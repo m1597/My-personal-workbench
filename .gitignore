@@ -1,0 +1,50 @@
+# 本地环境配置与凭据
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 私人资料、运行数据和备份（仓库根目录）
+/data/
+/local/
+/backups/
+/secrets/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# 依赖、缓存与构建产物
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.next/
+.nuxt/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# 本地日志和临时文件
+*.log
+/tmp/
+/temp/
+*.tmp
+*.swp
+*~
+
+# 操作系统和编辑器本地文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
