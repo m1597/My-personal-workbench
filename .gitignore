@@ -32,6 +32,9 @@ __pycache__/
 dist/
 build/
 coverage/
+/out/
+/test-results/
+/playwright-report/
 *.tsbuildinfo
 
 # 本地日志和临时文件

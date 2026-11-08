@@ -1,0 +1,10 @@
+:root {
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  color: #f7f7f7;
+  background: #18181a;
+  color-scheme: dark;
+}
+body { margin: 0; }
+.bootstrap { height: 100vh; display: grid; place-content: center; text-align: center; }
+.bootstrap span { color: #8ce8d9; font-size: 24px; }
+.bootstrap p { color: #a1a1aa; font-size: 13px; }
