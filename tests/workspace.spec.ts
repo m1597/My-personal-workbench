@@ -6,7 +6,10 @@ let page: Page
 let errors: string[]
 
 test.beforeEach(async ({}, testInfo) => {
-  app = await electron.launch({ args: ['.', `--user-data-dir=${testInfo.outputPath('profile')}`] })
+  app = await electron.launch({
+    args: ['.', `--user-data-dir=${testInfo.outputPath('profile')}`],
+    env: { ...process.env, ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '' }
+  })
   page = await app.firstWindow()
   errors = []
   page.on('pageerror', (error) => errors.push(error.message))

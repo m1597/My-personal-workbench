@@ -30,7 +30,7 @@
 | `npm run typecheck` | TypeScript 类型检查 |
 | `npm run build` | 类型检查并构建桌面程序代码 |
 | `npm start` | 打开已经构建的桌面程序；需先执行 build |
-| `npm test` | 构建并运行 Electron 端到端交互测试 |
+| `npm test` | 构建并分别在发布代码、开发模式下运行 Electron 端到端交互测试 |
 
 构建输出位于 `out/`，当前尚未制作可分发安装包。
 

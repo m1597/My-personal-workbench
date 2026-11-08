@@ -91,9 +91,14 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const helpRef = useRef<HTMLDialogElement>(null)
-  const subscriptions = useRef<Array<{ dispose(): void }>>([])
-
-  useEffect(() => () => subscriptions.current.forEach((item) => item.dispose()), [])
+  useEffect(() => {
+    const api = workspace.api
+    if (!api) return
+    const update = () => setWorkspace({ api, active: api.activePanel?.id, visible: api.panels.map((panel) => panel.id) })
+    const subscriptions = [api.onDidAddPanel(update), api.onDidRemovePanel(update), api.onDidActivePanelChange(update)]
+    update()
+    return () => subscriptions.forEach((item) => item.dispose())
+  }, [workspace.api])
   useEffect(() => {
     if (!menuOpen) return
     const close = (event: PointerEvent) => { if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false) }
@@ -105,11 +110,8 @@ export default function App() {
   useEffect(() => { if (helpOpen) helpRef.current?.showModal(); else helpRef.current?.close() }, [helpOpen])
 
   const onReady = useCallback(({ api }: DockviewReadyEvent) => {
-    subscriptions.current.forEach((item) => item.dispose())
     createDefaultLayout(api)
-    const update = () => setWorkspace({ api, active: api.activePanel?.id, visible: api.panels.map((panel) => panel.id) })
-    subscriptions.current = [api.onDidAddPanel(update), api.onDidRemovePanel(update), api.onDidActivePanelChange(update)]
-    update()
+    setWorkspace({ api, active: api.activePanel?.id, visible: api.panels.map((panel) => panel.id) })
   }, [])
 
   return <WorkspaceContext.Provider value={workspace}>
