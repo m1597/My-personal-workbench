@@ -13,7 +13,8 @@
     "dev:web": "vite --config vite.web.config.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && electron-vite build",
-    "start": "electron-vite preview"
+    "start": "electron-vite preview",
+    "test": "npm run build && playwright test"
   },
   "dependencies": {
     "dockview-react": "8.9.0",
