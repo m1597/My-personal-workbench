@@ -10,6 +10,7 @@ import { Button, FluentProvider } from '@fluentui/react-components'
 import { fluentTheme } from './fluentTheme'
 import { WindowMenu } from './WindowMenu'
 import { HelpDialog } from './HelpDialog'
+import { restoreLayout, trackLayout } from './layoutStorage'
 
 export default function App() {
   const [theme] = useState(() => ({
@@ -22,6 +23,9 @@ export default function App() {
   const [colorTheme, setColorTheme] = useState(readTheme)
   const uiTheme = useMemo(() => fluentTheme(colorTheme), [colorTheme])
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
+  useEffect(() => {
+    if (workspace.api) return trackLayout(workspace.api)
+  }, [workspace.api])
   useEffect(() => {
     const api = workspace.api
     if (!api) return
@@ -42,10 +46,17 @@ export default function App() {
         item.dispose()
       })
   }, [workspace.api])
-  const onReady = useCallback(({ api }: DockviewReadyEvent) => {
-    createDefaultLayout(api)
-    setWorkspace({ api, active: api.activePanel?.id, visible: api.panels.map((panel) => panel.id) })
-  }, [])
+  const onReady = useCallback(
+    ({ api }: DockviewReadyEvent) => {
+      restoreLayout(api, theme.gap)
+      setWorkspace({
+        api,
+        active: api.activePanel?.id,
+        visible: api.panels.map((panel) => panel.id),
+      })
+    },
+    [theme],
+  )
 
   return (
     <FluentProvider theme={uiTheme} className="fluent-workbench">

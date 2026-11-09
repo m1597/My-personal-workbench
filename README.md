@@ -2,7 +2,7 @@
 
 本地优先的个人创作工作台。目前实现四个可拖拽、停靠、分组、缩放、关闭重开的占位模块，以及最大化、恢复布局与黑白主题切换。
 
-技术栈：Electron + React + TypeScript + Vite，Dockview 布局。视觉为微软 Fluent 磨砂玻璃，默认深色；中文优先本机 HarmonyOS Sans SC，回退微软雅黑 UI。记住主题选择，布局目前重启后恢复默认。
+技术栈：Electron + React + TypeScript + Vite，Dockview 布局。视觉为微软 Fluent 磨砂玻璃，默认深色；中文优先本机 HarmonyOS Sans SC，回退微软雅黑 UI。记住主题选择和上次布局；首次启动使用默认四模块，全部关闭的空工作区也会保留。
 
 ## 开始开发
 
@@ -26,7 +26,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 | npm run build                 | 类型检查并构建至 out/                                           |
 | npm start                     | electron-vite preview 构建后启动桌面程序                        |
 | npm test                      | 构建并执行发布、开发两套 Electron 交互测试                      |
-| npm run check                 | 环境、格式、静态、类型、构建、12 项交互及 doctor 回归的统一入口 |
+| npm run check                 | 环境、格式、静态、类型、构建、26 项交互及 doctor 回归的统一入口 |
 
 统一检查只执行一次类型检查和生产构建。失败从终端首个错误看起，报告打开方法见开发流程。2026-11-09 已按用户授权推送，[首次 Windows CI](https://github.com/m1597/My-personal-workbench/actions/runs/42599390733) 已通过（提交 8af4c32，含 10 项交互测试）。
 
