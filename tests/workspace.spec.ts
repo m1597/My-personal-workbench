@@ -50,7 +50,7 @@ test.afterEach(async ({}, testInfo) => {
         (testInfo.status !== testInfo.expectedStatus || errors?.length)
       ) {
         const screenshot = testInfo.outputPath('failure.png')
-        await page.screenshot({ path: screenshot })
+        await page.screenshot({ animations: 'disabled', path: screenshot })
         await testInfo.attach('failure', { path: screenshot, contentType: 'image/png' })
       }
       if (app) {
@@ -71,7 +71,7 @@ test('默认深色，切换同步原生主题且重启后保留选择', async ({
   await page.getByRole('button', { name: '切换到浅色', exact: true }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
-  await page.screenshot({ path: path.resolve('tmp/workbench-light.png') })
+  await page.screenshot({ animations: 'disabled', path: path.resolve('tmp/workbench-light.png') })
   const initialTrace = testInfo.outputPath('before-restart.zip')
   await app.context().tracing.stop({ path: initialTrace })
   await testInfo.attach('before-restart', { path: initialTrace, contentType: 'application/zip' })
@@ -173,7 +173,7 @@ test('关闭重开、最大化还原、空工作区恢复', async () => {
   await page.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
   await expect(page.getByTestId('panel-count')).toHaveText('3 个模块已打开')
   await page.getByRole('button', { name: '窗口', exact: true }).click()
-  await page.locator('#window-menu').getByRole('button', { name: '模块 4', exact: true }).click()
+  await page.getByRole('menuitem', { name: '模块 4', exact: true }).click()
   await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
   await page.getByRole('button', { name: '重置布局', exact: true }).click()
   const group = page.locator('.dv-groupview').filter({ has: page.getByTestId('module-2') })
@@ -189,5 +189,53 @@ test('关闭重开、最大化还原、空工作区恢复', async () => {
   await page.getByRole('button', { name: '恢复默认布局', exact: true }).click()
   await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
   await page.mouse.move(0, 0)
-  await page.screenshot({ path: path.resolve('tmp/workbench-verified.png') })
+  await page.screenshot({
+    animations: 'disabled',
+    path: path.resolve('tmp/workbench-verified.png'),
+  })
+})
+
+test('官方控件支持搜索、菜单键盘导航和弹窗焦点恢复', async () => {
+  const search = page.getByRole('textbox', { name: '搜索模块' })
+  await search.fill('4')
+  await expect(page.locator('.module-row')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: '打开模块 4', exact: true })).toBeVisible()
+  await search.fill('不存在')
+  await expect(page.getByText('没有匹配的模块')).toBeVisible()
+  await search.clear()
+  const trigger = page.getByRole('button', { name: '窗口', exact: true })
+  await trigger.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('menu')).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '模块 1', exact: true })).toBeFocused()
+  await page.keyboard.press('End')
+  await expect(page.getByRole('menuitem', { name: '重置布局' })).toBeFocused()
+  await page.screenshot({ animations: 'disabled', path: path.resolve('tmp/fluent-menu-dark.png') })
+  await page.keyboard.press('Escape')
+  await expect(trigger).toBeFocused()
+  const help = page.getByRole('button', { name: '操作帮助', exact: true })
+  await help.focus()
+  await page.keyboard.press('Enter')
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await page.getByRole('button', { name: '知道了' }).focus()
+  await page.keyboard.press('Tab')
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  await page.screenshot({
+    animations: 'disabled',
+    path: path.resolve('tmp/fluent-dialog-dark.png'),
+  })
+  await page.keyboard.press('Escape')
+  await expect(dialog).not.toBeVisible()
+  await expect(help).toBeFocused()
+  await page.getByRole('button', { name: '切换到浅色', exact: true }).click()
+  await help.click()
+  await expect(dialog).toBeVisible()
+  await page.screenshot({
+    animations: 'disabled',
+    path: path.resolve('tmp/fluent-dialog-light.png'),
+  })
+  await page.getByRole('button', { name: '知道了' }).click()
+  await expect(dialog).not.toBeVisible()
+  await expect(help).toBeFocused()
 })

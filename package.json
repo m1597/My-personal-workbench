@@ -27,6 +27,7 @@
     "test:doctor": "node --test tests/doctor.test.mjs"
   },
   "dependencies": {
+    "@fluentui/react-components": "9.75.1",
     "dockview-react": "8.9.0",
     "lucide-react": "1.70.0",
     "react": "19.3.1",

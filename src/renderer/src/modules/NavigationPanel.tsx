@@ -1,4 +1,5 @@
 import { useContext, useState } from 'react'
+import { Input } from '@fluentui/react-components'
 import { Search, ChevronRight, PanelsTopLeft, Circle } from 'lucide-react'
 import { WorkspaceContext } from '../app/WorkspaceContext'
 import { modules, icons } from '../app/moduleRegistry'
@@ -12,15 +13,14 @@ export function NavigationPanel() {
         <span>工作区模块</span>
         <span className="count">4</span>
       </div>
-      <label className="search-field">
-        <Search size={14} />
-        <input
-          aria-label="搜索模块"
-          placeholder="搜索模块…"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
+      <Input
+        className="workbench-search"
+        contentBefore={<Search size={16} />}
+        aria-label="搜索模块"
+        placeholder="搜索模块…"
+        value={query}
+        onChange={(_, data) => setQuery(data.value)}
+      />
       <div className="module-list">
         {modules
           .filter((item) => item.title.replaceAll(' ', '').includes(query.replaceAll(' ', '')))

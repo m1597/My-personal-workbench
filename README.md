@@ -16,17 +16,17 @@ npm run dev
 
 npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装全局工具。自动检查在后台运行，不抢占桌面。当前没有可分发安装包。
 
-| 命令                          | 用途                                              |
-| ----------------------------- | ------------------------------------------------- |
-| npm run doctor                | 只读检查版本、依赖、锁文件和必要配置              |
-| npm run dev                   | 启动桌面开发窗口                                  |
-| npm run dev:web               | 浏览器预览，http://127.0.0.1:5173，无系统桥接     |
-| npm run format / format:check | 写回格式 / 只检查格式                             |
-| npm run lint / typecheck      | 静态 / strict 类型检查，含测试和构建配置          |
-| npm run build                 | 类型检查并构建至 out/                             |
-| npm start                     | electron-vite preview 构建后启动桌面程序          |
-| npm test                      | 构建并执行发布、开发两套 Electron 交互测试        |
-| npm run check                 | 环境、格式、静态、类型、构建、10 项交互的统一入口 |
+| 命令                          | 用途                                                            |
+| ----------------------------- | --------------------------------------------------------------- |
+| npm run doctor                | 只读检查版本、依赖、锁文件和必要配置                            |
+| npm run dev                   | 启动桌面开发窗口                                                |
+| npm run dev:web               | 浏览器预览，http://127.0.0.1:5173，无系统桥接                   |
+| npm run format / format:check | 写回格式 / 只检查格式                                           |
+| npm run lint / typecheck      | 静态 / strict 类型检查，含测试和构建配置                        |
+| npm run build                 | 类型检查并构建至 out/                                           |
+| npm start                     | electron-vite preview 构建后启动桌面程序                        |
+| npm test                      | 构建并执行发布、开发两套 Electron 交互测试                      |
+| npm run check                 | 环境、格式、静态、类型、构建、12 项交互及 doctor 回归的统一入口 |
 
 统一检查只执行一次类型检查和生产构建。失败从终端首个错误看起，报告打开方法见开发流程。2026-11-09 已按用户授权推送，[首次 Windows CI](https://github.com/m1597/My-personal-workbench/actions/runs/42599390733) 已通过（提交 8af4c32，含 10 项交互测试）。
 
