@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeTheme } from 'electron'
+import { app, BrowserWindow, Menu, nativeTheme, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { release } from 'node:os'
 
@@ -11,11 +11,12 @@ function createWindow() {
     minWidth: 900,
     minHeight: 640,
     title: '个人工作台',
-    backgroundColor: supportsAcrylic ? '#00000000' : '#eef2fa',
+    backgroundColor: supportsAcrylic ? '#00000000' : '#202227',
     ...(supportsAcrylic ? { backgroundMaterial: 'acrylic' as const } : {}),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
+      preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -37,7 +38,13 @@ function createWindow() {
 }
 
 void app.whenReady().then(() => {
-  nativeTheme.themeSource = 'light'
+  nativeTheme.themeSource = 'dark'
+  ipcMain.handle('theme:set', (event, theme: unknown) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window || event.senderFrame !== event.sender.mainFrame || (theme !== 'dark' && theme !== 'light')) return
+    nativeTheme.themeSource = theme
+    if (!supportsAcrylic) window.setBackgroundColor(theme === 'dark' ? '#202227' : '#eef2fa')
+  })
   Menu.setApplicationMenu(null)
   createWindow()
   app.on('activate', () => {

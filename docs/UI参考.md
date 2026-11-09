@@ -1,6 +1,6 @@
 # UI 参考与实现边界
 
-当前方案：用户否定了上一版深色界面，明确改为微软磨砂玻璃质感。采用 Fluent 浅色界面与 Windows 原生 Acrylic；Dockview 仍作为布局库。下方 Penpot 记录仅保留为历史来源。
+当前方案：用户否定了上一版深色界面，明确改为微软磨砂玻璃质感。采用 Fluent 黑白双主题（默认深色）与 Windows 原生 Acrylic；Dockview 仍作为布局库。下方 Penpot 记录仅保留为历史来源。
 
 ## 来源
 
@@ -10,7 +10,7 @@
 - [Dockview](https://github.com/dockview/dockview)：使用 MIT 开源包，不使用 Enterprise 扩展。
 - [Lucide](https://lucide.dev/)：使用 lucide-react 社区图标。
 
-## 设计约定
+## 历史设计约定（Penpot，已替代）
 
 - 基础背景 #18181a，控件背景 #232326，分隔线 #343438，主要文字 #f4f4f5，次要文字 #a1a1aa，强调色 #8ce8d9。
 - 字体使用 Segoe UI 与 Microsoft YaHei UI，中文优先保证本机清晰显示；控件 12–13px，模块标题 13px。
@@ -25,10 +25,10 @@
 
 ## 当前磨砂玻璃方案
 
-- 浅色半透明面板、蓝色选中状态、10px 面板圆角和柔和阴影。正文保持深色，避免透明度影响中文阅读。
-- Windows 11 build 22621+ 使用 Electron backgroundMaterial: acrylic；页面透明底色让系统材质显现。旧系统及浏览器采用浅色回退。
+- 深浅两套半透明面板、蓝色选中状态、10px 面板圆角和柔和阴影。正文与背景保持明暗对比；首次默认深色，右上角切换并记住选择。
+- Windows 11 build 22621+ 使用 Electron backgroundMaterial: acrylic；页面透明底色让系统材质显现。旧系统及浏览器采用对应主题的实色回退。
 - 面板及弹出菜单采用 CSS backdrop-filter，减少透明度与高对比度偏好下使用实色回退。
 - 字体为 HarmonyOS Sans SC → Microsoft YaHei UI → Microsoft YaHei；实际本机标题字体已用 Chromium CDP 核查。
-- 已复验开发模式和发布构建共 8 项 Electron 交互测试。
+- 已复验开发模式和发布构建共 10 项 Electron 交互测试。
 - [Microsoft Acrylic 指南](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)
 - [Electron BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)

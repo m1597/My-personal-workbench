@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { DockviewReact, themeDark, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps, type IDockviewHeaderActionsProps } from 'dockview-react'
+import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps, type IDockviewHeaderActionsProps } from 'dockview-react'
 import { PanelsTopLeft, PanelLeft, PanelRight, PanelBottom, SquareDashed, ChevronDown, ChevronRight, Check, Plus, RotateCcw, Maximize2, Minimize2, GripVertical, MousePointer2, SlidersHorizontal, HelpCircle, X, Search, LayoutGrid, Circle, Move } from 'lucide-react'
 import { createDefaultLayout, modules, openModule } from './workspace'
+import { Sun, Moon } from 'lucide-react'
+import { applyTheme, readTheme } from './theme'
 
-const theme = { ...themeDark, name: 'workbench', className: 'dockview-theme-workbench', colorScheme: 'light' as const, gap: 8 }
+const theme = { name: 'workbench', className: 'dockview-theme-workbench', gap: 8 }
 const icons = [PanelLeft, SquareDashed, PanelRight, PanelBottom]
 type WorkspaceState = { api?: DockviewApi; active?: string; visible: string[] }
 const WorkspaceContext = createContext<WorkspaceState>({ visible: [] })
@@ -86,6 +88,7 @@ function EmptyWorkspace() {
 const components = { module: ModulePanel }
 
 export default function App() {
+  const [colorTheme, setColorTheme] = useState(readTheme)
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
   const [menuOpen, setMenuOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
@@ -124,6 +127,7 @@ export default function App() {
         </div>
         <div className="header-spacer" />
         <div className="workspace-label"><span className="accent-dot" />本地工作区</div>
+        <button className="icon-button" aria-label={colorTheme === 'dark' ? '切换到浅色' : '切换到深色'} title={colorTheme === 'dark' ? '切换到浅色' : '切换到深色'} onClick={() => { const next = colorTheme === 'dark' ? 'light' : 'dark'; applyTheme(next); setColorTheme(next) }}>{colorTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
         <button className="icon-button" aria-label="操作帮助" title="操作帮助" onClick={() => setHelpOpen(true)}><HelpCircle size={17} /></button>
         <span className="header-divider" />
         <button className="reset-button" onClick={() => workspace.api && createDefaultLayout(workspace.api)}><RotateCcw size={14} />重置布局</button>

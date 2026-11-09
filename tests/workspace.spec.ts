@@ -4,10 +4,12 @@ import path from 'node:path'
 let app: ElectronApplication
 let page: Page
 let errors: string[]
+let profilePath: string
 
 test.beforeEach(async ({}, testInfo) => {
+  profilePath = testInfo.outputPath('profile')
   app = await electron.launch({
-    args: ['.', `--user-data-dir=${testInfo.outputPath('profile')}`],
+    args: ['.', `--user-data-dir=${profilePath}`],
     env: { ...process.env, ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '' }
   })
   page = await app.firstWindow()
@@ -18,6 +20,24 @@ test.beforeEach(async ({}, testInfo) => {
 
 test.afterEach(async () => {
   try { expect(errors).toEqual([]) } finally { await app?.close() }
+})
+
+test('默认深色，切换同步原生主题且重启后保留选择', async () => {
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
+  await expect.poll(() => page.evaluate(() => typeof window.workbench?.setTheme)).toBe('function')
+  await page.getByRole('button', { name: '切换到浅色', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
+  await page.screenshot({ path: path.resolve('tmp/workbench-light.png') })
+  await app.close()
+  app = await electron.launch({ args: ['.', `--user-data-dir=${profilePath}`], env: { ...process.env, ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '' } })
+  page = await app.firstWindow()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
+  await page.getByRole('button', { name: '切换到深色', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
 })
 
 test('四个模块可见，最小窗口保持可用，渲染进程隔离', async () => {

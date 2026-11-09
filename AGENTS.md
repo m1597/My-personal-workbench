@@ -2,7 +2,7 @@
 
 ## 项目定位与当前阶段
 
-这是用户的个人工作台项目。已确认 Electron + React + TypeScript + Vite 技术栈，采用 Dockview 实现布局，视觉采用微软 Fluent 浅色磨砂玻璃风格，中文优先使用本机 HarmonyOS Sans SC。当前仅实现模块 1—4 的基础框架；插件、AI 执行、数据库与媒体功能后续再做。
+这是用户的个人工作台项目。已确认 Electron + React + TypeScript + Vite 技术栈，采用 Dockview 实现布局，视觉采用微软 Fluent 黑白双主题磨砂玻璃风格（默认深色），中文优先使用本机 HarmonyOS Sans SC。当前仅实现模块 1—4 的基础框架；插件、AI 执行、数据库与媒体功能后续再做。
 
 - 优先阅读 `README.md` 和 `docs/需求与规划.md`，再查看相关代码及更深层的 `AGENTS.md`。
 - 不将讨论中的候选方案视为已确认需求；将已确认事项、候选方案和待确认问题分开记录。
