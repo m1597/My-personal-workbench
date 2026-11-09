@@ -21,7 +21,7 @@
 
 ## 本地运行
 
-使用 Node.js 22.12+（本机验证环境为 Node.js 24）。首次安装执行 `npm ci`。
+已验证 Node.js **24.19.0**、npm **11.17.0**。首次安装执行 `npm ci`，然后 `npm run doctor`。详见 [开发流程](docs/开发流程.md)。
 
 | 命令 | 用途 |
 | --- | --- |
@@ -29,7 +29,7 @@
 | `npm run dev:web` | 在浏览器预览界面，地址为 http://127.0.0.1:5173 |
 | `npm run typecheck` | TypeScript 类型检查 |
 | `npm run build` | 类型检查并构建桌面程序代码 |
-| `npm start` | 打开已经构建的桌面程序；需先执行 build |
+| `npm start` | 构建后打开桌面程序（尚非安装包） |
 | `npm test` | 构建并分别在发布代码、开发模式下运行 Electron 端到端交互测试 |
 
 构建输出位于 `out/`，当前尚未制作可分发安装包。
