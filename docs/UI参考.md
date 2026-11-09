@@ -1,34 +1,8 @@
-# UI 参考与实现边界
+# UI 参考与历史
 
-当前方案：用户否定了上一版深色界面，明确改为微软磨砂玻璃质感。采用 Fluent 黑白双主题（默认深色）与 Windows 原生 Acrylic；Dockview 仍作为布局库。下方 Penpot 记录仅保留为历史来源。
+当前唯一执行规范见 [设计规范](设计规范.md)。使用 Fluent 黑白磨砂，默认深色；本文件只保留来源，不另维护一份颜色和字体定义。
 
-## 来源
-
-- [Penpot 官方工作区导览](https://help.penpot.app/user-guide/first-steps/the-interface/)
-- [Penpot 官方界面截图](https://help.penpot.app/img/interface/workspace-dark.webp)
-- [Penpot 公开颜色定义](https://github.com/penpot/penpot/blob/develop/frontend/resources/styles/common/refactor/color-defs.scss)
-- [Dockview](https://github.com/dockview/dockview)：使用 MIT 开源包，不使用 Enterprise 扩展。
-- [Lucide](https://lucide.dev/)：使用 lucide-react 社区图标。
-
-## 历史设计约定（Penpot，已替代）
-
-- 基础背景 #18181a，控件背景 #232326，分隔线 #343438，主要文字 #f4f4f5，次要文字 #a1a1aa，强调色 #8ce8d9。
-- 字体使用 Segoe UI 与 Microsoft YaHei UI，中文优先保证本机清晰显示；控件 12–13px，模块标题 13px。
-- 顶部为工作台菜单、项目名与布局操作；左侧为模块导航；面板支持标签拖拽停靠和分隔线缩放。
-- 中央面板使用浅灰画布，对照 Penpot 的深色工具区与浅色画布；占位内容不伪装成已经实现的编辑器。
-- 不增加装饰性大卡片、渐变或持续动画；拖拽期间避免过渡动画干扰反馈。
-- 本项目未复制 Penpot 应用源码、商标或图标；参考界面样式，使用 React 编写适合工作台的组件。官方截图仅作为研究资料，不作为产品资源发布。
-
-## 字体调整
-
-中文优先使用本机已安装的 HarmonyOS Sans SC（鸿蒙黑体），回退到微软雅黑 UI。正文 13–14px，辅助文字至少 12px；不打包或分发系统字体。已通过 Chromium 字体检查确认中文标题实际使用 HarmonyOS Sans SC。
-
-## 当前磨砂玻璃方案
-
-- 深浅两套半透明面板、蓝色选中状态、10px 面板圆角和柔和阴影。正文与背景保持明暗对比；首次默认深色，右上角切换并记住选择。
-- Windows 11 build 22621+ 使用 Electron backgroundMaterial: acrylic；页面透明底色让系统材质显现。旧系统及浏览器采用对应主题的实色回退。
-- 面板及弹出菜单采用 CSS backdrop-filter，减少透明度与高对比度偏好下使用实色回退。
-- 字体为 HarmonyOS Sans SC → Microsoft YaHei UI → Microsoft YaHei；实际本机标题字体已用 Chromium CDP 核查。
-- 已复验开发模式和发布构建共 10 项 Electron 交互测试。
-- [Microsoft Acrylic 指南](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)
-- [Electron BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)
+- 当前质感参考：[Microsoft Acrylic 指南](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)。本项目使用 React/CSS 实现，未安装 Fluent UI 组件库。
+- 当前布局复用：[Dockview](https://github.com/dockview/dockview)，图标复用 [Lucide](https://lucide.dev/)。许可证见第三方来源。
+- 历史参考：[Penpot 工作区导览](https://help.penpot.app/user-guide/first-steps/the-interface/)。仅借鉴早期视觉，没有复制应用源码、商标或资源；该风格已替代。
+- 文档截图为本项目实际渲染，不使用 AI 概念图冒充成品。
