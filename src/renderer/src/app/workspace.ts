@@ -1,12 +1,5 @@
 import type { DockviewApi } from 'dockview-react'
-
-export const modules = [
-  { id: 'module-1', title: '模块 1', description: '模块导航' },
-  { id: 'module-2', title: '模块 2', description: '主工作区' },
-  { id: 'module-3', title: '模块 3', description: '辅助面板' },
-  { id: 'module-4', title: '模块 4', description: '底部面板' },
-] as const
-
+import { modules } from './moduleRegistry'
 export function openModule(api: DockviewApi, id: string) {
   if (api.hasMaximizedGroup()) api.exitMaximizedGroup()
   const existing = api.getPanel(id)

@@ -1,7 +1,7 @@
-export type Theme = 'dark' | 'light'
+import type { Theme, WorkbenchBridge } from '../../../shared/theme'
 declare global {
   interface Window {
-    workbench?: { setTheme(theme: Theme): Promise<void> }
+    workbench?: WorkbenchBridge
   }
 }
 

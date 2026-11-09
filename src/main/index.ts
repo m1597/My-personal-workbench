@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, nativeTheme, ipcMain, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { release } from 'node:os'
+import { isTheme, themeChannel } from '../shared/theme'
 
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
 
@@ -48,14 +49,9 @@ function createWindow() {
 
 void app.whenReady().then(() => {
   nativeTheme.themeSource = 'dark'
-  ipcMain.handle('theme:set', (event, theme: unknown) => {
+  ipcMain.handle(themeChannel, (event, theme: unknown) => {
     const window = BrowserWindow.fromWebContents(event.sender)
-    if (
-      !window ||
-      event.senderFrame !== event.sender.mainFrame ||
-      (theme !== 'dark' && theme !== 'light')
-    )
-      return
+    if (!window || event.senderFrame !== event.sender.mainFrame || !isTheme(theme)) return
     nativeTheme.themeSource = theme
     if (!supportsAcrylic) window.setBackgroundColor(theme === 'dark' ? '#202227' : '#eef2fa')
   })
