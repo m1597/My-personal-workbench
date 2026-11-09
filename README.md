@@ -14,7 +14,7 @@ npm run check
 npm run dev
 ```
 
-npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装全局工具。自动检查在后台运行，不抢占桌面。当前没有可分发安装包。
+npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装全局工具。自动检查在后台运行，不抢占桌面。已可生成 Windows x64 本地试用安装包。
 
 | 命令                          | 用途                                                            |
 | ----------------------------- | --------------------------------------------------------------- |
@@ -52,3 +52,9 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 [浅色截图](docs/images/workbench-light.png)。这是后台真实 Electron 渲染；原生 Acrylic 随 Windows 设置和桌面背景变化。
 
 当前不实现数据库、AI 执行、媒体处理、插件 SDK 或第三方软件嵌入。Git 只备份已提交源码与文档，私人素材、Electron 设置和被忽略数据需要单独备份。
+
+## Windows 安装包
+
+`npm run dist:win` 生成 `dist/Personal-Workbench-Setup-0.1.0-x64.exe`。双击启动中文安装向导，可选择安装目录（例如 D:/Apps/PersonalWorkbench）；无需安装 Node/npm。当前包未签名，不包含自动更新，安装完成不会自动启动程序。构建结果不提交 Git。
+
+`npm run check:package` 使用独立 profile 在后台验证 dist/win-unpacked 内的真实打包程序；需先生成安装包。它不执行安装或卸载向导。更多边界见 [数据与交付](docs/数据与交付.md)。

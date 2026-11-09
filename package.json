@@ -25,7 +25,9 @@
     "test:interaction": "playwright test && playwright test --config playwright.dev.config.ts",
     "check": "npm run doctor && npm run format:check && npm run lint && npm run test:doctor && npm run typecheck && npm run build:app && npm run test:interaction",
     "test:doctor": "node --test tests/doctor.test.mjs",
-    "check:visual": "npm run build && node scripts/visual-check.mjs"
+    "check:visual": "npm run build && node scripts/visual-check.mjs",
+    "dist:win": "npm run build && node scripts/prepare-package.mjs && electron-builder --win --x64 --publish never",
+    "check:package": "node scripts/check-package.mjs"
   },
   "dependencies": {
     "@fluentui/react-components": "9.75.1",
@@ -42,6 +44,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.2.1",
     "electron": "45.2.3",
+    "electron-builder": "26.18.0",
     "electron-vite": "6.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.6"

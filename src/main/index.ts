@@ -6,7 +6,9 @@ import { isTheme, themeChannel } from '../shared/theme'
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
 
 function createWindow() {
-  const backgroundTest = !app.isPackaged && process.env.WORKBENCH_TEST_BACKGROUND === '1'
+  const backgroundTest =
+    process.env.WORKBENCH_TEST_BACKGROUND === '1' &&
+    (!app.isPackaged || process.argv.some((arg) => arg.startsWith('--user-data-dir=')))
   const testX = backgroundTest
     ? Math.min(...screen.getAllDisplays().map((display) => display.bounds.x)) - 2000
     : undefined

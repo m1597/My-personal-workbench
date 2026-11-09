@@ -1,0 +1,49 @@
+import { _electron as electron, expect } from '@playwright/test'
+import { mkdtemp, mkdir } from 'node:fs/promises'
+import path from 'node:path'
+
+await mkdir('tmp', { recursive: true })
+const profile = await mkdtemp(path.resolve('tmp/packaged-profile-'))
+const executablePath = path.resolve('dist/win-unpacked/personal-workbench.exe')
+let app
+const errors = []
+async function launch(count) {
+  app = await electron.launch({
+    executablePath,
+    args: [`--user-data-dir=${profile}`],
+    env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1', ELECTRON_RENDERER_URL: '' },
+  })
+  const page = await app.firstWindow()
+  page.on('pageerror', (error) => errors.push(error.message))
+  await expect(page.getByTestId('panel-count')).toHaveText(`${count} 个模块已打开`)
+  const state = await app.evaluate(({ app, BrowserWindow, screen }) => {
+    const window = BrowserWindow.getAllWindows()[0]
+    const bounds = window.getBounds()
+    return {
+      packaged: app.isPackaged,
+      profile: app.getPath('userData'),
+      background:
+        !window.isFocused() &&
+        screen.getAllDisplays().every((display) => bounds.x + bounds.width <= display.bounds.x),
+    }
+  })
+  expect(state).toEqual({ packaged: true, profile, background: true })
+  return page
+}
+try {
+  let page = await launch(4)
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
+  await page.getByRole('button', { name: '切换到浅色', exact: true }).click()
+  await app.close()
+  page = await launch(3)
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
+  await page.getByRole('button', { name: '重置布局', exact: true }).click()
+  await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  await page.screenshot({ path: 'tmp/packaged-verified.png', animations: 'disabled' })
+  expect(errors).toEqual([])
+  console.log('PASS 打包程序：后台启动、独立 profile、主题与布局重启恢复、preload 主题桥接、重置。')
+} finally {
+  await app?.close()
+}
