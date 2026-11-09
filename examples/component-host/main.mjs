@@ -1,0 +1,314 @@
+import {
+  app,
+  BaseWindow,
+  BrowserWindow,
+  WebContentsView,
+  ipcMain,
+  session,
+  screen,
+  nativeTheme,
+} from 'electron'
+import { readFile, realpath } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { randomUUID } from 'node:crypto'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const argument = (name) =>
+  process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3)
+// Prototype must never use the daily workbench profile.
+const profile = argument('user-data-dir')
+if (!profile || !path.isAbsolute(profile)) throw new Error('原型必须指定独立的绝对 --user-data-dir')
+app.setPath('userData', profile)
+const componentRoot = argument('component')
+const workbenchFile = argument('workbench')
+const background = process.env.WORKBENCH_TEST_BACKGROUND === '1'
+let shell, standalone, view, parent
+let mode = 'standalone'
+let phase = 'stopped'
+let error = ''
+let entry
+const sessionId = randomUUID()
+let transferTimer
+let quitting = false
+const snapshot = () => ({ mode, phase, error, sessionId, theme: nativeTheme.themeSource })
+function broadcast() {
+  if (shell && !shell.isDestroyed()) shell.webContents.send('prototype:state', snapshot())
+  if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed())
+    view.webContents.send('sample:state', snapshot())
+}
+function options(width, height) {
+  return {
+    width,
+    height,
+    show: false,
+    backgroundColor: '#202227',
+    ...(background
+      ? {
+          x: Math.min(...screen.getAllDisplays().map((d) => d.bounds.x)) - 2200,
+          y: 0,
+          skipTaskbar: true,
+        }
+      : {}),
+  }
+}
+function show(window) {
+  if (background) window.showInactive()
+  else window.show()
+}
+function secure(contents) {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  contents.on('will-navigate', (event) => event.preventDefault())
+  contents.on('will-attach-webview', (event) => event.preventDefault())
+}
+function isShell(event) {
+  return (
+    shell && event.sender === shell.webContents && event.senderFrame === shell.webContents.mainFrame
+  )
+}
+function isSample(event) {
+  return (
+    view && event.sender === view.webContents && event.senderFrame === view.webContents.mainFrame
+  )
+}
+function moveTo(window) {
+  if (parent && !parent.isDestroyed()) parent.contentView.removeChildView(view)
+  window.contentView.addChildView(view)
+  parent = window
+}
+function detach() {
+  clearTimeout(transferTimer)
+  if (!view || view.webContents.isDestroyed() || view.webContents.isCrashed()) return
+  if (!standalone || standalone.isDestroyed()) {
+    standalone = new BaseWindow({ ...options(660, 620), title: '示例组件 · 独立窗口' })
+    standalone.on('resize', () => {
+      if (mode === 'standalone' && view) {
+        const [width, height] = standalone.getContentSize()
+        view.setBounds({ x: 0, y: 0, width, height })
+      }
+    })
+    standalone.on('closed', () => {
+      standalone = undefined
+      if (!quitting && mode === 'standalone') {
+        view?.webContents.close()
+        view = undefined
+        parent = undefined
+        phase = 'stopped'
+        broadcast()
+      }
+    })
+  }
+  moveTo(standalone)
+  mode = 'standalone'
+  phase = 'ready'
+  const [width, height] = standalone.getContentSize()
+  view.setBounds({ x: 0, y: 0, width, height })
+  view.setVisible(true)
+  show(standalone)
+  broadcast()
+}
+async function discover() {
+  try {
+    if (!componentRoot) throw new Error('NOT_INSTALLED：未登记示例组件')
+    const root = await realpath(componentRoot)
+    const manifest = JSON.parse(await readFile(path.join(root, 'component.json'), 'utf8'))
+    if (manifest.manifestVersion !== 1 || manifest.protocol !== '0.1' || manifest.hostApi !== '0.1')
+      throw new Error('INCOMPATIBLE：需要 manifest 1、协议/宿主 API 0.1')
+    if (
+      manifest.id !== 'io.example.counter' ||
+      manifest.uiEntry !== 'index.html' ||
+      JSON.stringify(manifest.capabilities) !== '["view.transfer"]'
+    )
+      throw new Error('DENIED：原型仅允许指定示例及 view.transfer 能力')
+    entry = await realpath(path.join(root, manifest.uiEntry))
+    if (path.dirname(entry) !== root) throw new Error('DENIED：入口越界')
+    return root
+  } catch (failure) {
+    error = failure.code === 'ENOENT' ? 'NOT_INSTALLED：组件清单或入口不存在' : failure.message
+    phase = 'unavailable'
+    broadcast()
+  }
+}
+async function openComponent() {
+  if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed()) return true
+  const root = await discover()
+  if (!root) return false
+  view?.webContents.close()
+  const isolated = session.fromPartition(`component-${sessionId}`)
+  isolated.setPermissionRequestHandler((_, __, callback) => callback(false))
+  isolated.setPermissionCheckHandler(() => false)
+  const allowed = new Set(
+    ['index.html', 'component.js', 'style.css', 'tokens.css'].map(
+      (file) => pathToFileURL(path.join(root, file)).href,
+    ),
+  )
+  isolated.webRequest.onBeforeRequest((details, callback) =>
+    callback({ cancel: !allowed.has(details.url) }),
+  )
+  view = new WebContentsView({
+    webPreferences: {
+      session: isolated,
+      preload: path.join(here, 'sample-preload.cjs'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  })
+  secure(view.webContents)
+  view.webContents.on('render-process-gone', () => {
+    clearTimeout(transferTimer)
+    phase = 'crashed'
+    error = 'CRASHED：示例组件退出，可重新打开；工作台仍可使用'
+    view.setVisible(false)
+    broadcast()
+  })
+  error = ''
+  detach()
+  await view.webContents.loadFile(entry)
+  return true
+}
+async function openWorkbench() {
+  if (shell && !shell.isDestroyed()) return
+  if (!workbenchFile) throw new Error('NOT_INSTALLED：未部署工作台界面；组件仍可独立使用')
+  const file = await realpath(workbenchFile)
+  shell = new BrowserWindow({
+    ...options(1480, 960),
+    title: '工作台 · 组件宿主原型',
+    webPreferences: {
+      preload: path.join(here, 'workbench-preload.cjs'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  })
+  secure(shell.webContents)
+  shell.on('close', () => {
+    if (!quitting && parent === shell) detach()
+  })
+  shell.on('closed', () => {
+    shell = undefined
+  })
+  await shell.loadFile(file)
+  show(shell)
+}
+async function attach() {
+  if (mode === 'docked' && phase === 'ready') return { ok: true }
+  if (phase === 'attaching') return { ok: false, error: 'BUSY：正在连接' }
+  try {
+    if (!(await openComponent())) return { ok: false, error }
+    phase = 'attaching'
+    await openWorkbench()
+    broadcast()
+    transferTimer = setTimeout(() => {
+      error = 'TIMEOUT：目标面板未就绪，保留独立窗口'
+      detach()
+    }, 5000)
+    return { ok: true }
+  } catch (failure) {
+    phase = 'ready'
+    error = failure.message
+    broadcast()
+    return { ok: false, error }
+  }
+}
+
+if (!app.requestSingleInstanceLock()) app.quit()
+else {
+  app.on('second-instance', () => {
+    /* One writer per prototype profile; no arbitrary command forwarding. */
+  })
+  app.on('before-quit', () => {
+    quitting = true
+    clearTimeout(transferTimer)
+    view?.webContents.close()
+  })
+  app.on('window-all-closed', () => {
+    if (!quitting) app.quit()
+  })
+  void app
+    .whenReady()
+    .then(async () => {
+      nativeTheme.themeSource = 'dark'
+      ipcMain.handle('sample:hello', (event, payload) => {
+        if (!isSample(event) || payload?.protocol !== '0.1') throw new Error('DENIED')
+        return snapshot()
+      })
+      ipcMain.handle('sample:transfer', (event, action) => {
+        if (!isSample(event) || !['attach', 'detach'].includes(action))
+          return { ok: false, error: 'DENIED' }
+        if (action === 'attach') return attach()
+        detach()
+        return { ok: true }
+      })
+      ipcMain.handle('prototype:status', (event) => {
+        if (!isShell(event)) throw new Error('DENIED')
+        return snapshot()
+      })
+      ipcMain.handle('prototype:open', (event) => {
+        if (!isShell(event)) throw new Error('DENIED')
+        return attach()
+      })
+      ipcMain.handle('prototype:detach', (event) => {
+        if (!isShell(event)) throw new Error('DENIED')
+        detach()
+      })
+      ipcMain.handle('prototype:theme', (event, theme) => {
+        if (isShell(event) && ['dark', 'light'].includes(theme)) {
+          nativeTheme.themeSource = theme
+          broadcast()
+        }
+      })
+      ipcMain.on('prototype:bounds', (event, bounds) => {
+        if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return
+        if (bounds === null) {
+          if (parent === shell) view.setVisible(false)
+          return
+        }
+        if (
+          !bounds ||
+          !['x', 'y', 'width', 'height'].every(
+            (key) => Number.isFinite(bounds[key]) && bounds[key] >= 0,
+          )
+        )
+          return
+        const [width, height] = shell.getContentSize()
+        if (
+          bounds.width < 1 ||
+          bounds.height < 1 ||
+          bounds.x + bounds.width > width + 1 ||
+          bounds.y + bounds.height > height + 1
+        )
+          return
+        if (phase === 'attaching') {
+          clearTimeout(transferTimer)
+          moveTo(shell)
+          mode = 'docked'
+          phase = 'ready'
+          standalone?.hide()
+          broadcast()
+        }
+        if (mode === 'docked') {
+          view.setBounds(
+            Object.fromEntries(Object.entries(bounds).map(([k, v]) => [k, Math.round(v)])),
+          )
+          view.setVisible(true)
+        }
+      })
+      if (argument('mode') === 'workbench') {
+        await discover()
+        await openWorkbench()
+      } else if (!(await openComponent())) {
+        if (workbenchFile) await openWorkbench()
+        else {
+          console.error(error)
+          app.exit(1)
+        }
+      }
+    })
+    .catch((failure) => {
+      console.error(failure)
+      app.exit(1)
+    })
+}

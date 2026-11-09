@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>示例组件</title><link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="style.css"></head>
+<body><main>
+<h1>独立组件</h1><p>此页面来自独立部署包，未使用 React。</p>
+<p id="mode">连接宿主中</p><p id="session"></p>
+<label>保留输入 <input id="note" placeholder="停靠和分离不会清空"></label>
+<p>计数：<output id="count">0</output> <button id="increment" type="button">增加</button></p>
+<label>队列选择 <select id="queue"><option>示例 A</option><option>示例 B</option><option>示例 C</option></select></label>
+<p>本页计时：<output id="elapsed">0</output> 秒（不是播放器）</p>
+<button id="transfer" type="button">加入工作台</button>
+<p id="error" role="status"></p>
+<p>原型仅验证界面和会话保持，未实现音乐播放。</p>
+</main><script src="component.js"></script></body></html>

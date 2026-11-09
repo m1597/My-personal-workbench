@@ -7,6 +7,7 @@ import { NavigationPanel } from '../modules/NavigationPanel'
 import { CanvasPanel } from '../modules/CanvasPanel'
 import { Inspector } from '../modules/Inspector'
 import { BottomPanel } from '../modules/BottomPanel'
+import { ComponentSlot } from './componentPrototype'
 
 function ModulePanel({ api }: IDockviewPanelProps) {
   switch (api.id) {
@@ -22,7 +23,7 @@ function ModulePanel({ api }: IDockviewPanelProps) {
       return null
   }
 }
-export const components = { module: ModulePanel }
+export const components = { module: ModulePanel, 'component-slot': ComponentSlot }
 
 export function HeaderActions({ api, containerApi }: IDockviewHeaderActionsProps) {
   const [maximized, setMaximized] = useState(api.isMaximized())

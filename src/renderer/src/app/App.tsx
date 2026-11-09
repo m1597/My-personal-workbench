@@ -11,6 +11,7 @@ import { fluentTheme } from './fluentTheme'
 import { WindowMenu } from './WindowMenu'
 import { HelpDialog } from './HelpDialog'
 import { restoreLayout, trackLayout } from './layoutStorage'
+import { ComponentPrototypeButton, useComponentPrototype } from './componentPrototype'
 
 export default function App() {
   const [theme] = useState(() => ({
@@ -23,8 +24,9 @@ export default function App() {
   const [colorTheme, setColorTheme] = useState(readTheme)
   const uiTheme = useMemo(() => fluentTheme(colorTheme), [colorTheme])
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
+  useComponentPrototype(workspace.api)
   useEffect(() => {
-    if (workspace.api) return trackLayout(workspace.api)
+    if (workspace.api && !window.componentHost) return trackLayout(workspace.api)
   }, [workspace.api])
   useEffect(() => {
     const api = workspace.api
@@ -48,7 +50,8 @@ export default function App() {
   }, [workspace.api])
   const onReady = useCallback(
     ({ api }: DockviewReadyEvent) => {
-      restoreLayout(api, theme.gap)
+      if (window.componentHost) createDefaultLayout(api)
+      else restoreLayout(api, theme.gap)
       setWorkspace({
         api,
         active: api.activePanel?.id,
@@ -71,6 +74,7 @@ export default function App() {
               <strong>我的工作空间</strong>
             </div>
             <WindowMenu />
+            <ComponentPrototypeButton />
             <div className="header-spacer" />
             <div className="workspace-label">
               <span className="accent-dot" />
