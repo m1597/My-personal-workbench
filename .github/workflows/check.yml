@@ -1,0 +1,43 @@
+name: Windows checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install with verified npm
+        shell: pwsh
+        run: |
+          $npmVersion = (Get-Content package.json | ConvertFrom-Json).packageManager
+          npx --yes --package=$npmVersion npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run unified checks
+        shell: pwsh
+        run: |
+          $npmVersion = (Get-Content package.json | ConvertFrom-Json).packageManager
+          npx --yes --package=$npmVersion npm run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-check-failure
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            playwright-report/
+            test-results/**/*.png
+            test-results/**/*.zip
+            test-results/**/*.md

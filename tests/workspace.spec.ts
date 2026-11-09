@@ -16,23 +16,55 @@ test.beforeEach(async ({}, testInfo) => {
   profilePath = testInfo.outputPath('profile')
   app = await electron.launch({
     args: ['.', `--user-data-dir=${profilePath}`],
-    env: { ...process.env, ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '' },
+    env: {
+      ...process.env,
+      WORKBENCH_TEST_BACKGROUND: '1',
+      ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '',
+    },
   })
   page = await app.firstWindow()
+  expect(
+    await app.evaluate(({ BrowserWindow, screen }) => {
+      const window = BrowserWindow.getAllWindows()[0]
+      const bounds = window.getBounds()
+      return (
+        !window.isFocused() &&
+        screen.getAllDisplays().every((display) => bounds.x + bounds.width <= display.bounds.x)
+      )
+    }),
+  ).toBe(true)
+  await app.context().tracing.start({ screenshots: false, snapshots: true })
   errors = []
   page.on('pageerror', (error) => errors.push(error.message))
   await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
 })
 
-test.afterEach(async () => {
+test.afterEach(async ({}, testInfo) => {
   try {
     expect(errors).toEqual([])
   } finally {
-    await app?.close()
+    try {
+      if (
+        page &&
+        !page.isClosed() &&
+        (testInfo.status !== testInfo.expectedStatus || errors?.length)
+      ) {
+        const screenshot = testInfo.outputPath('failure.png')
+        await page.screenshot({ path: screenshot })
+        await testInfo.attach('failure', { path: screenshot, contentType: 'image/png' })
+      }
+      if (app) {
+        const trace = testInfo.outputPath('trace.zip')
+        await app.context().tracing.stop({ path: trace })
+        await testInfo.attach('trace', { path: trace, contentType: 'application/zip' })
+      }
+    } finally {
+      await app?.close()
+    }
   }
 })
 
-test('默认深色，切换同步原生主题且重启后保留选择', async () => {
+test('默认深色，切换同步原生主题且重启后保留选择', async ({}, testInfo) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
   await expect.poll(() => page.evaluate(() => typeof window.workbench?.setTheme)).toBe('function')
@@ -40,12 +72,21 @@ test('默认深色，切换同步原生主题且重启后保留选择', async ()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
   await page.screenshot({ path: path.resolve('tmp/workbench-light.png') })
+  const initialTrace = testInfo.outputPath('before-restart.zip')
+  await app.context().tracing.stop({ path: initialTrace })
+  await testInfo.attach('before-restart', { path: initialTrace, contentType: 'application/zip' })
   await app.close()
   app = await electron.launch({
     args: ['.', `--user-data-dir=${profilePath}`],
-    env: { ...process.env, ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '' },
+    env: {
+      ...process.env,
+      WORKBENCH_TEST_BACKGROUND: '1',
+      ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '',
+    },
   })
   page = await app.firstWindow()
+  await app.context().tracing.start({ screenshots: false, snapshots: true })
+  page.on('pageerror', (error) => errors.push(error.message))
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
   await page.getByRole('button', { name: '切换到深色', exact: true }).click()
@@ -105,10 +146,14 @@ test('鼠标拖动分隔线改变模块宽度和高度', async () => {
 test('拖拽模块合并标签，再拖到边缘分屏', async () => {
   const source = page.getByRole('tab', { name: '模块 4', exact: true })
   const target = page.getByRole('tab', { name: '模块 2', exact: true })
-  await source.dragTo(target, {
-    sourcePosition: { x: 25, y: 15 },
-    targetPosition: { x: 25, y: 15 },
-  })
+  const sourceBox = (await source.boundingBox())!
+  const targetBox = (await target.boundingBox())!
+  await page.mouse.move(sourceBox.x + 25, sourceBox.y + 15)
+  await page.mouse.down()
+  await page.mouse.move(sourceBox.x + 35, sourceBox.y + 15, { steps: 3 })
+  await page.mouse.move(targetBox.x + 25, targetBox.y + 15, { steps: 20 })
+  await page.mouse.move(targetBox.x + 26, targetBox.y + 15)
+  await page.mouse.up()
   await expect(page.locator('.dv-groupview')).toHaveCount(3)
   await expect(page.getByTestId('module-4')).toBeVisible()
   await target.click()

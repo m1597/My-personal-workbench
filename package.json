@@ -13,14 +13,17 @@
     "dev": "electron-vite dev",
     "dev:web": "vite --config vite.web.config.ts",
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && electron-vite build",
+    "build": "npm run typecheck && npm run build:app",
     "start": "electron-vite preview",
-    "test": "npm run build && playwright test && playwright test --config playwright.dev.config.ts",
+    "test": "npm run build && npm run test:interaction",
     "doctor": "node scripts/doctor.mjs",
     "postinstall": "install-electron",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "lint": "biome lint --error-on-warnings ."
+    "lint": "biome lint --error-on-warnings .",
+    "build:app": "electron-vite build",
+    "test:interaction": "playwright test && playwright test --config playwright.dev.config.ts",
+    "check": "npm run doctor && npm run format:check && npm run lint && npm run typecheck && npm run build:app && npm run test:interaction"
   },
   "dependencies": {
     "dockview-react": "8.9.0",

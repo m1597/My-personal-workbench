@@ -1,11 +1,16 @@
-import { app, BrowserWindow, Menu, nativeTheme, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, nativeTheme, ipcMain, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { release } from 'node:os'
 
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
 
 function createWindow() {
+  const backgroundTest = !app.isPackaged && process.env.WORKBENCH_TEST_BACKGROUND === '1'
+  const testX = backgroundTest
+    ? Math.min(...screen.getAllDisplays().map((display) => display.bounds.x)) - 2000
+    : undefined
   const window = new BrowserWindow({
+    ...(backgroundTest ? { x: testX, y: 0, skipTaskbar: true } : {}),
     width: 1480,
     height: 960,
     minWidth: 900,
@@ -16,13 +21,17 @@ function createWindow() {
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
+      backgroundThrottling: !backgroundTest,
       preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   })
-  window.once('ready-to-show', () => window.show())
+  window.once('ready-to-show', () => {
+    if (backgroundTest) window.showInactive()
+    else window.show()
+  })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event) => event.preventDefault())
 

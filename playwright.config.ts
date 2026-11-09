@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './tests',
   workers: 1,
   timeout: 30_000,
-  reporter: 'list',
-  use: { trace: 'retain-on-failure' },
+  outputDir: 'test-results/production',
+  reporter: [['list'], ['html', { outputFolder: 'playwright-report/production', open: 'never' }]],
+  forbidOnly: Boolean(process.env.CI),
 })
