@@ -23,7 +23,8 @@
     "lint": "biome lint --error-on-warnings .",
     "build:app": "electron-vite build",
     "test:interaction": "playwright test && playwright test --config playwright.dev.config.ts",
-    "check": "npm run doctor && npm run format:check && npm run lint && npm run typecheck && npm run build:app && npm run test:interaction"
+    "check": "npm run doctor && npm run format:check && npm run lint && npm run test:doctor && npm run typecheck && npm run build:app && npm run test:interaction",
+    "test:doctor": "node --test tests/doctor.test.mjs"
   },
   "dependencies": {
     "dockview-react": "8.9.0",
@@ -34,7 +35,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
     "@playwright/test": "1.65.0",
-    "@types/node": "26.6.6",
+    "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.2.1",
