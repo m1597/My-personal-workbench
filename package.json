@@ -24,7 +24,8 @@
     "build:app": "electron-vite build",
     "test:interaction": "playwright test && playwright test --config playwright.dev.config.ts",
     "check": "npm run doctor && npm run format:check && npm run lint && npm run test:doctor && npm run typecheck && npm run build:app && npm run test:interaction",
-    "test:doctor": "node --test tests/doctor.test.mjs"
+    "test:doctor": "node --test tests/doctor.test.mjs",
+    "check:visual": "npm run build && node scripts/visual-check.mjs"
   },
   "dependencies": {
     "@fluentui/react-components": "9.75.1",
