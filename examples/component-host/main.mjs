@@ -1,3 +1,4 @@
+import { release } from 'node:os'
 import { watchNativeDock } from './native-dock.mjs'
 import {
   app,
@@ -8,6 +9,7 @@ import {
   session,
   screen,
   nativeTheme,
+  Menu,
 } from 'electron'
 import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
@@ -23,6 +25,7 @@ if (!profile || !path.isAbsolute(profile)) throw new Error('原型必须指定�
 app.setPath('userData', profile)
 const componentRoot = argument('component')
 const workbenchFile = argument('workbench')
+const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
 const background = process.env.WORKBENCH_TEST_BACKGROUND === '1'
 let shell, standalone, view, parent
 let mode = 'standalone'
@@ -45,7 +48,8 @@ function options(width, height) {
     width,
     height,
     show: false,
-    backgroundColor: '#202227',
+    backgroundColor: supportsAcrylic ? '#00000000' : '#202227',
+    ...(supportsAcrylic ? { backgroundMaterial: 'acrylic' } : {}),
     ...(background
       ? {
           x: Math.min(...screen.getAllDisplays().map((d) => d.bounds.x)) - 2200,
@@ -164,12 +168,12 @@ async function openComponent() {
   isolated.setPermissionRequestHandler((_, __, callback) => callback(false))
   isolated.setPermissionCheckHandler(() => false)
   const allowed = new Set(
-    ['index.html', 'component.js', 'style.css', 'tokens.css'].map(
+    ['index.html', 'component.js', 'component.css'].map(
       (file) => pathToFileURL(path.join(root, file)).href,
     ),
   )
   isolated.webRequest.onBeforeRequest((details, callback) =>
-    callback({ cancel: !allowed.has(details.url) }),
+    callback({ cancel: !allowed.has(details.url.split('?')[0]) }),
   )
   view = new WebContentsView({
     webPreferences: {
@@ -181,6 +185,7 @@ async function openComponent() {
       backgroundThrottling: false,
     },
   })
+  view.setBackgroundColor('#00000000')
   secure(view.webContents)
   view.webContents.on('render-process-gone', () => {
     clearTimeout(transferTimer)
@@ -191,7 +196,9 @@ async function openComponent() {
   })
   error = ''
   detach()
-  await view.webContents.loadFile(entry)
+  await view.webContents.loadFile(entry, {
+    query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {},
+  })
   return true
 }
 async function openWorkbench() {
@@ -217,7 +224,7 @@ async function openWorkbench() {
     shell = undefined
     dropZone = undefined
   })
-  await shell.loadFile(file)
+  await shell.loadFile(file, { query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {} })
   show(shell)
 }
 async function attach() {
@@ -257,6 +264,7 @@ else {
   void app
     .whenReady()
     .then(async () => {
+      Menu.setApplicationMenu(null)
       nativeTheme.themeSource = 'dark'
       ipcMain.handle('sample:hello', (event, payload) => {
         if (!isSample(event) || payload?.protocol !== '0.1') throw new Error('DENIED')

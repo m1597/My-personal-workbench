@@ -65,4 +65,4 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 ## 独立组件原型
 
-已实现隔离的公共宿主与纯网页示例，采用按钮停靠/分离。运行 `npm run build:prototype` 后执行 `npm run check:prototype`，自动使用独立 profile 在后台验证；不打开日常工作区。详见 [组件开发与验证](docs/组件开发.md)。目前是分目录部署，依赖项目 Electron 运行时，不是新的独立安装包；正式应用入口和布局存储保持原状。
+已实现隔离的公共宿主与 Fluent React 示例，支持按钮切换及 Windows 消息触发停靠/手柄拖出。运行 `npm run build:prototype` 后执行 `npm run check:prototype`，自动使用独立 profile 在后台验证；不打开日常工作区。详见 [组件开发与验证](docs/组件开发.md)。目前是分目录部署，依赖项目 Electron 运行时，不是新的独立安装包；正式应用入口和布局存储保持原状。

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
+import { GripHorizontal } from 'lucide-react'
 import { Button } from '@fluentui/react-components'
 
 type HostState = {
@@ -135,13 +136,15 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
       style={{
         width: '100%',
         height: '100%',
-        padding: 16,
+        padding: '48px 16px 16px',
         boxSizing: 'border-box',
         position: 'relative',
       }}
     >
-      <button
-        type="button"
+      <Button
+        appearance="subtle"
+        icon={<GripHorizontal size={14} />}
+        title="拖出工作区后松开以分离；Esc 取消，键盘 Enter 分离"
         aria-label="组件拖出手柄"
         style={{
           height: 36,
@@ -151,6 +154,9 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
           color: 'var(--text)',
           font: 'inherit',
           textAlign: 'left',
+          justifyContent: 'flex-start',
+          borderRadius: 0,
+          fontSize: 'var(--font-size-caption)',
           cursor: 'grab',
           touchAction: 'none',
           userSelect: 'none',
@@ -191,8 +197,8 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
           if (event.detail === 0) void window.componentHost?.detach()
         }}
       >
-        拖出工作区后松开以分离 · Esc 取消
-      </button>
+        拖出以分离
+      </Button>
       <p>
         {state?.error ||
           (state?.mode === 'standalone' ? '组件在独立窗口中运行' : '正在连接示例组件')}
