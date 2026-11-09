@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { _electron as electron, expect } from '@playwright/test'
 import { mkdir, mkdtemp, cp, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -62,6 +64,95 @@ try {
   await sample.getByRole('button', { name: '增加', exact: true }).click()
   const boot = await sample.locator('body').getAttribute('data-boot-id')
   const session = await sample.locator('#session').textContent()
+  // Set up both windows, then exercise the native message path without transfer buttons.
+  await sample.getByRole('button', { name: '加入工作台', exact: true }).click()
+  await expect(sample.locator('#mode')).toHaveText('已停靠')
+  await sample.getByRole('button', { name: '分离窗口', exact: true }).click()
+  const dockShell = await findPage(app, '/workbench/index.html')
+  const zone = await dockShell.locator('.docking-area').boundingBox()
+  const info = await app.evaluate(({ BaseWindow, BrowserWindow }, zone) => {
+    const host = BrowserWindow.getAllWindows()[0]
+    const win = BaseWindow.getAllWindows().find((w) => w.id !== host.id)
+    const content = host.getContentBounds()
+    return {
+      handle: win.getNativeWindowHandle().readBigUInt64LE().toString(),
+      id: win.id,
+      x: Math.round(content.x + zone.x + zone.width / 2 - win.getBounds().width / 2),
+      y: Math.round(content.y + zone.y + 80 - 16),
+    }
+  }, zone)
+  const message = (value) =>
+    promisify(execFile)(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-File',
+        path.resolve('scripts/native-dock-probe.ps1'),
+        info.handle,
+        String(value),
+      ],
+      { windowsHide: true, timeout: 10000 },
+    )
+  const position = (x, y) =>
+    app.evaluate(
+      ({ BaseWindow }, value) => BaseWindow.fromId(value.id).setPosition(value.x, value.y),
+      { id: info.id, x, y },
+    )
+  await position(info.x, info.y)
+  await sample.waitForTimeout(150)
+  await expect(sample.locator('#mode')).toHaveText('独立窗口')
+  // Resize/modal-loop notifications without WM_MOVING must not dock.
+  await message(0x231)
+  await position(info.x + 10, info.y)
+  await message(0x232)
+  await expect(sample.locator('#mode')).toHaveText('独立窗口')
+  // Moving outside the workspace is a rejected drop.
+  await message(0x231)
+  await message(0x216)
+  await position(info.x, info.y - 500)
+  await message(0x232)
+  await expect(sample.locator('#mode')).toHaveText('独立窗口')
+  // Returning to the initial position (Escape semantics) must not dock.
+  await position(info.x, info.y)
+  await message(0x231)
+  await message(0x216)
+  await position(info.x + 10, info.y)
+  await position(info.x, info.y)
+  await message(0x232)
+  await expect(sample.locator('#mode')).toHaveText('独立窗口')
+  await position(info.x, info.y - 500)
+  await message(0x231)
+  await message(0x216)
+  await position(info.x, info.y)
+  await expect(dockShell.getByRole('button', { name: '松开窗口标题栏以停靠' })).toBeVisible()
+  await dockShell.screenshot({ path: path.join(evidence, 'native-drop-preview.png') })
+  await message(0x232)
+  await expect(sample.locator('#mode')).toHaveText('已停靠')
+  const grip = await dockShell.getByRole('button', { name: '组件拖出手柄' }).boundingBox()
+  // A click/short move and an Escape-cancelled drag must retain the panel.
+  await dockShell.mouse.move(grip.x + 50, grip.y + 16)
+  await dockShell.mouse.down()
+  await dockShell.mouse.move(grip.x + 55, grip.y + 16)
+  await dockShell.mouse.up()
+  await expect(sample.locator('#mode')).toHaveText('已停靠')
+  await dockShell.mouse.move(grip.x + 50, grip.y + 16)
+  await dockShell.mouse.down()
+  await dockShell.mouse.move(grip.x + 50, 20, { steps: 5 })
+  await dockShell.keyboard.press('Escape')
+  await dockShell.mouse.up()
+  await expect(sample.locator('#mode')).toHaveText('已停靠')
+  await dockShell.mouse.move(grip.x + 50, grip.y + 16)
+  await dockShell.mouse.down()
+  await dockShell.mouse.move(grip.x + 50, 20, { steps: 12 })
+  await dockShell.mouse.up()
+  await expect(sample.locator('#mode')).toHaveText('独立窗口')
+  await background(app)
+  console.log(
+    'PASS Windows HWND 消息模拟拖入/未命中/取消/非拖动；真实网页指针拖出分离（不是桌面系统鼠标验收）',
+  )
   for (let i = 0; i < 20; i++) {
     await sample.getByRole('button', { name: '加入工作台', exact: true }).click()
     await expect(sample.locator('#mode')).toHaveText('已停靠')
@@ -166,4 +257,6 @@ for (const kind of ['missing', 'incompatible']) {
   }
 }
 expect(errors).toEqual([])
-console.log(`PASS 缺失/不兼容反馈；证据目录 ${evidence}。未验证原生拖入、声音连续性、安装卸载。`)
+console.log(
+  `PASS 缺失/不兼容反馈；证据目录 ${evidence}。未验证真实桌面标题栏拖动、声音连续性、安装卸载。`,
+)

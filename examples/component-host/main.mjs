@@ -1,3 +1,4 @@
+import { watchNativeDock } from './native-dock.mjs'
 import {
   app,
   BaseWindow,
@@ -31,7 +32,9 @@ let entry
 const sessionId = randomUUID()
 let transferTimer
 let quitting = false
-const snapshot = () => ({ mode, phase, error, sessionId, theme: nativeTheme.themeSource })
+let dropZone
+let dragOver = false
+const snapshot = () => ({ mode, phase, error, sessionId, theme: nativeTheme.themeSource, dragOver })
 function broadcast() {
   if (shell && !shell.isDestroyed()) shell.webContents.send('prototype:state', snapshot())
   if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed())
@@ -81,6 +84,29 @@ function detach() {
   if (!view || view.webContents.isDestroyed() || view.webContents.isCrashed()) return
   if (!standalone || standalone.isDestroyed()) {
     standalone = new BaseWindow({ ...options(660, 620), title: '示例组件 · 独立窗口' })
+    watchNativeDock(standalone, {
+      target: () => {
+        if (
+          mode !== 'standalone' ||
+          phase !== 'ready' ||
+          !shell ||
+          shell.isDestroyed() ||
+          shell.isMinimized() ||
+          !shell.isVisible() ||
+          !dropZone
+        )
+          return null
+        const content = shell.getContentBounds()
+        return { ...dropZone, x: content.x + dropZone.x, y: content.y + dropZone.y }
+      },
+      commit: () => void attach(),
+      preview: (value) => {
+        if (dragOver !== value) {
+          dragOver = value
+          broadcast()
+        }
+      },
+    })
     standalone.on('resize', () => {
       if (mode === 'standalone' && view) {
         const [width, height] = standalone.getContentSize()
@@ -189,6 +215,7 @@ async function openWorkbench() {
   })
   shell.on('closed', () => {
     shell = undefined
+    dropZone = undefined
   })
   await shell.loadFile(file)
   show(shell)
@@ -259,6 +286,25 @@ else {
           nativeTheme.themeSource = theme
           broadcast()
         }
+      })
+      ipcMain.on('prototype:drop-zone', (event, rect) => {
+        if (!isShell(event)) return
+        if (rect === null) {
+          dropZone = undefined
+          return
+        }
+        const [width, height] = shell.getContentSize()
+        if (
+          rect &&
+          ['x', 'y', 'width', 'height'].every(
+            (key) => Number.isFinite(rect[key]) && rect[key] >= 0,
+          ) &&
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.x + rect.width <= width + 1 &&
+          rect.y + rect.height <= height + 1
+        )
+          dropZone = rect
       })
       ipcMain.on('prototype:bounds', (event, bounds) => {
         if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return

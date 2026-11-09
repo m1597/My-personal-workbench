@@ -2,10 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { Button } from '@fluentui/react-components'
 
-type HostState = { mode: string; phase: string; error: string; sessionId: string }
+type HostState = {
+  mode: string
+  phase: string
+  error: string
+  sessionId: string
+  dragOver?: boolean
+}
 declare global {
   interface Window {
     componentHost?: {
+      dropZone(value: { x: number; y: number; width: number; height: number } | null): void
       status(): Promise<HostState>
       open(): Promise<{ ok: boolean; error?: string }>
       bounds(value: { x: number; y: number; width: number; height: number } | null): void
@@ -37,12 +44,33 @@ export function useComponentPrototype(api?: DockviewApi) {
     }
     const off = host.subscribe(update)
     void host.status().then(update)
-    return off
+    let frame = 0
+    let previous = ''
+    const measure = () => {
+      const rect = document.querySelector('.docking-area')?.getBoundingClientRect()
+      const blocked = document.querySelector('[role="dialog"], [role="menu"]')
+      const zone =
+        rect && !blocked ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+      const encoded = JSON.stringify(zone)
+      if (previous !== encoded) {
+        previous = encoded
+        host.dropZone(zone)
+      }
+      frame = requestAnimationFrame(measure)
+    }
+    frame = requestAnimationFrame(measure)
+    return () => {
+      off()
+      cancelAnimationFrame(frame)
+      host.dropZone(null)
+    }
   }, [api])
 }
 
 export function ComponentPrototypeButton() {
   const [message, setMessage] = useState('')
+  const [over, setOver] = useState(false)
+  useEffect(() => window.componentHost?.subscribe((value) => setOver(!!value.dragOver)), [])
   if (!window.componentHost) return null
   return (
     <Button
@@ -53,13 +81,14 @@ export function ComponentPrototypeButton() {
         setMessage(result?.error ?? '')
       }}
     >
-      {message || '示例组件'}
+      {over ? '松开窗口标题栏以停靠' : message || '示例组件'}
     </Button>
   )
 }
 
 export function ComponentSlot({ api }: IDockviewPanelProps) {
   const element = useRef<HTMLDivElement>(null)
+  const dragStart = useRef<{ x: number; y: number } | null>(null)
   const [state, setState] = useState<HostState>()
   useEffect(() => {
     const host = window.componentHost
@@ -83,7 +112,7 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
         api.isVisible &&
         !blocked &&
         (current?.mode === 'docked' || current?.phase === 'attaching')
-          ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+          ? { x: rect.x, y: rect.y + 36, width: rect.width, height: Math.max(0, rect.height - 36) }
           : null
       const encoded = JSON.stringify(bounds)
       if (encoded !== previous) {
@@ -103,8 +132,67 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
   return (
     <div
       ref={element}
-      style={{ width: '100%', height: '100%', padding: 16, boxSizing: 'border-box' }}
+      style={{
+        width: '100%',
+        height: '100%',
+        padding: 16,
+        boxSizing: 'border-box',
+        position: 'relative',
+      }}
     >
+      <button
+        type="button"
+        aria-label="组件拖出手柄"
+        style={{
+          height: 36,
+          boxSizing: 'border-box',
+          border: 0,
+          background: 'var(--control)',
+          color: 'var(--text)',
+          font: 'inherit',
+          textAlign: 'left',
+          cursor: 'grab',
+          touchAction: 'none',
+          userSelect: 'none',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          padding: 8,
+        }}
+        onPointerDown={(event) => {
+          if (event.button !== 0 || state?.mode !== 'docked') return
+          dragStart.current = { x: event.clientX, y: event.clientY }
+          event.currentTarget.focus()
+          event.currentTarget.setPointerCapture(event.pointerId)
+        }}
+        onPointerUp={(event) => {
+          const start = dragStart.current
+          dragStart.current = null
+          const zone = document.querySelector('.docking-area')?.getBoundingClientRect()
+          if (
+            start &&
+            zone &&
+            Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12 &&
+            (event.clientX < zone.left ||
+              event.clientX >= zone.right ||
+              event.clientY < zone.top ||
+              event.clientY >= zone.bottom)
+          )
+            void window.componentHost?.detach()
+        }}
+        onPointerCancel={() => {
+          dragStart.current = null
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') dragStart.current = null
+        }}
+        onClick={(event) => {
+          if (event.detail === 0) void window.componentHost?.detach()
+        }}
+      >
+        拖出工作区后松开以分离 · Esc 取消
+      </button>
       <p>
         {state?.error ||
           (state?.mode === 'standalone' ? '组件在独立窗口中运行' : '正在连接示例组件')}

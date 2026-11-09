@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('workbench', {
 contextBridge.exposeInMainWorld('componentHost', {
   status: () => ipcRenderer.invoke('prototype:status'),
   open: () => ipcRenderer.invoke('prototype:open'),
+  dropZone: (rect) => ipcRenderer.send('prototype:drop-zone', rect),
   bounds: (bounds) => ipcRenderer.send('prototype:bounds', bounds),
   detach: () => ipcRenderer.invoke('prototype:detach'),
   subscribe: (callback) => {
