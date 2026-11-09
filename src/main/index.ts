@@ -19,8 +19,8 @@ function createWindow() {
       preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
-    }
+      sandbox: true,
+    },
   })
   window.once('ready-to-show', () => window.show())
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -32,7 +32,7 @@ function createWindow() {
     void window.loadURL(url.toString())
   } else {
     void window.loadFile(fileURLToPath(new URL('../renderer/index.html', import.meta.url)), {
-      query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {}
+      query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {},
     })
   }
 }
@@ -41,7 +41,12 @@ void app.whenReady().then(() => {
   nativeTheme.themeSource = 'dark'
   ipcMain.handle('theme:set', (event, theme: unknown) => {
     const window = BrowserWindow.fromWebContents(event.sender)
-    if (!window || event.senderFrame !== event.sender.mainFrame || (theme !== 'dark' && theme !== 'light')) return
+    if (
+      !window ||
+      event.senderFrame !== event.sender.mainFrame ||
+      (theme !== 'dark' && theme !== 'light')
+    )
+      return
     nativeTheme.themeSource = theme
     if (!supportsAcrylic) window.setBackgroundColor(theme === 'dark' ? '#202227' : '#eef2fa')
   })

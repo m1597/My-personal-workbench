@@ -11,8 +11,10 @@ if (new URLSearchParams(location.search).get('nativeBackdrop') === 'acrylic') {
   document.documentElement.dataset.backdrop = 'acrylic'
 }
 
-createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root')
+if (!root) throw new Error('Missing root element')
+createRoot(root).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>
+  </React.StrictMode>,
 )
