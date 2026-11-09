@@ -18,9 +18,15 @@ import { modules, icons } from './moduleRegistry'
 import { WorkspaceContext, type WorkspaceState } from './WorkspaceContext'
 import { components, HeaderActions, EmptyWorkspace } from './dockviewComponents'
 import { applyTheme, readTheme } from './theme'
-const theme = { name: 'workbench', className: 'dockview-theme-workbench', gap: 8 }
 
 export default function App() {
+  const [theme] = useState(() => ({
+    name: 'workbench',
+    className: 'dockview-theme-workbench',
+    gap: Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--space-8'),
+    ),
+  }))
   const [colorTheme, setColorTheme] = useState(readTheme)
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
   const [menuOpen, setMenuOpen] = useState(false)

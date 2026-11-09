@@ -2,7 +2,8 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './app/App'
 import 'dockview-react/dist/styles/dockview.css'
-import './styles.css'
+import './styles/tokens.css'
+import './styles/global.css'
 import { applyTheme, readTheme } from './app/theme'
 
 applyTheme(readTheme())
