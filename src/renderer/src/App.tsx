@@ -3,7 +3,7 @@ import { DockviewReact, themeDark, type DockviewApi, type DockviewReadyEvent, ty
 import { PanelsTopLeft, PanelLeft, PanelRight, PanelBottom, SquareDashed, ChevronDown, ChevronRight, Check, Plus, RotateCcw, Maximize2, Minimize2, GripVertical, MousePointer2, SlidersHorizontal, HelpCircle, X, Search, LayoutGrid, Circle, Move } from 'lucide-react'
 import { createDefaultLayout, modules, openModule } from './workspace'
 
-const theme = { ...themeDark, name: 'workbench', className: 'dockview-theme-workbench', gap: 5 }
+const theme = { ...themeDark, name: 'workbench', className: 'dockview-theme-workbench', colorScheme: 'light' as const, gap: 8 }
 const icons = [PanelLeft, SquareDashed, PanelRight, PanelBottom]
 type WorkspaceState = { api?: DockviewApi; active?: string; visible: string[] }
 const WorkspaceContext = createContext<WorkspaceState>({ visible: [] })

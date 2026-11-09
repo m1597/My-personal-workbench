@@ -1,5 +1,8 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, nativeTheme } from 'electron'
 import { fileURLToPath } from 'node:url'
+import { release } from 'node:os'
+
+const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -8,7 +11,8 @@ function createWindow() {
     minWidth: 900,
     minHeight: 640,
     title: '个人工作台',
-    backgroundColor: '#18181a',
+    backgroundColor: supportsAcrylic ? '#00000000' : '#eef2fa',
+    ...(supportsAcrylic ? { backgroundMaterial: 'acrylic' as const } : {}),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -22,13 +26,18 @@ function createWindow() {
   window.webContents.on('will-navigate', (event) => event.preventDefault())
 
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
-    void window.loadURL(process.env.ELECTRON_RENDERER_URL)
+    const url = new URL(process.env.ELECTRON_RENDERER_URL)
+    if (supportsAcrylic) url.searchParams.set('nativeBackdrop', 'acrylic')
+    void window.loadURL(url.toString())
   } else {
-    void window.loadFile(fileURLToPath(new URL('../renderer/index.html', import.meta.url)))
+    void window.loadFile(fileURLToPath(new URL('../renderer/index.html', import.meta.url)), {
+      query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {}
+    })
   }
 }
 
 void app.whenReady().then(() => {
+  nativeTheme.themeSource = 'light'
   Menu.setApplicationMenu(null)
   createWindow()
   app.on('activate', () => {

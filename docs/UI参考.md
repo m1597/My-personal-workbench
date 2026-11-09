@@ -1,6 +1,6 @@
 # UI 参考与实现边界
 
-用户选定 Penpot 深色工作区作为主要视觉参考，Dockview 作为面板布局库。
+当前方案：用户否定了上一版深色界面，明确改为微软磨砂玻璃质感。采用 Fluent 浅色界面与 Windows 原生 Acrylic；Dockview 仍作为布局库。下方 Penpot 记录仅保留为历史来源。
 
 ## 来源
 
@@ -22,3 +22,13 @@
 ## 字体调整
 
 中文优先使用本机已安装的 HarmonyOS Sans SC（鸿蒙黑体），回退到微软雅黑 UI。正文 13–14px，辅助文字至少 12px；不打包或分发系统字体。已通过 Chromium 字体检查确认中文标题实际使用 HarmonyOS Sans SC。
+
+## 当前磨砂玻璃方案
+
+- 浅色半透明面板、蓝色选中状态、10px 面板圆角和柔和阴影。正文保持深色，避免透明度影响中文阅读。
+- Windows 11 build 22621+ 使用 Electron backgroundMaterial: acrylic；页面透明底色让系统材质显现。旧系统及浏览器采用浅色回退。
+- 面板及弹出菜单采用 CSS backdrop-filter，减少透明度与高对比度偏好下使用实色回退。
+- 字体为 HarmonyOS Sans SC → Microsoft YaHei UI → Microsoft YaHei；实际本机标题字体已用 Chromium CDP 核查。
+- 已复验开发模式和发布构建共 8 项 Electron 交互测试。
+- [Microsoft Acrylic 指南](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)
+- [Electron BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)
