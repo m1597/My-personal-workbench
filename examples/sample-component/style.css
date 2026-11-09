@@ -9,10 +9,10 @@ body {
 * {
   box-sizing: border-box;
 }
-.sample-shell {
+.sample-shell.fui-FluentProvider {
   min-height: 100vh;
   color: var(--text);
-  background: linear-gradient(145deg, var(--glass), var(--canvas));
+  background: var(--base);
   font-family: var(--font-ui);
 }
 .sample-header {
@@ -21,8 +21,7 @@ body {
   gap: var(--space-12);
   padding: var(--space-18) var(--space-24);
   border-bottom: 1px solid var(--stroke);
-  background: var(--glass);
-  backdrop-filter: var(--material-panel);
+  background: transparent;
 }
 .sample-header > button {
   margin-left: auto;
@@ -127,4 +126,24 @@ body {
 
 :root[data-material="acrylic"] {
   background: transparent;
+}
+
+/* The native window owns the blur. Do not cover it with the Provider's solid
+   background, a second gradient, or a separate blur on the header. */
+:root[data-material="acrylic"] .sample-shell.fui-FluentProvider {
+  background: transparent;
+}
+:root[data-material="acrylic"] .sample-fields {
+  background: var(--glass);
+  box-shadow: none;
+}
+:root[data-material="acrylic"] .sample-fields .fui-Input,
+:root[data-material="acrylic"] .sample-fields .fui-Select {
+  background: var(--control);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-material="acrylic"],
+  :root[data-material="acrylic"] .sample-shell.fui-FluentProvider {
+    background: var(--base);
+  }
 }

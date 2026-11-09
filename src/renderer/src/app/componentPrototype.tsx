@@ -199,11 +199,15 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
       >
         拖出以分离
       </Button>
-      <p>
-        {state?.error ||
-          (state?.mode === 'standalone' ? '组件在独立窗口中运行' : '正在连接示例组件')}
-      </p>
-      <Button onClick={() => void window.componentHost?.open()}>重新连接示例</Button>
+      {!(state?.mode === 'docked' && state.phase === 'ready') && (
+        <>
+          <p>
+            {state?.error ||
+              (state?.mode === 'standalone' ? '组件在独立窗口中运行' : '正在连接示例组件')}
+          </p>
+          <Button onClick={() => void window.componentHost?.open()}>重新连接示例</Button>
+        </>
+      )}
     </div>
   )
 }

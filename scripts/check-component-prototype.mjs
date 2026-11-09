@@ -47,6 +47,21 @@ try {
   const sample = await findPage(app, '/component/index.html')
   await expect(sample.getByText('独立窗口', { exact: true })).toBeVisible()
   await expect(sample.locator('.fui-Input')).toHaveCount(1)
+  const material = await sample.evaluate(() => {
+    const root = document.documentElement
+    const provider = document.querySelector('.sample-shell')
+    const nativeMaterial = root.dataset.material
+    const background = getComputedStyle(provider).backgroundColor
+    const gradient = getComputedStyle(provider).backgroundImage
+    delete root.dataset.material
+    const fallback = getComputedStyle(provider).backgroundColor
+    if (nativeMaterial) root.dataset.material = nativeMaterial
+    return { nativeMaterial, background, gradient, fallback }
+  })
+  if (material.nativeMaterial === 'acrylic') expect(material.background).toBe('rgba(0, 0, 0, 0)')
+  expect(material.gradient).toBe('none')
+  expect(material.fallback).toBe('rgb(32, 34, 39)')
+
   await expect(sample.locator('.fui-Select')).toHaveCount(1)
   expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu())).toBeNull()
   expect(await sample.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -220,6 +235,24 @@ try {
   await expect(sample.locator('#mode')).toHaveText('独立窗口')
   await sample.waitForTimeout(300)
   await sample.screenshot({ path: path.join(evidence, 'component.png') })
+  // Renderer captures omit native Acrylic. Capture the supported opaque fallback
+  // separately for legibility review; never label this as native material evidence.
+  const savedMaterial = await sample.evaluate(() => {
+    const value = document.documentElement.dataset.material
+    delete document.documentElement.dataset.material
+    return value
+  })
+  await sample.screenshot({ path: path.join(evidence, 'component-fallback-dark.png') })
+  await shell.evaluate(() => window.workbench.setTheme('light'))
+  await expect(sample.locator('html')).toHaveAttribute('data-theme', 'light')
+  await sample.mouse.move(5, 5)
+  await sample.waitForTimeout(300)
+  await sample.screenshot({ path: path.join(evidence, 'component-fallback-light.png') })
+  await shell.evaluate(() => window.workbench.setTheme('dark'))
+  await expect(sample.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await sample.evaluate((value) => {
+    if (value) document.documentElement.dataset.material = value
+  }, savedMaterial)
   await sample.getByRole('button', { name: '加入工作台', exact: true }).click()
   await expect(sample.locator('#mode')).toHaveText('已停靠')
   await sample.waitForTimeout(300)
