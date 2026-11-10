@@ -72,3 +72,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 右上角齿轮可调整主题、材质浓度、密度、强调色和面板边角，立即生效并在当前工作区记忆；“恢复默认外观”不重置布局。中文字体保持原方案。`npm run build` 后运行 `node scripts/preview-appearance.mjs` 获取后台深浅色和设置截图（底色回退预览）。详见 [设计规范](docs/设计规范.md)。
 
 [外观设置截图](docs/images/workbench-settings.png)。
+
+## 桌面双击启动
+
+本机桌面“打开个人工作台.cmd”调用 `scripts/open-workbench.cmd`，直接启动已构建版本（可进入右上角软件设置）。不启动终端开发服务器，不下载依赖。设置与布局保存在项目 `local/desktop-profile`，可关闭后单独备份；与测试及安装版数据隔离。更新源码后开发者执行 `npm run build` 才会更新此入口展示的界面；首次缺依赖/构建时脚本会说明修复命令，不静默安装。项目文件夹需保持在桌面脚本旁，重复双击可能打开多个窗口，正常关闭原窗口后再开即可。
