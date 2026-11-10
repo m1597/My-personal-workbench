@@ -119,3 +119,87 @@
   --material-popup: blur(28px);
   --material-panel: blur(24px) saturate(125%);
 }
+
+/* Workbench appearance settings. Material is a UI overlay over native Acrylic. */
+:root {
+  --shell-surface: transparent;
+  --panel-surface: var(--glass);
+  --panel-shadow: inset 0 0 0 1px var(--stroke);
+  --panel-filter: none;
+  --shell-header-height: 56px;
+  --shell-toolbar-height: 36px;
+  --panel-tab-height: 36px;
+  --module-row-height: 36px;
+  --panel-radius: 10px;
+  --panel-tab-radius: 6px;
+}
+:root[data-density="compact"] {
+  --shell-header-height: 48px;
+  --shell-toolbar-height: 30px;
+  --panel-tab-height: 30px;
+  --module-row-height: 30px;
+}
+:root[data-corners="square"] {
+  --panel-radius: 2px;
+  --panel-tab-radius: 2px;
+}
+:root[data-material="soft"] {
+  --shell-surface: var(--backdrop);
+  --panel-surface: var(--glass);
+  --panel-filter: var(--material-panel);
+}
+:root[data-material="solid"] {
+  --shell-surface: var(--base);
+  --panel-surface: var(--solid-surface);
+  --panel-filter: none;
+}
+:root[data-accent="neutral"] {
+  --accent: #d9dde4;
+  --accent-hover: #f4f5f7;
+  --accent-soft: #d9dde41a;
+  --accent-border: #858d99;
+  --accent-preview: #636b78;
+  --drop: #d9dde424;
+  --on-accent: #202227;
+}
+:root[data-theme="light"][data-accent="neutral"] {
+  --accent: #394451;
+  --accent-hover: #222b37;
+  --accent-soft: #39445112;
+  --accent-border: #8a939e;
+  --accent-preview: #aeb6c0;
+  --drop: #3944511a;
+  --on-accent: #ffffff;
+}
+:root[data-accent="violet"] {
+  --accent: #c3b6ff;
+  --accent-hover: #d7ceff;
+  --accent-soft: #a58aff20;
+  --accent-border: #8e7ac1;
+  --accent-preview: #63517e;
+  --drop: #c3b6ff24;
+  --on-accent: #292039;
+}
+:root[data-theme="light"][data-accent="violet"] {
+  --accent: #6f4ab1;
+  --accent-hover: #58358e;
+  --accent-soft: #6f4ab112;
+  --accent-border: #a890d2;
+  --accent-preview: #c6b7e4;
+  --drop: #6f4ab11a;
+  --on-accent: #ffffff;
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --shell-surface: var(--base);
+    --panel-surface: var(--solid-surface);
+    --panel-filter: none;
+  }
+}
+@media (forced-colors: active) {
+  :root {
+    --shell-surface: Canvas;
+    --panel-surface: Canvas;
+    --panel-filter: none;
+  }
+}

@@ -239,3 +239,65 @@ test('官方控件支持搜索、菜单键盘导航和弹窗焦点恢复', async
   await expect(dialog).not.toBeVisible()
   await expect(help).toBeFocused()
 })
+
+test('外观设置即时生效、重启保持，恢复外观不重置布局', async ({}, testInfo) => {
+  await page.getByRole('button', { name: '软件设置', exact: true }).click()
+  const settings = page.getByRole('dialog')
+  await settings.getByLabel('颜色主题', { exact: true }).selectOption('light')
+  await settings.getByLabel('界面材质', { exact: true }).selectOption('solid')
+  expect(await settings.evaluate((el) => getComputedStyle(el).backdropFilter)).toBe('none')
+  await settings.getByLabel('界面密度', { exact: true }).selectOption('compact')
+  await settings.getByLabel('强调色', { exact: true }).selectOption('violet')
+  await settings.getByLabel('面板边角', { exact: true }).selectOption('square')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(page.locator('html')).toHaveAttribute('data-density', 'compact')
+  expect(await page.locator('.app-header').evaluate((el) => getComputedStyle(el).height)).toBe(
+    '48px',
+  )
+  expect(
+    await page.locator('.workbench').evaluate((el) => getComputedStyle(el).backgroundColor),
+  ).toBe('rgb(238, 242, 250)')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: '软件设置', exact: true })).toBeFocused()
+  const before = await page.locator('.dv-tab').count()
+  await app.context().tracing.stop({ path: testInfo.outputPath('appearance-before-restart.zip') })
+  await app.close()
+  app = await electron.launch({
+    args: ['.', `--user-data-dir=${profilePath}`],
+    env: {
+      ...process.env,
+      WORKBENCH_TEST_BACKGROUND: '1',
+      ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '',
+    },
+  })
+  page = await app.firstWindow()
+  await app.context().tracing.start({ screenshots: false, snapshots: true })
+  page.on('pageerror', (error) => errors.push(error.message))
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'violet')
+  await expect(page.locator('html')).toHaveAttribute('data-corners', 'square')
+  await expect(page.locator('html')).toHaveAttribute('data-material', 'solid')
+  await expect(page.locator('html')).toHaveAttribute('data-density', 'compact')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await page.getByRole('button', { name: '软件设置', exact: true }).click()
+  await page.getByRole('button', { name: '恢复默认外观', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-material', 'glass')
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'blue')
+  await expect(page.locator('html')).toHaveAttribute('data-density', 'comfortable')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  expect(await page.locator('.dv-tab').count()).toBe(before)
+})
+
+test('损坏或不兼容外观数据安全回退', async () => {
+  for (const stored of [
+    '{broken',
+    JSON.stringify({ version: 99, material: 'solid' }),
+    JSON.stringify({ version: 1, material: 'wrong', accent: 'red', density: null }),
+  ]) {
+    await page.evaluate((value) => localStorage.setItem('workbench.appearance', value), stored)
+    await page.reload()
+    await expect(page.locator('html')).toHaveAttribute('data-material', 'glass')
+    await expect(page.locator('html')).toHaveAttribute('data-accent', 'blue')
+    await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  }
+})

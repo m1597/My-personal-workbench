@@ -1,3 +1,5 @@
+import { AppearanceSettings } from './AppearanceSettings'
+import { applyAppearance, readAppearance, type Appearance } from './appearance'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react'
 import { PanelsTopLeft, RotateCcw, MousePointer2, LayoutGrid, Sun, Moon } from 'lucide-react'
@@ -22,6 +24,16 @@ export default function App() {
     ),
   }))
   const [colorTheme, setColorTheme] = useState(readTheme)
+  const [appearance, setAppearance] = useState(readAppearance)
+  const [appearanceSaved, setAppearanceSaved] = useState(true)
+  const changeAppearance = (value: Appearance) => {
+    setAppearanceSaved(applyAppearance(value))
+    setAppearance(value)
+  }
+  const changeTheme = (value: 'dark' | 'light') => {
+    applyTheme(value)
+    setColorTheme(value)
+  }
   const uiTheme = useMemo(() => fluentTheme(colorTheme), [colorTheme])
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
   useComponentPrototype(workspace.api)
@@ -70,8 +82,8 @@ export default function App() {
               <PanelsTopLeft size={23} strokeWidth={1.4} />
             </div>
             <div className="project-name">
-              <span>个人工作台</span>
-              <strong>我的工作空间</strong>
+              <strong>个人工作台</strong>
+              <span>我的工作空间</span>
             </div>
             <WindowMenu />
             <ComponentPrototypeButton />
@@ -93,6 +105,13 @@ export default function App() {
             >
               {colorTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
+            <AppearanceSettings
+              value={appearance}
+              theme={colorTheme}
+              onChange={changeAppearance}
+              onTheme={changeTheme}
+              saved={appearanceSaved}
+            />
             <HelpDialog />
             <span className="header-divider" />
             <Button
@@ -103,9 +122,6 @@ export default function App() {
             >
               重置布局
             </Button>
-            <div className="avatar" title="个人空间">
-              我
-            </div>
           </header>
           <div className="workspace-toolbar">
             <span className="workspace-title">
@@ -113,7 +129,7 @@ export default function App() {
               默认工作区
             </span>
             <span className="toolbar-divider" />
-            <span className="toolbar-hint">把工具放到顺手的位置</span>
+            <span className="toolbar-hint">拖动标签，自由组合工作区</span>
             <div className="header-spacer" />
             <div className="module-shortcuts">
               {modules.map((module, index) => {

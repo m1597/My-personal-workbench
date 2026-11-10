@@ -85,6 +85,7 @@ for (const scale of [1.25, 1.5]) {
         for (const [trigger, role] of [
           ['窗口', 'menu'],
           ['操作帮助', 'dialog'],
+          ['软件设置', 'dialog'],
         ]) {
           await page.getByRole('button', { name: trigger, exact: true }).click()
           const popup = page.getByRole(role)
