@@ -45,6 +45,7 @@ for (const scale of [1.25, 1.5]) {
     for (const [width, height] of [
       [1480, 960],
       [960, 720],
+      [900, 640],
     ]) {
       await app.evaluate(
         ({ BrowserWindow }, size) => {

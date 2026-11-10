@@ -28,6 +28,7 @@ try {
   for (const [width, height] of [
     [1480, 960],
     [960, 720],
+    [900, 640],
   ]) {
     await app.evaluate(
       ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setSize(size[0], size[1]),
@@ -40,6 +41,9 @@ try {
           .click()
       await page.mouse.move(1, 1)
       await page.waitForTimeout(300)
+      expect(
+        await page.locator('.bottom-panel').evaluate((el) => el.scrollHeight <= el.clientHeight),
+      ).toBe(true)
       await page.screenshot({ path: path.join(output, `${width}-${theme}.png`) })
       await page.getByRole('button', { name: '软件设置', exact: true }).click()
       await expect(page.getByRole('dialog')).toBeVisible()
@@ -48,7 +52,22 @@ try {
       expect(action.y + action.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight))
       await page.waitForTimeout(300)
       await page.screenshot({ path: path.join(output, `${width}-${theme}-settings.png`) })
+      const content = page.locator('.appearance-dialog .fui-DialogContent')
+      expect(await content.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+      await page.getByLabel('面板边角', { exact: true }).focus()
+      await expect(page.getByLabel('面板边角', { exact: true })).toBeFocused()
+      await content.evaluate((el) => {
+        el.scrollTop = el.scrollHeight
+      })
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: path.join(output, `${width}-${theme}-settings-bottom.png`) })
+      const close = await page.getByRole('button', { name: '关闭设置', exact: true }).boundingBox()
+      expect(close.y).toBeGreaterThanOrEqual(0)
+      await expect(page.getByRole('button', { name: '完成', exact: true })).toBeInViewport({
+        ratio: 1,
+      })
       await page.keyboard.press('Escape')
+      await expect(page.getByRole('button', { name: '软件设置', exact: true })).toBeFocused()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       )

@@ -90,6 +90,24 @@
 .statusbar {
   border-top: 0;
 }
+.bottom-panel {
+  container-type: size;
+  container-name: bottom-module;
+}
+@container bottom-module (max-height: 140px) {
+  .bottom-panel-top {
+    display: none;
+  }
+  .bottom-empty {
+    padding: var(--space-8) var(--space-15);
+  }
+  .bottom-empty h2 {
+    margin: 0 0 var(--space-4);
+  }
+  .bottom-empty p {
+    margin: 0;
+  }
+}
 .appearance-dialog.fui-DialogSurface {
   width: min(720px, calc(100vw - 32px));
 }

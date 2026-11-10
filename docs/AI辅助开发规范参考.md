@@ -6,12 +6,12 @@
 
 优先参考 OpenSpec 的单项变更记录，结合 ADR 保存重要架构决策。保留已有 AGENTS.md、开发流程、任务记录与 CI，避免再维护一套内容相同但会逐渐冲突的规范。当前产品目标大，实际实现仍是基础框架，应按实际风险增加约束。
 
-| 来源 | 可参考内容 | 对本项目的取舍 |
-| --- | --- | --- |
-| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) | 每项变更的动机、范围、需求场景、设计、任务，以及完成后的归档；MIT | 首选。适合已有工程持续迭代。先参考文档结构，不自动安装 CLI；小修不必建立整套文件。 |
-| [github/spec-kit](https://github.com/github/spec-kit) | 项目原则、需求到计划和实施的结构化流程；可组合模板；MIT | 组件协议等重大能力可参考其设计检查。与 OpenSpec 职责重叠，暂不同时接入两套生成流程。 |
-| [obra/superpowers](https://github.com/obra/superpowers) | 设计讨论、实施计划、系统调试、验证与评审 skills；MIT | 适合作为操作方法参考。其完整流程包含 TDD 与子代理协作，不直接照搬为本项目强制要求；不自动安装。 |
-| [Architecture Decision Record](https://github.com/architecture-decision-record/architecture-decision-record) | 保存决定的背景、备选方案、结果与后果 | 适合公共宿主、权限、数据归属等长期选择；复用现有技术决策文档，重要条目增长后再按决策拆文件。作者自写内容为 CC BY-NC-SA 4.0，收录模板分别遵循原作者许可；参考方法，暂不复制模板。 |
+| 来源                                                                                                         | 可参考内容                                                        | 对本项目的取舍                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)                                                | 每项变更的动机、范围、需求场景、设计、任务，以及完成后的归档；MIT | 首选。适合已有工程持续迭代。先参考文档结构，不自动安装 CLI；小修不必建立整套文件。                                                                                               |
+| [github/spec-kit](https://github.com/github/spec-kit)                                                        | 项目原则、需求到计划和实施的结构化流程；可组合模板；MIT           | 组件协议等重大能力可参考其设计检查。与 OpenSpec 职责重叠，暂不同时接入两套生成流程。                                                                                             |
+| [obra/superpowers](https://github.com/obra/superpowers)                                                      | 设计讨论、实施计划、系统调试、验证与评审 skills；MIT              | 适合作为操作方法参考。其完整流程包含 TDD 与子代理协作，不直接照搬为本项目强制要求；不自动安装。                                                                                  |
+| [Architecture Decision Record](https://github.com/architecture-decision-record/architecture-decision-record) | 保存决定的背景、备选方案、结果与后果                              | 适合公共宿主、权限、数据归属等长期选择；复用现有技术决策文档，重要条目增长后再按决策拆文件。作者自写内容为 CC BY-NC-SA 4.0，收录模板分别遵循原作者许可；参考方法，暂不复制模板。 |
 
 已直接查看 OpenSpec 的 [proposal 模板](https://github.com/Fission-AI/OpenSpec/blob/main/schemas/spec-driven/templates/proposal.md) 与 [design 模板](https://github.com/Fission-AI/OpenSpec/blob/main/schemas/spec-driven/templates/design.md)。前者明确动机、能力变化及影响，后者区分目标、非目标、决定与风险。这里仅整理适用性，未复制模板源码。
 
