@@ -11,6 +11,15 @@ const app = await electron.launch({
 try {
   const page = await app.firstWindow()
   await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  // Check the real CSS transparency chain before switching to fallback screenshots.
+  const materials = await page.evaluate(() =>
+    ['.fluent-workbench', '.workbench', '.dv-groupview', '.workbench-search'].map((selector) => ({
+      selector,
+      background: getComputedStyle(document.querySelector(selector)).backgroundColor,
+    })),
+  )
+  for (const material of materials) expect(material.background).toMatch(/^rgba\(/)
+  console.log('透明材质链路:', materials)
   // Native desktop Acrylic is not present in renderer screenshots. Use the actual
   // supported no-Acrylic fallback for visual review, without changing OS settings.
   await page.evaluate(() => {
@@ -34,6 +43,9 @@ try {
       await page.screenshot({ path: path.join(output, `${width}-${theme}.png`) })
       await page.getByRole('button', { name: '软件设置', exact: true }).click()
       await expect(page.getByRole('dialog')).toBeVisible()
+      const action = await page.getByRole('button', { name: '完成', exact: true }).boundingBox()
+      expect(action).not.toBeNull()
+      expect(action.y + action.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight))
       await page.waitForTimeout(300)
       await page.screenshot({ path: path.join(output, `${width}-${theme}-settings.png`) })
       await page.keyboard.press('Escape')

@@ -23,7 +23,7 @@
   --base: #202227;
   --backdrop: #171a20ad;
   --solid-surface: #282c34;
-  --menu-surface: #252a33ed;
+  --menu-surface: #252525b8;
   --glass: #ffffff08;
   --control: #ffffff0c;
   --hover: #ffffff12;
@@ -34,9 +34,9 @@
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --text: #243247;
-  --text-secondary: #51627b;
-  --text-muted: #69778b;
+  --text: #242424;
+  --text-secondary: #505050;
+  --text-muted: #686868;
   --accent: #2675c9;
   --accent-hover: #1e65b5;
   --accent-soft: #dceafd;
@@ -56,12 +56,12 @@
   --base: #eef2fa;
   --backdrop: #edf3fa9c;
   --solid-surface: #f8fafe;
-  --menu-surface: #f7faffd9;
-  --glass: #ffffff66;
-  --control: #ffffff80;
-  --hover: #ffffff99;
+  --menu-surface: #fafafab8;
+  --glass: #ffffff18;
+  --control: #ffffff38;
+  --hover: #ffffff60;
   --edge-highlight: #ffffffb3;
-  --tab-active: #ffffffd9;
+  --tab-active: #ffffff55;
   --highlight: #ffffff;
   --on-accent: #ffffff;
 }
@@ -124,7 +124,7 @@
 :root {
   --shell-surface: transparent;
   --panel-surface: var(--glass);
-  --panel-shadow: inset 0 0 0 1px var(--stroke);
+  --panel-shadow: var(--shadow-panel);
   --panel-filter: none;
   --shell-header-height: 56px;
   --shell-toolbar-height: 36px;

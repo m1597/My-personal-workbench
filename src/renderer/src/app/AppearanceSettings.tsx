@@ -46,17 +46,21 @@ export function AppearanceSettings({ value, theme, onChange, onTheme, saved }: P
           </DialogTitle>
           <DialogContent>
             <div className="settings-intro">
-              <span>外观</span>
-              <p>让工作台适合你的习惯。修改即时生效。</p>
+              <span>个性化</span>
+              <p>外观随你而定。修改即时生效，关闭窗口后仍会保留。</p>
             </div>
             <div className="settings-grid">
-              <Field label="颜色主题">
+              <Field label="颜色主题" hint="为整个工作台选择深色或浅色。" orientation="horizontal">
                 <Select value={theme} onChange={(_, data) => onTheme(data.value as Theme)}>
                   <option value="dark">深色</option>
                   <option value="light">浅色</option>
                 </Select>
               </Field>
-              <Field label="界面材质">
+              <Field
+                label="界面材质"
+                hint="调整玻璃透光程度，或使用实色底。"
+                orientation="horizontal"
+              >
                 <Select
                   value={value.material}
                   onChange={(_, data) =>
@@ -68,7 +72,11 @@ export function AppearanceSettings({ value, theme, onChange, onTheme, saved }: P
                   <option value="solid">纯色 · 更高可读性</option>
                 </Select>
               </Field>
-              <Field label="界面密度">
+              <Field
+                label="界面密度"
+                hint="调整工具栏、标签和列表的间距。"
+                orientation="horizontal"
+              >
                 <Select
                   value={value.density}
                   onChange={(_, data) =>
@@ -79,7 +87,7 @@ export function AppearanceSettings({ value, theme, onChange, onTheme, saved }: P
                   <option value="compact">紧凑</option>
                 </Select>
               </Field>
-              <Field label="强调色">
+              <Field label="强调色" hint="用于选中状态、焦点和主要操作。" orientation="horizontal">
                 <Select
                   value={value.accent}
                   onChange={(_, data) =>
@@ -91,7 +99,7 @@ export function AppearanceSettings({ value, theme, onChange, onTheme, saved }: P
                   <option value="violet">柔紫</option>
                 </Select>
               </Field>
-              <Field label="面板边角">
+              <Field label="面板边角" hint="统一停靠面板与标签的轮廓。" orientation="horizontal">
                 <Select
                   value={value.corners}
                   onChange={(_, data) =>
@@ -105,7 +113,7 @@ export function AppearanceSettings({ value, theme, onChange, onTheme, saved }: P
               <div className="settings-font">
                 <span>中文字体</span>
                 <p>HarmonyOS Sans SC</p>
-                <small>未安装时回退到微软雅黑，不更改系统字体。</small>
+                <small>本机字体 · 未安装时回退微软雅黑 UI</small>
               </div>
             </div>
             <p className="settings-note">
