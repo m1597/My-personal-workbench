@@ -1,0 +1,27 @@
+# AI 辅助开发规范参考
+
+调研日期：2026-11-10。以下为候选参考，尚未安装工具、skills 或改变项目流程；仓库文档核查不等于本机运行验证。
+
+## 推荐选择
+
+优先参考 OpenSpec 的单项变更记录，结合 ADR 保存重要架构决策。保留已有 AGENTS.md、开发流程、任务记录与 CI，避免再维护一套内容相同但会逐渐冲突的规范。当前产品目标大，实际实现仍是基础框架，应按实际风险增加约束。
+
+| 来源 | 可参考内容 | 对本项目的取舍 |
+| --- | --- | --- |
+| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) | 每项变更的动机、范围、需求场景、设计、任务，以及完成后的归档；MIT | 首选。适合已有工程持续迭代。先参考文档结构，不自动安装 CLI；小修不必建立整套文件。 |
+| [github/spec-kit](https://github.com/github/spec-kit) | 项目原则、需求到计划和实施的结构化流程；可组合模板；MIT | 组件协议等重大能力可参考其设计检查。与 OpenSpec 职责重叠，暂不同时接入两套生成流程。 |
+| [obra/superpowers](https://github.com/obra/superpowers) | 设计讨论、实施计划、系统调试、验证与评审 skills；MIT | 适合作为操作方法参考。其完整流程包含 TDD 与子代理协作，不直接照搬为本项目强制要求；不自动安装。 |
+| [Architecture Decision Record](https://github.com/architecture-decision-record/architecture-decision-record) | 保存决定的背景、备选方案、结果与后果 | 适合公共宿主、权限、数据归属等长期选择；复用现有技术决策文档，重要条目增长后再按决策拆文件。作者自写内容为 CC BY-NC-SA 4.0，收录模板分别遵循原作者许可；参考方法，暂不复制模板。 |
+
+已直接查看 OpenSpec 的 [proposal 模板](https://github.com/Fission-AI/OpenSpec/blob/main/schemas/spec-driven/templates/proposal.md) 与 [design 模板](https://github.com/Fission-AI/OpenSpec/blob/main/schemas/spec-driven/templates/design.md)。前者明确动机、能力变化及影响，后者区分目标、非目标、决定与风险。这里仅整理适用性，未复制模板源码。
+
+## 本项目最值得补强的内容（待确认）
+
+1. 明确每个需求的唯一记录位置，区分已实现规范、正在讨论的改动和已废弃决定；不要在多篇文档重复维护同一结论。
+2. 跨模块变更先记录影响：主进程、界面、公共宿主、组件协议、布局存储、用户数据、桌面预览及安装包。明确哪些不变。
+3. 每项功能给出可操作的成功与失败场景；数据格式/协议变化必须写兼容与迁移方式、回退时是否损失数据。
+4. 大改先设计和确认，小改沿用任务记录即可；不要求每次改颜色都经过完整提案。
+5. 交付证据分别记录本地检查、远程 CI、后台截图、原生桌面效果；未执行或未通过不得标成完成。
+6. 将可自动判断的规范交给现有 check/CI；AGENTS.md 保持短，只保留操作约定与文档入口。文字规范本身不能保证执行。
+
+建议先在下一项真正跨模块变更中试用精简提案与验收记录，再决定是否正式引入 OpenSpec。数据库、插件市场、音乐库不会因本次调研获得实施授权。
