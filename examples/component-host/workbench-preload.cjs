@@ -1,7 +1,4 @@
 const { contextBridge, ipcRenderer } = require('electron')
-contextBridge.exposeInMainWorld('workbench', {
-  setTheme: (theme) => ipcRenderer.invoke('prototype:theme', theme),
-})
 contextBridge.exposeInMainWorld('componentHost', {
   status: () => ipcRenderer.invoke('prototype:status'),
   open: () => ipcRenderer.invoke('prototype:open'),

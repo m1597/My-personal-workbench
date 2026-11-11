@@ -38,7 +38,7 @@ let pendingAttach
 let quitting = false
 let dropZone
 let dragOver = false
-const snapshot = () => ({ mode, phase, error, sessionId, theme: nativeTheme.themeSource, dragOver })
+const snapshot = () => ({ mode, phase, error, sessionId, dragOver })
 function broadcast() {
   if (shell && !shell.isDestroyed()) shell.webContents.send('prototype:state', snapshot())
   if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed())
@@ -296,12 +296,6 @@ else {
       ipcMain.handle('prototype:detach', (event) => {
         if (!isShell(event)) throw new Error('DENIED')
         detach()
-      })
-      ipcMain.handle('prototype:theme', (event, theme) => {
-        if (isShell(event) && ['dark', 'light'].includes(theme)) {
-          nativeTheme.themeSource = theme
-          broadcast()
-        }
       })
       ipcMain.on('prototype:drop-zone', (event, rect) => {
         if (!isShell(event)) return

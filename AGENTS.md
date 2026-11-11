@@ -1,7 +1,7 @@
 # 项目协作约定
 
 - 使用简体中文。开始读 [README](README.md)、[需求](docs/需求与规划.md) 和相关目录文档，检查 git status；保留未提交成果，不做破坏性 Git 操作。
-- 遵循 [架构](docs/架构说明.md) 与 [设计规范](docs/设计规范.md)：沿用 Electron/React/TypeScript/Vite/Dockview、Fluent 黑白磨砂和已确认字体；设计参数放 tokens.css，不顺带重构。
+- 遵循 [架构](docs/架构说明.md) 与 [设计规范](docs/设计规范.md)：沿用 Electron/React/TypeScript/Vite/Dockview、Fluent 固定深色玻璃和已确认字体；设计参数放 tokens.css，不顺带重构。
 - 公共宿主方案 B 已确认，范围仍限隔离示例原型；音乐库暂停。候选不等于授权，不提前搭建数据库、AI 执行、插件 SDK 或空接口。实现边界见 [组件开发](docs/组件开发.md)。
 - 系统能力只经用途明确的 preload 接口，主进程校验输入；不暴露通用 IPC、任意系统操作或凭据。私人数据边界见 [数据与交付](docs/数据与交付.md)。
 - 按 [开发流程](docs/开发流程.md) 选择小任务记录或项目内 OpenSpec 标准变更；重要架构选择记 ADR，重大改造先确认。长期规则不复制到每个任务。

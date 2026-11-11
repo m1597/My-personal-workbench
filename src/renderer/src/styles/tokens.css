@@ -32,39 +32,6 @@
   --highlight: #ffffff18;
   --on-accent: #12243a;
 }
-:root[data-theme="light"] {
-  color-scheme: light;
-  --text: #242424;
-  --text-secondary: #505050;
-  --text-muted: #686868;
-  --accent: #2675c9;
-  --accent-hover: #1e65b5;
-  --accent-soft: #dceafd;
-  --accent-border: #76a9e0;
-  --accent-preview: #a8caef;
-  --icon-muted: #7591b2;
-  --drop: #2675c91c;
-  --shadow: #273b611f;
-  --shadow-soft: #3857830c;
-  --scrim: #304c7829;
-  --stroke: #c8d2e17a;
-  --stroke-strong: #94a3b8;
-  --preview-muted: #d9e3f1;
-  --tint-blue: #a9c8f442;
-  --tint-violet: #d3c8ec40;
-  --canvas: #eef4fa55;
-  --base: #eef2fa;
-  --backdrop: #edf3fa9c;
-  --solid-surface: #f8fafe;
-  --menu-surface: #fafafab8;
-  --glass: #ffffff18;
-  --control: #ffffff38;
-  --hover: #ffffff60;
-  --edge-highlight: #ffffffb3;
-  --tab-active: #ffffff55;
-  --highlight: #ffffff;
-  --on-accent: #ffffff;
-}
 :root {
   --font-ui:
     "HarmonyOS Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI Variable", sans-serif;
@@ -120,7 +87,7 @@
   --material-panel: blur(24px) saturate(125%);
 }
 
-/* Workbench appearance settings. Material is a UI overlay over native Acrylic. */
+/* Default glass surface. Material is a UI overlay over native Acrylic. */
 :root {
   --shell-surface: transparent;
   --panel-surface: var(--glass);
@@ -132,62 +99,6 @@
   --module-row-height: 36px;
   --panel-radius: 10px;
   --panel-tab-radius: 6px;
-}
-:root[data-density="compact"] {
-  --shell-header-height: 48px;
-  --shell-toolbar-height: 30px;
-  --panel-tab-height: 30px;
-  --module-row-height: 30px;
-}
-:root[data-corners="square"] {
-  --panel-radius: 2px;
-  --panel-tab-radius: 2px;
-}
-:root:where([data-material="soft"]) {
-  --shell-surface: var(--backdrop);
-  --panel-surface: var(--glass);
-  --panel-filter: var(--material-panel);
-}
-:root:where([data-material="solid"]) {
-  --shell-surface: var(--base);
-  --panel-surface: var(--solid-surface);
-  --panel-filter: none;
-}
-:root[data-accent="neutral"] {
-  --accent: #d9dde4;
-  --accent-hover: #f4f5f7;
-  --accent-soft: #d9dde41a;
-  --accent-border: #858d99;
-  --accent-preview: #636b78;
-  --drop: #d9dde424;
-  --on-accent: #202227;
-}
-:root[data-theme="light"][data-accent="neutral"] {
-  --accent: #394451;
-  --accent-hover: #222b37;
-  --accent-soft: #39445112;
-  --accent-border: #8a939e;
-  --accent-preview: #aeb6c0;
-  --drop: #3944511a;
-  --on-accent: #ffffff;
-}
-:root[data-accent="violet"] {
-  --accent: #c3b6ff;
-  --accent-hover: #d7ceff;
-  --accent-soft: #a58aff20;
-  --accent-border: #8e7ac1;
-  --accent-preview: #63517e;
-  --drop: #c3b6ff24;
-  --on-accent: #292039;
-}
-:root[data-theme="light"][data-accent="violet"] {
-  --accent: #6f4ab1;
-  --accent-hover: #58358e;
-  --accent-soft: #6f4ab112;
-  --accent-border: #a890d2;
-  --accent-preview: #c6b7e4;
-  --drop: #6f4ab11a;
-  --on-accent: #ffffff;
 }
 @media (prefers-reduced-transparency: reduce) {
   :root {

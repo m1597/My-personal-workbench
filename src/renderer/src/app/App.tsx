@@ -1,13 +1,10 @@
-import { AppearanceSettings } from './AppearanceSettings'
-import { applyAppearance, readAppearance, type Appearance } from './appearance'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react'
-import { PanelsTopLeft, RotateCcw, MousePointer2, LayoutGrid, Sun, Moon } from 'lucide-react'
+import { PanelsTopLeft, RotateCcw, MousePointer2, LayoutGrid } from 'lucide-react'
 import { createDefaultLayout, openModule } from './workspace'
 import { modules, icons } from './moduleRegistry'
 import { WorkspaceContext, type WorkspaceState } from './WorkspaceContext'
 import { components, HeaderActions, EmptyWorkspace } from './dockviewComponents'
-import { applyTheme, readTheme } from './theme'
 import { Button, FluentProvider } from '@fluentui/react-components'
 import { fluentTheme } from './fluentTheme'
 import { WindowMenu } from './WindowMenu'
@@ -15,13 +12,8 @@ import { HelpDialog } from './HelpDialog'
 import { restoreLayout, trackLayout } from './layoutStorage'
 import { ComponentPrototypeButton, useComponentPrototype } from './componentPrototype'
 
-export default function App({
-  initialThemeSaved,
-  initialAppearanceSaved,
-}: {
-  initialThemeSaved: boolean
-  initialAppearanceSaved: boolean
-}) {
+export default function App() {
+  const [uiTheme] = useState(fluentTheme)
   const [theme] = useState(() => ({
     name: 'workbench',
     className: 'dockview-theme-workbench',
@@ -29,19 +21,6 @@ export default function App({
       getComputedStyle(document.documentElement).getPropertyValue('--space-8'),
     ),
   }))
-  const [colorTheme, setColorTheme] = useState(readTheme)
-  const [appearance, setAppearance] = useState(readAppearance)
-  const [themeSaved, setThemeSaved] = useState(initialThemeSaved)
-  const [appearanceSaved, setAppearanceSaved] = useState(initialAppearanceSaved)
-  const changeAppearance = (value: Appearance) => {
-    setAppearanceSaved(applyAppearance(value))
-    setAppearance(value)
-  }
-  const changeTheme = (value: 'dark' | 'light') => {
-    setThemeSaved(applyTheme(value))
-    setColorTheme(value)
-  }
-  const uiTheme = useMemo(() => fluentTheme(colorTheme), [colorTheme])
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
   useComponentPrototype(workspace.api)
   useEffect(() => {
@@ -99,22 +78,6 @@ export default function App({
               <span className="accent-dot" />
               本地工作区
             </div>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={colorTheme === 'dark' ? '切换到浅色' : '切换到深色'}
-              title={colorTheme === 'dark' ? '切换到浅色' : '切换到深色'}
-              onClick={() => changeTheme(colorTheme === 'dark' ? 'light' : 'dark')}
-            >
-              {colorTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-            <AppearanceSettings
-              value={appearance}
-              theme={colorTheme}
-              onChange={changeAppearance}
-              onTheme={changeTheme}
-              saved={themeSaved && appearanceSaved}
-            />
             <HelpDialog />
             <span className="header-divider" />
             <Button

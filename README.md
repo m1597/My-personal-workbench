@@ -1,8 +1,8 @@
 # 个人工作台
 
-本地优先的个人创作工作台。目前实现四个可拖拽、停靠、分组、缩放、关闭重开的占位模块，以及最大化、恢复布局与黑白主题切换。
+本地优先的个人创作工作台。目前实现四个可拖拽、停靠、分组、缩放、关闭重开的占位模块，以及最大化与布局恢复。
 
-技术栈：Electron + React + TypeScript + Vite，Dockview 布局。视觉为微软 Fluent 磨砂玻璃，默认深色；中文优先本机 HarmonyOS Sans SC，回退微软雅黑 UI。记住主题选择和上次布局；首次启动使用默认四模块，全部关闭的空工作区也会保留。
+技术栈：Electron + React + TypeScript + Vite，Dockview 布局。视觉为微软 Fluent 磨砂玻璃，固定深色；中文优先本机 HarmonyOS Sans SC，回退微软雅黑 UI。记住上次布局；首次启动使用默认四模块，全部关闭的空工作区也会保留。
 
 ## 组件产品方向（已确认公共宿主方案 B）
 
@@ -30,7 +30,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 | npm run build                 | 类型检查并构建至 out/                                           |
 | npm start                     | electron-vite preview 构建后启动桌面程序                        |
 | npm test                      | 构建并执行发布、开发两套 Electron 交互测试                      |
-| npm run check                 | 环境、格式、静态、类型、构建、32 项交互及 doctor 回归的统一入口 |
+| npm run check                 | 环境、格式、静态、类型、构建、26 项交互及 doctor 回归的统一入口 |
 
 统一检查只执行一次类型检查和生产构建。失败从终端首个错误看起，报告打开方法见开发流程。2026-11-09 已按用户授权推送，[首次 Windows CI](https://github.com/m1597/My-personal-workbench/actions/runs/42599390733) 已通过（提交 8af4c32，含 10 项交互测试）。
 
@@ -50,11 +50,11 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 ## 当前工作区
 
-拖动标签到面板边缘分屏，到标签栏合并；拖动分隔线缩放。「窗口」菜单重新打开模块，「重置布局」恢复初始排列。右上角太阳/月亮切换主题。
+拖动标签到面板边缘分屏，到标签栏合并；拖动分隔线缩放。「窗口」菜单重新打开模块，「重置布局」恢复初始排列。
 
 ![深色实际渲染截图](docs/images/workbench.png)
 
-[浅色截图](docs/images/workbench-light.png)。这是后台真实 Electron 渲染的底色回退预览；原生 Acrylic 随 Windows 设置和桌面背景变化。
+这是后台真实 Electron 渲染的工作台预览；原生 Acrylic 随 Windows 设置和桌面背景变化。
 
 当前不实现数据库、AI 执行、媒体处理、插件 SDK 或第三方软件嵌入。Git 只备份已提交源码与文档，私人素材、Electron 设置和被忽略数据需要单独备份。
 
@@ -68,12 +68,6 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 已实现隔离的公共宿主与 Fluent React 示例，支持按钮切换及 Windows 消息触发停靠/手柄拖出。运行 `npm run build:prototype` 后执行 `npm run check:prototype`，自动使用独立 profile 在后台验证；不打开日常工作区。详见 [组件开发与验证](docs/组件开发.md)。目前是分目录部署，依赖项目 Electron 运行时，不是新的独立安装包；正式应用入口和布局存储保持原状。
 
-## 外观样板与软件设置
-
-右上角齿轮可调整主题、材质浓度、密度、强调色和面板边角，立即生效并在当前工作区记忆；“恢复默认外观”不重置布局。中文字体保持原方案。`npm run build` 后运行 `node scripts/preview-appearance.mjs` 获取后台深浅色和设置截图（底色回退预览）。详见 [设计规范](docs/设计规范.md)。
-
-[外观设置截图](docs/images/workbench-settings.png)。
-
 ## 桌面双击启动
 
-本机桌面“打开个人工作台.cmd”调用 `scripts/open-workbench.cmd`，直接启动已构建版本（可进入右上角软件设置）。不启动终端开发服务器，不下载依赖。设置与布局保存在项目 `local/desktop-profile`，可关闭后单独备份；与测试及安装版数据隔离。更新源码后开发者执行 `npm run build` 才会更新此入口展示的界面；首次缺依赖/构建时脚本会说明修复命令，不静默安装。项目文件夹需保持在桌面脚本旁，重复双击可能打开多个窗口，正常关闭原窗口后再开即可。
+本机桌面“打开个人工作台.cmd”调用 `scripts/open-workbench.cmd`，直接启动已构建版本。不启动终端开发服务器，不下载依赖。设置与布局保存在项目 `local/desktop-profile`，可关闭后单独备份；与测试及安装版数据隔离。更新源码后开发者执行 `npm run build` 才会更新此入口展示的界面；首次缺依赖/构建时脚本会说明修复命令，不静默安装。项目文件夹需保持在桌面脚本旁，重复双击可能打开多个窗口，正常关闭原窗口后再开即可。

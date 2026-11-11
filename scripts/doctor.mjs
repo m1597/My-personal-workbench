@@ -73,7 +73,6 @@ for (const file of [
   '.gitattributes',
   '.editorconfig',
   'src/main/index.ts',
-  'src/preload/index.ts',
   'src/renderer/index.html',
 ]) {
   check(file, existsSync(file), '查看 git status；保留修改后恢复该项目文件。')

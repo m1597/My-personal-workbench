@@ -6,7 +6,7 @@ import { fluentTheme } from '../../src/renderer/src/app/fluentTheme'
 import '../../src/renderer/src/styles/tokens.css'
 import './style.css'
 
-type State = { mode: string; theme: 'dark' | 'light'; sessionId: string }
+type State = { mode: string; sessionId: string }
 declare global {
   interface Window {
     sampleHost: {
@@ -21,18 +21,17 @@ if (new URLSearchParams(location.search).get('nativeBackdrop') === 'acrylic')
   document.documentElement.dataset.material = 'acrylic'
 const start = performance.now()
 function Sample() {
-  const [state, setState] = useState<State>({ mode: 'standalone', theme: 'dark', sessionId: '' })
+  const [state, setState] = useState<State>({ mode: 'standalone', sessionId: '' })
   const [count, setCount] = useState(0)
   const [note, setNote] = useState('')
   const [queue, setQueue] = useState('示例 A')
   const [elapsed, setElapsed] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const theme = useMemo(() => fluentTheme(state.theme), [state.theme])
+  const theme = useMemo(fluentTheme, [])
   const docked = state.mode === 'docked'
   useEffect(() => {
     const update = (value: State) => {
-      document.documentElement.dataset.theme = value.theme
       setState(value)
     }
     const off = window.sampleHost.subscribe(update)

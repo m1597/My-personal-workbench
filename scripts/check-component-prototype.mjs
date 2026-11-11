@@ -212,12 +212,6 @@ try {
       ),
     )
     .toBe(true)
-  await shell.evaluate(() => window.workbench.setTheme('light'))
-  await expect(sample.locator('html')).toHaveAttribute('data-theme', 'light')
-  await sample.mouse.move(5, 5)
-  await sample.waitForTimeout(300)
-  await sample.screenshot({ path: path.join(evidence, 'component-light.png') })
-  await shell.evaluate(() => window.workbench.setTheme('dark'))
   await expect(sample.locator('html')).toHaveAttribute('data-theme', 'dark')
   await shell.getByRole('button', { name: '重置布局', exact: true }).click()
   await expect(sample.locator('#mode')).toHaveText('独立窗口')
@@ -243,12 +237,6 @@ try {
     return value
   })
   await sample.screenshot({ path: path.join(evidence, 'component-fallback-dark.png') })
-  await shell.evaluate(() => window.workbench.setTheme('light'))
-  await expect(sample.locator('html')).toHaveAttribute('data-theme', 'light')
-  await sample.mouse.move(5, 5)
-  await sample.waitForTimeout(300)
-  await sample.screenshot({ path: path.join(evidence, 'component-fallback-light.png') })
-  await shell.evaluate(() => window.workbench.setTheme('dark'))
   await expect(sample.locator('html')).toHaveAttribute('data-theme', 'dark')
   await sample.evaluate((value) => {
     if (value) document.documentElement.dataset.material = value

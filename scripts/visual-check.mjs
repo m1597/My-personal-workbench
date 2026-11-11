@@ -53,90 +53,84 @@ for (const scale of [1.25, 1.5]) {
         },
         [width, height],
       )
-      for (const theme of ['dark', 'light']) {
-        if ((await page.locator('html').getAttribute('data-theme')) !== theme) {
-          await page
-            .getByRole('button', { name: `切换到${theme === 'dark' ? '深' : '浅'}色`, exact: true })
-            .click()
-        }
-        const prefix = `${scale}-${width}-${theme}`
-        await expect
-          .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-          .toBe(true)
-        for (let i = 1; i <= 4; i++) await expect(page.getByTestId(`module-${i}`)).toBeVisible()
-        const capture = async (suffix) => {
-          // Fluent motion may start after React commits; wait for its real final frame.
-          await page.evaluate(async () => {
-            await new Promise((resolve) =>
-              requestAnimationFrame(() => requestAnimationFrame(resolve)),
-            )
-            await Promise.all(
-              document
-                .getAnimations()
-                .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
-                .map((animation) => animation.finished.catch(() => {})),
-            )
-          })
-          return page.screenshot({
-            path: path.join(output, `${prefix}-${suffix}.png`),
-            animations: 'disabled',
-          })
-        }
-        await capture('workspace')
-        for (const [trigger, role] of [
-          ['窗口', 'menu'],
-          ['操作帮助', 'dialog'],
-          ['软件设置', 'dialog'],
-        ]) {
-          await page.getByRole('button', { name: trigger, exact: true }).click()
-          const popup = page.getByRole(role)
-          await expect(popup).toBeVisible()
-          await capture(role)
-          expect(
-            await popup.evaluate((element) => {
-              const box = element.getBoundingClientRect()
-              return (
-                box.left >= 0 &&
-                box.top >= 0 &&
-                box.right <= innerWidth &&
-                box.bottom <= innerHeight &&
-                element.contains(
-                  document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
-                )
-              )
-            }),
-          ).toBe(true)
-          await page.keyboard.press('Escape')
-          await expect(popup).not.toBeVisible()
-          await expect(page.getByRole('button', { name: trigger, exact: true })).toBeFocused()
-        }
-        const background = await app.evaluate(({ BrowserWindow, screen }) => {
-          const window = BrowserWindow.getAllWindows()[0]
-          const bounds = window.getBounds()
-          return (
-            !window.isFocused() &&
-            screen.getAllDisplays().every((display) => bounds.x + bounds.width <= display.bounds.x)
+      const theme = 'dark'
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      const prefix = `${scale}-${width}-${theme}`
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true)
+      for (let i = 1; i <= 4; i++) await expect(page.getByTestId(`module-${i}`)).toBeVisible()
+      const capture = async (suffix) => {
+        // Fluent motion may start after React commits; wait for its real final frame.
+        await page.evaluate(async () => {
+          await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          )
+          await Promise.all(
+            document
+              .getAnimations()
+              .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+              .map((animation) => animation.finished.catch(() => {})),
           )
         })
-        expect(background).toBe(true)
-        const viewport = await page.evaluate(() => ({
-          width: innerWidth,
-          height: innerHeight,
-          dpr: devicePixelRatio,
-        }))
-        expect(viewport.dpr).toBeCloseTo(scale)
-        results.push({
-          scaleSimulation: scale,
-          window: [width, height],
-          theme,
-          viewport,
-          typography,
-          fonts,
-          fallback,
-          background,
+        return page.screenshot({
+          path: path.join(output, `${prefix}-${suffix}.png`),
+          animations: 'disabled',
         })
-        console.log(`PASS ${prefix}: geometry, focus, background; DPR=${viewport.dpr}`)
       }
+      await capture('workspace')
+      for (const [trigger, role] of [
+        ['窗口', 'menu'],
+        ['操作帮助', 'dialog'],
+      ]) {
+        await page.getByRole('button', { name: trigger, exact: true }).click()
+        const popup = page.getByRole(role)
+        await expect(popup).toBeVisible()
+        await capture(role)
+        expect(
+          await popup.evaluate((element) => {
+            const box = element.getBoundingClientRect()
+            return (
+              box.left >= 0 &&
+              box.top >= 0 &&
+              box.right <= innerWidth &&
+              box.bottom <= innerHeight &&
+              element.contains(
+                document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+              )
+            )
+          }),
+        ).toBe(true)
+        await page.keyboard.press('Escape')
+        await expect(popup).not.toBeVisible()
+        await expect(page.getByRole('button', { name: trigger, exact: true })).toBeFocused()
+      }
+      const background = await app.evaluate(({ BrowserWindow, screen }) => {
+        const window = BrowserWindow.getAllWindows()[0]
+        const bounds = window.getBounds()
+        return (
+          !window.isFocused() &&
+          screen.getAllDisplays().every((display) => bounds.x + bounds.width <= display.bounds.x)
+        )
+      })
+      expect(background).toBe(true)
+      const viewport = await page.evaluate(() => ({
+        width: innerWidth,
+        height: innerHeight,
+        dpr: devicePixelRatio,
+      }))
+      expect(viewport.dpr).toBeCloseTo(scale)
+      results.push({
+        scaleSimulation: scale,
+        window: [width, height],
+        theme,
+        viewport,
+        typography,
+        fonts,
+        fallback,
+        background,
+      })
+      console.log(`PASS ${prefix}: geometry, focus, background; DPR=${viewport.dpr}`)
     }
     expect(errors).toEqual([])
   } finally {

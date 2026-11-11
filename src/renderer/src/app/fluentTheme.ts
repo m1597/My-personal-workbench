@@ -1,10 +1,9 @@
-import { webDarkTheme, webLightTheme, type Theme } from '@fluentui/react-components'
-import type { Theme as ColorTheme } from '../../../shared/theme'
+import { webDarkTheme, type Theme } from '@fluentui/react-components'
 
 // Adapt our existing CSS tokens; no second brand palette or font stack.
-export function fluentTheme(mode: ColorTheme): Theme {
+export function fluentTheme(): Theme {
   return {
-    ...(mode === 'dark' ? webDarkTheme : webLightTheme),
+    ...webDarkTheme,
     fontFamilyBase: 'var(--font-ui)',
     fontFamilyNumeric: 'var(--font-ui)',
     fontSizeBase200: 'var(--font-size-caption)',

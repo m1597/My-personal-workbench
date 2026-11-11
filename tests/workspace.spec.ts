@@ -64,34 +64,20 @@ test.afterEach(async ({}, testInfo) => {
   }
 })
 
-test('默认深色，切换同步原生主题且重启后保留选择', async ({}, testInfo) => {
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
-  await expect.poll(() => page.evaluate(() => typeof window.workbench?.setTheme)).toBe('function')
-  await page.getByRole('button', { name: '切换到浅色', exact: true }).click()
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
-  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
-  await page.screenshot({ animations: 'disabled', path: path.resolve('tmp/workbench-light.png') })
-  const initialTrace = testInfo.outputPath('before-restart.zip')
-  await app.context().tracing.stop({ path: initialTrace })
-  await testInfo.attach('before-restart', { path: initialTrace, contentType: 'application/zip' })
-  await app.close()
-  app = await electron.launch({
-    args: ['.', `--user-data-dir=${profilePath}`],
-    env: {
-      ...process.env,
-      WORKBENCH_TEST_BACKGROUND: '1',
-      ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '',
-    },
+test('旧外观偏好不会覆盖固定深色或重置布局', async () => {
+  await page.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
+  await page.evaluate(() => {
+    localStorage.setItem('workbench.theme', 'light')
+    localStorage.setItem(
+      'workbench.appearance',
+      JSON.stringify({ version: 1, material: 'solid', density: 'compact' }),
+    )
   })
-  page = await app.firstWindow()
-  await app.context().tracing.start({ screenshots: false, snapshots: true })
-  page.on('pageerror', (error) => errors.push(error.message))
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
-  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
-  await page.getByRole('button', { name: '切换到深色', exact: true }).click()
+  await page.reload()
+  await expect(page.getByTestId('panel-count')).toHaveText('3 个模块已打开')
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
+  await expect(page.getByRole('button', { name: /切换到浅色|软件设置/ })).toHaveCount(0)
 })
 
 test('四个模块可见，最小窗口保持可用，渲染进程隔离', async () => {
@@ -228,115 +214,4 @@ test('官方控件支持搜索、菜单键盘导航和弹窗焦点恢复', async
   await page.keyboard.press('Escape')
   await expect(dialog).not.toBeVisible()
   await expect(help).toBeFocused()
-  await page.getByRole('button', { name: '切换到浅色', exact: true }).click()
-  await help.click()
-  await expect(dialog).toBeVisible()
-  await page.screenshot({
-    animations: 'disabled',
-    path: path.resolve('tmp/fluent-dialog-light.png'),
-  })
-  await page.getByRole('button', { name: '知道了' }).click()
-  await expect(dialog).not.toBeVisible()
-  await expect(help).toBeFocused()
-})
-
-test('外观设置即时生效、重启保持，恢复外观不重置布局', async ({}, testInfo) => {
-  await page.getByRole('button', { name: '软件设置', exact: true }).click()
-  const settings = page.getByRole('dialog')
-  await settings.getByLabel('颜色主题', { exact: true }).selectOption('light')
-  await settings.getByLabel('界面材质', { exact: true }).selectOption('soft')
-  const panel = page.locator('.dv-groupview').first()
-  const cdp = await app.context().newCDPSession(page)
-  await cdp.send('Emulation.setEmulatedMedia', {
-    features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }],
-  })
-  await expect(panel).toHaveCSS('backdrop-filter', 'none')
-  await expect(panel).toHaveCSS('background-color', /^rgb\(/)
-  await settings.getByRole('button', { name: '完成' }).click()
-  await page.screenshot({ path: testInfo.outputPath('reduced-transparency.png') })
-  await cdp.send('Emulation.setEmulatedMedia', { features: [] })
-  await expect(panel).toHaveCSS('backdrop-filter', /blur\(/)
-  await page.getByRole('button', { name: '软件设置', exact: true }).click()
-  await settings.getByLabel('界面材质', { exact: true }).selectOption('solid')
-  expect(await settings.evaluate((el) => getComputedStyle(el).backdropFilter)).toBe('none')
-  await settings.getByLabel('界面密度', { exact: true }).selectOption('compact')
-  await settings.getByLabel('强调色', { exact: true }).selectOption('violet')
-  await settings.getByLabel('面板边角', { exact: true }).selectOption('square')
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
-  await expect(page.locator('html')).toHaveAttribute('data-density', 'compact')
-  expect(await page.locator('.app-header').evaluate((el) => getComputedStyle(el).height)).toBe(
-    '48px',
-  )
-  expect(
-    await page.locator('.workbench').evaluate((el) => getComputedStyle(el).backgroundColor),
-  ).toBe('rgb(238, 242, 250)')
-  await page.keyboard.press('Escape')
-  await expect(page.getByRole('button', { name: '软件设置', exact: true })).toBeFocused()
-  const before = await page.locator('.dv-tab').count()
-  await app.context().tracing.stop({ path: testInfo.outputPath('appearance-before-restart.zip') })
-  await app.close()
-  app = await electron.launch({
-    args: ['.', `--user-data-dir=${profilePath}`],
-    env: {
-      ...process.env,
-      WORKBENCH_TEST_BACKGROUND: '1',
-      ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '',
-    },
-  })
-  page = await app.firstWindow()
-  await app.context().tracing.start({ screenshots: false, snapshots: true })
-  page.on('pageerror', (error) => errors.push(error.message))
-  await expect(page.locator('html')).toHaveAttribute('data-accent', 'violet')
-  await expect(page.locator('html')).toHaveAttribute('data-corners', 'square')
-  await expect(page.locator('html')).toHaveAttribute('data-material', 'solid')
-  await expect(page.locator('html')).toHaveAttribute('data-density', 'compact')
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
-  await page.getByRole('button', { name: '软件设置', exact: true }).click()
-  await page.getByRole('button', { name: '恢复默认外观', exact: true }).click()
-  await expect(page.locator('html')).toHaveAttribute('data-material', 'glass')
-  await expect(page.locator('html')).toHaveAttribute('data-accent', 'blue')
-  await expect(page.locator('html')).toHaveAttribute('data-density', 'comfortable')
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await page.getByRole('button', { name: '完成', exact: true }).click()
-  expect(await page.locator('.dv-tab').count()).toBe(before)
-})
-
-test('损坏或不兼容外观数据安全回退', async () => {
-  for (const stored of [
-    '{broken',
-    JSON.stringify({ version: 99, material: 'solid' }),
-    JSON.stringify({ version: 1, material: 'wrong', accent: 'red', density: null }),
-  ]) {
-    await page.evaluate((value) => localStorage.setItem('workbench.appearance', value), stored)
-    await page.reload()
-    await expect(page.locator('html')).toHaveAttribute('data-material', 'glass')
-    await expect(page.locator('html')).toHaveAttribute('data-accent', 'blue')
-    await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
-  }
-})
-
-test('主题写入失败时两个入口均显示真实保存状态', async () => {
-  await page.evaluate(() => {
-    const setItem = Storage.prototype.setItem
-    Storage.prototype.setItem = function (key, value) {
-      if (key === 'workbench.theme' && value === 'light') throw new Error('模拟主题写入失败')
-      return setItem.call(this, key, value)
-    }
-  })
-  await page.getByRole('button', { name: '切换到浅色', exact: true }).click()
-  await page.getByRole('button', { name: '软件设置', exact: true }).click()
-  const status = page.getByRole('dialog').getByRole('status')
-  const theme = page.getByLabel('颜色主题', { exact: true })
-  await expect(status).toContainText('无法写入本地存储')
-  await expect(theme).toHaveValue('light')
-  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
-  expect(await page.evaluate(() => localStorage.getItem('workbench.theme'))).toBe('dark')
-  await page.getByLabel('界面密度', { exact: true }).selectOption('compact')
-  await expect(status).toContainText('无法写入本地存储')
-  await theme.selectOption('dark')
-  await expect(status).toContainText('外观已保存')
-  await theme.selectOption('light')
-  await expect(status).toContainText('无法写入本地存储')
-  await page.getByRole('button', { name: '恢复默认外观', exact: true }).click()
-  await expect(status).toContainText('外观已保存')
 })
