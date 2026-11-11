@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Button, Field, FluentProvider, Input, Select } from '@fluentui/react-components'
+import { Button, Dropdown, Field, FluentProvider, Input, Option } from '@fluentui/react-components'
 import { AppWindow, ArrowUpRight, PanelLeft, Plus } from 'lucide-react'
 import { fluentTheme } from '../../src/renderer/src/app/fluentTheme'
 import '../../src/renderer/src/styles/tokens.css'
@@ -90,11 +90,22 @@ function Sample() {
             />
           </Field>
           <Field label="队列选择">
-            <Select id="queue" value={queue} onChange={(_, data) => setQueue(data.value)}>
-              <option>示例 A</option>
-              <option>示例 B</option>
-              <option>示例 C</option>
-            </Select>
+            <Dropdown
+              id="queue"
+              inlinePopup
+              listbox={{ className: 'sample-queue-list' }}
+              value={queue}
+              selectedOptions={[queue]}
+              onOptionSelect={(_, data) => {
+                if (data.optionValue) setQueue(data.optionValue)
+              }}
+            >
+              {['示例 A', '示例 B', '示例 C'].map((item) => (
+                <Option key={item} value={item}>
+                  {item}
+                </Option>
+              ))}
+            </Dropdown>
           </Field>
           <div className="sample-counter">
             <div>

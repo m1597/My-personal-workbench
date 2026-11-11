@@ -138,8 +138,21 @@ body {
   box-shadow: none;
 }
 :root[data-material="acrylic"] .sample-fields .fui-Input,
-:root[data-material="acrylic"] .sample-fields .fui-Select {
+:root[data-material="acrylic"] .sample-fields .fui-Dropdown {
   background: var(--control);
+}
+.sample-fields .fui-Dropdown {
+  min-width: 0;
+}
+.sample-fields .sample-queue-list {
+  background: var(--solid-surface);
+  color: var(--text);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-6);
+  box-shadow: var(--shadow-menu);
+}
+.sample-queue-list [role="option"][aria-selected="true"] {
+  background: var(--accent-soft);
 }
 @media (prefers-reduced-transparency: reduce) {
   :root[data-material="acrylic"],
