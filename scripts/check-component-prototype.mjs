@@ -290,6 +290,30 @@ for (const kind of ['missing', 'incompatible']) {
       }),
     ).toBeVisible()
     await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+    if (kind === 'missing') {
+      await cp(samplePath, fixture, { recursive: true })
+      await shell.getByRole('button', { name: '操作帮助', exact: true }).click()
+      await expect(shell.getByRole('dialog')).toBeVisible()
+      const results = await shell.evaluate(() =>
+        Promise.all([window.componentHost.open(), window.componentHost.open()]),
+      )
+      expect(results).toEqual([{ ok: true }, { ok: true }])
+      expect((await shell.evaluate(() => window.componentHost.status())).phase).toBe('attaching')
+      expect(await shell.evaluate(() => window.componentHost.open())).toEqual({ ok: true })
+      await shell.keyboard.press('Escape')
+      const sample = await findPage(app, '/missing/index.html')
+      await expect(sample.locator('#mode')).toHaveText('已停靠')
+      await expect(shell.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(1)
+      expect(
+        await app.evaluate(
+          ({ webContents }) =>
+            webContents
+              .getAllWebContents()
+              .filter((wc) => wc.getURL().includes('/missing/index.html')).length,
+        ),
+      ).toBe(1)
+      console.log('PASS 首次连接失败后补齐组件，并发重试共用单个已停靠视图')
+    }
     await background(app)
   } finally {
     await app.close()

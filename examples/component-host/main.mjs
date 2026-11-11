@@ -34,6 +34,7 @@ let error = ''
 let entry
 const sessionId = randomUUID()
 let transferTimer
+let pendingAttach
 let quitting = false
 let dropZone
 let dragOver = false
@@ -227,13 +228,20 @@ async function openWorkbench() {
   await shell.loadFile(file, { query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {} })
   show(shell)
 }
-async function attach() {
-  if (mode === 'docked' && phase === 'ready') return { ok: true }
-  if (phase === 'attaching') return { ok: false, error: 'BUSY：正在连接' }
+function attach() {
+  pendingAttach ??= startAttach().finally(() => {
+    pendingAttach = undefined
+  })
+  return pendingAttach
+}
+async function startAttach() {
+  if ((mode === 'docked' && phase === 'ready') || phase === 'attaching') return { ok: true }
   try {
     if (!(await openComponent())) return { ok: false, error }
     phase = 'attaching'
     await openWorkbench()
+    // The shell may already have acknowledged its bounds while loadFile was pending.
+    if (mode === 'docked' && phase === 'ready') return { ok: true }
     broadcast()
     transferTimer = setTimeout(() => {
       error = 'TIMEOUT：目标面板未就绪，保留独立窗口'
