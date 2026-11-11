@@ -214,3 +214,22 @@ for (const bad of ['JSON 损坏', '版本不兼容', '未知模块', '结构损�
     await restart(3)
   })
 }
+
+test('组件宿主缺失只移除对应标签', async () => {
+  const raw = JSON.stringify(await saved()).replaceAll('module-4', 'component-example')
+  const layout = JSON.parse(raw)
+  layout.panels['component-example'].contentComponent = 'component-slot'
+  await page.evaluate(
+    ({ key, layout }) => {
+      window.addEventListener(
+        'beforeunload',
+        () => localStorage.setItem(key, JSON.stringify({ version: 1, layout })),
+        { once: true },
+      )
+    },
+    { key, layout },
+  )
+  await restart(3)
+  for (const id of [1, 2, 3]) await expect(page.getByTestId('module-' + id)).toBeVisible()
+  await expect(page.getByTestId('module-4')).toHaveCount(0)
+})

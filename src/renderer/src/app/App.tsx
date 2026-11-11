@@ -24,7 +24,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
   useComponentPrototype(workspace.api)
   useEffect(() => {
-    if (workspace.api && !window.componentHost) return trackLayout(workspace.api)
+    if (workspace.api) return trackLayout(workspace.api)
   }, [workspace.api])
   useEffect(() => {
     const api = workspace.api
@@ -48,8 +48,7 @@ export default function App() {
   }, [workspace.api])
   const onReady = useCallback(
     ({ api }: DockviewReadyEvent) => {
-      if (window.componentHost) createDefaultLayout(api)
-      else restoreLayout(api, theme.gap)
+      restoreLayout(api, theme.gap)
       setWorkspace({
         api,
         active: api.activePanel?.id,

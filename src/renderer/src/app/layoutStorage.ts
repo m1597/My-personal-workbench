@@ -17,14 +17,15 @@ function validLayout(value: unknown): value is SerializedDockview {
   if (![grid.width, grid.height].every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0))
     return false
   const ids = Object.keys(panels)
-  if (!ids.every((id) => modules.some((module) => module.id === id))) return false
+  if (!ids.every((id) => id === 'component-example' || modules.some((module) => module.id === id)))
+    return false
   if (
     !ids.every((id) => {
       const panel = panels[id]
       return (
         record(panel) &&
         panel.id === id &&
-        panel.contentComponent === 'module' &&
+        panel.contentComponent === (id === 'component-example' ? 'component-slot' : 'module') &&
         !panel.tabComponent &&
         ['minimumWidth', 'minimumHeight', 'maximumWidth', 'maximumHeight'].every((field) => {
           const size = panel[field]
@@ -106,6 +107,8 @@ export function restoreLayout(api: DockviewApi, gap: number) {
       }
       restoreGapSizes(saved.layout.grid.root, gap)
       api.fromJSON(saved.layout)
+      const slot = api.getPanel('component-example')
+      if (slot && !window.componentHost) api.removePanel(slot)
       return
     }
   } catch {
