@@ -17,6 +17,9 @@ import {
   Play,
   Pause,
   SkipForward,
+  SkipBack,
+  Shuffle,
+  ListOrdered,
   PanelLeft,
   ArrowUpRight,
   ChevronDown,
@@ -100,6 +103,15 @@ declare global {
 configureBackdrop()
 const host = window.music
 const playable = (row: Item) => ['已入库', '就绪'].includes(row.status)
+function shuffleQueue(ids: string[], first?: string) {
+  const result = ids.filter((id) => id !== first)
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  if (first && ids.includes(first)) result.unshift(first)
+  return result
+}
 function Music() {
   const [state, setState] = useState<State>(),
     [draft, setDraft] = useState(''),
@@ -116,6 +128,7 @@ function Music() {
   const [settings, setSettings] = useState(false),
     [online, setOnline] = useState<Item | null>(null)
   const provider = state?.models.providers.find((x) => x.id === state.models.active)
+  const [shuffled, setShuffled] = useState<string[] | null>(null)
   const switching = useRef(Promise.resolve())
   const audio = useRef<HTMLAudioElement>(null),
     current = useRef(''),
@@ -195,7 +208,30 @@ function Music() {
     ...(state?.localTracks ?? []).filter((t) => t.available).map((t) => t.id),
     ...(state?.items ?? []).filter(playable).map((t) => t.id),
   ])
-  const following = queue.slice(queue.indexOf(now) + 1).find((id) => available.has(id))
+  const order = shuffled ?? queue
+  const index = order.indexOf(now)
+  const following = index >= 0 ? order.slice(index + 1).find((id) => available.has(id)) : undefined
+  const preceding =
+    index > 0
+      ? order
+          .slice(0, index)
+          .reverse()
+          .find((id) => available.has(id))
+      : undefined
+  function startTrack(id: string) {
+    if (shuffled) setShuffled(shuffleQueue(visibleQueue, id))
+    return play(id, visibleQueue)
+  }
+  function resumeOrStart() {
+    if (!primary) return Promise.resolve()
+    if (primary === now && queue.includes(primary)) return play(primary, queue)
+    if (shuffled) {
+      const nextOrder = shuffleQueue(visibleQueue)
+      setShuffled(nextOrder)
+      return play(nextOrder[0], visibleQueue)
+    }
+    return play(primary, visibleQueue)
+  }
   function play(id: string, ids = visibleQueue) {
     const seq = ++epoch.current
     const run = async () => {
@@ -320,7 +356,7 @@ function Music() {
             playing={!paused}
             importFiles={(mode) => void act(() => host.importLocal(mode))}
             cancel={() => void act(() => host.cancelImport())}
-            play={(id) => void act(() => play(id))}
+            play={(id) => void act(() => startTrack(id))}
             relocate={(id) => void act(() => host.relocateLocal(id))}
             remove={(id) =>
               void act(async () => {
@@ -481,7 +517,7 @@ function Music() {
                                   )
                                 }
                                 aria-label={'试听' + r.title}
-                                onClick={() => void act(() => play(r.id))}
+                                onClick={() => void act(() => startTrack(r.id))}
                               />
                             ) : (
                               <Disc3 size={18} />
@@ -572,6 +608,28 @@ function Music() {
             <small>{active?.artist ?? '试听播放器'}</small>
           </div>
           <Button
+            appearance="subtle"
+            size="small"
+            className="music-order"
+            aria-label="随机播放"
+            aria-pressed={shuffled !== null}
+            title={shuffled ? '当前随机播放，切换为顺序播放' : '当前顺序播放，切换为随机播放'}
+            icon={shuffled ? <Shuffle size={17} /> : <ListOrdered size={17} />}
+            onClick={() => setShuffled(shuffled ? null : shuffleQueue(queue, now))}
+          >
+            <span>{shuffled ? '随机播放' : '顺序播放'}</span>
+          </Button>
+          <Button
+            appearance="subtle"
+            aria-label="上一首"
+            title="上一首"
+            icon={<SkipBack size={17} />}
+            disabled={!preceding}
+            onClick={() => {
+              if (preceding) void act(() => play(preceding, queue))
+            }}
+          />
+          <Button
             appearance="primary"
             shape="circular"
             disabled={!primary}
@@ -580,10 +638,7 @@ function Music() {
             icon={paused ? <Play size={16} /> : <Pause size={16} />}
             onClick={() => {
               if (!paused) audio.current?.pause()
-              else if (primary)
-                void act(() =>
-                  play(primary, primary === now && queue.includes(primary) ? queue : visibleQueue),
-                )
+              else void act(resumeOrStart)
             }}
           />
           <Button

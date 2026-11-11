@@ -363,3 +363,19 @@ li[data-active="true"] .music-track-icon,
   border: 1px solid var(--stroke);
   border-radius: var(--panel-radius);
 }
+
+.music-order[aria-pressed="true"] {
+  color: var(--accent);
+}
+@media (max-width: 540px) {
+  .music-order span:not(.fui-Button__icon) {
+    display: none;
+  }
+  .music-transport {
+    gap: var(--space-4);
+  }
+  .music-transport > button {
+    min-width: 32px;
+    padding-inline: var(--space-4);
+  }
+}

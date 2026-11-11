@@ -128,6 +128,39 @@ try {
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).current), { timeout: 9000 })
     .toBe(filtered[1])
+  const prev = page.getByRole('button', { name: '上一首', exact: true })
+  const next = page.getByRole('button', { name: '下一首', exact: true })
+  const shuffle = page.getByRole('button', { name: '随机播放', exact: true })
+  const currentId = () => page.evaluate(async () => (await window.music.state()).current)
+  await prev.click()
+  await expect.poll(currentId).toBe(filtered[0])
+  await expect(prev).toBeDisabled()
+  await shuffle.click()
+  await expect(shuffle).toHaveAttribute('aria-pressed', 'true')
+  assert.equal(await currentId(), filtered[0])
+  const heard = [filtered[0]]
+  for (let i = 1; i < filtered.length; i++) {
+    if (i === 1) {
+      await expect
+        .poll(() => page.locator('audio').evaluate((a) => !a.paused && Number.isFinite(a.duration)))
+        .toBe(true)
+      await page.locator('audio').evaluate((a) => {
+        a.currentTime = a.duration - 0.15
+      })
+    } else await next.click()
+    await expect.poll(currentId).not.toBe(heard.at(-1))
+    heard.push(await currentId())
+  }
+  assert.deepEqual([...heard].sort(), [...filtered].sort())
+  await expect(next).toBeDisabled()
+  await prev.click()
+  await expect.poll(currentId).toBe(heard.at(-2))
+  await next.click()
+  await expect.poll(currentId).toBe(heard.at(-1))
+  await shuffle.click()
+  await expect(shuffle).toHaveAttribute('aria-pressed', 'false')
+  await prev.click()
+  await expect.poll(currentId).toBe(filtered[filtered.indexOf(heard.at(-1)) - 1])
   await page.getByRole('tab', { name: '本地曲库' }).click()
   await page.getByRole('searchbox').fill('')
   await page.getByRole('button', { name: '播放长音', exact: true }).click()
