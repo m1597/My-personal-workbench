@@ -75,14 +75,12 @@ try {
     const root = document.documentElement
     const provider = document.querySelector('.sample-shell')
     const nativeMaterial = root.dataset.material
-    const background = getComputedStyle(provider).backgroundColor
     const gradient = getComputedStyle(provider).backgroundImage
     delete root.dataset.material
     const fallback = getComputedStyle(provider).backgroundColor
     if (nativeMaterial) root.dataset.material = nativeMaterial
-    return { nativeMaterial, background, gradient, fallback }
+    return { gradient, fallback }
   })
-  if (material.nativeMaterial === 'acrylic') expect(material.background).toBe('rgba(0, 0, 0, 0)')
   expect(material.gradient).toBe('none')
   expect(material.fallback).toBe('rgb(32, 34, 39)')
 
@@ -472,6 +470,27 @@ try {
   await expect(sample.locator('#mode')).toHaveText('已停靠')
   await sample.waitForTimeout(300)
   await sample.screenshot({ path: path.join(evidence, 'component-docked.png') })
+  // Sample the flat header corner of the actual component render, before OS composition.
+  const materialPixel = (file) =>
+    app.evaluate(
+      ({ nativeImage }, filename) => {
+        const image = nativeImage.createFromPath(filename)
+        return [...image.crop({ x: 8, y: 8, width: 1, height: 1 }).toBitmap()]
+      },
+      path.join(evidence, file),
+    )
+  const detachedPixel = await materialPixel('component.png')
+  expect(await materialPixel('component-docked.png')).toEqual(detachedPixel)
+  if (
+    savedMaterial &&
+    !(await sample.evaluate(
+      () => matchMedia('(prefers-reduced-transparency: reduce), (forced-colors: active)').matches,
+    ))
+  ) {
+    // A dark translucent tint limits the influence of the two different host backgrounds.
+    expect(detachedPixel[3]).toBeGreaterThanOrEqual(224)
+    expect(detachedPixel[3]).toBeLessThan(255)
+  }
   await shell.screenshot({ path: path.join(evidence, 'workbench-dom.png') })
   await app.evaluate(({ webContents }) =>
     webContents

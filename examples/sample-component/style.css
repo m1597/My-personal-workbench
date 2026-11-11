@@ -128,10 +128,9 @@ body {
   background: transparent;
 }
 
-/* The native window owns the blur. Do not cover it with the Provider's solid
-   background, a second gradient, or a separate blur on the header. */
+/* The view carries one tint across both native parents. Windows supplies the blur. */
 :root[data-material="acrylic"] .sample-shell.fui-FluentProvider {
-  background: transparent;
+  background: var(--sample-surface);
 }
 :root[data-material="acrylic"] .sample-fields {
   background: var(--glass);
