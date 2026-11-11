@@ -152,6 +152,7 @@ export function trackLayout(api: DockviewApi) {
   window.addEventListener('beforeunload', save)
   schedule()
   return {
+    flush: save,
     pause() {
       save()
       pauses++

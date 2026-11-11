@@ -26,7 +26,8 @@ contextBridge.exposeInMainWorld('componentHost', {
   restore: () => ipcRenderer.invoke('prototype:restore'),
   open: () => ipcRenderer.invoke('prototype:open'),
   dropZone: (rect) => ipcRenderer.send('prototype:drop-zone', rect),
-  bounds: (bounds) => ipcRenderer.send('prototype:bounds', bounds),
+  confirmedTransfer: (id) => ipcRenderer.sendSync('prototype:confirmed-transfer', id),
+  bounds: (bounds, id) => ipcRenderer.send('prototype:bounds', bounds, id),
   detach: (release) => ipcRenderer.invoke('prototype:detach', release),
   onActivate: (callback) => {
     const listener = () => callback()

@@ -116,6 +116,34 @@ try {
   expect((await mode()).mode).toBe('standalone')
   await expect(tab).toHaveCount(0)
   console.log('PASS 交接等待期间重载仅保存用户已完成的改动')
+
+  // Hold just the success notification: the main process has already reparented the view.
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents
+    const send = contents.send.bind(contents)
+    contents.send = (channel, ...args) => {
+      if (channel === 'prototype:state' && args[0].phase === 'ready' && args[0].mode === 'docked') {
+        contents.send = send
+        return
+      }
+      send(channel, ...args)
+    }
+  })
+  await shell.evaluate(() => window.componentHost.open())
+  await expect.poll(async () => (await mode()).mode).toBe('docked')
+  // Exercise the final synchronous write before tearing down the document.
+  expect(
+    await shell.evaluate(() => {
+      window.dispatchEvent(new Event('beforeunload'))
+      return Object.keys(JSON.parse(localStorage.getItem('workbench.layout')).layout.panels)
+    }),
+  ).toContain('component-example')
+  await shell.reload()
+  expect(await shell.evaluate(() => Object.keys(window.savedOnReload))).toContain(
+    'component-example',
+  )
+  await expect(tab).toHaveCount(1)
+  console.log('PASS 确认消息延迟时重载保留已交接槽')
 } finally {
   await app.close()
 }

@@ -14,6 +14,7 @@ type HostState = {
   phase: string
   error: string
   sessionId: string
+  transfer: number
   dragOver?: Target | null
   placement?: Target | null
 }
@@ -26,7 +27,11 @@ declare global {
       status(): Promise<HostState>
       restore(): Promise<void>
       open(): Promise<{ ok: boolean; error?: string }>
-      bounds(value: { x: number; y: number; width: number; height: number } | null): void
+      confirmedTransfer(id: number): boolean
+      bounds(
+        value: { x: number; y: number; width: number; height: number } | null,
+        id?: number,
+      ): void
       detach(release?: { x: number; y: number }): Promise<void>
       onActivate(callback: () => void): () => void
       subscribe(callback: (state: HostState) => void): () => void
@@ -53,8 +58,12 @@ export function useComponentPrototype(
       complete(docked)
       layout.resume()
     }
-    // Undo the provisional slot before trackLayout takes its final bubble-phase snapshot.
-    const beforeUnload = () => finish(false)
+    // The debounced save may never run again. Flush the authoritative result on unload.
+    const beforeUnload = () => {
+      if (!finishAttach || !last) return
+      finish(host.confirmedTransfer(last.transfer))
+      layout.flush()
+    }
     window.addEventListener('beforeunload', beforeUnload, true)
     const update = (state: HostState) => {
       const wasDocked = last?.mode === 'docked'
@@ -284,7 +293,9 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
       setState(value)
     }
     const off = host.subscribe(update)
-    void host.status().then(update)
+    void host.status().then((state) => {
+      if (!current) update(state)
+    })
     let frame = 0
     let previous = ''
     const measure = () => {
@@ -311,10 +322,10 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
           (current?.phase === 'attaching' && attachingGroups.get(api) === api.group.id))
           ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
           : null
-      const encoded = JSON.stringify(bounds)
+      const encoded = JSON.stringify([current?.transfer, bounds])
       if (encoded !== previous) {
         previous = encoded
-        host.bounds(bounds)
+        host.bounds(bounds, current?.transfer)
       }
       frame = requestAnimationFrame(measure)
     }

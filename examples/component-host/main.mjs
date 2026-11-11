@@ -40,13 +40,15 @@ let phase = 'stopped'
 let error = ''
 let entry
 const sessionId = randomUUID()
+let transfer = 0
+let confirmedTransfer = 0
 let transferTimer
 let pendingAttach
 let quitting = false
 let dropZone
 let dragOver = null
 let placement = null
-const snapshot = () => ({ mode, phase, error, sessionId, dragOver, placement })
+const snapshot = () => ({ mode, phase, error, sessionId, dragOver, placement, transfer })
 function broadcast() {
   if (shell && !shell.isDestroyed()) shell.webContents.send('prototype:state', snapshot())
   if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed())
@@ -278,6 +280,7 @@ async function startAttach(hit) {
     if (mode === 'docked' && phase === 'ready') return { ok: true }
     error = ''
     placement = hit
+    transfer++
     phase = 'attaching'
     await openWorkbench()
     // The shell may already have acknowledged its bounds while loadFile was pending.
@@ -404,8 +407,12 @@ else {
         )
           dropZone = regions
       })
-      ipcMain.on('prototype:bounds', (event, bounds) => {
+      ipcMain.on('prototype:confirmed-transfer', (event, id) => {
+        event.returnValue = Boolean(isShell(event) && id > 0 && id === confirmedTransfer)
+      })
+      ipcMain.on('prototype:bounds', (event, bounds, id) => {
         if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return
+        if (phase === 'attaching' && id !== transfer) return
         if (bounds === null) {
           if (parent === shell) view.setVisible(false)
           return
@@ -431,6 +438,7 @@ else {
           moveTo(shell)
           if (transferFocus) shell.focus()
           mode = 'docked'
+          confirmedTransfer = transfer
           phase = 'ready'
           standalone?.hide()
           broadcast()
