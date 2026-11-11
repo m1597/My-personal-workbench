@@ -8,8 +8,8 @@ import { applyAppearance, readAppearance } from './app/appearance'
 import './styles/appearance.css'
 import { applyTheme, readTheme } from './app/theme'
 
-applyTheme(readTheme())
-applyAppearance(readAppearance())
+const initialThemeSaved = applyTheme(readTheme())
+const initialAppearanceSaved = applyAppearance(readAppearance())
 
 if (new URLSearchParams(location.search).get('nativeBackdrop') === 'acrylic') {
   document.documentElement.dataset.backdrop = 'acrylic'
@@ -19,6 +19,6 @@ const root = document.getElementById('root')
 if (!root) throw new Error('Missing root element')
 createRoot(root).render(
   <React.StrictMode>
-    <App />
+    <App initialThemeSaved={initialThemeSaved} initialAppearanceSaved={initialAppearanceSaved} />
   </React.StrictMode>,
 )

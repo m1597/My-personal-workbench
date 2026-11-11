@@ -314,3 +314,29 @@ test('损坏或不兼容外观数据安全回退', async () => {
     await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
   }
 })
+
+test('主题写入失败时两个入口均显示真实保存状态', async () => {
+  await page.evaluate(() => {
+    const setItem = Storage.prototype.setItem
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'workbench.theme' && value === 'light') throw new Error('模拟主题写入失败')
+      return setItem.call(this, key, value)
+    }
+  })
+  await page.getByRole('button', { name: '切换到浅色', exact: true }).click()
+  await page.getByRole('button', { name: '软件设置', exact: true }).click()
+  const status = page.getByRole('dialog').getByRole('status')
+  const theme = page.getByLabel('颜色主题', { exact: true })
+  await expect(status).toContainText('无法写入本地存储')
+  await expect(theme).toHaveValue('light')
+  await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
+  expect(await page.evaluate(() => localStorage.getItem('workbench.theme'))).toBe('dark')
+  await page.getByLabel('界面密度', { exact: true }).selectOption('compact')
+  await expect(status).toContainText('无法写入本地存储')
+  await theme.selectOption('dark')
+  await expect(status).toContainText('外观已保存')
+  await theme.selectOption('light')
+  await expect(status).toContainText('无法写入本地存储')
+  await page.getByRole('button', { name: '恢复默认外观', exact: true }).click()
+  await expect(status).toContainText('外观已保存')
+})

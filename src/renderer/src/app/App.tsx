@@ -15,7 +15,13 @@ import { HelpDialog } from './HelpDialog'
 import { restoreLayout, trackLayout } from './layoutStorage'
 import { ComponentPrototypeButton, useComponentPrototype } from './componentPrototype'
 
-export default function App() {
+export default function App({
+  initialThemeSaved,
+  initialAppearanceSaved,
+}: {
+  initialThemeSaved: boolean
+  initialAppearanceSaved: boolean
+}) {
   const [theme] = useState(() => ({
     name: 'workbench',
     className: 'dockview-theme-workbench',
@@ -25,13 +31,14 @@ export default function App() {
   }))
   const [colorTheme, setColorTheme] = useState(readTheme)
   const [appearance, setAppearance] = useState(readAppearance)
-  const [appearanceSaved, setAppearanceSaved] = useState(true)
+  const [themeSaved, setThemeSaved] = useState(initialThemeSaved)
+  const [appearanceSaved, setAppearanceSaved] = useState(initialAppearanceSaved)
   const changeAppearance = (value: Appearance) => {
     setAppearanceSaved(applyAppearance(value))
     setAppearance(value)
   }
   const changeTheme = (value: 'dark' | 'light') => {
-    applyTheme(value)
+    setThemeSaved(applyTheme(value))
     setColorTheme(value)
   }
   const uiTheme = useMemo(() => fluentTheme(colorTheme), [colorTheme])
@@ -97,11 +104,7 @@ export default function App() {
               className="icon-button"
               aria-label={colorTheme === 'dark' ? '切换到浅色' : '切换到深色'}
               title={colorTheme === 'dark' ? '切换到浅色' : '切换到深色'}
-              onClick={() => {
-                const next = colorTheme === 'dark' ? 'light' : 'dark'
-                applyTheme(next)
-                setColorTheme(next)
-              }}
+              onClick={() => changeTheme(colorTheme === 'dark' ? 'light' : 'dark')}
             >
               {colorTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -110,7 +113,7 @@ export default function App() {
               theme={colorTheme}
               onChange={changeAppearance}
               onTheme={changeTheme}
-              saved={appearanceSaved}
+              saved={themeSaved && appearanceSaved}
             />
             <HelpDialog />
             <span className="header-divider" />

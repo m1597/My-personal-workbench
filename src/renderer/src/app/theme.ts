@@ -14,12 +14,13 @@ export function readTheme(): Theme {
   }
 }
 
-export function applyTheme(theme: Theme) {
+export function applyTheme(theme: Theme): boolean {
   document.documentElement.dataset.theme = theme
+  void window.workbench?.setTheme(theme).catch((error) => console.error('同步窗口主题失败', error))
   try {
     localStorage.setItem(storageKey, theme)
+    return true
   } catch {
-    /* Still usable without storage. */
+    return false
   }
-  void window.workbench?.setTheme(theme).catch((error) => console.error('同步窗口主题失败', error))
 }
