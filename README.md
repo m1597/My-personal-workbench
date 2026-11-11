@@ -30,7 +30,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 | npm run build                 | 类型检查并构建至 out/                                           |
 | npm start                     | electron-vite preview 构建后启动桌面程序                        |
 | npm test                      | 构建并执行发布、开发两套 Electron 交互测试                      |
-| npm run check                 | 环境、格式、静态、类型、构建、26 项交互及 doctor 回归的统一入口 |
+| npm run check                 | 环境、格式、静态、类型、构建、28 项交互及 doctor 回归的统一入口 |
 
 统一检查只执行一次类型检查和生产构建。失败从终端首个错误看起，报告打开方法见开发流程。2026-11-09 已按用户授权推送，[首次 Windows CI](https://github.com/m1597/My-personal-workbench/actions/runs/42599390733) 已通过（提交 8af4c32，含 10 项交互测试）。
 
@@ -66,13 +66,13 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 ## 独立组件原型
 
-已实现隔离的公共宿主与 Fluent React 示例，支持按钮切换及 Windows 消息触发停靠/手柄拖出。运行 `npm run build:prototype` 后执行 `npm run check:prototype`，自动使用独立 profile 在后台验证；不打开日常工作区。详见 [组件开发与验证](docs/组件开发.md)。目前是分目录部署，依赖项目 Electron 运行时，不是新的独立安装包；正式应用入口和布局存储保持原状。
+已实现隔离的公共宿主与 Fluent React 示例，支持系统标题栏拖入预览吸附、Dockview 标签拖出分离。运行 `npm run build:prototype` 后执行 `npm run check:prototype`，自动使用独立 profile 在后台验证；不打开日常工作区。详见 [组件开发与验证](docs/组件开发.md)。目前是分目录部署，依赖项目 Electron 运行时，不是新的独立安装包；正式应用入口和布局存储保持原状。
 
 ## 桌面双击启动
 
 双击桌面的“打开个人工作台.cmd”，按数字键选择入口：
 
 - **1 日常工作台**（5 秒后默认）。沿用 `local/desktop-profile` 和已保存布局。
-- **2 示例组件**。独立窗口中点击“加入工作台”，会打开组件宿主的工作台并停靠；点击“分离窗口”回到独立窗口。原型使用单独的 `local/desktop-component-profile`，只能停靠到自己的宿主窗口。
+- **2 示例组件**。再次双击 CMD 选择另一入口即可同时打开两个窗口。拖独立窗口标题栏到面板中央合并标签，拖到四边分屏；出现蓝色预览后松手。拖“示例组件”标签到整个工作台窗口外松手即可分离。两个入口复用同一宿主实例。
 
 桌面 CMD 转调项目的 `scripts/open-workbench.cmd`。工作台界面更新后运行 `npm run build`；示例或宿主更新后运行 `npm run build:prototype`。两个入口均使用最新的 `out/renderer`。运行 `scripts/open-workbench.cmd --check` 检查启动文件。关闭旧窗口后重开即可加载新版。
