@@ -8,26 +8,40 @@ if not exist "out\main\index.js" goto missing_build
 if not exist "out\renderer\index.html" goto missing_build
 set "prototype=%workbench_root%\dist\component-prototype"
 set "mode=standalone"
+set "profile=%workbench_root%\local\desktop-profile"
+if /i "%~1"=="--manual" set "profile=%workbench_root%\tmp\manual-builtin-windows\profile"
 set "ELECTRON_RUN_AS_NODE="
 set "ELECTRON_RENDERER_URL="
 set "WORKBENCH_TEST_BACKGROUND=0"
 if /i "%~1"=="--check" goto check_component
 if /i "%~1"=="--component" goto check_component
 if /i "%~1"=="--workbench" goto workbench
-choice /c 12 /n /t 5 /d 1 /m "按 1 打开日常工作台，按 2 打开示例组件（5 秒后默认 1）："
+for %%M in (1 2 3 4) do if /i "%~1"=="--module-%%M" (
+  set "mode=module-%%M"
+  goto check_component
+)
+choice /c 123456 /n /t 5 /d 1 /m "1 工作台，2 示例组件，3 模块1，4 模块2，5 模块3，6 模块4（默认 1）："
 if errorlevel 255 goto failed
+for %%M in (6 5 4 3) do if errorlevel %%M (
+  set /a "module_number=%%M-2"
+  goto builtin
+)
 if errorlevel 2 goto check_component
 if not errorlevel 1 goto failed
+goto workbench
+:builtin
+set "mode=module-%module_number%"
+goto check_component
 :workbench
 set "mode=workbench"
 :check_component
-for %%F in (host\package.json host\main.mjs host\native-dock.mjs host\sample-preload.cjs host\workbench-preload.cjs) do if not exist "%prototype%\%%F" goto missing_component
+for %%F in (host\package.json host\main.mjs host\builtin-windows.mjs host\builtin-preload.cjs host\native-dock.mjs host\sample-preload.cjs host\workbench-preload.cjs) do if not exist "%prototype%\%%F" goto missing_component
 if /i "%mode%"=="standalone" for %%F in (component.json index.html component.js component.css) do if not exist "%prototype%\component\%%F" goto missing_component
 if /i "%~1"=="--check" (
   echo OK: Workbench, component host and sample are ready.
   goto launched
 )
-start "" "node_modules\electron\dist\electron.exe" "%prototype%\host" "--mode=%mode%" "--component=%prototype%\component" "--workbench=%workbench_root%\out\renderer\index.html" "--user-data-dir=%workbench_root%\local\desktop-profile"
+start "" "node_modules\electron\dist\electron.exe" "%prototype%\host" "--mode=%mode%" "--component=%prototype%\component" "--workbench=%workbench_root%\out\renderer\index.html" "--user-data-dir=%profile%"
 :launched
 popd
 exit /b 0

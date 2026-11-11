@@ -73,6 +73,9 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 双击桌面的“打开个人工作台.cmd”，按数字键选择入口：
 
 - **1 日常工作台**（5 秒后默认）。沿用 `local/desktop-profile` 和已保存布局。
-- **2 示例组件**。再次双击 CMD 选择另一入口即可同时打开两个窗口。拖独立窗口标题栏到面板中央合并标签，拖到四边分屏；出现蓝色预览后松手。拖“示例组件”标签到整个工作台窗口外松手即可分离。两个入口复用同一宿主实例。
+- **2 示例组件**。再次双击 CMD 选择另一入口即可同时打开两个窗口。拖独立窗口标题栏到面板中央合并标签，拖到四边分屏；出现蓝色预览后松手。拖“示例组件”标签到整个工作台窗口外松手即可分离。
+- **3 到 6** 分别打开模块 1 到 4。也可传 `--module-1` 至 `--module-4`。已有实例会被激活。拖模块标签到整个工作台外可分离，每个独立窗口都可用系统标题栏拖回面板中央或四边。四窗可同时使用。
 
-桌面 CMD 转调项目的 `scripts/open-workbench.cmd`。工作台界面更新后运行 `npm run build`；示例或宿主更新后运行 `npm run build:prototype`。两个入口均使用最新的 `out/renderer`。运行 `scripts/open-workbench.cmd --check` 检查启动文件。关闭旧窗口后重开即可加载新版。
+手动验收从项目目录运行 `scripts\open-workbench.cmd --manual`，菜单相同，布局写入 `tmp/manual-builtin-windows/profile`。每次打开验收菜单都使用这个参数。
+
+桌面 CMD 转调项目的 `scripts/open-workbench.cmd`。工作台界面更新后运行 `npm run build`；示例或宿主更新后运行 `npm run build:prototype`。各入口使用最新的 `out/renderer`。运行 `scripts/open-workbench.cmd --check` 检查启动文件。关闭旧窗口后重开即可加载新版。

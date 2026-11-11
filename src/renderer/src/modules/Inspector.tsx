@@ -3,7 +3,7 @@ import { SlidersHorizontal, LayoutGrid, GripVertical, Move, Plus } from 'lucide-
 import { WorkspaceContext } from '../app/WorkspaceContext'
 import { modules } from '../app/moduleRegistry'
 export function Inspector() {
-  const { api, active } = useContext(WorkspaceContext)
+  const { api, active, dimensions: external } = useContext(WorkspaceContext)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const selected = modules.find((item) => item.id === active)
   useEffect(() => {
@@ -39,11 +39,11 @@ export function Inspector() {
         <div className="dimension-fields">
           <div>
             <span>W</span>
-            <output>{dimensions.width}</output>
+            <output>{external?.width ?? dimensions.width}</output>
           </div>
           <div>
             <span>H</span>
-            <output>{dimensions.height}</output>
+            <output>{external?.height ?? dimensions.height}</output>
           </div>
         </div>
         <p className="field-hint">内容区域尺寸 · px</p>

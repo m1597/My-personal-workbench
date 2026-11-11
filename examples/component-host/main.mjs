@@ -1,5 +1,12 @@
+import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
-import { watchNativeDock, shellExposed, snapTarget } from './native-dock.mjs'
+import {
+  watchNativeDock,
+  shellExposed,
+  snapTarget,
+  positionAtRelease,
+  outsideRelease,
+} from './native-dock.mjs'
 import {
   app,
   BaseWindow,
@@ -86,6 +93,19 @@ function moveTo(window) {
   window.contentView.addChildView(view)
   parent = window
 }
+function dockTarget(point, source) {
+  if (!shell || shell.isDestroyed() || shell.isMinimized() || !shell.isVisible() || !dropZone)
+    return null
+  const content = shell.getContentBounds()
+  const hit = snapTarget({ x: point.x - content.x, y: point.y - content.y }, dropZone)
+  return hit && shellExposed(point, source, shell) ? hit : null
+}
+function preview(value) {
+  if (JSON.stringify(dragOver) !== JSON.stringify(value)) {
+    dragOver = value
+    broadcast()
+  }
+}
 function detach(point) {
   clearTimeout(transferTimer)
   if (!view || view.webContents.isDestroyed() || view.webContents.isCrashed()) return
@@ -93,27 +113,10 @@ function detach(point) {
     standalone = new BaseWindow({ ...options(660, 620), title: '示例组件 · 独立窗口' })
     watchNativeDock(standalone, {
       target: (point) => {
-        if (
-          mode !== 'standalone' ||
-          phase !== 'ready' ||
-          !shell ||
-          shell.isDestroyed() ||
-          shell.isMinimized() ||
-          !shell.isVisible() ||
-          !dropZone
-        )
-          return null
-        const content = shell.getContentBounds()
-        const hit = snapTarget({ x: point.x - content.x, y: point.y - content.y }, dropZone)
-        return hit && shellExposed(point, standalone, shell) ? hit : null
+        return mode === 'standalone' && phase === 'ready' ? dockTarget(point, standalone) : null
       },
       commit: (hit) => void attach(hit),
-      preview: (value) => {
-        if (JSON.stringify(dragOver) !== JSON.stringify(value)) {
-          dragOver = value
-          broadcast()
-        }
-      },
+      preview,
     })
     standalone.on('resize', () => {
       if (mode === 'standalone' && view) {
@@ -132,18 +135,7 @@ function detach(point) {
       }
     })
   }
-  if (point) {
-    const [width, height] = standalone.getSize()
-    const area = screen.getDisplayNearestPoint(point).workArea
-    let x = point.x - Math.min(width / 2, 120)
-    let y = point.y - 16
-    if (!background) {
-      x = Math.max(area.x, Math.min(x, area.x + Math.max(0, area.width - width)))
-      y = Math.max(area.y, Math.min(y, area.y + Math.max(0, area.height - height)))
-    }
-    if (background) x = Math.min(x, ...screen.getAllDisplays().map((d) => d.bounds.x - width - 80))
-    standalone.setPosition(Math.round(x), Math.round(y))
-  }
+  if (point) positionAtRelease(standalone, point, background)
   moveTo(standalone)
   mode = 'standalone'
   phase = 'ready'
@@ -248,10 +240,12 @@ async function openWorkbench() {
     },
   })
   secure(shell.webContents)
+  shell.webContents.on('did-start-loading', builtins.shellClosed)
   shell.on('close', () => {
     if (!quitting && parent === shell) detach()
   })
   shell.on('closed', () => {
+    builtins.shellClosed()
     shell = undefined
     dropZone = undefined
   })
@@ -289,9 +283,25 @@ async function startAttach(hit) {
   }
 }
 
-const intent = argument('mode') === 'workbench' ? 'workbench' : 'component'
+const builtins = builtinWindows({
+  shell: () => shell,
+  isShell,
+  options,
+  show,
+  secure,
+  preview,
+  dockTarget,
+  background,
+  workbenchFile,
+  preload: path.join(here, 'builtin-preload.cjs'),
+  supportsAcrylic,
+})
+const requestedMode = argument('mode')
+const intent =
+  requestedMode === 'workbench' || isBuiltin(requestedMode) ? requestedMode : 'component'
 let requests = Promise.resolve()
 async function openIntent(request) {
+  if (isBuiltin(request)) return builtins.open(request)
   if (request === 'workbench') {
     if (!shell || shell.isDestroyed()) {
       await discover()
@@ -311,7 +321,7 @@ async function openIntent(request) {
 if (!app.requestSingleInstanceLock({ intent })) app.quit()
 else {
   app.on('second-instance', (_event, _argv, _cwd, data) => {
-    if (data.intent === 'workbench' || data.intent === 'component')
+    if (data.intent === 'workbench' || data.intent === 'component' || isBuiltin(data.intent))
       requests = requests.then(() => openIntent(data.intent)).catch(console.error)
   })
   app.on('before-quit', () => {
@@ -322,9 +332,10 @@ else {
   app.on('window-all-closed', () => {
     if (!quitting) app.quit()
   })
-  void app
+  requests = app
     .whenReady()
     .then(async () => {
+      builtins.listen()
       Menu.setApplicationMenu(null)
       nativeTheme.themeSource = 'dark'
       ipcMain.handle('sample:hello', (event, payload) => {
@@ -354,18 +365,8 @@ else {
         if (!isShell(event)) throw new Error('DENIED')
         if (mode !== 'docked' || phase !== 'ready') return
         if (release === undefined) return detach()
-        if (!Number.isFinite(release?.x) || !Number.isFinite(release?.y)) return
-        const content = shell.getContentBounds()
-        const frame = shell.getBounds()
-        const point = { x: Math.round(content.x + release.x), y: Math.round(content.y + release.y) }
-        if (
-          point.x >= frame.x &&
-          point.y >= frame.y &&
-          point.x < frame.x + frame.width &&
-          point.y < frame.y + frame.height
-        )
-          return
-        detach(point)
+        const point = outsideRelease(shell, release)
+        if (point) detach(point)
       })
       ipcMain.on('prototype:drop-zone', (event, regions) => {
         if (!isShell(event)) return
@@ -425,8 +426,7 @@ else {
           view.setVisible(true)
         }
       })
-      requests = openIntent(intent)
-      await requests
+      await openIntent(intent)
     })
     .catch((failure) => {
       console.error(failure)

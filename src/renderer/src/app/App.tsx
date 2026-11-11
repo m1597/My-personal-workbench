@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react'
 import { PanelsTopLeft, RotateCcw, MousePointer2, LayoutGrid } from 'lucide-react'
 import { createDefaultLayout, openModule } from './workspace'
+import type { ModuleId } from './builtinSession'
 import { modules, icons } from './moduleRegistry'
 import { WorkspaceContext, type WorkspaceState } from './WorkspaceContext'
 import { components, HeaderActions, EmptyWorkspace } from './dockviewComponents'
@@ -22,7 +23,8 @@ export default function App() {
     ),
   }))
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
-  useComponentPrototype(workspace.api, theme.gap)
+  const [detached, setDetached] = useState<ModuleId[]>([])
+  useComponentPrototype(workspace.api, theme.gap, setDetached)
   useEffect(() => {
     const api = workspace.api
     if (!api) return
@@ -57,7 +59,9 @@ export default function App() {
 
   return (
     <FluentProvider theme={uiTheme} className="fluent-workbench">
-      <WorkspaceContext.Provider value={workspace}>
+      <WorkspaceContext.Provider
+        value={{ ...workspace, visible: [...workspace.visible, ...detached] }}
+      >
         <div className="workbench">
           <header className="app-header">
             <div className="brand" title="个人工作台">

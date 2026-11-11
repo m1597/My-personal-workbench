@@ -1,12 +1,13 @@
-import { useContext, useState } from 'react'
+import { useContext } from 'react'
 import { Input } from '@fluentui/react-components'
 import { Search, ChevronRight, PanelsTopLeft, Circle } from 'lucide-react'
 import { WorkspaceContext } from '../app/WorkspaceContext'
 import { modules, icons } from '../app/moduleRegistry'
+import { useNavigationQuery, setNavigationQuery } from '../app/builtinSession'
 import { openModule } from '../app/workspace'
 export function NavigationPanel() {
   const workspace = useContext(WorkspaceContext)
-  const [query, setQuery] = useState('')
+  const query = useNavigationQuery()
   return (
     <section className="module-navigation" aria-label="模块 1 内容" data-testid="module-1">
       <div className="section-heading">
@@ -19,7 +20,10 @@ export function NavigationPanel() {
         aria-label="搜索模块"
         placeholder="搜索模块…"
         value={query}
-        onChange={(_, data) => setQuery(data.value)}
+        onChange={(_, data) => {
+          setNavigationQuery(data.value)
+          window.builtinWindow?.query(data.value)
+        }}
       />
       <div className="module-list">
         {modules
@@ -32,7 +36,11 @@ export function NavigationPanel() {
                 type="button"
                 key={item.id}
                 className={`module-row ${workspace.active === item.id ? 'selected' : ''}`}
-                onClick={() => workspace.api && openModule(workspace.api, item.id)}
+                onClick={() =>
+                  workspace.api
+                    ? openModule(workspace.api, item.id)
+                    : void window.builtinWindow?.open(item.id)
+                }
                 aria-label={`打开${item.title}`}
               >
                 <ChevronRight size={12} />

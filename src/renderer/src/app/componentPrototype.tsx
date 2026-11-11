@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { Button } from '@fluentui/react-components'
 
+import { bindBuiltinDock } from './builtinDock'
+import { type ModuleId, navigationQuery } from './builtinSession'
+import { modules } from './moduleRegistry'
 import { applyLayout, trackLayout } from './layoutStorage'
 
 type Region = { id: string; x: number; y: number; width: number; height: number }
@@ -28,12 +31,17 @@ declare global {
     }
   }
 }
-export function useComponentPrototype(api: DockviewApi | undefined, gap: number) {
+export function useComponentPrototype(
+  api: DockviewApi | undefined,
+  gap: number,
+  onDetached: (ids: ModuleId[]) => void,
+) {
   useEffect(() => {
     const host = window.componentHost
     if (!api) return
     const layout = trackLayout(api)
     if (!host) return layout.dispose
+    const builtins = bindBuiltinDock(api, layout, gap, onDetached)
     let last: HostState | undefined
     let finishAttach: ((docked: boolean) => void) | undefined
     const update = (state: HostState) => {
@@ -102,6 +110,7 @@ export function useComponentPrototype(api: DockviewApi | undefined, gap: number)
           api.removeGroup(source)
       }
     }
+    let dragging = ''
     let pointer: number | undefined
     const cancel = () => {
       pointer = undefined
@@ -109,7 +118,15 @@ export function useComponentPrototype(api: DockviewApi | undefined, gap: number)
     }
     const drag = api.onWillDragPanel(({ panel, nativeEvent }) => {
       cancel()
-      if (panel.id !== 'component-example' || !(nativeEvent instanceof PointerEvent)) return
+      if (
+        !(nativeEvent instanceof PointerEvent) ||
+        !(
+          panel.id === 'component-example' ||
+          (builtins && modules.some((item) => item.id === panel.id))
+        )
+      )
+        return
+      dragging = panel.id
       pointer = nativeEvent.pointerId
       document.documentElement.dataset.componentDrag = 'true'
       document.documentElement.setPointerCapture(pointer)
@@ -122,8 +139,22 @@ export function useComponentPrototype(api: DockviewApi | undefined, gap: number)
         event.clientY < 0 ||
         event.clientX >= innerWidth ||
         event.clientY >= innerHeight
-      )
-        void host.detach({ x: event.clientX, y: event.clientY })
+      ) {
+        const point = { x: event.clientX, y: event.clientY }
+        if (dragging === 'component-example') void host.detach(point)
+        else {
+          // Keep the captured navigation state stable until the new renderer has mounted.
+          const input =
+            dragging === 'module-1'
+              ? document.querySelector<HTMLInputElement>('[data-testid="module-1"] input')
+              : null
+          if (input?.readOnly) return
+          if (input) input.readOnly = true
+          void window.builtinDock?.detach(dragging, point, navigationQuery()).finally(() => {
+            if (input) input.readOnly = false
+          })
+        }
+      }
     }
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') cancel()
@@ -147,6 +178,7 @@ export function useComponentPrototype(api: DockviewApi | undefined, gap: number)
     let frame = 0
     let previous = ''
     const measure = () => {
+      builtins?.report()
       const rect = document.querySelector('.docking-area')?.getBoundingClientRect()
       const blocked = document.querySelector('[role="dialog"], [role="menu"]')
       const region = (id: string, box: DOMRect) => ({
@@ -177,6 +209,7 @@ export function useComponentPrototype(api: DockviewApi | undefined, gap: number)
     }
     frame = requestAnimationFrame(measure)
     return () => {
+      builtins?.dispose()
       offActivate()
       disposed = true
       layout.dispose()
@@ -191,7 +224,7 @@ export function useComponentPrototype(api: DockviewApi | undefined, gap: number)
       cancelAnimationFrame(frame)
       host.dropZone(null)
     }
-  }, [api, gap])
+  }, [api, gap, onDetached])
 }
 
 export function ComponentPrototypeButton() {

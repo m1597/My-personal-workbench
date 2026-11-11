@@ -10,7 +10,10 @@ import { BottomPanel } from '../modules/BottomPanel'
 import { ComponentSlot } from './componentPrototype'
 
 function ModulePanel({ api }: IDockviewPanelProps) {
-  switch (api.id) {
+  return <BuiltinContent id={api.id} />
+}
+export function BuiltinContent({ id }: { id: string }) {
+  switch (id) {
     case 'module-1':
       return <NavigationPanel />
     case 'module-2':

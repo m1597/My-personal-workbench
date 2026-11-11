@@ -126,10 +126,10 @@ export function restoreLayout(api: DockviewApi, gap: number) {
 export function trackLayout(api: DockviewApi) {
   let timer: ReturnType<typeof setTimeout> | undefined
   let lastSaved: string | undefined
-  let paused = false
+  let pauses = 0
   const save = () => {
     clearTimeout(timer)
-    if (paused) return
+    if (pauses) return
     try {
       const layout = api.toJSON()
       Reflect.deleteProperty(layout.grid, 'maximizedNode')
@@ -154,10 +154,10 @@ export function trackLayout(api: DockviewApi) {
   return {
     pause() {
       save()
-      paused = true
+      pauses++
     },
     resume() {
-      paused = false
+      pauses--
       schedule()
     },
     dispose() {

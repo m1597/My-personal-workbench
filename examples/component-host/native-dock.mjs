@@ -70,6 +70,29 @@ export function snapTarget(point, regions) {
   }
 }
 
+export function positionAtRelease(window, point, background) {
+  const [width, height] = window.getSize()
+  const area = screen.getDisplayNearestPoint(point).workArea
+  let x = point.x - Math.min(width / 2, 120)
+  let y = point.y - 16
+  if (!background) {
+    x = Math.max(area.x, Math.min(x, area.x + Math.max(0, area.width - width)))
+    y = Math.max(area.y, Math.min(y, area.y + Math.max(0, area.height - height)))
+  }
+  if (background) x = Math.min(x, ...screen.getAllDisplays().map((d) => d.bounds.x - width - 80))
+  window.setPosition(Math.round(x), Math.round(y))
+}
+
+export function outsideRelease(shell, release) {
+  if (!Number.isFinite(release?.x) || !Number.isFinite(release?.y)) return
+  const content = shell.getContentBounds()
+  const frame = shell.getBounds()
+  const x = Math.round(content.x + release.x)
+  const y = Math.round(content.y + release.y)
+  if (x < frame.x || y < frame.y || x >= frame.x + frame.width || y >= frame.y + frame.height)
+    return { x, y }
+}
+
 export function watchNativeDock(window, { target, commit, preview }) {
   if (process.platform !== 'win32') return
   let start

@@ -44,6 +44,11 @@
 .dockview-theme-workbench .dv-groupview.dv-active-group .dv-tab.dv-active-tab {
   box-shadow: inset 0 -2px var(--accent);
 }
+.builtin-window.fui-FluentProvider {
+  height: 100vh;
+  overflow: auto;
+  background: var(--panel-surface);
+}
 .module-row {
   height: var(--module-row-height);
 }
