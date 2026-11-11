@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "examples/sample-component", "tests", "*.config.ts"]
+  "include": ["src", "components/music", "examples/sample-component", "tests", "*.config.ts"]
 }

@@ -1,0 +1,234 @@
+body {
+  margin: 0;
+}
+* {
+  box-sizing: border-box;
+}
+.music-shell {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-ui);
+}
+.music-shell h1,
+.music-shell h2,
+.music-shell p,
+.music-shell ol {
+  margin: 0;
+}
+.music-shell h1,
+.music-shell h2,
+.music-shell strong {
+  font-weight: var(--font-weight-medium);
+}
+.music-shell h1,
+.music-shell h2 {
+  font-size: var(--font-size-heading);
+}
+.music-shell small,
+.music-track p,
+.music-track span {
+  font-size: var(--font-size-caption);
+  color: var(--text-muted);
+}
+.music-header,
+.music-transport,
+.music-section-head,
+.music-input,
+.music-tools,
+.music-seek,
+.music-versions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.music-header,
+.music-player {
+  padding: var(--space-12) var(--space-20);
+}
+.music-header {
+  border-bottom: 1px solid var(--stroke);
+  gap: var(--space-12);
+}
+.music-header > button,
+.music-section-head .fui-Dropdown,
+.music-tools button:last-child {
+  margin-left: auto;
+}
+.music-mark,
+.music-disc,
+.music-track-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.music-mark {
+  width: 36px;
+  height: 36px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-9);
+}
+.music-heading {
+  display: grid;
+  min-width: 0;
+}
+.music-heading strong,
+.music-heading small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-scroll {
+  overflow: auto;
+  min-width: 0;
+  padding: var(--space-18) var(--space-20);
+}
+.music-compose,
+.music-list {
+  max-width: 860px;
+  margin-inline: auto;
+}
+.music-compose {
+  padding: var(--space-16);
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: var(--panel-radius);
+}
+.music-input {
+  margin: var(--space-10) 0 var(--space-6);
+  flex-wrap: wrap;
+}
+.music-input .fui-Input {
+  min-width: 120px;
+  flex: 1 1 150px;
+}
+.music-summary.fui-Button {
+  padding-inline: 0;
+  color: var(--text-secondary);
+}
+.music-summary-content {
+  padding-top: var(--space-6);
+  color: var(--text-muted);
+}
+.music-list {
+  margin-top: var(--space-20);
+}
+.music-section-head {
+  flex-wrap: wrap;
+}
+.music-section-head .fui-Dropdown {
+  min-width: 0;
+  max-width: min(65%, 280px);
+}
+.music-tools {
+  margin: var(--space-8) 0;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.music-shell ol {
+  padding: 0;
+  list-style: none;
+}
+.music-shell li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-10) var(--space-8);
+  border-top: 1px solid var(--stroke);
+}
+.music-shell li[data-active="true"] {
+  background: var(--tint-blue);
+  border-radius: var(--radius-6);
+}
+.music-track-icon,
+.music-disc {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-6);
+  background: var(--control);
+  color: var(--icon-muted);
+}
+li[data-active="true"] .music-track-icon,
+.music-disc {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.music-track {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.music-track > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+.music-track p {
+  color: var(--text-secondary);
+}
+.music-track small {
+  display: block;
+}
+.music-versions {
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+}
+.music-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-10);
+  padding: var(--space-24);
+  color: var(--text-muted);
+  font-size: var(--font-size-control);
+}
+.music-player {
+  border-top: 1px solid var(--stroke);
+  background: var(--glass);
+}
+.music-player .music-heading {
+  flex: 1;
+}
+.music-seek {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.music-seek .fui-Slider {
+  flex: 1;
+  min-width: 0;
+}
+.music-player p:empty {
+  display: none;
+}
+.music-player p {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 420px) {
+  .music-header,
+  .music-player,
+  .music-scroll {
+    padding: var(--space-10) var(--space-12);
+  }
+  .music-compose {
+    padding: var(--space-12);
+  }
+  .music-shell li {
+    gap: var(--space-8);
+  }
+}
+@media (max-height: 240px) {
+  .music-header small,
+  .music-seek {
+    display: none;
+  }
+  .music-header,
+  .music-player {
+    padding-block: var(--space-4);
+  }
+}

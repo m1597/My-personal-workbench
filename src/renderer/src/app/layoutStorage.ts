@@ -17,7 +17,13 @@ function validLayout(value: unknown): value is SerializedDockview {
   if (![grid.width, grid.height].every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0))
     return false
   const ids = Object.keys(panels)
-  if (!ids.every((id) => id === 'component-example' || modules.some((module) => module.id === id)))
+  if (
+    !ids.every(
+      (id) =>
+        ['component-example', 'component-music'].includes(id) ||
+        modules.some((module) => module.id === id),
+    )
+  )
     return false
   if (
     !ids.every((id) => {
@@ -25,7 +31,8 @@ function validLayout(value: unknown): value is SerializedDockview {
       return (
         record(panel) &&
         panel.id === id &&
-        panel.contentComponent === (id === 'component-example' ? 'component-slot' : 'module') &&
+        panel.contentComponent ===
+          (['component-example', 'component-music'].includes(id) ? 'component-slot' : 'module') &&
         !panel.tabComponent &&
         ['minimumWidth', 'minimumHeight', 'maximumWidth', 'maximumHeight'].every((field) => {
           const size = panel[field]
@@ -113,6 +120,8 @@ export function restoreLayout(api: DockviewApi, gap: number) {
       applyLayout(api, saved.layout, gap)
       const slot = api.getPanel('component-example')
       if (slot && !window.componentHost) api.removePanel(slot)
+      const music = api.getPanel('component-music')
+      if (music && !window.musicDock) api.removePanel(music)
       return
     }
   } catch {

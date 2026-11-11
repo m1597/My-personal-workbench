@@ -21,22 +21,29 @@ contextBridge.exposeInMainWorld('builtinDock', {
     return () => ipcRenderer.removeListener('builtin:activate', listener)
   },
 })
-contextBridge.exposeInMainWorld('componentHost', {
-  status: () => ipcRenderer.invoke('prototype:status'),
-  restore: () => ipcRenderer.invoke('prototype:restore'),
-  open: () => ipcRenderer.invoke('prototype:open'),
-  dropZone: (rect) => ipcRenderer.send('prototype:drop-zone', rect),
-  confirmedTransfer: (id) => ipcRenderer.sendSync('prototype:confirmed-transfer', id),
-  bounds: (bounds, id) => ipcRenderer.send('prototype:bounds', bounds, id),
-  detach: (release) => ipcRenderer.invoke('prototype:detach', release),
-  onActivate: (callback) => {
-    const listener = () => callback()
-    ipcRenderer.on('prototype:activate', listener)
-    return () => ipcRenderer.removeListener('prototype:activate', listener)
-  },
-  subscribe: (callback) => {
-    const listener = (_, state) => callback(state)
-    ipcRenderer.on('prototype:state', listener)
-    return () => ipcRenderer.removeListener('prototype:state', listener)
-  },
-})
+function componentBridge(prefix) {
+  return {
+    ...(prefix === 'music-prototype'
+      ? { close: () => ipcRenderer.invoke('music-prototype:close') }
+      : {}),
+    status: () => ipcRenderer.invoke(`${prefix}:status`),
+    restore: () => ipcRenderer.invoke(`${prefix}:restore`),
+    open: () => ipcRenderer.invoke(`${prefix}:open`),
+    dropZone: (rect) => ipcRenderer.send('prototype:drop-zone', rect),
+    confirmedTransfer: (id) => ipcRenderer.sendSync(`${prefix}:confirmed-transfer`, id),
+    bounds: (bounds, id) => ipcRenderer.send(`${prefix}:bounds`, bounds, id),
+    detach: (release) => ipcRenderer.invoke(`${prefix}:detach`, release),
+    onActivate: (callback) => {
+      const listener = () => callback()
+      ipcRenderer.on(`${prefix}:activate`, listener)
+      return () => ipcRenderer.removeListener(`${prefix}:activate`, listener)
+    },
+    subscribe: (callback) => {
+      const listener = (_, state) => callback(state)
+      ipcRenderer.on(`${prefix}:state`, listener)
+      return () => ipcRenderer.removeListener(`${prefix}:state`, listener)
+    },
+  }
+}
+contextBridge.exposeInMainWorld('componentHost', componentBridge('prototype'))
+contextBridge.exposeInMainWorld('musicDock', componentBridge('music-prototype'))

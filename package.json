@@ -29,6 +29,7 @@
     "dist:win": "npm run build && node scripts/prepare-package.mjs && electron-builder --win --x64 --publish never",
     "check:package": "node scripts/check-package.mjs",
     "build:prototype": "npm run build && node scripts/build-component-prototype.mjs",
+    "check:music": "node scripts/check-music-storage.mjs && node scripts/check-music.mjs",
     "check:prototype": "node scripts/check-component-prototype.mjs && node scripts/check-builtin-modules.mjs && node scripts/check-dock-transitions.mjs"
   },
   "dependencies": {
