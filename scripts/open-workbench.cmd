@@ -7,6 +7,7 @@ if not exist "node_modules\electron\dist\electron.exe" goto missing_runtime
 if not exist "out\main\index.js" goto missing_build
 if not exist "out\renderer\index.html" goto missing_build
 set "prototype=%workbench_root%\dist\component-prototype"
+set "mode=standalone"
 set "ELECTRON_RUN_AS_NODE="
 set "ELECTRON_RENDERER_URL="
 set "WORKBENCH_TEST_BACKGROUND=0"
@@ -18,15 +19,15 @@ if errorlevel 255 goto failed
 if errorlevel 2 goto check_component
 if not errorlevel 1 goto failed
 :workbench
-start "" "node_modules\electron\dist\electron.exe" "%workbench_root%" "--user-data-dir=%workbench_root%\local\desktop-profile"
-goto launched
+set "mode=workbench"
 :check_component
-for %%F in (host\package.json host\main.mjs host\native-dock.mjs host\sample-preload.cjs host\workbench-preload.cjs component\component.json component\index.html component\component.js component\component.css) do if not exist "%prototype%\%%F" goto missing_component
+for %%F in (host\package.json host\main.mjs host\native-dock.mjs host\sample-preload.cjs host\workbench-preload.cjs) do if not exist "%prototype%\%%F" goto missing_component
+if /i "%mode%"=="standalone" for %%F in (component.json index.html component.js component.css) do if not exist "%prototype%\component\%%F" goto missing_component
 if /i "%~1"=="--check" (
   echo OK: Workbench, component host and sample are ready.
   goto launched
 )
-start "" "node_modules\electron\dist\electron.exe" "%prototype%\host" "--component=%prototype%\component" "--workbench=%workbench_root%\out\renderer\index.html" "--user-data-dir=%workbench_root%\local\desktop-component-profile"
+start "" "node_modules\electron\dist\electron.exe" "%prototype%\host" "--mode=%mode%" "--component=%prototype%\component" "--workbench=%workbench_root%\out\renderer\index.html" "--user-data-dir=%workbench_root%\local\desktop-profile"
 :launched
 popd
 exit /b 0

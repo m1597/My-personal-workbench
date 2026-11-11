@@ -19,7 +19,7 @@ import { randomUUID } from 'node:crypto'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const argument = (name) =>
   process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3)
-// Prototype must never use the daily workbench profile.
+// The launcher selects a profile explicitly. Tests always supply a temporary directory.
 const profile = argument('user-data-dir')
 if (!profile || !path.isAbsolute(profile)) throw new Error('原型必须指定独立的绝对 --user-data-dir')
 app.setPath('userData', profile)
@@ -208,7 +208,9 @@ async function openWorkbench() {
   const file = await realpath(workbenchFile)
   shell = new BrowserWindow({
     ...options(1480, 960),
-    title: '工作台 · 组件宿主原型',
+    minWidth: 900,
+    minHeight: 640,
+    title: '个人工作台',
     webPreferences: {
       preload: path.join(here, 'workbench-preload.cjs'),
       sandbox: true,
@@ -256,10 +258,29 @@ async function startAttach() {
   }
 }
 
-if (!app.requestSingleInstanceLock()) app.quit()
+const intent = argument('mode') === 'workbench' ? 'workbench' : 'component'
+let requests = Promise.resolve()
+async function openIntent(request) {
+  if (request === 'workbench') {
+    if (!shell || shell.isDestroyed()) {
+      await discover()
+      await openWorkbench()
+    } else {
+      if (shell.isMinimized()) shell.restore()
+      show(shell)
+    }
+  } else if (await openComponent()) {
+    const window = mode === 'docked' ? shell : standalone
+    if (window.isMinimized()) window.restore()
+    show(window)
+  } else if (workbenchFile) await openWorkbench()
+  else throw new Error(error)
+}
+if (!app.requestSingleInstanceLock({intent})) app.quit()
 else {
-  app.on('second-instance', () => {
-    /* One writer per prototype profile; no arbitrary command forwarding. */
+  app.on('second-instance', (_event, _argv, _cwd, data) => {
+    if (data.intent === 'workbench' || data.intent === 'component')
+      requests = requests.then(() => openIntent(data.intent)).catch(console.error)
   })
   app.on('before-quit', () => {
     quitting = true
@@ -352,16 +373,8 @@ else {
           view.setVisible(true)
         }
       })
-      if (argument('mode') === 'workbench') {
-        await discover()
-        await openWorkbench()
-      } else if (!(await openComponent())) {
-        if (workbenchFile) await openWorkbench()
-        else {
-          console.error(error)
-          app.exit(1)
-        }
-      }
+      requests = openIntent(intent)
+      await requests
     })
     .catch((failure) => {
       console.error(failure)
