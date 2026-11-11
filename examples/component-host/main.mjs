@@ -168,13 +168,13 @@ async function discover() {
   }
 }
 let pendingOpen
-function openComponent(restoreWindow) {
-  pendingOpen ??= loadComponent(restoreWindow).finally(() => {
+function openComponent(restoreWindow, showDetached = true) {
+  pendingOpen ??= loadComponent(restoreWindow, showDetached).finally(() => {
     pendingOpen = undefined
   })
   return pendingOpen
 }
-async function loadComponent(restoreWindow) {
+async function loadComponent(restoreWindow, showDetached) {
   if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed()) return true
   const root = await discover()
   if (!root || restoreWindow?.isDestroyed()) return false
@@ -216,7 +216,7 @@ async function loadComponent(restoreWindow) {
     mode = 'docked'
     phase = 'ready'
     broadcast()
-  } else detach()
+  } else if (showDetached) detach()
   await view.webContents.loadFile(entry, {
     query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {},
   })
@@ -261,7 +261,7 @@ function attach(hit = null) {
 async function startAttach(hit) {
   if ((mode === 'docked' && phase === 'ready') || phase === 'attaching') return { ok: true }
   try {
-    if (!(await openComponent())) return { ok: false, error }
+    if (!(await openComponent(undefined, false))) return { ok: false, error }
     if (mode === 'docked' && phase === 'ready') return { ok: true }
     error = ''
     placement = hit
@@ -276,6 +276,7 @@ async function startAttach(hit) {
     }, 5000)
     return { ok: true }
   } catch (failure) {
+    if (!parent && view && !view.webContents.isDestroyed()) detach()
     phase = 'ready'
     error = failure.message
     broadcast()
@@ -413,7 +414,9 @@ else {
           return
         if (phase === 'attaching') {
           clearTimeout(transferTimer)
+          const transferFocus = !background && standalone?.isFocused()
           moveTo(shell)
+          if (transferFocus) shell.focus()
           mode = 'docked'
           phase = 'ready'
           standalone?.hide()

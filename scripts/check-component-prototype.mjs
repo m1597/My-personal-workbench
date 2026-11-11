@@ -551,6 +551,8 @@ try {
   await shell.getByRole('button', { name: '示例组件', exact: true }).click()
   const sample = await findPage(app, '/component/index.html')
   await expect(sample.locator('#mode')).toHaveText('已停靠')
+  // A toolbar open must never create a second top-level HWND just to hide it.
+  expect(await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows().length)).toBe(1)
   await shell.getByRole('tab', { name: '模块 2', exact: true }).click()
   await expect(shell.getByTestId('module-2')).toBeVisible()
 } finally {
