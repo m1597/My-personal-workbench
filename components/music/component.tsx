@@ -40,6 +40,7 @@ type Item = {
   checked: number
   candidates: Track[]
 }
+import type { Versions } from './LxPanel'
 type State = {
   items: Item[]
   batches: Batch[]
@@ -56,6 +57,11 @@ type Mode = { mode: string }
 declare global {
   interface Window {
     music: {
+      lxInfo(): Promise<string>
+      lxImport(): Promise<void>
+      lxCancel(): Promise<void>
+      lxSearch(id: string): Promise<Versions>
+      lxDownload(key: string, quality: string): Promise<string>
       importLocal(mode: 'folder' | 'files'): Promise<void>
       cancelImport(): Promise<void>
       refreshLocal(): Promise<void>
@@ -293,6 +299,7 @@ function Music() {
       <main className="music-scroll">
         {tab === 'library' ? (
           <LibraryPane
+            refresh={refresh}
             rows={localRows}
             total={state?.localTracks.length ?? 0}
             search={search}

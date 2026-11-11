@@ -1,3 +1,4 @@
+import { LxPanel } from './LxPanel'
 import { useState } from 'react'
 import { Button, Input } from '@fluentui/react-components'
 import {
@@ -29,6 +30,7 @@ export type ImportJob = {
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 type Props = {
+  refresh: () => Promise<void>
   rows: LocalTrack[]
   total: number
   search: string
@@ -43,6 +45,7 @@ type Props = {
   remove: (id: string) => void
 }
 export function LibraryPane({
+  refresh,
   rows,
   total,
   search,
@@ -57,6 +60,7 @@ export function LibraryPane({
   remove,
 }: Props) {
   const [limit, setLimit] = useState(100)
+  const [online, setOnline] = useState<LocalTrack | null | undefined>()
   return (
     <section className="local-library" aria-label="本地歌曲库">
       <div className="library-title">
@@ -65,6 +69,9 @@ export function LibraryPane({
           <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
         </div>
         <div className="library-import">
+          <Button size="small" onClick={() => setOnline(null)}>
+            音乐源
+          </Button>
           <Button
             size="small"
             icon={<FileMusic size={16} />}
@@ -84,6 +91,14 @@ export function LibraryPane({
           </Button>
         </div>
       </div>
+      {online !== undefined && (
+        <LxPanel
+          key={online?.id ?? 'source'}
+          song={online}
+          close={() => setOnline(undefined)}
+          refresh={refresh}
+        />
+      )}
       <Input
         aria-label="搜索本地歌曲"
         type="search"
@@ -132,6 +147,17 @@ export function LibraryPane({
                   {t.album || '—'}
                 </span>
                 <small className="library-time">{formatTime(t.duration)}</small>
+                <Button
+                  size="small"
+                  appearance="subtle"
+                  title="查找在线版本"
+                  aria-label={'查找版本' + t.title}
+                  icon={<Search size={15} />}
+                  onClick={() => {
+                    setOnline(t)
+                    document.querySelector('.music-scroll')?.scrollTo(0, 0)
+                  }}
+                />
                 {!t.available && (
                   <Button
                     size="small"

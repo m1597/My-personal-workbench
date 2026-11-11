@@ -18,7 +18,7 @@ const day = () => new Intl.DateTimeFormat('sv-SE').format(new Date())
 // MoveFileW refuses an existing destination and renames within the selected volume.
 import { createRequire } from 'node:module'
 let moveFile
-function publish(temp, dest) {
+export function publish(temp, dest) {
   moveFile ??= createRequire(import.meta.url)('koffi')
     .load('kernel32.dll')
     .func('int __stdcall MoveFileW(str16, str16)')

@@ -1,0 +1,103 @@
+import https from 'node:https'
+import http from 'node:http'
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
+import ipaddr from 'ipaddr.js'
+
+export async function openPublic(input, options = {}, redirects = 0) {
+  const url = new URL(input)
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.port ||
+    redirects > 4
+  )
+    throw Error('音源地址无效')
+  const hostname = url.hostname.replace(/^\[|\]$/g, '')
+  let addresses = isIP(hostname)
+    ? [{ address: hostname, family: isIP(hostname) }]
+    : await lookup(hostname, { all: true })
+  // Fake-IP proxies can return benchmarking addresses. Resolve the hostname independently.
+  if (
+    !isIP(hostname) &&
+    addresses.length &&
+    addresses.every(
+      (a) => ipaddr.process(a.address).range() === 'reserved' && /^198\.(18|19)\./.test(a.address),
+    )
+  ) {
+    const dns = await sourceRequest(
+      'https://1.1.1.1/dns-query?type=A&name=' + encodeURIComponent(hostname),
+      { headers: { accept: 'application/dns-json' }, signal: options.signal },
+    )
+    addresses = (dns.body?.Answer ?? [])
+      .filter((a) => a.type === 1 && isIP(a.data) === 4)
+      .map((a) => ({ family: 4, address: a.data }))
+  }
+  if (
+    !addresses.length ||
+    addresses.some(({ address }) => ipaddr.process(address).range() !== 'unicast')
+  )
+    throw Error('音源仅支持公网地址')
+  const peer = addresses.find((a) => a.family === 4) ?? addresses[0]
+  const headers = {}
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    if (
+      /^(accept|content-type|user-agent|referer|origin)$/i.test(name) &&
+      typeof value === 'string' &&
+      value.length < 2048
+    )
+      headers[name] = value
+  }
+  const request = url.protocol === 'https:' ? https.request : http.request
+  const method = options.method ?? 'GET'
+  if (!['GET', 'POST'].includes(method)) throw Error('不支持该请求方法')
+  const response = await new Promise((resolve, reject) => {
+    const req = request(
+      url,
+      {
+        method,
+        headers,
+        agent: false,
+        autoSelectFamily: false,
+        family: peer.family,
+        lookup: (_name, _opts, cb) => cb(null, peer.address, peer.family),
+        signal: options.signal ?? AbortSignal.timeout(20000),
+      },
+      resolve,
+    )
+    req.on('error', reject)
+    req.end(method === 'POST' ? options.body : undefined)
+  })
+  if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+    response.destroy()
+    return openPublic(
+      new URL(response.headers.location, url),
+      { ...options, method: 'GET', body: undefined },
+      redirects + 1,
+    )
+  }
+  return response
+}
+
+export async function sourceRequest(url, options) {
+  const timeout = Math.min(20000, Math.max(1000, Number(options.timeout) || 15000))
+  const res = await openPublic(url, {
+    ...options,
+    signal: options.signal
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(timeout)])
+      : AbortSignal.timeout(timeout),
+  })
+  const chunks = []
+  let size = 0
+  for await (const chunk of res) {
+    size += chunk.length
+    if (size > 2 * 1024 * 1024) throw Error('音源响应过大')
+    chunks.push(chunk)
+  }
+  let body = Buffer.concat(chunks).toString('utf8')
+  try {
+    body = JSON.parse(body)
+  } catch {}
+  return { statusCode: res.statusCode, body }
+}

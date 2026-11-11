@@ -1,3 +1,4 @@
+import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { ipcMain, dialog } from 'electron'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -20,11 +21,13 @@ export function musicService(profile, isSender) {
         return await fn(...args)
       } catch (e) {
         // File system and SQLite errors may contain local paths.
-        if (e.name === 'AbortError') throw Error('生成已取消')
+        if (e.name === 'AbortError')
+          throw Error(name.startsWith('lx') ? '操作已取消' : '生成已取消')
         if (e.code) throw Error('存储操作失败，请检查空间和目录权限后重试')
         throw e
       }
     })
+  const closeLx = registerLx(bind, () => store, dialog)
   const text = (value) => {
     if (typeof value !== 'string' || value.length > 1000) throw Error('输入过长')
     return value
@@ -209,6 +212,7 @@ export function musicService(profile, isSender) {
       }
     },
     dispose() {
+      closeLx()
       viewEpoch++
       grant = null
       store?.library.cancel()

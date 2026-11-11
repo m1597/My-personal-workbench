@@ -1,5 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 const names = [
+  'lxInfo',
+  'lxImport',
+  'lxSearch',
+  'lxDownload',
+  'lxCancel',
   'state',
   'importLocal',
   'cancelImport',
