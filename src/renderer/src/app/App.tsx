@@ -6,15 +6,14 @@ import type { ModuleId } from './builtinSession'
 import { modules, icons } from './moduleRegistry'
 import { WorkspaceContext, type WorkspaceState } from './WorkspaceContext'
 import { components, HeaderActions, EmptyWorkspace } from './dockviewComponents'
-import { Button, FluentProvider } from '@fluentui/react-components'
-import { fluentTheme } from './fluentTheme'
+import { Button } from '@fluentui/react-components'
+import { ComponentTheme } from './ComponentTheme'
 import { WindowMenu } from './WindowMenu'
 import { HelpDialog } from './HelpDialog'
 import { restoreLayout } from './layoutStorage'
 import { ComponentPrototypeButton, useComponentPrototype } from './componentPrototype'
 
 export default function App() {
-  const [uiTheme] = useState(fluentTheme)
   const [theme] = useState(() => ({
     name: 'workbench',
     className: 'dockview-theme-workbench',
@@ -58,7 +57,7 @@ export default function App() {
   )
 
   return (
-    <FluentProvider theme={uiTheme} className="fluent-workbench">
+    <ComponentTheme surface="workspace">
       <WorkspaceContext.Provider
         value={{ ...workspace, visible: [...workspace.visible, ...detached] }}
       >
@@ -143,6 +142,6 @@ export default function App() {
           </footer>
         </div>
       </WorkspaceContext.Provider>
-    </FluentProvider>
+    </ComponentTheme>
   )
 }

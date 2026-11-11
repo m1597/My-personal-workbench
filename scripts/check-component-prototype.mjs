@@ -74,11 +74,11 @@ try {
   const material = await sample.evaluate(() => {
     const root = document.documentElement
     const provider = document.querySelector('.sample-shell')
-    const nativeMaterial = root.dataset.material
+    const nativeMaterial = root.dataset.backdrop
     const gradient = getComputedStyle(provider).backgroundImage
-    delete root.dataset.material
-    const fallback = getComputedStyle(provider).backgroundColor
-    if (nativeMaterial) root.dataset.material = nativeMaterial
+    delete root.dataset.backdrop
+    const fallback = getComputedStyle(root).backgroundColor
+    if (nativeMaterial) root.dataset.backdrop = nativeMaterial
     return { gradient, fallback }
   })
   expect(material.gradient).toBe('none')
@@ -140,6 +140,36 @@ try {
     { env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }, windowsHide: true, timeout: 15000 },
   )
   const dockShell = await findPage(app, '/workbench/index.html')
+  const ordinaryPanel = dockShell.locator('.dv-groupview').first()
+  const panelColor = await ordinaryPanel.evaluate((el) => getComputedStyle(el).backgroundColor)
+  await expect(sample.locator('.sample-shell')).toHaveCSS('background-color', panelColor)
+  const ordinaryInput = dockShell.locator('.workbench-search')
+  for (const property of ['background-color', 'font-family', 'color']) {
+    const ordinary = await ordinaryInput.evaluate(
+      (el, prop) => getComputedStyle(el).getPropertyValue(prop),
+      property,
+    )
+    await expect(sample.locator('.fui-Input')).toHaveCSS(property, ordinary)
+  }
+  // Emulate preferences in these isolated pages only.
+  const sessions = await Promise.all(
+    [dockShell, sample].map((page) => page.context().newCDPSession(page)),
+  )
+  for (const feature of ['prefers-reduced-transparency', 'forced-colors']) {
+    const features = [{ name: feature, value: feature === 'forced-colors' ? 'active' : 'reduce' }]
+    await Promise.all(sessions.map((s) => s.send('Emulation.setEmulatedMedia', { features })))
+    const reference = await ordinaryPanel.evaluate((el) => getComputedStyle(el).backgroundColor)
+    await expect(sample.locator('.sample-shell')).toHaveCSS('background-color', reference)
+    await sample.getByRole('combobox').click()
+    await expect(sample.getByRole('listbox')).toHaveCSS('backdrop-filter', 'none')
+    await sample.keyboard.press('Escape')
+  }
+  await Promise.all(
+    sessions.map(async (s) => {
+      await s.send('Emulation.setEmulatedMedia', { features: [] })
+      await s.detach()
+    }),
+  )
   const zone = await dockShell.locator('.docking-area').boundingBox()
   const info = await app.evaluate(({ BaseWindow, BrowserWindow }, zone) => {
     const host = BrowserWindow.getAllWindows()[0]
@@ -457,41 +487,49 @@ try {
   // Renderer captures omit native Acrylic. Capture the supported opaque fallback
   // separately for legibility review; never label this as native material evidence.
   const savedMaterial = await sample.evaluate(() => {
-    const value = document.documentElement.dataset.material
-    delete document.documentElement.dataset.material
+    const value = document.documentElement.dataset.backdrop
+    delete document.documentElement.dataset.backdrop
     return value
   })
   await sample.screenshot({ path: path.join(evidence, 'component-fallback-dark.png') })
   await expect(sample.locator('html')).toHaveAttribute('data-theme', 'dark')
   await sample.evaluate((value) => {
-    if (value) document.documentElement.dataset.material = value
+    if (value) document.documentElement.dataset.backdrop = value
   }, savedMaterial)
   await sample.getByRole('button', { name: '加入工作台', exact: true }).click()
   await expect(sample.locator('#mode')).toHaveText('已停靠')
   await sample.waitForTimeout(300)
   await sample.screenshot({ path: path.join(evidence, 'component-docked.png') })
-  // Sample the flat header corner of the actual component render, before OS composition.
-  const materialPixel = (file) =>
-    app.evaluate(
-      ({ nativeImage }, filename) => {
-        const image = nativeImage.createFromPath(filename)
-        return [...image.crop({ x: 8, y: 8, width: 1, height: 1 }).toBitmap()]
-      },
-      path.join(evidence, file),
-    )
-  const detachedPixel = await materialPixel('component.png')
-  expect(await materialPixel('component-docked.png')).toEqual(detachedPixel)
-  if (
-    savedMaterial &&
-    !(await sample.evaluate(
-      () => matchMedia('(prefers-reduced-transparency: reduce), (forced-colors: active)').matches,
-    ))
-  ) {
-    // A dark translucent tint limits the influence of the two different host backgrounds.
-    expect(detachedPixel[3]).toBeGreaterThanOrEqual(224)
-    expect(detachedPixel[3]).toBeLessThan(255)
-  }
+  await expect(sample.locator('.sample-shell')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(sample.locator('html')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  const slotGroup = shell
+    .locator('.dv-groupview')
+    .filter({ has: shell.getByRole('tab', { name: '示例组件', exact: true }) })
+  await expect(slotGroup).toHaveCSS('background-color', panelColor)
   await shell.screenshot({ path: path.join(evidence, 'workbench-dom.png') })
+  // Compare the standalone surface with the actual shell pixel beneath the embedded view.
+  const shellWidth = await shell.evaluate(() => innerWidth)
+  const pixels = await app.evaluate(
+    ({ BrowserWindow, nativeImage }, { evidence, shellWidth }) => {
+      const host = BrowserWindow.getAllWindows()[0]
+      const view = host.contentView.children.at(-1).getBounds()
+      const hostImage = nativeImage.createFromPath(evidence + '/workbench-dom.png')
+      const scale = hostImage.getSize().width / shellWidth
+      const pixel = (image, x, y) => [...image.crop({ x, y, width: 1, height: 1 }).toBitmap()]
+      return {
+        docked: pixel(
+          hostImage,
+          Math.round((view.x + 8) * scale),
+          Math.round((view.y + 8) * scale),
+        ),
+        standalone: pixel(nativeImage.createFromPath(evidence + '/component.png'), 8, 8),
+        overlay: pixel(nativeImage.createFromPath(evidence + '/component-docked.png'), 8, 8),
+      }
+    },
+    { evidence, shellWidth },
+  )
+  expect(pixels.docked).toEqual(pixels.standalone)
+  expect(pixels.overlay[3]).toBe(0)
   await app.evaluate(({ webContents }) =>
     webContents
       .getAllWebContents()

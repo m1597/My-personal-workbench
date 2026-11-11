@@ -1,19 +1,11 @@
-:root {
-  font-family: var(--font-ui);
-  color: var(--text);
-  background: var(--base);
-}
 body {
   margin: 0;
 }
 * {
   box-sizing: border-box;
 }
-.sample-shell.fui-FluentProvider {
+.sample-shell {
   min-height: 100vh;
-  color: var(--text);
-  background: var(--base);
-  font-family: var(--font-ui);
 }
 .sample-header {
   display: flex;
@@ -123,51 +115,6 @@ body {
     flex-wrap: wrap;
   }
 }
-
-:root[data-material="acrylic"] {
-  background: transparent;
-}
-
-/* The view carries one tint across both native parents. Windows supplies the blur. */
-:root[data-material="acrylic"] .sample-shell.fui-FluentProvider {
-  background: var(--sample-surface);
-}
-:root[data-material="acrylic"] .sample-fields {
-  background: var(--glass);
-  box-shadow: none;
-}
-:root[data-material="acrylic"] .sample-fields .fui-Input,
-:root[data-material="acrylic"] .sample-fields .fui-Dropdown {
-  background: var(--control);
-}
 .sample-fields .fui-Dropdown {
   min-width: 0;
-}
-.sample-fields .sample-queue-list {
-  background: var(--menu-surface);
-  backdrop-filter: var(--material-popup);
-  color: var(--text);
-  border: 1px solid var(--edge-highlight);
-  border-radius: var(--radius-9);
-  box-shadow: var(--shadow-menu);
-}
-.sample-queue-list [role="option"][aria-selected="true"] {
-  background: var(--accent-soft);
-}
-@media (prefers-reduced-transparency: reduce) {
-  .sample-fields .sample-queue-list {
-    background: var(--solid-surface);
-    backdrop-filter: none;
-  }
-  :root[data-material="acrylic"],
-  :root[data-material="acrylic"] .sample-shell.fui-FluentProvider {
-    background: var(--base);
-  }
-}
-@media (forced-colors: active) {
-  .sample-fields .sample-queue-list {
-    background: Canvas;
-    color: CanvasText;
-    backdrop-filter: none;
-  }
 }

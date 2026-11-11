@@ -21,7 +21,6 @@
   --tint-violet: #63579819;
   --canvas: #1a1d2360;
   --base: #202227;
-  --sample-surface: color-mix(in srgb, var(--base) 90%, transparent);
   --backdrop: #171a20ad;
   --solid-surface: #282c34;
   --menu-surface: #252525b8;

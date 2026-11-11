@@ -22,7 +22,7 @@ export function WindowMenu() {
           窗口
         </Button>
       </MenuTrigger>
-      <MenuPopover className="workbench-menu">
+      <MenuPopover className="component-popup workbench-menu">
         <MenuList aria-label="窗口菜单" id="window-menu">
           {modules.map((module) => (
             <MenuItem

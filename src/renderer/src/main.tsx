@@ -4,13 +4,11 @@ import { BuiltinWindow } from './app/BuiltinWindow'
 import { modules } from './app/moduleRegistry'
 import App from './app/App'
 import 'dockview-react/dist/styles/dockview.css'
-import './styles/tokens.css'
+import { configureBackdrop } from './app/ComponentTheme'
 import './styles/global.css'
 import './styles/appearance.css'
 
-if (new URLSearchParams(location.search).get('nativeBackdrop') === 'acrylic') {
-  document.documentElement.dataset.backdrop = 'acrylic'
-}
+configureBackdrop()
 
 const root = document.getElementById('root')
 if (!root) throw new Error('Missing root element')

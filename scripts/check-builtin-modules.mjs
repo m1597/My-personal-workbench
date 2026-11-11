@@ -38,6 +38,10 @@ try {
     await shell.mouse.up()
   }
   await shell.getByRole('textbox', { name: '搜索模块' }).fill('模块 2')
+  const ordinaryMaterial = await shell
+    .locator('.dv-groupview')
+    .first()
+    .evaluate((el) => getComputedStyle(el).backgroundColor)
   await dragOut('module-1', true)
   await expect(shell.getByTestId('module-1')).toBeVisible()
   await app.evaluate(
@@ -67,6 +71,7 @@ try {
     return find()
   }
   const nav = await pageFor('module-1')
+  await expect(nav.locator('.builtin-window')).toHaveCSS('background-color', ordinaryMaterial)
   await expect(nav.getByRole('textbox', { name: '搜索模块' })).toHaveValue('模块 2')
   await nav.getByRole('textbox', { name: '搜索模块' }).fill('模块 4')
   await nav.getByRole('button', { name: '打开模块 4' }).click()

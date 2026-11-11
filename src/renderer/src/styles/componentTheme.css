@@ -1,0 +1,55 @@
+/* A document supplies the native backdrop or its fallback. Embedded views reveal their host. */
+:root {
+  background: var(--base);
+}
+:root[data-backdrop="acrylic"],
+:root:has(.component-theme[data-surface="embedded"]) {
+  background: transparent;
+}
+.component-theme.fui-FluentProvider {
+  background: transparent;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+.component-theme[data-surface="window"],
+.dockview-theme-workbench .dv-groupview {
+  background: var(--panel-surface);
+  backdrop-filter: var(--panel-filter);
+}
+.component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {
+  background: var(--menu-surface);
+  backdrop-filter: var(--material-popup);
+  border: 1px solid var(--edge-highlight);
+  border-radius: var(--radius-9);
+  box-shadow: var(--shadow-menu);
+}
+.component-popup [role="option"][aria-selected="true"] {
+  background: var(--accent-soft);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  :root {
+    --panel-surface: var(--solid-surface);
+  }
+  .component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {
+    background: var(--solid-surface);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {
+    background: var(--solid-surface);
+    backdrop-filter: none;
+  }
+}
+@media (forced-colors: active) {
+  .component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+    backdrop-filter: none;
+  }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke-strong) transparent;
+}

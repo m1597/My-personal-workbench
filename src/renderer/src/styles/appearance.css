@@ -29,8 +29,6 @@
   --dv-tabs-and-actions-container-height: var(--panel-tab-height);
 }
 .dockview-theme-workbench .dv-groupview {
-  background: var(--panel-surface);
-  backdrop-filter: var(--panel-filter);
   box-shadow: var(--panel-shadow);
   border-radius: var(--panel-radius);
 }
@@ -47,7 +45,6 @@
 .builtin-window.fui-FluentProvider {
   height: 100vh;
   overflow: auto;
-  background: var(--panel-surface);
 }
 .module-row {
   height: var(--module-row-height);
@@ -117,10 +114,6 @@
   .dockview-theme-workbench .dv-groupview {
     border: 1px solid CanvasText;
   }
-}
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--stroke-strong) transparent;
 }
 
 .component-drop-preview {

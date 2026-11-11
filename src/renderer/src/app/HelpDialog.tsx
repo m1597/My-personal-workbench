@@ -21,7 +21,7 @@ export function HelpDialog() {
           title="操作帮助"
         />
       </DialogTrigger>
-      <DialogSurface className="workbench-dialog">
+      <DialogSurface className="component-popup workbench-dialog">
         <DialogBody>
           <DialogTitle
             action={

@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Button, Dropdown, Field, FluentProvider, Input, Option } from '@fluentui/react-components'
+import { Button, Dropdown, Field, Input, Option } from '@fluentui/react-components'
 import { AppWindow, ArrowUpRight, PanelLeft, Plus } from 'lucide-react'
-import { fluentTheme } from '../../src/renderer/src/app/fluentTheme'
-import '../../src/renderer/src/styles/tokens.css'
+import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import './style.css'
 
 type State = { mode: string; sessionId: string }
@@ -17,8 +16,7 @@ declare global {
   }
 }
 document.body.dataset.bootId = crypto.randomUUID()
-if (new URLSearchParams(location.search).get('nativeBackdrop') === 'acrylic')
-  document.documentElement.dataset.material = 'acrylic'
+configureBackdrop()
 const start = performance.now()
 function Sample() {
   const [state, setState] = useState<State>({ mode: 'standalone', sessionId: '' })
@@ -28,7 +26,6 @@ function Sample() {
   const [elapsed, setElapsed] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const theme = useMemo(fluentTheme, [])
   const docked = state.mode === 'docked'
   useEffect(() => {
     const update = (value: State) => {
@@ -57,7 +54,7 @@ function Sample() {
     }
   }
   return (
-    <FluentProvider theme={theme} className="sample-shell">
+    <ComponentTheme surface={docked ? 'embedded' : 'window'} className="sample-shell">
       <header className="sample-header">
         <div className="sample-symbol">
           <AppWindow size={22} />
@@ -93,7 +90,7 @@ function Sample() {
             <Dropdown
               id="queue"
               inlinePopup
-              listbox={{ className: 'sample-queue-list' }}
+              listbox={{ className: 'component-popup' }}
               value={queue}
               selectedOptions={[queue]}
               onOptionSelect={(_, data) => {
@@ -136,7 +133,7 @@ function Sample() {
         <summary>连接信息</summary>
         <p id="session">会话 {state.sessionId}</p>
       </details>
-    </FluentProvider>
+    </ComponentTheme>
   )
 }
 const root = document.getElementById('root')

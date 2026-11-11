@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
-import { FluentProvider } from '@fluentui/react-components'
-import { fluentTheme } from './fluentTheme'
+import { ComponentTheme } from './ComponentTheme'
 import { WorkspaceContext } from './WorkspaceContext'
 import { BuiltinContent } from './dockviewComponents'
 import { type ModuleWindows, type ModuleId, setNavigationQuery } from './builtinSession'
 
 export function BuiltinWindow({ id }: { id: ModuleId }) {
-  const [theme] = useState(fluentTheme)
   const [state, setState] = useState<ModuleWindows>()
   const [size, setSize] = useState({ width: innerWidth, height: innerHeight })
   const [ready, setReady] = useState(false)
@@ -36,7 +34,7 @@ export function BuiltinWindow({ id }: { id: ModuleId }) {
   }, [ready])
   const workspace = state?.workspace
   return (
-    <FluentProvider className="fluent-workbench builtin-window" theme={theme}>
+    <ComponentTheme surface="window" className="builtin-window">
       <WorkspaceContext.Provider
         value={{
           active: workspace ? workspace.active : id,
@@ -46,6 +44,6 @@ export function BuiltinWindow({ id }: { id: ModuleId }) {
       >
         {ready && <BuiltinContent id={id} />}
       </WorkspaceContext.Provider>
-    </FluentProvider>
+    </ComponentTheme>
   )
 }
