@@ -8,16 +8,6 @@
   padding: 0 var(--space-18);
   border-bottom: 1px solid var(--stroke);
 }
-.project-name {
-  gap: 1px;
-  min-width: 140px;
-}
-.project-name strong {
-  font-size: var(--font-size-body);
-}
-.project-name > span {
-  font-size: var(--font-size-caption);
-}
 .workspace-toolbar {
   height: var(--shell-toolbar-height);
   border-bottom: 0;

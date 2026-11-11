@@ -1,4 +1,4 @@
-# 个人工作台
+# FitBay
 
 本地优先的个人创作工作台。目前实现四个可拖拽、停靠、分组、缩放、关闭重开的占位模块，以及最大化与布局恢复。
 
@@ -60,7 +60,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 ## Windows 安装包
 
-`npm run dist:win` 生成 `dist/Personal-Workbench-Setup-0.1.0-x64.exe`。双击启动中文安装向导，可选择安装目录（例如 D:/Apps/PersonalWorkbench）；无需安装 Node/npm。当前包未签名，不包含自动更新，安装完成不会自动启动程序。构建结果不提交 Git。
+`npm run dist:win` 生成 `dist/FitBay-Setup-0.1.0-x64.exe`。双击启动中文安装向导，可选择安装目录（例如 D:/Apps/PersonalWorkbench）；无需安装 Node/npm。当前包未签名，不包含自动更新，安装完成不会自动启动程序。构建结果不提交 Git。
 
 `npm run check:package` 使用独立 profile 在后台验证 dist/win-unpacked 内的真实打包程序；需先生成安装包。它不执行安装或卸载向导。更多边界见 [数据与交付](docs/数据与交付.md)。
 
@@ -70,7 +70,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 ## 桌面双击启动
 
-双击桌面的“打开个人工作台.cmd”，按数字键选择入口：
+本机桌面的“FitBay”快捷方式直接打开日常工作台。双击原有的“打开个人工作台.cmd”可按数字键选择入口：
 
 - **1 日常工作台**（5 秒后默认）。沿用 `local/desktop-profile` 和已保存布局。
 - **2 示例组件**。再次双击 CMD 选择另一入口即可同时打开两个窗口。拖独立窗口标题栏到面板中央合并标签，拖到四边分屏；出现蓝色预览后松手。拖“示例组件”标签到整个工作台窗口外松手即可分离。

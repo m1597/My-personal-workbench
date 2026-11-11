@@ -18,16 +18,19 @@ for (const scale of [1.25, 1.5]) {
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
     await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+    await expect(page).toHaveTitle('FitBay')
+    await expect(page.locator('.app-header button').first()).toHaveAccessibleName('窗口')
+    await expect(page.locator('.app-header')).not.toContainText(/个人工作台|我的工作空间|FitBay/)
     const cdp = await app.context().newCDPSession(page)
     await cdp.send('DOM.enable')
     await cdp.send('CSS.enable')
     const { root } = await cdp.send('DOM.getDocument')
     const { nodeId } = await cdp.send('DOM.querySelector', {
       nodeId: root.nodeId,
-      selector: '.project-name strong',
+      selector: '.toolbar-hint',
     })
     const fonts = await cdp.send('CSS.getPlatformFontsForNode', { nodeId })
-    const title = page.locator('.project-name strong')
+    const title = page.locator('.toolbar-hint')
     const typography = await title.evaluate((element) => {
       const style = getComputedStyle(element)
       return {

@@ -1,5 +1,5 @@
 appId: io.github.m1597.personalworkbench
-productName: personal-workbench
+productName: FitBay
 directories:
   app: .cache/package-app
   output: dist
@@ -13,11 +13,12 @@ files:
   - THIRD_PARTY_NOTICES.txt
   - "!node_modules/**/*"
 win:
+  executableName: personal-workbench
   target:
     - target: nsis
       arch: [x64]
   icon: resources/app.ico
-  artifactName: Personal-Workbench-Setup-${version}-${arch}.${ext}
+  artifactName: FitBay-Setup-${version}-${arch}.${ext}
 nsis:
   oneClick: false
   perMachine: false
@@ -25,8 +26,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: 个人工作台
-  uninstallDisplayName: 个人工作台
+  shortcutName: FitBay
+  uninstallDisplayName: FitBay
   runAfterFinish: false
   deleteAppDataOnUninstall: false
   installerLanguages: [zh_CN, en_US]

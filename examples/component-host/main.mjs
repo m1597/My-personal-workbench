@@ -59,6 +59,7 @@ function options(width, height) {
     width,
     height,
     show: false,
+    icon: path.join(here, 'fitbay.png'),
     backgroundColor: supportsAcrylic ? '#00000000' : '#202227',
     ...(supportsAcrylic ? { backgroundMaterial: 'acrylic' } : {}),
     ...(background
@@ -232,7 +233,7 @@ async function openWorkbench() {
     ...options(1480, 960),
     minWidth: 900,
     minHeight: 640,
-    title: '个人工作台',
+    title: 'FitBay',
     webPreferences: {
       preload: path.join(here, 'workbench-preload.cjs'),
       sandbox: true,

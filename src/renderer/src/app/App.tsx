@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react'
-import { PanelsTopLeft, RotateCcw, MousePointer2, LayoutGrid } from 'lucide-react'
+import { RotateCcw, MousePointer2, LayoutGrid } from 'lucide-react'
 import { createDefaultLayout, openModule } from './workspace'
 import type { ModuleId } from './builtinSession'
 import { modules, icons } from './moduleRegistry'
@@ -63,13 +63,6 @@ export default function App() {
       >
         <div className="workbench">
           <header className="app-header">
-            <div className="brand" title="个人工作台">
-              <PanelsTopLeft size={23} strokeWidth={1.4} />
-            </div>
-            <div className="project-name">
-              <strong>个人工作台</strong>
-              <span>我的工作空间</span>
-            </div>
             <WindowMenu />
             <ComponentPrototypeButton />
             <div className="header-spacer" />

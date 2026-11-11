@@ -4,6 +4,7 @@ const root = 'dist/component-prototype'
 for (const name of ['host', 'component', 'workbench'])
   await mkdir(`${root}/${name}`, { recursive: true })
 await cp('examples/component-host', `${root}/host`, { recursive: true })
+await cp('src/renderer/public/fitbay.png', `${root}/host/fitbay.png`)
 await build({
   configFile: false,
   define: { 'process.env.NODE_ENV': JSON.stringify('production') },

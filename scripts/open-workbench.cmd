@@ -35,7 +35,7 @@ goto check_component
 :workbench
 set "mode=workbench"
 :check_component
-for %%F in (host\package.json host\main.mjs host\builtin-windows.mjs host\builtin-preload.cjs host\native-dock.mjs host\sample-preload.cjs host\workbench-preload.cjs) do if not exist "%prototype%\%%F" goto missing_component
+for %%F in (host\package.json host\fitbay.png host\main.mjs host\builtin-windows.mjs host\builtin-preload.cjs host\native-dock.mjs host\sample-preload.cjs host\workbench-preload.cjs) do if not exist "%prototype%\%%F" goto missing_component
 if /i "%mode%"=="standalone" for %%F in (component.json index.html component.js component.css) do if not exist "%prototype%\component\%%F" goto missing_component
 if /i "%~1"=="--check" (
   echo OK: Workbench, component host and sample are ready.

@@ -72,25 +72,6 @@ svg {
   padding: 0 var(--space-18);
   border-bottom: 1px solid var(--glass);
 }
-.brand {
-  color: var(--accent);
-  display: flex;
-  align-items: center;
-}
-.project-name {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-width: 126px;
-}
-.project-name > span {
-  color: var(--muted);
-  font-size: var(--font-size-caption);
-}
-.project-name strong {
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-medium);
-}
 .header-spacer {
   flex: 1;
 }
