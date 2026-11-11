@@ -185,6 +185,32 @@ try {
     ['below', 0.5, 0.92],
     ['within', 0.5, 0.5],
   ]) {
+    // Restore a tab in another group while the component is running independently.
+    await dockShell.evaluate(() => {
+      window.addEventListener(
+        'beforeunload',
+        () => {
+          const saved = JSON.parse(localStorage.getItem('workbench.layout'))
+          const addSlot = (node) => {
+            if (node.type === 'branch') return node.data.forEach(addSlot)
+            if (node.data.views.includes('module-1')) node.data.views.push('component-example')
+          }
+          addSlot(saved.layout.grid.root)
+          saved.layout.panels['component-example'] = {
+            id: 'component-example',
+            contentComponent: 'component-slot',
+            title: '示例组件',
+          }
+          localStorage.setItem('workbench.layout', JSON.stringify(saved))
+        },
+        { once: true },
+      )
+    })
+    await dockShell.reload()
+    const componentGroup = dockShell.locator('.dv-groupview').filter({
+      has: dockShell.getByRole('tab', { name: '示例组件', exact: true }),
+    })
+    await expect(componentGroup.getByRole('tab', { name: '模块 1', exact: true })).toHaveCount(1)
     const group = dockShell
       .locator('.dv-groupview')
       .filter({ has: dockShell.getByTestId('module-2') })
@@ -213,6 +239,19 @@ try {
         .filter({ has: dockShell.getByRole('tab', { name: '示例组件', exact: true }) })
       await expect(merged.getByRole('tab', { name: '模块 2', exact: true })).toHaveCount(1)
     } else {
+      const target = await group.boundingBox()
+      const placed = await componentGroup.boundingBox()
+      const horizontal = direction === 'left' || direction === 'right'
+      const axis = horizontal ? 'x' : 'y'
+      const size = horizontal ? 'width' : 'height'
+      const cross = horizontal ? 'y' : 'x'
+      const crossSize = horizontal ? 'height' : 'width'
+      const [first, second] = ['left', 'above'].includes(direction)
+        ? [placed, target]
+        : [target, placed]
+      expect(first[axis] + first[size]).toBeLessThanOrEqual(second[axis] + 1)
+      expect(Math.abs(first[cross] - second[cross])).toBeLessThanOrEqual(1)
+      expect(Math.abs(first[crossSize] - second[crossSize])).toBeLessThanOrEqual(1)
       await sample.getByRole('button', { name: '分离窗口', exact: true }).click()
       await expect(dockShell.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(0)
     }

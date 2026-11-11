@@ -30,6 +30,7 @@ export function useComponentPrototype(api?: DockviewApi) {
     if (!api || !host) return
     let last: HostState | undefined
     const update = (state: HostState) => {
+      const wasAttaching = last?.phase === 'attaching'
       const wasDocked = last?.mode === 'docked'
       last = state
       const slot = api.getPanel('component-example')
@@ -37,9 +38,22 @@ export function useComponentPrototype(api?: DockviewApi) {
         api.removePanel(slot)
         return
       }
-      if (state.phase === 'attaching') {
+      if (state.phase === 'attaching' && !wasAttaching) {
         const existing = api.getPanel('component-example')
         if (existing) {
+          const hit = state.placement
+          const group = hit && api.groups.find((candidate) => candidate.id === hit.id)
+          if (hit && group && (group !== existing.group || hit.direction !== 'within')) {
+            const position =
+              hit.direction === 'within'
+                ? 'center'
+                : hit.direction === 'above'
+                  ? 'top'
+                  : hit.direction === 'below'
+                    ? 'bottom'
+                    : hit.direction
+            existing.api.moveTo({ group, position })
+          }
           existing.api.setActive()
           return
         }
