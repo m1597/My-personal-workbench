@@ -6,3 +6,10 @@ export const modules = [
   { id: 'module-3', title: '模块 3', description: '辅助面板' },
   { id: 'module-4', title: '模块 4', description: '底部面板' },
 ] as const
+
+export const minimumPanelSize = {
+  'module-1': { minimumWidth: 160, minimumHeight: 110 },
+  'module-2': { minimumWidth: 220, minimumHeight: 150 },
+  'module-3': { minimumWidth: 180, minimumHeight: 110 },
+  'module-4': { minimumWidth: 160, minimumHeight: 110 },
+} satisfies Record<(typeof modules)[number]['id'], { minimumWidth: number; minimumHeight: number }>

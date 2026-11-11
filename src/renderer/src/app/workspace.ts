@@ -1,5 +1,5 @@
 import type { DockviewApi } from 'dockview-react'
-import { modules } from './moduleRegistry'
+import { minimumPanelSize, modules } from './moduleRegistry'
 export function openModule(api: DockviewApi, id: string) {
   if (api.hasMaximizedGroup()) api.exitMaximizedGroup()
   const existing = api.getPanel(id)
@@ -13,8 +13,7 @@ export function openModule(api: DockviewApi, id: string) {
     id,
     title: module.title,
     component: 'module',
-    minimumWidth: 160,
-    minimumHeight: 110,
+    ...minimumPanelSize[module.id],
   })
 }
 
@@ -24,8 +23,7 @@ export function createDefaultLayout(api: DockviewApi) {
     id: 'module-2',
     title: '模块 2',
     component: 'module',
-    minimumWidth: 220,
-    minimumHeight: 150,
+    ...minimumPanelSize['module-2'],
   })
   api.addPanel({
     id: 'module-4',
@@ -33,8 +31,7 @@ export function createDefaultLayout(api: DockviewApi) {
     component: 'module',
     position: { referencePanel: 'module-2', direction: 'below' },
     initialHeight: Math.max(160, api.height * 0.25),
-    minimumHeight: 110,
-    minimumWidth: 160,
+    ...minimumPanelSize['module-4'],
   })
   api.addPanel({
     id: 'module-1',
@@ -42,8 +39,7 @@ export function createDefaultLayout(api: DockviewApi) {
     component: 'module',
     position: { direction: 'left' },
     initialWidth: 230,
-    minimumWidth: 160,
-    minimumHeight: 110,
+    ...minimumPanelSize['module-1'],
   })
   api.addPanel({
     id: 'module-3',
@@ -51,8 +47,7 @@ export function createDefaultLayout(api: DockviewApi) {
     component: 'module',
     position: { direction: 'right' },
     initialWidth: 252,
-    minimumWidth: 180,
-    minimumHeight: 110,
+    ...minimumPanelSize['module-3'],
   })
   api.getPanel('module-1')?.api.setSize({ width: 230 })
   api.getPanel('module-3')?.api.setSize({ width: 252 })

@@ -1,5 +1,5 @@
 import type { DockviewApi, SerializedDockview } from 'dockview-react'
-import { modules } from './moduleRegistry'
+import { minimumPanelSize, modules } from './moduleRegistry'
 import { createDefaultLayout } from './workspace'
 
 export const layoutStorageKey = 'workbench.layout'
@@ -98,6 +98,12 @@ export function restoreLayout(api: DockviewApi, gap: number) {
         throw new Error('布局格式、版本或模块不兼容')
       // 8.9.0 writes maximizedNode at runtime although its public grid type omits it.
       Reflect.deleteProperty(saved.layout.grid, 'maximizedNode')
+      // Older versions assigned 160 × 110 to every panel reopened from the menu.
+      for (const { id } of modules) {
+        const panel = saved.layout.panels[id]
+        if (panel?.minimumWidth === 160 && panel.minimumHeight === 110)
+          Object.assign(panel, minimumPanelSize[id])
+      }
       restoreGapSizes(saved.layout.grid.root, gap)
       api.fromJSON(saved.layout)
       return
