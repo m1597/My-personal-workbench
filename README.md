@@ -70,4 +70,9 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 ## 桌面双击启动
 
-本机桌面“打开个人工作台.cmd”调用 `scripts/open-workbench.cmd`，直接启动已构建版本。不启动终端开发服务器，不下载依赖。设置与布局保存在项目 `local/desktop-profile`，可关闭后单独备份；与测试及安装版数据隔离。更新源码后开发者执行 `npm run build` 才会更新此入口展示的界面；首次缺依赖/构建时脚本会说明修复命令，不静默安装。项目文件夹需保持在桌面脚本旁，重复双击可能打开多个窗口，正常关闭原窗口后再开即可。
+双击桌面的“打开个人工作台.cmd”，按数字键选择入口：
+
+- **1 日常工作台**（5 秒后默认）。沿用 `local/desktop-profile` 和已保存布局。
+- **2 示例组件**。独立窗口中点击“加入工作台”，会打开组件宿主的工作台并停靠；点击“分离窗口”回到独立窗口。原型使用单独的 `local/desktop-component-profile`，只能停靠到自己的宿主窗口。
+
+桌面 CMD 转调项目的 `scripts/open-workbench.cmd`。工作台界面更新后运行 `npm run build`；示例或宿主更新后运行 `npm run build:prototype`。两个入口均使用最新的 `out/renderer`。运行 `scripts/open-workbench.cmd --check` 检查启动文件。关闭旧窗口后重开即可加载新版。
