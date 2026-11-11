@@ -17,6 +17,8 @@ type HostState = {
   dragOver?: Target | null
   placement?: Target | null
 }
+// Only the slot created or accepted by the layout transaction can acknowledge a drop.
+const attachingGroups = new WeakMap<IDockviewPanelProps['api'], string>()
 declare global {
   interface Window {
     componentHost?: {
@@ -61,9 +63,15 @@ export function useComponentPrototype(
         return
       }
       if (state.phase !== 'attaching' || finishAttach) return
+      const hit = state.placement
+      if (
+        hit &&
+        ((hit.id ? !api.getGroup(hit.id) : api.groups.length > 0) ||
+          document.querySelector('[role="dialog"], [role="menu"]'))
+      )
+        return
       layout.pause()
       const before = api.toJSON()
-      const hit = state.placement
       const source = existing?.group
       const index = existing ? existing.group.panels.indexOf(existing) : undefined
       const target = hit?.id ? api.getGroup(hit.id) : (source ?? api.getPanel('module-2')?.group)
@@ -86,9 +94,11 @@ export function useComponentPrototype(
                 ? { referenceGroup: target.id, direction: hit?.direction ?? 'within' }
                 : undefined,
             })
+      attachingGroups.set(slot.api, slot.group.id)
       slot.api.setActive()
       const provisional = JSON.stringify(api.toJSON())
       finishAttach = (docked) => {
+        attachingGroups.delete(slot.api)
         // Removing a split redistributes sibling sizes in Dockview. Reuse the
         // exact pre-transfer layout unless the user edited it during the wait.
         if (!docked && JSON.stringify(api.toJSON()) === provisional) {
@@ -290,7 +300,8 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
         rect &&
         api.isVisible &&
         !blocked &&
-        (current?.mode === 'docked' || current?.phase === 'attaching')
+        (current?.mode === 'docked' ||
+          (current?.phase === 'attaching' && attachingGroups.get(api) === api.group.id))
           ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
           : null
       const encoded = JSON.stringify(bounds)

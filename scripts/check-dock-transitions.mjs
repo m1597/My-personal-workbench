@@ -42,6 +42,27 @@ try {
   await preview(null)
   await expect.poll(visible).toBe(true)
   console.log('PASS 原生子视图避让重叠预览并恢复')
+
+  await shell.evaluate(() => window.componentHost.detach())
+  const tab = shell.getByRole('tab', { name: '示例组件', exact: true })
+  await expect(tab).toHaveCount(0)
+  // Reproduce a stale group between release and delivery in the workbench.
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents
+    const send = contents.send.bind(contents)
+    contents.send = (channel, ...args) => {
+      if (channel === 'prototype:state' && args[0].phase === 'attaching') {
+        contents.send = send
+        args[0] = { ...args[0], placement: { id: 'removed-group', direction: 'within' } }
+      }
+      send(channel, ...args)
+    }
+  })
+  await shell.evaluate(() => window.componentHost.open())
+  await expect.poll(async () => (await mode()).phase, { timeout: 8000 }).toBe('ready')
+  expect((await mode()).mode).toBe('standalone')
+  await expect(tab).toHaveCount(0)
+  console.log('PASS 目标失效时保留原窗口和布局')
 } finally {
   await app.close()
 }
