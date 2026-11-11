@@ -122,8 +122,10 @@ export function restoreLayout(api: DockviewApi, gap: number) {
 export function trackLayout(api: DockviewApi) {
   let timer: ReturnType<typeof setTimeout> | undefined
   let lastSaved: string | undefined
+  let paused = false
   const save = () => {
     clearTimeout(timer)
+    if (paused) return
     try {
       const layout = api.toJSON()
       Reflect.deleteProperty(layout.grid, 'maximizedNode')
@@ -145,9 +147,19 @@ export function trackLayout(api: DockviewApi) {
   // completed change can precede the pending layout-change notification.
   window.addEventListener('beforeunload', save)
   schedule()
-  return () => {
-    clearTimeout(timer)
-    subscription.dispose()
-    window.removeEventListener('beforeunload', save)
+  return {
+    pause() {
+      save()
+      paused = true
+    },
+    resume() {
+      paused = false
+      schedule()
+    },
+    dispose() {
+      clearTimeout(timer)
+      subscription.dispose()
+      window.removeEventListener('beforeunload', save)
+    },
   }
 }

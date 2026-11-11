@@ -9,7 +9,7 @@ import { Button, FluentProvider } from '@fluentui/react-components'
 import { fluentTheme } from './fluentTheme'
 import { WindowMenu } from './WindowMenu'
 import { HelpDialog } from './HelpDialog'
-import { restoreLayout, trackLayout } from './layoutStorage'
+import { restoreLayout } from './layoutStorage'
 import { ComponentPrototypeButton, useComponentPrototype } from './componentPrototype'
 
 export default function App() {
@@ -23,9 +23,6 @@ export default function App() {
   }))
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
   useComponentPrototype(workspace.api)
-  useEffect(() => {
-    if (workspace.api) return trackLayout(workspace.api)
-  }, [workspace.api])
   useEffect(() => {
     const api = workspace.api
     if (!api) return

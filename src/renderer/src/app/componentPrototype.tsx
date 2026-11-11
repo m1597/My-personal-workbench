@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { Button } from '@fluentui/react-components'
 
+import { trackLayout } from './layoutStorage'
+
 type Region = { id: string; x: number; y: number; width: number; height: number }
 type Target = Region & { direction: 'within' | 'left' | 'right' | 'above' | 'below' }
 type HostState = {
@@ -27,19 +29,28 @@ declare global {
 export function useComponentPrototype(api?: DockviewApi) {
   useEffect(() => {
     const host = window.componentHost
-    if (!api || !host) return
+    if (!api) return
+    const layout = trackLayout(api)
+    if (!host) return layout.dispose
     let last: HostState | undefined
     const update = (state: HostState) => {
       const wasAttaching = last?.phase === 'attaching'
       const wasDocked = last?.mode === 'docked'
       last = state
       const slot = api.getPanel('component-example')
-      if (slot && ((wasDocked && state.mode === 'standalone') || state.phase === 'unavailable')) {
+      const attachEnded = wasAttaching && state.phase !== 'attaching'
+      if (attachEnded) layout.resume()
+      if (
+        slot &&
+        (((wasDocked || attachEnded) && state.mode === 'standalone') ||
+          state.phase === 'unavailable')
+      ) {
         api.removePanel(slot)
         return
       }
       if (state.phase === 'attaching' && !wasAttaching) {
-        const existing = api.getPanel('component-example')
+        layout.pause()
+        const existing = slot
         if (existing) {
           const hit = state.placement
           const group = hit && api.groups.find((candidate) => candidate.id === hit.id)
@@ -142,6 +153,7 @@ export function useComponentPrototype(api?: DockviewApi) {
     }
     frame = requestAnimationFrame(measure)
     return () => {
+      layout.dispose()
       drag.dispose()
       window.removeEventListener('pointerup', release, true)
       window.removeEventListener('pointercancel', cancel, true)

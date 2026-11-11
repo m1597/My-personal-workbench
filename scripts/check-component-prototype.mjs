@@ -413,7 +413,30 @@ for (const kind of ['missing', 'incompatible']) {
       expect(results).toEqual([{ ok: true }, { ok: true }])
       expect((await shell.evaluate(() => window.componentHost.status())).phase).toBe('attaching')
       expect(await shell.evaluate(() => window.componentHost.open())).toEqual({ ok: true })
-      await shell.keyboard.press('Escape')
+      const pendingTab = shell.locator('[role="tab"]').filter({ hasText: '示例组件' })
+      await expect(pendingTab).toHaveCount(1)
+      const savedPanels = () =>
+        shell.evaluate(() =>
+          Object.keys(JSON.parse(localStorage.getItem('workbench.layout')).layout.panels).sort(),
+        )
+      const modules = ['module-1', 'module-2', 'module-3', 'module-4']
+      await shell.waitForTimeout(400)
+      const duringAttach = await savedPanels()
+      await expect
+        .poll(async () => (await shell.evaluate(() => window.componentHost.status())).error, {
+          timeout: 10000,
+        })
+        .toContain('TIMEOUT')
+      expect({ duringAttach, tabsAfterTimeout: await pendingTab.count() }).toEqual({
+        duringAttach: modules,
+        tabsAfterTimeout: 0,
+      })
+      const standalone = await findPage(app, '/missing/index.html')
+      await expect(standalone.locator('#mode')).toHaveText('独立窗口')
+      await shell.reload()
+      await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+      expect(await savedPanels()).toEqual(modules)
+      await shell.getByRole('button', { name: '示例组件', exact: true }).click()
       const sample = await findPage(app, '/missing/index.html')
       await expect(sample.locator('#mode')).toHaveText('已停靠')
       await expect(shell.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(1)
