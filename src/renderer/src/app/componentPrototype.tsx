@@ -272,9 +272,20 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
     let previous = ''
     const measure = () => {
       const rect = element.current?.getBoundingClientRect()
-      const blocked = document.querySelector(
-        '[role="dialog"], [role="menu"], .dv-drop-target-selection, [data-component-drag]',
-      )
+      const preview = current?.dragOver
+      // Native child views paint above DOM even when the preview has a higher z-index.
+      const covered =
+        rect &&
+        preview &&
+        rect.left < preview.x + preview.width &&
+        rect.right > preview.x &&
+        rect.top < preview.y + preview.height &&
+        rect.bottom > preview.y
+      const blocked =
+        covered ||
+        document.querySelector(
+          '[role="dialog"], [role="menu"], .dv-drop-target-selection, [data-component-drag]',
+        )
       const bounds =
         rect &&
         api.isVisible &&
