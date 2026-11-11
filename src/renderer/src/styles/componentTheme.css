@@ -28,6 +28,7 @@
 }
 @supports not (backdrop-filter: blur(1px)) {
   :root {
+    --shell-surface: var(--base);
     --panel-surface: var(--solid-surface);
   }
   .component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {

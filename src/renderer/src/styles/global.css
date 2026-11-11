@@ -25,7 +25,7 @@ button,
 input {
   font: inherit;
 }
-button:not(.fui-Button) {
+:where(button:not(.fui-Button)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -36,7 +36,7 @@ button:not(.fui-Button) {
   cursor: pointer;
   border-radius: var(--radius-6);
 }
-button:not(.fui-Button):hover {
+:where(button:not(.fui-Button)):hover {
   background: var(--hover);
 }
 button:not(.fui-Button):focus-visible,
@@ -626,11 +626,6 @@ svg {
   }
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .workbench {
-    background: var(--base);
-  }
-}
 @media (forced-colors: active) {
   .workbench {
     background: Canvas;
@@ -648,11 +643,6 @@ input:disabled {
   cursor: not-allowed;
   color: var(--text-muted);
   background: var(--control);
-}
-@supports not (backdrop-filter: blur(1px)) {
-  .workbench {
-    background: var(--base);
-  }
 }
 
 /* Fluent samples: appearance comes from existing tokens, interaction from Fluent UI. */

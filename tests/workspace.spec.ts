@@ -172,7 +172,10 @@ test('关闭重开、最大化还原、空工作区恢复', async () => {
   for (let i = 1; i <= 4; i++)
     await page.getByRole('button', { name: `Close 模块 ${i}`, exact: true }).click()
   await expect(page.getByTestId('panel-count')).toHaveText('0 个模块已打开')
-  await page.getByRole('button', { name: '恢复默认布局', exact: true }).click()
+  const restore = page.getByRole('button', { name: '恢复默认布局', exact: true })
+  await expect(restore).toHaveCSS('background-color', 'rgb(128, 186, 255)')
+  await restore.click()
+  await expect(page.locator('.module-row').first()).toHaveCSS('justify-content', 'flex-start')
   await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
   await page.mouse.move(0, 0)
   await page.screenshot({
