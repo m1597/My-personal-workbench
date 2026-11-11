@@ -1,13 +1,19 @@
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
 import { shellExposed, snapTarget } from './native-dock.mjs'
-import { app, BrowserWindow, ipcMain, screen, nativeTheme, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, screen, nativeTheme, Menu } from 'electron'
 import { realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { componentView } from './component-view.mjs'
 import { musicService } from './music-service.mjs'
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'fitbay-audio',
+    privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
+  },
+])
 const here = path.dirname(fileURLToPath(import.meta.url))
 const argument = (name) =>
   process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3)
@@ -115,9 +121,10 @@ const shared = {
   isQuitting: () => quitting,
 }
 const sample = componentView({ ...shared, componentRoot, music: false })
-let releaseMusic
+let musicRuntime
 const music = componentView({
-  onDispose: () => releaseMusic?.(),
+  configureSession: (s) => musicRuntime.register(s),
+  onDispose: () => musicRuntime?.dispose(),
   ...shared,
   componentRoot: path.resolve(here, '../music'),
   music: true,
@@ -207,7 +214,7 @@ else {
           dropZone = regions
       })
       for (const item of components) item.listen()
-      releaseMusic = musicService(profile, music.isSender)
+      musicRuntime = musicService(profile, music.isSender)
       await openIntent(intent)
     })
     .catch((failure) => {

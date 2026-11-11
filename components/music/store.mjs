@@ -12,6 +12,7 @@ import { writeFile, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { catalogue, recording, offlineSuggestions } from './offline-source.mjs'
+import { LocalLibrary } from './local-library.mjs'
 const hash = (b) => createHash('sha256').update(b).digest('hex')
 const day = () => new Intl.DateTimeFormat('sv-SE').format(new Date())
 // MoveFileW refuses an existing destination and renames within the selected volume.
@@ -40,6 +41,7 @@ export class MusicStore {
     this.db.exec("UPDATE items SET status='中断' WHERE status IN ('等候','下载中')")
     for (const { id } of this.db.prepare('SELECT id FROM items').all())
       this.removeCache(id, '.part')
+    this.library = new LocalLibrary(this)
     this.recover()
     this.cleanup(false)
   }
@@ -81,6 +83,9 @@ export class MusicStore {
         candidates: catalogue.filter((t) => t.title === row.title && t.artist === row.artist),
       }))
     return {
+      localTracks: this.library.list(),
+      importJob: this.library.job,
+      queue: JSON.parse(this.get('play-queue') || '[]'),
       batches,
       items,
       summary: this.summary(),
@@ -223,6 +228,10 @@ export class MusicStore {
       root = this.get('root')
     if (!root || !t) throw Error('请先选择音乐库和版本')
     if (this.local(t.id)) {
+      this.library.saved(
+        t.id,
+        this.db.prepare('SELECT file FROM library WHERE track=?').get(t.id).file,
+      )
       this.status(id, '已入库')
       return
     }
@@ -262,6 +271,7 @@ export class MusicStore {
     this.db
       .prepare('INSERT OR REPLACE INTO library VALUES(?,?,?,?,?)')
       .run(t.id, op.file, op.digest, t.album, t.version)
+    this.library.saved(t.id, op.file)
     if (existsSync(temp)) unlinkSync(temp)
     this.db.prepare('DELETE FROM saves WHERE track=?').run(t.id)
   }

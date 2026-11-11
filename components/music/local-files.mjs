@@ -1,0 +1,40 @@
+import path from 'node:path'
+import { lstat, realpath, open } from 'node:fs/promises'
+export const audioTypes = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
+}
+export function pathKey(file) {
+  return path.resolve(file).toLowerCase()
+}
+export async function regularFile(file) {
+  if (!Object.hasOwn(audioTypes, path.extname(file).toLowerCase())) return false
+  try {
+    const info = await lstat(file)
+    return info.size > 0 && info.isFile() && pathKey(await realpath(file)) === pathKey(file)
+  } catch {
+    return false
+  }
+}
+
+export async function openAudio(file) {
+  if (!(await regularFile(file))) throw Error('文件不可用')
+  const entry = await lstat(file, { bigint: true })
+  const handle = await open(file, 'r')
+  try {
+    const actual = await handle.stat({ bigint: true })
+    if (
+      !actual.isFile() ||
+      actual.ino !== entry.ino ||
+      actual.dev !== entry.dev ||
+      pathKey(await realpath(file)) !== pathKey(file)
+    )
+      throw Error('文件已变化')
+    return handle
+  } catch (e) {
+    await handle.close()
+    throw e
+  }
+}

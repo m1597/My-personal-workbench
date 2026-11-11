@@ -6,7 +6,13 @@ for (const name of ['host', 'component', 'workbench'])
 await cp('examples/component-host', `${root}/host`, { recursive: true })
 await cp('src/renderer/public/fitbay.png', `${root}/host/fitbay.png`)
 await mkdir(`${root}/host/music`, { recursive: true })
-for (const f of ['offline-source.mjs', 'store.mjs'])
+for (const f of [
+  'offline-source.mjs',
+  'store.mjs',
+  'local-files.mjs',
+  'library-worker.mjs',
+  'local-library.mjs',
+])
   await cp('components/music/' + f, `${root}/host/music/${f}`)
 for (const [source, output] of [
   ['examples/sample-component', 'component'],

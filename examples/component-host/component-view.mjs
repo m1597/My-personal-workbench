@@ -19,6 +19,7 @@ export function componentView({
   supportsAcrylic,
   isQuitting,
   onDispose,
+  configureSession,
 }) {
   let standalone, view, parent
   let mode = 'standalone'
@@ -146,6 +147,7 @@ export function componentView({
     if (!root || restoreWindow?.isDestroyed()) return false
     view?.webContents.close()
     const isolated = session.fromPartition(`component-${sessionId}`)
+    configureSession?.(isolated)
     isolated.setPermissionRequestHandler((_, __, callback) => callback(false))
     isolated.setPermissionCheckHandler(() => false)
     const allowed = new Set(
@@ -156,7 +158,11 @@ export function componentView({
     isolated.webRequest.onBeforeRequest((details, callback) =>
       callback({
         cancel:
-          !allowed.has(details.url.split('?')[0]) && !(music && details.url.startsWith('blob:')),
+          !allowed.has(details.url.split('?')[0]) &&
+          !(
+            music &&
+            (details.url.startsWith('blob:') || details.url.startsWith('fitbay-audio://track/'))
+          ),
       }),
     )
     view = new WebContentsView({

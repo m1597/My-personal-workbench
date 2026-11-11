@@ -1,6 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron')
 const names = [
   'state',
+  'importLocal',
+  'cancelImport',
+  'refreshLocal',
+  'removeLocal',
+  'relocateLocal',
+  'localSource',
+  'mediaFailed',
+  'playQueue',
   'draft',
   'generate',
   'stopGeneration',
