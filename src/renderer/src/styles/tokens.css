@@ -143,12 +143,12 @@
   --panel-radius: 2px;
   --panel-tab-radius: 2px;
 }
-:root[data-material="soft"] {
+:root:where([data-material="soft"]) {
   --shell-surface: var(--backdrop);
   --panel-surface: var(--glass);
   --panel-filter: var(--material-panel);
 }
-:root[data-material="solid"] {
+:root:where([data-material="solid"]) {
   --shell-surface: var(--base);
   --panel-surface: var(--solid-surface);
   --panel-filter: none;
