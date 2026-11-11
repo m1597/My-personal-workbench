@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { Button } from '@fluentui/react-components'
 
-import { trackLayout } from './layoutStorage'
+import { applyLayout, trackLayout } from './layoutStorage'
 
 type Region = { id: string; x: number; y: number; width: number; height: number }
 type Target = Region & { direction: 'within' | 'left' | 'right' | 'above' | 'below' }
@@ -28,59 +28,78 @@ declare global {
     }
   }
 }
-export function useComponentPrototype(api?: DockviewApi) {
+export function useComponentPrototype(api: DockviewApi | undefined, gap: number) {
   useEffect(() => {
     const host = window.componentHost
     if (!api) return
     const layout = trackLayout(api)
     if (!host) return layout.dispose
     let last: HostState | undefined
+    let finishAttach: ((docked: boolean) => void) | undefined
     const update = (state: HostState) => {
-      const wasAttaching = last?.phase === 'attaching'
       const wasDocked = last?.mode === 'docked'
       last = state
-      const slot = api.getPanel('component-example')
-      const attachEnded = wasAttaching && state.phase !== 'attaching'
-      if (attachEnded) layout.resume()
+      if (finishAttach && state.phase !== 'attaching') {
+        finishAttach(state.mode === 'docked')
+        finishAttach = undefined
+        layout.resume()
+      }
+      const existing = api.getPanel('component-example')
       if (
-        slot &&
-        (((wasDocked || attachEnded) && state.mode === 'standalone') ||
-          state.phase === 'unavailable')
+        existing &&
+        ((wasDocked && state.mode === 'standalone') || state.phase === 'unavailable')
       ) {
-        api.removePanel(slot)
+        api.removePanel(existing)
         return
       }
-      if (state.phase === 'attaching' && !wasAttaching) {
-        layout.pause()
-        const existing = slot
-        if (existing) {
-          const hit = state.placement
-          const group = hit && api.groups.find((candidate) => candidate.id === hit.id)
-          if (hit && group && (group !== existing.group || hit.direction !== 'within')) {
-            const position =
-              hit.direction === 'within'
-                ? 'center'
-                : hit.direction === 'above'
-                  ? 'top'
-                  : hit.direction === 'below'
-                    ? 'bottom'
-                    : hit.direction
-            existing.api.moveTo({ group, position })
-          }
-          existing.api.setActive()
+      if (state.phase !== 'attaching' || finishAttach) return
+      layout.pause()
+      const before = api.toJSON()
+      const hit = state.placement
+      const source = existing?.group
+      const index = existing ? existing.group.panels.indexOf(existing) : undefined
+      const target = hit?.id ? api.getGroup(hit.id) : (source ?? api.getPanel('module-2')?.group)
+      const relocate =
+        existing && hit && target && (target !== source || hit.direction !== 'within')
+      const originalActive = api.activePanel?.id
+      const sourceActive = source?.activePanel?.id
+      const targetActive = target?.activePanel?.id
+      // Keep an emptied source group until the host confirms the transfer. Its
+      // position and size then remain available even if it held only this tab.
+      if (relocate) api.removePanel(existing, { removeEmptyGroup: false })
+      const slot =
+        existing && !relocate
+          ? existing
+          : api.addPanel({
+              id: 'component-example',
+              title: '示例组件',
+              component: 'component-slot',
+              position: target
+                ? { referenceGroup: target.id, direction: hit?.direction ?? 'within' }
+                : undefined,
+            })
+      slot.api.setActive()
+      const provisional = JSON.stringify(api.toJSON())
+      finishAttach = (docked) => {
+        // Removing a split redistributes sibling sizes in Dockview. Reuse the
+        // exact pre-transfer layout unless the user edited it during the wait.
+        if (!docked && JSON.stringify(api.toJSON()) === provisional) {
+          applyLayout(api, before, gap)
           return
         }
-        api.addPanel({
-          id: 'component-example',
-          title: '示例组件',
-          component: 'component-slot',
-          position:
-            state.placement?.id && api.getGroup(state.placement.id)
-              ? { referenceGroup: state.placement.id, direction: state.placement.direction }
-              : api.getPanel('module-2')
-                ? { referencePanel: 'module-2', direction: 'within' }
-                : undefined,
-        })
+        if (!docked && api.getPanel(slot.id) === slot) {
+          const active = api.activePanel === slot ? originalActive : api.activePanel?.id
+          const restoreTarget = target?.activePanel === slot
+          if (!existing) api.removePanel(slot)
+          else if (relocate && source && api.getGroup(source.id)) {
+            slot.api.moveTo({ group: source, index, position: 'center' })
+            if (sourceActive) api.getPanel(sourceActive)?.api.setActive()
+          }
+          if (restoreTarget && targetActive) api.getPanel(targetActive)?.api.setActive()
+          if (active) api.getPanel(active)?.api.setActive()
+        }
+        if (relocate && source && api.getGroup(source.id) && !source.panels.length)
+          api.removeGroup(source)
       }
     }
     let pointer: number | undefined
@@ -172,7 +191,7 @@ export function useComponentPrototype(api?: DockviewApi) {
       cancelAnimationFrame(frame)
       host.dropZone(null)
     }
-  }, [api])
+  }, [api, gap])
 }
 
 export function ComponentPrototypeButton() {

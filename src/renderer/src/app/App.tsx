@@ -22,7 +22,7 @@ export default function App() {
     ),
   }))
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
-  useComponentPrototype(workspace.api)
+  useComponentPrototype(workspace.api, theme.gap)
   useEffect(() => {
     const api = workspace.api
     if (!api) return

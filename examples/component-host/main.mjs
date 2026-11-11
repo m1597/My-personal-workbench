@@ -269,6 +269,7 @@ async function startAttach(hit) {
   try {
     if (!(await openComponent())) return { ok: false, error }
     if (mode === 'docked' && phase === 'ready') return { ok: true }
+    error = ''
     placement = hit
     phase = 'attaching'
     await openWorkbench()

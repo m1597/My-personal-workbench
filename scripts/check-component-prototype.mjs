@@ -42,6 +42,29 @@ async function background(app) {
     ),
   ).toBe(true)
 }
+async function restoreStandaloneSlot(shell) {
+  await shell.evaluate(() => {
+    window.addEventListener(
+      'beforeunload',
+      () => {
+        const saved = JSON.parse(localStorage.getItem('workbench.layout'))
+        const addSlot = (node) => {
+          if (node.type === 'branch') return node.data.forEach(addSlot)
+          if (node.data.views.includes('module-1')) node.data.views.push('component-example')
+        }
+        addSlot(saved.layout.grid.root)
+        saved.layout.panels['component-example'] = {
+          id: 'component-example',
+          contentComponent: 'component-slot',
+          title: '示例组件',
+        }
+        localStorage.setItem('workbench.layout', JSON.stringify(saved))
+      },
+      { once: true },
+    )
+  })
+  await shell.reload()
+}
 const samplePath = path.join(root, 'component')
 let app = await launch(samplePath, false)
 try {
@@ -158,12 +181,30 @@ try {
   await message(0x216)
   await position(info.x, info.y)
   await expect(dockShell.getByRole('button', { name: '松开窗口标题栏以停靠' })).toBeVisible()
-  const blocker = await app.evaluate(({ BaseWindow }, id) => {
-    const target = BaseWindow.fromId(id).getBounds()
+  const blocker = await app.evaluate(({ BaseWindow, BrowserWindow }) => {
+    const target = BrowserWindow.getAllWindows()[0].getBounds()
     const blocker = new BaseWindow({ ...target, show: false, skipTaskbar: true, alwaysOnTop: true })
     blocker.showInactive()
     return blocker.id
-  }, info.id)
+  })
+  // Wait for Windows to expose the off-screen blocker before releasing the drag.
+  await expect
+    .poll(() =>
+      app.evaluate(
+        ({ BaseWindow, BrowserWindow, screen }, { helper, id }) => {
+          const requireHost = process.getBuiltinModule('node:module').createRequire(helper)
+          const { shellExposed } = requireHost(helper)
+          return shellExposed(
+            screen.getCursorScreenPoint(),
+            BaseWindow.fromId(id),
+            BrowserWindow.getAllWindows()[0],
+          )
+        },
+        { helper: path.join(root, 'host/native-dock.mjs'), id: info.id },
+      ),
+    )
+    .toBe(false)
+  await expect(dockShell.locator('.component-drop-preview')).toBeVisible()
   await message(0x232)
   await expect(sample.locator('#mode')).toHaveText('独立窗口')
   await expect(dockShell.locator('.component-drop-preview')).toHaveCount(0)
@@ -186,27 +227,7 @@ try {
     ['within', 0.5, 0.5],
   ]) {
     // Restore a tab in another group while the component is running independently.
-    await dockShell.evaluate(() => {
-      window.addEventListener(
-        'beforeunload',
-        () => {
-          const saved = JSON.parse(localStorage.getItem('workbench.layout'))
-          const addSlot = (node) => {
-            if (node.type === 'branch') return node.data.forEach(addSlot)
-            if (node.data.views.includes('module-1')) node.data.views.push('component-example')
-          }
-          addSlot(saved.layout.grid.root)
-          saved.layout.panels['component-example'] = {
-            id: 'component-example',
-            contentComponent: 'component-slot',
-            title: '示例组件',
-          }
-          localStorage.setItem('workbench.layout', JSON.stringify(saved))
-        },
-        { once: true },
-      )
-    })
-    await dockShell.reload()
+    await restoreStandaloneSlot(dockShell)
     const componentGroup = dockShell.locator('.dv-groupview').filter({
       has: dockShell.getByRole('tab', { name: '示例组件', exact: true }),
     })
@@ -219,18 +240,69 @@ try {
       const shell = BrowserWindow.getAllWindows()[0].getContentBounds()
       return { x: shell.x - BaseWindow.fromId(id).getBounds().width / 2, y: shell.y - 16 }
     }, info.id)
-    await position(info.x, info.y - 500)
-    await message(0x231)
-    await message(0x216)
-    await position(
-      Math.round(origin.x + box.x + box.width * u),
-      Math.round(origin.y + box.y + box.height * v),
-    )
-    await expect(dockShell.locator('.component-drop-preview')).toHaveAttribute(
-      'data-direction',
-      direction,
-    )
-    await message(0x232)
+    const drop = async () => {
+      await position(info.x, info.y - 500)
+      await message(0x231)
+      await message(0x216)
+      await position(
+        Math.round(origin.x + box.x + box.width * u),
+        Math.round(origin.y + box.y + box.height * v),
+      )
+      await expect(dockShell.locator('.component-drop-preview')).toHaveAttribute(
+        'data-direction',
+        direction,
+      )
+      await message(0x232)
+    }
+    if (direction === 'left' || direction === 'above') {
+      const lower = dockShell
+        .locator('.dv-groupview')
+        .filter({ has: dockShell.getByTestId('module-4') })
+      if (direction === 'above') {
+        const previousHeight = (await lower.boundingBox()).height
+        const sash = dockShell
+          .locator('.dv-vertical > .dv-sash-container > .dv-sash.dv-enabled')
+          .first()
+        const handle = await sash.boundingBox()
+        await dockShell.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+        await dockShell.mouse.down()
+        await dockShell.mouse.move(handle.x + handle.width / 2, handle.y - 50, { steps: 10 })
+        await dockShell.mouse.up()
+        await expect
+          .poll(async () => (await lower.boundingBox()).height)
+          .toBeGreaterThan(previousHeight + 30)
+      }
+      const heights = async () => [
+        (await group.boundingBox()).height,
+        (await lower.boundingBox()).height,
+      ]
+      const before = await heights()
+      const checkHeights = async () => {
+        const actual = await heights()
+        for (const [index, height] of actual.entries())
+          expect(Math.abs(height - before[index])).toBeLessThanOrEqual(2)
+      }
+      // Hold the same bounds gate used during a tab drag, through the timeout.
+      await dockShell.evaluate(() => {
+        document.documentElement.dataset.componentDrag = 'true'
+      })
+      await drop()
+      await expect(dockShell.locator('.dv-groupview')).toHaveCount(5)
+      await expect
+        .poll(async () => (await dockShell.evaluate(() => window.componentHost.status())).error, {
+          timeout: 10000,
+        })
+        .toContain('TIMEOUT')
+      await expect(dockShell.locator('.dv-groupview')).toHaveCount(4)
+      await dockShell.evaluate(() => {
+        delete document.documentElement.dataset.componentDrag
+      })
+      await checkHeights()
+      await dockShell.reload()
+      await expect(componentGroup.getByRole('tab', { name: '模块 1', exact: true })).toHaveCount(1)
+      await checkHeights()
+    }
+    await drop()
     await expect(sample.locator('#mode')).toHaveText('已停靠')
     await expect(dockShell.locator('.dv-groupview')).toHaveCount(direction === 'within' ? 4 : 5)
     if (direction === 'within') {
@@ -249,7 +321,10 @@ try {
       const [first, second] = ['left', 'above'].includes(direction)
         ? [placed, target]
         : [target, placed]
-      expect(first[axis] + first[size]).toBeLessThanOrEqual(second[axis] + 1)
+      const gap = await dockShell
+        .locator('.docking-area')
+        .evaluate((el) => Number.parseFloat(getComputedStyle(el).getPropertyValue('--space-8')))
+      expect(Math.abs(second[axis] - first[axis] - first[size] - gap)).toBeLessThanOrEqual(1)
       expect(Math.abs(first[cross] - second[cross])).toBeLessThanOrEqual(1)
       expect(Math.abs(first[crossSize] - second[crossSize])).toBeLessThanOrEqual(1)
       await sample.getByRole('button', { name: '分离窗口', exact: true }).click()
@@ -448,6 +523,7 @@ for (const kind of ['missing', 'incompatible']) {
     await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
     if (kind === 'missing') {
       await cp(samplePath, fixture, { recursive: true })
+      await shell.getByRole('tab', { name: '模块 1', exact: true }).click()
       await shell.getByRole('button', { name: '操作帮助', exact: true }).click()
       await expect(shell.getByRole('dialog')).toBeVisible()
       const results = await shell.evaluate(() =>
@@ -479,6 +555,23 @@ for (const kind of ['missing', 'incompatible']) {
       await shell.reload()
       await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
       expect(await savedPanels()).toEqual(modules)
+      await expect(shell.getByRole('button', { name: '显示模块 1' })).toHaveClass(/is-active/)
+      await restoreStandaloneSlot(shell)
+      const originalGroup = shell
+        .locator('.dv-groupview')
+        .filter({ has: shell.getByRole('tab', { name: '模块 1', exact: true }) })
+      await expect(originalGroup.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(1)
+      await shell.getByRole('button', { name: '操作帮助', exact: true }).click()
+      await shell.evaluate(() => window.componentHost.open())
+      await expect
+        .poll(async () => (await shell.evaluate(() => window.componentHost.status())).phase, {
+          timeout: 10000,
+        })
+        .toBe('ready')
+      await shell.keyboard.press('Escape')
+      await shell.reload()
+      await expect(originalGroup.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(1)
+      await expect(shell.getByRole('button', { name: '显示模块 1' })).toHaveClass(/is-active/)
       await shell.getByRole('button', { name: '示例组件', exact: true }).click()
       const sample = await findPage(app, '/missing/index.html')
       await expect(sample.locator('#mode')).toHaveText('已停靠')

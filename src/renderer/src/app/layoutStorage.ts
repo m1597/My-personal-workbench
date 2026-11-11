@@ -89,6 +89,11 @@ function restoreGapSizes(node: SerializedDockview['grid']['root'], gap: number) 
   }
 }
 
+export function applyLayout(api: DockviewApi, layout: SerializedDockview, gap: number) {
+  restoreGapSizes(layout.grid.root, gap)
+  api.fromJSON(layout, { reuseExistingPanels: true })
+}
+
 export function restoreLayout(api: DockviewApi, gap: number) {
   try {
     const raw = localStorage.getItem(layoutStorageKey)
@@ -105,8 +110,7 @@ export function restoreLayout(api: DockviewApi, gap: number) {
         if (panel?.minimumWidth === 160 && panel.minimumHeight === 110)
           Object.assign(panel, minimumPanelSize[id])
       }
-      restoreGapSizes(saved.layout.grid.root, gap)
-      api.fromJSON(saved.layout)
+      applyLayout(api, saved.layout, gap)
       const slot = api.getPanel('component-example')
       if (slot && !window.componentHost) api.removePanel(slot)
       return
