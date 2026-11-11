@@ -9,8 +9,8 @@ const root = path.resolve('dist/component-prototype')
 await mkdir('tmp', { recursive: true })
 const evidence = await mkdtemp(path.resolve('tmp/component-prototype-'))
 const errors = []
-async function launch(component, workbench = true, mode = 'standalone') {
-  const profile = await mkdtemp(path.join(evidence, 'profile-'))
+async function launch(component, workbench = true, mode = 'standalone', reuseProfile) {
+  const profile = reuseProfile ?? (await mkdtemp(path.join(evidence, 'profile-')))
   const app = await electron.launch({
     timeout: 30000,
     args: [
@@ -381,6 +381,38 @@ try {
   await shell.getByRole('button', { name: '重置布局', exact: true }).click()
   await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
   console.log('PASS 20 次同视图停靠/分离，中文/队列/计数/会话保持；权限、遮挡与崩溃隔离')
+} finally {
+  await app.close()
+}
+
+const restartProfile = await mkdtemp(path.join(evidence, 'restart-'))
+app = await launch(samplePath, true, 'workbench', restartProfile)
+try {
+  const shell = await findPage(app, '/workbench/index.html')
+  await shell.getByRole('button', { name: '示例组件', exact: true }).click()
+  const sample = await findPage(app, '/component/index.html')
+  await expect(sample.locator('#mode')).toHaveText('已停靠')
+  await shell.getByRole('tab', { name: '模块 2', exact: true }).click()
+  await expect(shell.getByTestId('module-2')).toBeVisible()
+} finally {
+  await app.close()
+}
+app = await launch(samplePath, true, 'workbench', restartProfile)
+try {
+  const shell = await findPage(app, '/workbench/index.html')
+  const sample = await findPage(app, '/component/index.html')
+  await expect(sample.locator('#mode')).toHaveText('已停靠')
+  const moduleTab = shell.getByRole('tab', { name: '模块 2', exact: true })
+  const componentTab = shell.getByRole('tab', { name: '示例组件', exact: true })
+  await expect(moduleTab).toHaveAttribute('aria-selected', 'true')
+  const viewVisible = () =>
+    app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].contentView.children.at(-1).getVisible(),
+    )
+  await expect.poll(viewVisible).toBe(false)
+  await componentTab.click()
+  await expect.poll(viewVisible).toBe(true)
+  await background(app)
 } finally {
   await app.close()
 }

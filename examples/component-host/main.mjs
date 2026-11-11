@@ -175,10 +175,17 @@ async function discover() {
     broadcast()
   }
 }
-async function openComponent() {
+let pendingOpen
+function openComponent(restoreWindow) {
+  pendingOpen ??= loadComponent(restoreWindow).finally(() => {
+    pendingOpen = undefined
+  })
+  return pendingOpen
+}
+async function loadComponent(restoreWindow) {
   if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed()) return true
   const root = await discover()
-  if (!root) return false
+  if (!root || restoreWindow?.isDestroyed()) return false
   view?.webContents.close()
   const isolated = session.fromPartition(`component-${sessionId}`)
   isolated.setPermissionRequestHandler((_, __, callback) => callback(false))
@@ -211,7 +218,13 @@ async function openComponent() {
     broadcast()
   })
   error = ''
-  detach()
+  if (restoreWindow) {
+    view.setVisible(false)
+    moveTo(restoreWindow)
+    mode = 'docked'
+    phase = 'ready'
+    broadcast()
+  } else detach()
   await view.webContents.loadFile(entry, {
     query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {},
   })
@@ -255,6 +268,7 @@ async function startAttach(hit) {
   if ((mode === 'docked' && phase === 'ready') || phase === 'attaching') return { ok: true }
   try {
     if (!(await openComponent())) return { ok: false, error }
+    if (mode === 'docked' && phase === 'ready') return { ok: true }
     placement = hit
     phase = 'attaching'
     await openWorkbench()
@@ -325,6 +339,10 @@ else {
       ipcMain.handle('prototype:status', (event) => {
         if (!isShell(event)) throw new Error('DENIED')
         return snapshot()
+      })
+      ipcMain.handle('prototype:restore', async (event) => {
+        if (!isShell(event)) throw new Error('DENIED')
+        if (phase === 'stopped') await openComponent(shell)
       })
       ipcMain.handle('prototype:open', (event) => {
         if (!isShell(event)) throw new Error('DENIED')

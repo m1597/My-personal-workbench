@@ -19,6 +19,7 @@ declare global {
     componentHost?: {
       dropZone(value: Region[] | null): void
       status(): Promise<HostState>
+      restore(): Promise<void>
       open(): Promise<{ ok: boolean; error?: string }>
       bounds(value: { x: number; y: number; width: number; height: number } | null): void
       detach(release?: { x: number; y: number }): Promise<void>
@@ -115,10 +116,12 @@ export function useComponentPrototype(api?: DockviewApi) {
       if (panel.id === 'component-example' && last?.mode === 'docked' && last.phase === 'ready')
         void host.detach()
     })
+    let disposed = false
     const off = host.subscribe(update)
     void host.status().then((state) => {
+      if (disposed || last) return
       update(state)
-      if (state.phase === 'stopped' && api.getPanel('component-example')) void host.open()
+      if (state.phase === 'stopped' && api.getPanel('component-example')) void host.restore()
     })
     let frame = 0
     let previous = ''
@@ -153,6 +156,7 @@ export function useComponentPrototype(api?: DockviewApi) {
     }
     frame = requestAnimationFrame(measure)
     return () => {
+      disposed = true
       layout.dispose()
       drag.dispose()
       window.removeEventListener('pointerup', release, true)
