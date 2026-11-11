@@ -119,6 +119,7 @@ export default function App() {
               components={components}
               onReady={onReady}
               theme={theme}
+              dndStrategy={window.componentHost ? 'pointer' : 'auto'}
               disableFloatingGroups
               rightHeaderActionsComponent={HeaderActions}
               watermarkComponent={EmptyWorkspace}

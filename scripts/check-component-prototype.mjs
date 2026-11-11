@@ -3,6 +3,7 @@ import { promisify } from 'node:util'
 import { _electron as electron, expect } from '@playwright/test'
 import { mkdir, mkdtemp, cp, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import executable from 'electron'
 
 const root = path.resolve('dist/component-prototype')
 await mkdir('tmp', { recursive: true })
@@ -83,10 +84,13 @@ try {
   await sample.getByRole('button', { name: '增加', exact: true }).click()
   const boot = await sample.locator('body').getAttribute('data-boot-id')
   const session = await sample.locator('#session').textContent()
-  // Set up both windows, then exercise the native message path without transfer buttons.
-  await sample.getByRole('button', { name: '加入工作台', exact: true }).click()
-  await expect(sample.locator('#mode')).toHaveText('已停靠')
-  await sample.getByRole('button', { name: '分离窗口', exact: true }).click()
+  // Same two launcher intents and profile as the desktop CMD, without transfer buttons.
+  const profile = await app.evaluate(({ app }) => app.getPath('userData'))
+  await promisify(execFile)(
+    executable,
+    [path.join(root, 'host'), `--user-data-dir=${profile}`, '--mode=workbench'],
+    { env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }, windowsHide: true, timeout: 15000 },
+  )
   const dockShell = await findPage(app, '/workbench/index.html')
   const zone = await dockShell.locator('.docking-area').boundingBox()
   const info = await app.evaluate(({ BaseWindow, BrowserWindow }, zone) => {
@@ -213,22 +217,41 @@ try {
       await expect(dockShell.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(0)
     }
   }
-  const grip = await dockShell.getByRole('button', { name: '组件拖出手柄' }).boundingBox()
-  // A click/short move and an Escape-cancelled drag must retain the panel.
-  await dockShell.mouse.move(grip.x + 50, grip.y + 16)
+  const tab = dockShell.getByRole('tab', { name: '示例组件', exact: true })
+  const destination = dockShell.getByRole('tab', { name: '模块 1', exact: true })
+  const from = await tab.boundingBox()
+  const to = await destination.boundingBox()
+  await dockShell.mouse.move(from.x + 24, from.y + 14)
   await dockShell.mouse.down()
-  await dockShell.mouse.move(grip.x + 55, grip.y + 16)
+  await dockShell.mouse.move(to.x + 24, to.y + 14, { steps: 24 })
+  await dockShell.mouse.up()
+  const regrouped = dockShell.locator('.dv-groupview').filter({ has: tab })
+  await expect(regrouped.getByRole('tab', { name: '模块 1', exact: true })).toHaveCount(1)
+  await expect(sample.locator('#mode')).toHaveText('已停靠')
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1200, 820))
+  await expect
+    .poll(async () => {
+      const slot = await regrouped.locator('.dv-content-container').boundingBox()
+      if (!slot) return false
+      return Math.abs((await sample.evaluate(() => innerWidth)) - slot.width) < 3
+    })
+    .toBe(true)
+  const grip = await dockShell.getByRole('tab', { name: '示例组件', exact: true }).boundingBox()
+  // A click/short move and an Escape-cancelled drag must retain the panel.
+  await dockShell.mouse.move(grip.x + 24, grip.y + 16)
+  await dockShell.mouse.down()
+  await dockShell.mouse.move(grip.x + 26, grip.y + 16)
   await dockShell.mouse.up()
   await expect(sample.locator('#mode')).toHaveText('已停靠')
-  await dockShell.mouse.move(grip.x + 50, grip.y + 16)
+  await dockShell.mouse.move(grip.x + 24, grip.y + 16)
   await dockShell.mouse.down()
-  await dockShell.mouse.move(grip.x + 50, 20, { steps: 5 })
+  await dockShell.mouse.move(-80, grip.y + 16, { steps: 5 })
   await dockShell.keyboard.press('Escape')
   await dockShell.mouse.up()
   await expect(sample.locator('#mode')).toHaveText('已停靠')
-  await dockShell.mouse.move(grip.x + 50, grip.y + 16)
+  await dockShell.mouse.move(grip.x + 24, grip.y + 16)
   await dockShell.mouse.down()
-  await dockShell.mouse.move(grip.x + 50, 20, { steps: 12 })
+  await dockShell.mouse.move(-80, grip.y + 16, { steps: 12 })
   await dockShell.mouse.up()
   await expect(sample.locator('#mode')).toHaveText('独立窗口')
   await background(app)

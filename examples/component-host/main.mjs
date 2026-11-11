@@ -57,6 +57,7 @@ function options(width, height) {
           x: Math.min(...screen.getAllDisplays().map((d) => d.bounds.x)) - 2200,
           y: 0,
           skipTaskbar: true,
+          focusable: false,
         }
       : {}),
   }
@@ -85,7 +86,7 @@ function moveTo(window) {
   window.contentView.addChildView(view)
   parent = window
 }
-function detach() {
+function detach(point) {
   clearTimeout(transferTimer)
   if (!view || view.webContents.isDestroyed() || view.webContents.isCrashed()) return
   if (!standalone || standalone.isDestroyed()) {
@@ -130,6 +131,18 @@ function detach() {
         broadcast()
       }
     })
+  }
+  if (point) {
+    const [width, height] = standalone.getSize()
+    const area = screen.getDisplayNearestPoint(point).workArea
+    let x = point.x - Math.min(width / 2, 120)
+    let y = point.y - 16
+    if (!background) {
+      x = Math.max(area.x, Math.min(x, area.x + Math.max(0, area.width - width)))
+      y = Math.max(area.y, Math.min(y, area.y + Math.max(0, area.height - height)))
+    }
+    if (background) x = Math.min(x, ...screen.getAllDisplays().map((d) => d.bounds.x - width - 80))
+    standalone.setPosition(Math.round(x), Math.round(y))
   }
   moveTo(standalone)
   mode = 'standalone'
@@ -317,9 +330,22 @@ else {
         if (!isShell(event)) throw new Error('DENIED')
         return attach()
       })
-      ipcMain.handle('prototype:detach', (event) => {
+      ipcMain.handle('prototype:detach', (event, release) => {
         if (!isShell(event)) throw new Error('DENIED')
-        detach()
+        if (mode !== 'docked' || phase !== 'ready') return
+        if (release === undefined) return detach()
+        if (!Number.isFinite(release?.x) || !Number.isFinite(release?.y)) return
+        const content = shell.getContentBounds()
+        const frame = shell.getBounds()
+        const point = { x: Math.round(content.x + release.x), y: Math.round(content.y + release.y) }
+        if (
+          point.x >= frame.x &&
+          point.y >= frame.y &&
+          point.x < frame.x + frame.width &&
+          point.y < frame.y + frame.height
+        )
+          return
+        detach(point)
       })
       ipcMain.on('prototype:drop-zone', (event, regions) => {
         if (!isShell(event)) return

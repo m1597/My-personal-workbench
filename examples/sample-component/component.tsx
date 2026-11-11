@@ -111,8 +111,8 @@ function Sample() {
         </p>
         <p className="sample-hint">
           {docked
-            ? '拖住面板顶部的手柄，移出工作区即可分离。'
-            : '拖动系统标题栏到工作台模块区域，松开即可停靠。'}
+            ? '拖住“示例组件”标签，移出工作台窗口后松手即可分离。'
+            : '拖动系统标题栏到工作台，中央松手合并标签，边缘松手分屏。'}
         </p>
       </main>
       <footer className="sample-footer">
