@@ -40,8 +40,11 @@ type Item = {
   checked: number
   candidates: Track[]
 }
+import { ModelSettings, type ModelInfo } from './ModelSettings'
+import { LxPanel } from './LxPanel'
 import type { Versions } from './LxPanel'
 type State = {
+  models: ModelInfo
   items: Item[]
   batches: Batch[]
   summary: string[]
@@ -57,6 +60,7 @@ type Mode = { mode: string }
 declare global {
   interface Window {
     music: {
+      configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
       lxInfo(): Promise<string>
       lxImport(): Promise<void>
       lxCancel(): Promise<void>
@@ -100,7 +104,7 @@ function Music() {
   const [state, setState] = useState<State>(),
     [draft, setDraft] = useState(''),
     [batch, setBatch] = useState(''),
-    [include, setInclude] = useState(false),
+    [includedSummary, setIncludedSummary] = useState<string[]>(),
     [preview, setPreview] = useState(false),
     [paused, setPaused] = useState(true),
     [time, setTime] = useState(0),
@@ -109,6 +113,9 @@ function Music() {
     [docked, setDocked] = useState(false)
   const [tab, setTab] = useState('library'),
     [search, setSearch] = useState('')
+  const [settings, setSettings] = useState(false),
+    [online, setOnline] = useState<Item | null>(null)
+  const provider = state?.models.providers.find((x) => x.id === state.models.active)
   const switching = useRef(Promise.resolve())
   const audio = useRef<HTMLAudioElement>(null),
     current = useRef(''),
@@ -255,10 +262,14 @@ function Music() {
       ? '从 ' + Math.floor(elapsed) + ' 秒继续'
       : '播放'
   async function generate() {
+    if (provider?.id !== 'offline' && !provider?.hasKey) {
+      setSettings(true)
+      return
+    }
     setBusy(true)
     try {
-      setBatch(await host.generate(draft, include ? state?.summary : undefined))
-      setInclude(false)
+      setBatch(await host.generate(draft, includedSummary))
+      setIncludedSummary(undefined)
       setPreview(false)
     } finally {
       setBusy(false)
@@ -272,7 +283,7 @@ function Music() {
         </div>
         <div className="music-heading">
           <h1>音乐试听</h1>
-          <small>{tab === 'library' ? '本地音乐' : '离线合成曲库'}</small>
+          <small>{tab === 'library' ? '本地音乐' : (provider?.label ?? 'DeepSeek')}</small>
         </div>
         <Button
           appearance="subtle"
@@ -324,6 +335,29 @@ function Music() {
               <h2>
                 <label htmlFor="preference">今天想听什么</label>
               </h2>
+              <div className="model-toolbar">
+                <span>
+                  {provider?.label ?? 'DeepSeek'}
+                  {provider?.id !== 'offline' && provider?.model ? ' · ' + provider.model : ''}
+                </span>
+                <Button
+                  size="small"
+                  disabled={busy || !provider}
+                  onClick={() => setSettings((v) => !v)}
+                >
+                  模型设置
+                </Button>
+              </div>
+              {settings && state && (
+                <ModelSettings
+                  info={state.models}
+                  close={() => setSettings(false)}
+                  save={async (...args) => {
+                    await host.configureModel(...args)
+                    await refresh()
+                  }}
+                />
+              )}
               <div className="music-input">
                 <Input
                   id="preference"
@@ -345,7 +379,7 @@ function Music() {
                   icon={<ListMusic size={16} />}
                   onClick={() => void act(generate)}
                 >
-                  生成离线试听单
+                  {provider?.id === 'offline' ? '生成离线试听单' : '生成推荐'}
                 </Button>
               </div>
               <Button
@@ -356,16 +390,18 @@ function Music() {
                 icon={preview ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 onClick={() => setPreview(!preview)}
               >
-                预览曲库摘要{include ? ' · 已附加' : ''}
+                预览曲库摘要{includedSummary ? ' · 已附加' : ''}
               </Button>
               {preview && (
                 <div className="music-summary-content">
-                  <p>{state?.summary.join('；') || '音乐库为空'}</p>
+                  <p>{(includedSummary ?? state?.summary)?.join('；') || '音乐库为空'}</p>
                   <Checkbox
-                    disabled={!state?.summary.length}
+                    disabled={!includedSummary && !state?.summary.length}
                     label="本次附加以上摘要"
-                    checked={include}
-                    onChange={(_, v) => setInclude(v.checked === true)}
+                    checked={!!includedSummary}
+                    onChange={(_, v) =>
+                      setIncludedSummary(v.checked === true ? state?.summary : undefined)
+                    }
                   />
                 </div>
               )}
@@ -375,6 +411,14 @@ function Music() {
                 </Button>
               )}
             </section>
+            {online && online.batch === batch && (
+              <LxPanel
+                key={online.id}
+                song={online}
+                close={() => setOnline(null)}
+                refresh={refresh}
+              />
+            )}
             <section className="music-list">
               <div className="music-section-head">
                 <h2>推荐记录</h2>
@@ -453,6 +497,17 @@ function Music() {
                               {r.status}
                               {version ? ' · ' + version.album + ' · ' + version.version : ''}
                             </small>
+                            {r.status === '模型推荐' && (
+                              <Button
+                                size="small"
+                                onClick={() => {
+                                  setOnline(r)
+                                  document.querySelector('.music-scroll')?.scrollTo(0, 0)
+                                }}
+                              >
+                                查找在线版本
+                              </Button>
+                            )}
                             {r.status === '待选版本' && (
                               <div className="music-versions">
                                 {r.candidates.map((t) => (

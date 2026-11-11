@@ -82,3 +82,5 @@ SQLite 和媒体播放当前用于第一方音乐试听组件。Git 只备份已
 桌面 CMD 转调项目的 `scripts/open-workbench.cmd`。工作台界面更新后运行 `npm run build`；示例或宿主更新后运行 `npm run build:prototype`。各入口使用最新的 `out/renderer`。运行 `scripts/open-workbench.cmd --check` 检查启动文件。关闭旧窗口后重开即可加载新版。
 
 音乐试听现支持在 FitBay 内导入洛雪兼容 JS 源，从本地歌曲查找版本并下载入库。见[洛雪音乐源](docs/组件开发.md#洛雪音乐源)。
+
+推荐试听默认使用 DeepSeek，模型设置也支持 OpenAI、Claude 和 Gemini。详见[模型推荐](docs/组件开发.md#模型推荐)。

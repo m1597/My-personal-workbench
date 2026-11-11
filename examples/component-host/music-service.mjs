@@ -1,6 +1,7 @@
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
-import { ipcMain, dialog } from 'electron'
+import { modelInfo, configureModel, recommend } from './music-model.mjs'
+import { ipcMain, dialog, safeStorage } from 'electron'
 import { setTimeout as delay } from 'node:timers/promises'
 import { MusicStore } from './music/store.mjs'
 import { randomUUID } from 'node:crypto'
@@ -116,7 +117,11 @@ export function musicService(profile, isSender) {
       throw e
     }
   })
-  bind('state', () => store.snapshot())
+  bind('state', () => ({ ...store.snapshot(), models: modelInfo(store) }))
+  bind('configureModel', (id, model, key, forget) => {
+    if (pending) throw Error('请先结束当前生成')
+    configureModel(store, safeStorage, id, model, key, forget)
+  })
   bind('draft', (v) => store.set('draft', text(v)))
   bind('generate', async (preference, summary) => {
     text(preference)
@@ -133,6 +138,11 @@ export function musicService(profile, isSender) {
     const task = new AbortController()
     pending = task
     try {
+      if (modelInfo(store).active !== 'offline') {
+        const rows = await recommend(store, safeStorage, preference, summary, task.signal)
+        task.signal.throwIfAborted()
+        return store.saveSuggestions(preference, rows, '模型推荐')
+      }
       await delay(150, undefined, { signal: task.signal })
       return store.generate(request.preference, request.summary)
     } finally {

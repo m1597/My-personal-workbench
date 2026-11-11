@@ -9,7 +9,7 @@ export const catalogue = [...names, '夜航'].map((title, index) => ({
   genre: index % 2 ? '氛围' : '电子',
   frequency: [220, 262, 330, 392, 294][index],
 }))
-export function validateSuggestions(rows) {
+export function validateSuggestions(rows, { songPunctuation = false } = {}) {
   if (
     !Array.isArray(rows) ||
     rows.length !== 5 ||
@@ -24,7 +24,7 @@ export function validateSuggestions(rows) {
             typeof row[key] === 'string' &&
             row[key].trim().length > 0 &&
             row[key].length <= 300 &&
-            !/[\\/]/u.test(row[key]) &&
+            !(songPunctuation ? /(?:[a-z]+:\/\/|^\/|\\|^[a-z]:\/)/iu : /[\\/]/u).test(row[key]) &&
             Array.from(row[key]).every((ch) => ch.charCodeAt(0) >= 32),
         ),
     )

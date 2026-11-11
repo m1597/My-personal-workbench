@@ -10,7 +10,7 @@ export function LxPanel({
   close,
   refresh,
 }: {
-  song: LocalTrack | null
+  song: Pick<LocalTrack, 'id' | 'title'> | null
   close: () => void
   refresh: () => Promise<void>
 }) {

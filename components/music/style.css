@@ -346,3 +346,20 @@ li[data-active="true"] .music-track-icon,
 .lx-panel li small {
   color: var(--text-muted);
 }
+
+.model-toolbar,
+.model-settings {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+}
+.model-toolbar {
+  justify-content: space-between;
+  color: var(--text-muted);
+}
+.model-settings {
+  display: grid;
+  padding: var(--space-12);
+  border: 1px solid var(--stroke);
+  border-radius: var(--panel-radius);
+}

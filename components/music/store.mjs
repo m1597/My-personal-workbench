@@ -66,12 +66,9 @@ export class MusicStore {
   }
   summary() {
     return this.db
-      .prepare('SELECT track FROM library ORDER BY track')
+      .prepare('SELECT title,artist FROM local_tracks ORDER BY rowid DESC LIMIT 5')
       .all()
-      .map(({ track }) => catalogue.find((t) => t.id === track))
-      .filter(Boolean)
-      .slice(0, 5)
-      .map((t) => [t.artist, t.genre, t.title].join(' · '))
+      .map((t) => [t.title, t.artist].map((v) => v.slice(0, 100)).join(' · '))
   }
   snapshot() {
     const batches = this.db.prepare('SELECT * FROM batches ORDER BY rowid DESC').all()
@@ -96,8 +93,10 @@ export class MusicStore {
     }
   }
   generate(preference, summary) {
-    const rows = offlineSuggestions(preference, summary),
-      batch = randomUUID()
+    return this.saveSuggestions(preference, offlineSuggestions(preference, summary), '待匹配')
+  }
+  saveSuggestions(preference, rows, status) {
+    const batch = randomUUID()
     this.db.exec('BEGIN')
     try {
       this.db.prepare('INSERT INTO batches VALUES(?,?,?)').run(batch, day(), preference)
@@ -106,7 +105,7 @@ export class MusicStore {
           .prepare(
             'INSERT INTO items(id,batch,title,artist,reason,status,used) VALUES(?,?,?,?,?,?,?)',
           )
-          .run(randomUUID(), batch, row.title, row.artist, row.reason, '待匹配', Date.now())
+          .run(randomUUID(), batch, row.title, row.artist, row.reason, status, Date.now())
       this.db.exec('COMMIT')
     } catch (e) {
       this.db.exec('ROLLBACK')

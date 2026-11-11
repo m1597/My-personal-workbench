@@ -197,7 +197,11 @@ export function registerLx(bind, getStore, dialog) {
       if (!src) throw Error('请先导入洛雪音乐源')
       if (typeof id !== 'string') throw Error('无效曲目')
       matches.clear()
-      const rows = await versions(src, getStore().library.row(id), signal)
+      const rows = await versions(
+        src,
+        id.startsWith('local-') ? getStore().library.row(id) : getStore().item(id),
+        signal,
+      )
       signal.throwIfAborted()
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
       const items = []
