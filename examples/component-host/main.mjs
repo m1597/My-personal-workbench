@@ -242,7 +242,8 @@ async function openWorkbench() {
   secure(shell.webContents)
   shell.webContents.on('did-start-loading', builtins.shellClosed)
   shell.on('close', () => {
-    if (!quitting && parent === shell) detach()
+    if (!quitting && phase === 'attaching') cancelAttach('目标工作台已关闭')
+    else if (!quitting && parent === shell) detach()
   })
   shell.on('closed', () => {
     builtins.shellClosed()
@@ -250,7 +251,19 @@ async function openWorkbench() {
     dropZone = undefined
   })
   await shell.loadFile(file, { query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {} })
+  shell.webContents.on('did-start-loading', () => {
+    if (phase === 'attaching') cancelAttach('目标工作台已重新加载')
+  })
   show(shell)
+}
+function cancelAttach(reason) {
+  clearTimeout(transferTimer)
+  error = reason
+  placement = null
+  if (parent && parent === standalone && !parent.isDestroyed()) {
+    phase = 'ready'
+    broadcast()
+  } else detach()
 }
 function attach(hit = null) {
   pendingAttach ??= startAttach(hit).finally(() => {
@@ -271,8 +284,7 @@ async function startAttach(hit) {
     if (mode === 'docked' && phase === 'ready') return { ok: true }
     broadcast()
     transferTimer = setTimeout(() => {
-      error = 'TIMEOUT：目标面板未就绪，保留独立窗口'
-      detach()
+      cancelAttach('TIMEOUT：目标面板未就绪，保留独立窗口')
     }, 5000)
     return { ok: true }
   } catch (failure) {

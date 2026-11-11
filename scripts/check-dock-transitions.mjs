@@ -63,6 +63,23 @@ try {
   expect((await mode()).mode).toBe('standalone')
   await expect(tab).toHaveCount(0)
   console.log('PASS 目标失效时保留原窗口和布局')
+
+  await shell.evaluate(() => {
+    document.documentElement.dataset.componentDrag = 'true'
+    return window.componentHost.open()
+  })
+  await expect(tab).toHaveCount(1)
+  await shell.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
+  await shell.addInitScript(() => {
+    window.savedOnReload = JSON.parse(localStorage.getItem('workbench.layout'))?.layout.panels
+  })
+  await shell.reload()
+  const saved = await shell.evaluate(() => Object.keys(window.savedOnReload).sort())
+  expect(saved).toEqual(['module-1', 'module-2', 'module-3'])
+  await expect.poll(async () => (await mode()).phase).toBe('ready')
+  expect((await mode()).mode).toBe('standalone')
+  await expect(tab).toHaveCount(0)
+  console.log('PASS 交接等待期间重载仅保存用户已完成的改动')
 } finally {
   await app.close()
 }

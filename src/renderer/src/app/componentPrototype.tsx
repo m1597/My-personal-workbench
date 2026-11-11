@@ -46,14 +46,20 @@ export function useComponentPrototype(
     const builtins = bindBuiltinDock(api, layout, gap, onDetached)
     let last: HostState | undefined
     let finishAttach: ((docked: boolean) => void) | undefined
+    const finish = (docked: boolean) => {
+      const complete = finishAttach
+      if (!complete) return
+      finishAttach = undefined
+      complete(docked)
+      layout.resume()
+    }
+    // Undo the provisional slot before trackLayout takes its final bubble-phase snapshot.
+    const beforeUnload = () => finish(false)
+    window.addEventListener('beforeunload', beforeUnload, true)
     const update = (state: HostState) => {
       const wasDocked = last?.mode === 'docked'
       last = state
-      if (finishAttach && state.phase !== 'attaching') {
-        finishAttach(state.mode === 'docked')
-        finishAttach = undefined
-        layout.resume()
-      }
+      if (state.phase !== 'attaching') finish(state.mode === 'docked')
       const existing = api.getPanel('component-example')
       if (
         existing &&
@@ -219,6 +225,7 @@ export function useComponentPrototype(
     }
     frame = requestAnimationFrame(measure)
     return () => {
+      window.removeEventListener('beforeunload', beforeUnload, true)
       builtins?.dispose()
       offActivate()
       disposed = true
