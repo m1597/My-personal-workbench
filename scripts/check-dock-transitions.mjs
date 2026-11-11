@@ -1,6 +1,9 @@
 import { _electron as electron, expect } from '@playwright/test'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import executable from 'electron'
 
 const root = path.resolve('dist/component-prototype')
 await mkdir('tmp', { recursive: true })
@@ -17,7 +20,40 @@ const app = await electron.launch({
 })
 try {
   const shell = await app.firstWindow()
+  await shell.evaluate(() => {
+    document.documentElement.dataset.componentDrag = 'true'
+  })
   await shell.getByRole('button', { name: '示例组件', exact: true }).click()
+  await expect
+    .poll(() => shell.evaluate(async () => (await window.componentHost.status()).phase))
+    .toBe('attaching')
+  await app.evaluate(({ BrowserWindow }) => {
+    const target = BrowserWindow.getAllWindows()[0]
+    const show = target.showInactive.bind(target)
+    target.showInactive = () => {
+      target.testRaised = true
+      show()
+    }
+  })
+  await promisify(execFile)(
+    executable,
+    [path.join(root, 'host'), '--user-data-dir=' + profile, '--mode=component'],
+    {
+      env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+      windowsHide: true,
+      timeout: 10000,
+    },
+  )
+  await expect
+    .poll(
+      () =>
+        app.evaluate(({ BrowserWindow }) => Boolean(BrowserWindow.getAllWindows()[0].testRaised)),
+      { timeout: 3000 },
+    )
+    .toBe(true)
+  await shell.evaluate(() => {
+    delete document.documentElement.dataset.componentDrag
+  })
   const mode = () => shell.evaluate(() => window.componentHost.status())
   await expect.poll(async () => (await mode()).mode).toBe('docked')
   const visible = () =>

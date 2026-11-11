@@ -324,7 +324,8 @@ async function openIntent(request) {
       show(shell)
     }
   } else if (await openComponent()) {
-    const window = mode === 'docked' ? shell : standalone
+    // During a toolbar cold start the view has no native parent until the slot is ready.
+    const window = parent ?? shell
     if (mode === 'docked') shell.webContents.send('prototype:activate')
     if (window.isMinimized()) window.restore()
     show(window)
