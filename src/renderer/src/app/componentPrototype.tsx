@@ -3,17 +3,20 @@ import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { GripHorizontal } from 'lucide-react'
 import { Button } from '@fluentui/react-components'
 
+type Region = { id: string; x: number; y: number; width: number; height: number }
+type Target = Region & { direction: 'within' | 'left' | 'right' | 'above' | 'below' }
 type HostState = {
   mode: string
   phase: string
   error: string
   sessionId: string
-  dragOver?: boolean
+  dragOver?: Target | null
+  placement?: Target | null
 }
 declare global {
   interface Window {
     componentHost?: {
-      dropZone(value: { x: number; y: number; width: number; height: number } | null): void
+      dropZone(value: Region[] | null): void
       status(): Promise<HostState>
       open(): Promise<{ ok: boolean; error?: string }>
       bounds(value: { x: number; y: number; width: number; height: number } | null): void
@@ -26,7 +29,15 @@ export function useComponentPrototype(api?: DockviewApi) {
   useEffect(() => {
     const host = window.componentHost
     if (!api || !host) return
+    let last: HostState | undefined
     const update = (state: HostState) => {
+      const wasDocked = last?.mode === 'docked'
+      last = state
+      const slot = api.getPanel('component-example')
+      if (slot && ((wasDocked && state.mode === 'standalone') || state.phase === 'unavailable')) {
+        api.removePanel(slot)
+        return
+      }
       if (state.phase === 'attaching') {
         const existing = api.getPanel('component-example')
         if (existing) {
@@ -37,21 +48,48 @@ export function useComponentPrototype(api?: DockviewApi) {
           id: 'component-example',
           title: '示例组件',
           component: 'component-slot',
-          position: api.getPanel('module-2')
-            ? { referencePanel: 'module-2', direction: 'within' }
-            : undefined,
+          position:
+            state.placement?.id && api.getGroup(state.placement.id)
+              ? { referenceGroup: state.placement.id, direction: state.placement.direction }
+              : api.getPanel('module-2')
+                ? { referencePanel: 'module-2', direction: 'within' }
+                : undefined,
         })
       }
     }
+    const removed = api.onDidRemovePanel((panel) => {
+      if (panel.id === 'component-example' && last?.mode === 'docked' && last.phase === 'ready')
+        void host.detach()
+    })
     const off = host.subscribe(update)
-    void host.status().then(update)
+    void host.status().then((state) => {
+      update(state)
+      if (state.phase === 'stopped' && api.getPanel('component-example')) void host.open()
+    })
     let frame = 0
     let previous = ''
     const measure = () => {
       const rect = document.querySelector('.docking-area')?.getBoundingClientRect()
       const blocked = document.querySelector('[role="dialog"], [role="menu"]')
+      const region = (id: string, box: DOMRect) => ({
+        id,
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+      })
       const zone =
-        rect && !blocked ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+        !rect || blocked
+          ? null
+          : api.groups.length
+            ? api.groups
+                .filter(
+                  (group) =>
+                    group.element.getClientRects().length && group.element.checkVisibility(),
+                )
+                .map((group) => region(group.id, group.element.getBoundingClientRect()))
+                .filter((r) => r.width && r.height)
+            : [region('', rect)]
       const encoded = JSON.stringify(zone)
       if (previous !== encoded) {
         previous = encoded
@@ -61,6 +99,7 @@ export function useComponentPrototype(api?: DockviewApi) {
     }
     frame = requestAnimationFrame(measure)
     return () => {
+      removed.dispose()
       off()
       cancelAnimationFrame(frame)
       host.dropZone(null)
@@ -70,20 +109,29 @@ export function useComponentPrototype(api?: DockviewApi) {
 
 export function ComponentPrototypeButton() {
   const [message, setMessage] = useState('')
-  const [over, setOver] = useState(false)
-  useEffect(() => window.componentHost?.subscribe((value) => setOver(!!value.dragOver)), [])
+  const [over, setOver] = useState<Target | null>(null)
+  useEffect(() => window.componentHost?.subscribe((value) => setOver(value.dragOver ?? null)), [])
   if (!window.componentHost) return null
   return (
-    <Button
-      appearance="subtle"
-      title={message || '连接独立部署的示例组件'}
-      onClick={async () => {
-        const result = await window.componentHost?.open()
-        setMessage(result?.error ?? '')
-      }}
-    >
-      {over ? '松开窗口标题栏以停靠' : message || '示例组件'}
-    </Button>
+    <>
+      {over && (
+        <div
+          className="component-drop-preview"
+          data-direction={over.direction}
+          style={{ left: over.x, top: over.y, width: over.width, height: over.height }}
+        />
+      )}
+      <Button
+        appearance="subtle"
+        title={message || '连接独立部署的示例组件'}
+        onClick={async () => {
+          const result = await window.componentHost?.open()
+          setMessage(result?.error ?? '')
+        }}
+      >
+        {over ? '松开窗口标题栏以停靠' : message || '示例组件'}
+      </Button>
+    </>
   )
 }
 
@@ -127,7 +175,6 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
       cancelAnimationFrame(frame)
       off()
       host.bounds(null)
-      if (current?.mode === 'docked' && current.phase === 'ready') void host.detach()
     }
   }, [api])
   return (

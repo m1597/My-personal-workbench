@@ -1,5 +1,5 @@
 import { release } from 'node:os'
-import { watchNativeDock } from './native-dock.mjs'
+import { watchNativeDock, shellExposed, snapTarget } from './native-dock.mjs'
 import {
   app,
   BaseWindow,
@@ -37,8 +37,9 @@ let transferTimer
 let pendingAttach
 let quitting = false
 let dropZone
-let dragOver = false
-const snapshot = () => ({ mode, phase, error, sessionId, dragOver })
+let dragOver = null
+let placement = null
+const snapshot = () => ({ mode, phase, error, sessionId, dragOver, placement })
 function broadcast() {
   if (shell && !shell.isDestroyed()) shell.webContents.send('prototype:state', snapshot())
   if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed())
@@ -90,7 +91,7 @@ function detach() {
   if (!standalone || standalone.isDestroyed()) {
     standalone = new BaseWindow({ ...options(660, 620), title: '示例组件 · 独立窗口' })
     watchNativeDock(standalone, {
-      target: () => {
+      target: (point) => {
         if (
           mode !== 'standalone' ||
           phase !== 'ready' ||
@@ -102,11 +103,12 @@ function detach() {
         )
           return null
         const content = shell.getContentBounds()
-        return { ...dropZone, x: content.x + dropZone.x, y: content.y + dropZone.y }
+        const hit = snapTarget({ x: point.x - content.x, y: point.y - content.y }, dropZone)
+        return hit && shellExposed(point, standalone, shell) ? hit : null
       },
-      commit: () => void attach(),
+      commit: (hit) => void attach(hit),
       preview: (value) => {
-        if (dragOver !== value) {
+        if (JSON.stringify(dragOver) !== JSON.stringify(value)) {
           dragOver = value
           broadcast()
         }
@@ -230,16 +232,17 @@ async function openWorkbench() {
   await shell.loadFile(file, { query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {} })
   show(shell)
 }
-function attach() {
-  pendingAttach ??= startAttach().finally(() => {
+function attach(hit = null) {
+  pendingAttach ??= startAttach(hit).finally(() => {
     pendingAttach = undefined
   })
   return pendingAttach
 }
-async function startAttach() {
+async function startAttach(hit) {
   if ((mode === 'docked' && phase === 'ready') || phase === 'attaching') return { ok: true }
   try {
     if (!(await openComponent())) return { ok: false, error }
+    placement = hit
     phase = 'attaching'
     await openWorkbench()
     // The shell may already have acknowledged its bounds while loadFile was pending.
@@ -276,7 +279,7 @@ async function openIntent(request) {
   } else if (workbenchFile) await openWorkbench()
   else throw new Error(error)
 }
-if (!app.requestSingleInstanceLock({intent})) app.quit()
+if (!app.requestSingleInstanceLock({ intent })) app.quit()
 else {
   app.on('second-instance', (_event, _argv, _cwd, data) => {
     if (data.intent === 'workbench' || data.intent === 'component')
@@ -318,24 +321,27 @@ else {
         if (!isShell(event)) throw new Error('DENIED')
         detach()
       })
-      ipcMain.on('prototype:drop-zone', (event, rect) => {
+      ipcMain.on('prototype:drop-zone', (event, regions) => {
         if (!isShell(event)) return
-        if (rect === null) {
-          dropZone = undefined
-          return
-        }
+        dropZone = null
         const [width, height] = shell.getContentSize()
         if (
-          rect &&
-          ['x', 'y', 'width', 'height'].every(
-            (key) => Number.isFinite(rect[key]) && rect[key] >= 0,
-          ) &&
-          rect.width > 0 &&
-          rect.height > 0 &&
-          rect.x + rect.width <= width + 1 &&
-          rect.y + rect.height <= height + 1
+          Array.isArray(regions) &&
+          regions.length <= 16 &&
+          regions.every(
+            (rect) =>
+              rect &&
+              typeof rect.id === 'string' &&
+              ['x', 'y', 'width', 'height'].every(
+                (k) => Number.isFinite(rect[k]) && rect[k] >= 0,
+              ) &&
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.x + rect.width <= width + 1 &&
+              rect.y + rect.height <= height + 1,
+          )
         )
-          dropZone = rect
+          dropZone = regions
       })
       ipcMain.on('prototype:bounds', (event, bounds) => {
         if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return

@@ -100,6 +100,13 @@ try {
       y: Math.round(content.y + zone.y + 80 - 16),
     }
   }, zone)
+  // Model a pointer on the test title bar without touching the system cursor.
+  await app.evaluate(({ screen, BaseWindow }, id) => {
+    screen.getCursorScreenPoint = () => {
+      const b = BaseWindow.fromId(id).getBounds()
+      return { x: Math.round(b.x + b.width / 2), y: b.y + 16 }
+    }
+  }, info.id)
   const message = (value) =>
     promisify(execFile)(
       'powershell.exe',
@@ -147,9 +154,65 @@ try {
   await message(0x216)
   await position(info.x, info.y)
   await expect(dockShell.getByRole('button', { name: '松开窗口标题栏以停靠' })).toBeVisible()
+  const blocker = await app.evaluate(({ BaseWindow }, id) => {
+    const target = BaseWindow.fromId(id).getBounds()
+    const blocker = new BaseWindow({ ...target, show: false, skipTaskbar: true, alwaysOnTop: true })
+    blocker.showInactive()
+    return blocker.id
+  }, info.id)
+  await message(0x232)
+  await expect(sample.locator('#mode')).toHaveText('独立窗口')
+  await expect(dockShell.locator('.component-drop-preview')).toHaveCount(0)
+  await app.evaluate(({ BaseWindow }, id) => BaseWindow.fromId(id).close(), blocker)
+  await position(info.x, info.y - 500)
+  await message(0x231)
+  await message(0x216)
+  await position(info.x, info.y)
+  await expect(dockShell.locator('.component-drop-preview')).toBeVisible()
   await dockShell.screenshot({ path: path.join(evidence, 'native-drop-preview.png') })
   await message(0x232)
   await expect(sample.locator('#mode')).toHaveText('已停靠')
+  // Every preview must commit to the group under the simulated cursor.
+  await sample.getByRole('button', { name: '分离窗口', exact: true }).click()
+  for (const [direction, u, v] of [
+    ['left', 0.08, 0.5],
+    ['right', 0.92, 0.5],
+    ['above', 0.5, 0.08],
+    ['below', 0.5, 0.92],
+    ['within', 0.5, 0.5],
+  ]) {
+    const group = dockShell
+      .locator('.dv-groupview')
+      .filter({ has: dockShell.getByTestId('module-2') })
+    const box = await group.boundingBox()
+    const origin = await app.evaluate(({ BrowserWindow, BaseWindow }, id) => {
+      const shell = BrowserWindow.getAllWindows()[0].getContentBounds()
+      return { x: shell.x - BaseWindow.fromId(id).getBounds().width / 2, y: shell.y - 16 }
+    }, info.id)
+    await position(info.x, info.y - 500)
+    await message(0x231)
+    await message(0x216)
+    await position(
+      Math.round(origin.x + box.x + box.width * u),
+      Math.round(origin.y + box.y + box.height * v),
+    )
+    await expect(dockShell.locator('.component-drop-preview')).toHaveAttribute(
+      'data-direction',
+      direction,
+    )
+    await message(0x232)
+    await expect(sample.locator('#mode')).toHaveText('已停靠')
+    await expect(dockShell.locator('.dv-groupview')).toHaveCount(direction === 'within' ? 4 : 5)
+    if (direction === 'within') {
+      const merged = dockShell
+        .locator('.dv-groupview')
+        .filter({ has: dockShell.getByRole('tab', { name: '示例组件', exact: true }) })
+      await expect(merged.getByRole('tab', { name: '模块 2', exact: true })).toHaveCount(1)
+    } else {
+      await sample.getByRole('button', { name: '分离窗口', exact: true }).click()
+      await expect(dockShell.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(0)
+    }
+  }
   const grip = await dockShell.getByRole('button', { name: '组件拖出手柄' }).boundingBox()
   // A click/short move and an Escape-cancelled drag must retain the panel.
   await dockShell.mouse.move(grip.x + 50, grip.y + 16)
