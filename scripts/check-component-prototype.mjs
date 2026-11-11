@@ -412,6 +412,17 @@ try {
   await expect.poll(viewVisible).toBe(false)
   await componentTab.click()
   await expect.poll(viewVisible).toBe(true)
+  await moduleTab.click()
+  await expect.poll(viewVisible).toBe(false)
+  const boot = await sample.locator('body').getAttribute('data-boot-id')
+  await promisify(execFile)(
+    executable,
+    [path.join(root, 'host'), `--user-data-dir=${restartProfile}`, '--mode=component'],
+    { env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }, windowsHide: true, timeout: 15000 },
+  )
+  await expect(componentTab).toHaveAttribute('aria-selected', 'true')
+  await expect.poll(viewVisible).toBe(true)
+  expect(await sample.locator('body').getAttribute('data-boot-id')).toBe(boot)
   await background(app)
 } finally {
   await app.close()

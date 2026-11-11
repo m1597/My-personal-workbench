@@ -301,6 +301,7 @@ async function openIntent(request) {
     }
   } else if (await openComponent()) {
     const window = mode === 'docked' ? shell : standalone
+    if (mode === 'docked') shell.webContents.send('prototype:activate')
     if (window.isMinimized()) window.restore()
     show(window)
   } else if (workbenchFile) await openWorkbench()

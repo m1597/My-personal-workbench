@@ -23,6 +23,7 @@ declare global {
       open(): Promise<{ ok: boolean; error?: string }>
       bounds(value: { x: number; y: number; width: number; height: number } | null): void
       detach(release?: { x: number; y: number }): Promise<void>
+      onActivate(callback: () => void): () => void
       subscribe(callback: (state: HostState) => void): () => void
     }
   }
@@ -116,6 +117,7 @@ export function useComponentPrototype(api?: DockviewApi) {
       if (panel.id === 'component-example' && last?.mode === 'docked' && last.phase === 'ready')
         void host.detach()
     })
+    const offActivate = host.onActivate(() => api.getPanel('component-example')?.api.setActive())
     let disposed = false
     const off = host.subscribe(update)
     void host.status().then((state) => {
@@ -156,6 +158,7 @@ export function useComponentPrototype(api?: DockviewApi) {
     }
     frame = requestAnimationFrame(measure)
     return () => {
+      offActivate()
       disposed = true
       layout.dispose()
       drag.dispose()
