@@ -145,18 +145,30 @@ body {
   min-width: 0;
 }
 .sample-fields .sample-queue-list {
-  background: var(--solid-surface);
+  background: var(--menu-surface);
+  backdrop-filter: var(--material-popup);
   color: var(--text);
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius-6);
+  border: 1px solid var(--edge-highlight);
+  border-radius: var(--radius-9);
   box-shadow: var(--shadow-menu);
 }
 .sample-queue-list [role="option"][aria-selected="true"] {
   background: var(--accent-soft);
 }
 @media (prefers-reduced-transparency: reduce) {
+  .sample-fields .sample-queue-list {
+    background: var(--solid-surface);
+    backdrop-filter: none;
+  }
   :root[data-material="acrylic"],
   :root[data-material="acrylic"] .sample-shell.fui-FluentProvider {
     background: var(--base);
+  }
+}
+@media (forced-colors: active) {
+  .sample-fields .sample-queue-list {
+    background: Canvas;
+    color: CanvasText;
+    backdrop-filter: none;
   }
 }

@@ -88,7 +88,27 @@ try {
 
   const queue = sample.getByRole('combobox', { name: '队列选择' })
   await queue.click()
-  await expect(sample.getByRole('listbox')).toHaveCSS('background-color', 'rgb(40, 44, 52)')
+  const listbox = sample.getByRole('listbox')
+  if (await sample.evaluate(() => matchMedia('(forced-colors: active)').matches)) {
+    await expect(listbox).toHaveCSS('backdrop-filter', 'none')
+  } else if (
+    await sample.evaluate(() => matchMedia('(prefers-reduced-transparency: reduce)').matches)
+  ) {
+    await expect(listbox).toHaveCSS('background-color', 'rgb(40, 44, 52)')
+    await expect(listbox).toHaveCSS('backdrop-filter', 'none')
+  } else {
+    const menuColor = await sample.evaluate(() => {
+      const probe = document.createElement('span')
+      probe.style.backgroundColor = 'var(--menu-surface)'
+      document.body.append(probe)
+      const color = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return color
+    })
+    expect(menuColor).toMatch(/^rgba\(/)
+    await expect(listbox).toHaveCSS('background-color', menuColor)
+    await expect(listbox).toHaveCSS('backdrop-filter', 'blur(28px)')
+  }
   await expect(sample.getByRole('option', { selected: true })).toHaveText('示例 A')
   await sample.screenshot({ path: path.join(evidence, 'queue-expanded.png') })
   await queue.press('Escape')
