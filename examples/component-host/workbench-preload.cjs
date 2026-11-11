@@ -45,5 +45,8 @@ function componentBridge(prefix) {
     },
   }
 }
-contextBridge.exposeInMainWorld('componentHost', componentBridge('prototype'))
+contextBridge.exposeInMainWorld('componentHost', {
+  ...componentBridge('prototype'),
+  sampleEnabled: process.argv.includes('--enable-sample-component'),
+})
 contextBridge.exposeInMainWorld('musicDock', componentBridge('music-prototype'))

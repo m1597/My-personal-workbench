@@ -78,6 +78,7 @@ async function createWorkbench() {
     title: 'FitBay',
     webPreferences: {
       preload: path.join(here, 'workbench-preload.cjs'),
+      additionalArguments: componentRoot ? ['--enable-sample-component'] : [],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,

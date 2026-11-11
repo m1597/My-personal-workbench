@@ -11,7 +11,7 @@ import { ComponentTheme } from './ComponentTheme'
 import { WindowMenu } from './WindowMenu'
 import { HelpDialog } from './HelpDialog'
 import { restoreLayout } from './layoutStorage'
-import { ComponentPrototypeButton, useComponentPrototype } from './componentPrototype'
+import { ComponentDropPreview, useComponentPrototype } from './componentPrototype'
 
 export default function App() {
   const [theme] = useState(() => ({
@@ -64,7 +64,7 @@ export default function App() {
         <div className="workbench">
           <header className="app-header">
             <WindowMenu />
-            <ComponentPrototypeButton />
+            <ComponentDropPreview />
             <div className="header-spacer" />
             <div className="workspace-label">
               <span className="accent-dot" />

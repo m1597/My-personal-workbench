@@ -7,28 +7,26 @@ if not exist "node_modules\electron\dist\electron.exe" goto missing_runtime
 if not exist "out\main\index.js" goto missing_build
 if not exist "out\renderer\index.html" goto missing_build
 set "prototype=%workbench_root%\dist\component-prototype"
-set "mode=standalone"
+set "mode=workbench"
 set "profile=%workbench_root%\local\desktop-profile"
 if /i "%~1"=="--manual" set "profile=%workbench_root%\tmp\manual-builtin-windows\profile"
 set "ELECTRON_RUN_AS_NODE="
 set "ELECTRON_RENDERER_URL="
 set "WORKBENCH_TEST_BACKGROUND=0"
 if /i "%~1"=="--check" goto check_component
-if /i "%~1"=="--component" goto check_component
 if /i "%~1"=="--workbench" goto workbench
 for %%M in (1 2 3 4) do if /i "%~1"=="--module-%%M" (
   set "mode=module-%%M"
   goto check_component
 )
 if /i "%~1"=="--music" goto music
-choice /c 1234567 /n /t 5 /d 1 /m "1 工作台，2 示例组件，3 模块1，4 模块2，5 模块3，6 模块4，7 音乐试听（默认 1）："
+choice /c 134567 /n /t 5 /d 1 /m "1 工作台，3 模块1，4 模块2，5 模块3，6 模块4，7 音乐试听（默认 1）："
 if errorlevel 255 goto failed
-if errorlevel 7 goto music
-for %%M in (6 5 4 3) do if errorlevel %%M (
-  set /a "module_number=%%M-2"
+if errorlevel 6 goto music
+for %%M in (5 4 3 2) do if errorlevel %%M (
+  set /a "module_number=%%M-1"
   goto builtin
 )
-if errorlevel 2 goto check_component
 if not errorlevel 1 goto failed
 goto workbench
 :music
@@ -40,19 +38,18 @@ goto check_component
 :workbench
 set "mode=workbench"
 :check_component
-for %%F in (host\package.json host\fitbay.png host\main.mjs host\component-view.mjs host\music-preload.cjs host\music-service.mjs host\music\store.mjs host\music\offline-source.mjs host\builtin-windows.mjs host\builtin-preload.cjs host\native-dock.mjs host\sample-preload.cjs host\workbench-preload.cjs) do if not exist "%prototype%\%%F" goto missing_component
-if /i "%mode%"=="standalone" for %%F in (component.json index.html component.js component.css) do if not exist "%prototype%\component\%%F" goto missing_component
+for %%F in (host\package.json host\fitbay.png host\main.mjs host\component-view.mjs host\music-preload.cjs host\music-service.mjs host\music\store.mjs host\music\offline-source.mjs host\builtin-windows.mjs host\builtin-preload.cjs host\native-dock.mjs host\workbench-preload.cjs) do if not exist "%prototype%\%%F" goto missing_component
 if /i "%~1"=="--check" (
   for %%F in (component.json index.html component.js component.css) do if not exist "%prototype%\music\%%F" goto missing_component
-  echo OK: Workbench, component host, sample and music are ready.
+  echo OK: Workbench, component host and music are ready.
   goto launched
 )
-start "" "node_modules\electron\dist\electron.exe" "%prototype%\host" "--mode=%mode%" "--component=%prototype%\component" "--workbench=%workbench_root%\out\renderer\index.html" "--user-data-dir=%profile%"
+start "" "node_modules\electron\dist\electron.exe" "%prototype%\host" "--mode=%mode%" "--workbench=%workbench_root%\out\renderer\index.html" "--user-data-dir=%profile%"
 :launched
 popd
 exit /b 0
 :missing_component
-echo 示例组件缺少构建文件。请在项目目录运行 npm run build:prototype。
+echo 组件宿主或音乐试听缺少构建文件。请在项目目录运行 npm run build:prototype。
 goto failed
 :missing_runtime
 echo Electron is missing. Run npm ci in the project folder, then try again.

@@ -23,7 +23,7 @@ try {
   await shell.evaluate(() => {
     document.documentElement.dataset.componentDrag = 'true'
   })
-  await shell.getByRole('button', { name: '示例组件', exact: true }).click()
+  await shell.evaluate(() => window.componentHost.open())
   await expect
     .poll(() => shell.evaluate(async () => (await window.componentHost.status()).phase))
     .toBe('attaching')

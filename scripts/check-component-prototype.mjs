@@ -235,7 +235,7 @@ try {
   await message(0x231)
   await message(0x216)
   await position(info.x, info.y)
-  await expect(dockShell.getByRole('button', { name: '松开窗口标题栏以停靠' })).toBeVisible()
+  await expect(dockShell.locator('.component-drop-preview')).toBeVisible()
   const blocker = await app.evaluate(({ BaseWindow, BrowserWindow }) => {
     const target = BrowserWindow.getAllWindows()[0].getBounds()
     const blocker = new BaseWindow({ ...target, show: false, skipTaskbar: true, alwaysOnTop: true })
@@ -548,10 +548,10 @@ const restartProfile = await mkdtemp(path.join(evidence, 'restart-'))
 app = await launch(samplePath, true, 'workbench', restartProfile)
 try {
   const shell = await findPage(app, '/workbench/index.html')
-  await shell.getByRole('button', { name: '示例组件', exact: true }).click()
+  await shell.evaluate(() => window.componentHost.open())
   const sample = await findPage(app, '/component/index.html')
   await expect(sample.locator('#mode')).toHaveText('已停靠')
-  // A toolbar open must never create a second top-level HWND just to hide it.
+  // Opening the sample in the test host must never create a second top-level HWND just to hide it.
   expect(await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows().length)).toBe(1)
   await shell.getByRole('tab', { name: '模块 2', exact: true }).click()
   await expect(shell.getByTestId('module-2')).toBeVisible()
@@ -600,12 +600,9 @@ for (const kind of ['missing', 'incompatible']) {
   app = await launch(fixture, true, 'workbench')
   try {
     const shell = await findPage(app, '/workbench/index.html')
-    await shell.getByRole('button', { name: '示例组件', exact: true }).click()
-    await expect(
-      shell.getByRole('button', {
-        name: new RegExp(kind === 'missing' ? 'NOT_INSTALLED' : 'INCOMPATIBLE'),
-      }),
-    ).toBeVisible()
+    const result = await shell.evaluate(() => window.componentHost.open())
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain(kind === 'missing' ? 'NOT_INSTALLED' : 'INCOMPATIBLE')
     await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
     if (kind === 'missing') {
       await cp(samplePath, fixture, { recursive: true })
@@ -658,7 +655,7 @@ for (const kind of ['missing', 'incompatible']) {
       await shell.reload()
       await expect(originalGroup.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(1)
       await expect(shell.getByRole('button', { name: '显示模块 1' })).toHaveClass(/is-active/)
-      await shell.getByRole('button', { name: '示例组件', exact: true }).click()
+      await shell.evaluate(() => window.componentHost.open())
       const sample = await findPage(app, '/missing/index.html')
       await expect(sample.locator('#mode')).toHaveText('已停靠')
       await expect(shell.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(1)

@@ -24,6 +24,7 @@ declare global {
   interface Window {
     musicDock?: Window['componentHost']
     componentHost?: {
+      sampleEnabled?: boolean
       dropZone(value: Region[] | null): void
       status(): Promise<HostState>
       close?(): Promise<void>
@@ -158,7 +159,7 @@ export function useComponentPrototype(
         window.removeEventListener('beforeunload', beforeUnload, true)
       }
     }
-    const offSample = bind(host, 'component-example', '示例组件')
+    const offSample = host.sampleEnabled && bind(host, 'component-example', '示例组件')
     const offMusic = window.musicDock && bind(window.musicDock, 'component-music', '音乐试听')
     let dragging = ''
     let pointer: number | undefined
@@ -249,7 +250,7 @@ export function useComponentPrototype(
     }
     frame = requestAnimationFrame(measure)
     return () => {
-      offSample()
+      if (offSample) offSample()
       offMusic?.()
       builtins?.dispose()
 
@@ -267,44 +268,20 @@ export function useComponentPrototype(
   }, [api, gap, onDetached])
 }
 
-export function ComponentPrototypeButton() {
-  const [message, setMessage] = useState('')
-  const [musicError, setMusicError] = useState('')
+export function ComponentDropPreview() {
   const [sampleOver, setOver] = useState<Target | null>(null)
   const [musicOver, setMusicOver] = useState<Target | null>(null)
   const over = musicOver ?? sampleOver
   useEffect(() => window.componentHost?.subscribe((value) => setOver(value.dragOver ?? null)), [])
   useEffect(() => window.musicDock?.subscribe((value) => setMusicOver(value.dragOver ?? null)), [])
-  if (!window.componentHost) return null
   return (
-    <>
-      {window.musicDock && (
-        <Button
-          appearance="subtle"
-          title={musicError || '打开音乐试听'}
-          onClick={async () => setMusicError((await window.musicDock?.open())?.error ?? '')}
-        >
-          {musicOver ? '松开窗口标题栏以停靠' : musicError || '音乐试听'}
-        </Button>
-      )}
-      {over && (
-        <div
-          className="component-drop-preview"
-          data-direction={over.direction}
-          style={{ left: over.x, top: over.y, width: over.width, height: over.height }}
-        />
-      )}
-      <Button
-        appearance="subtle"
-        title={message || '连接独立部署的示例组件'}
-        onClick={async () => {
-          const result = await window.componentHost?.open()
-          setMessage(result?.error ?? '')
-        }}
-      >
-        {sampleOver ? '松开窗口标题栏以停靠' : message || '示例组件'}
-      </Button>
-    </>
+    over && (
+      <div
+        className="component-drop-preview"
+        data-direction={over.direction}
+        style={{ left: over.x, top: over.y, width: over.width, height: over.height }}
+      />
+    )
   )
 }
 

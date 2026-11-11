@@ -119,7 +119,7 @@ export function restoreLayout(api: DockviewApi, gap: number) {
       }
       applyLayout(api, saved.layout, gap)
       const slot = api.getPanel('component-example')
-      if (slot && !window.componentHost) api.removePanel(slot)
+      if (slot && !window.componentHost?.sampleEnabled) api.removePanel(slot)
       const music = api.getPanel('component-music')
       if (music && !window.musicDock) api.removePanel(music)
       return

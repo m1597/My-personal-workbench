@@ -11,7 +11,6 @@ const profile = path.join(evidence, 'profile')
 const args = [
   path.join(root, 'host'),
   '--user-data-dir=' + profile,
-  '--component=' + path.join(root, 'component'),
   '--workbench=' + path.resolve('out/renderer/index.html'),
 ]
 const env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
@@ -180,10 +179,34 @@ try {
   await expect
     .poll(() => app.windows().filter((p) => p.url().includes('/music/index.html')).length)
     .toBe(0)
-  await shell.getByRole('button', { name: '音乐试听', exact: true }).click()
+  const windowMenu = shell.getByRole('button', { name: '窗口', exact: true })
+  const musicItem = shell.getByRole('menuitem', { name: '音乐试听', exact: true })
+  await expect(shell.getByRole('button', { name: /^(音乐试听|示例组件)$/ })).toHaveCount(0)
+  await windowMenu.click()
+  await expect(shell.getByRole('menuitem')).toHaveText([
+    '模块 1',
+    '模块 2',
+    '模块 3',
+    '模块 4',
+    '音乐试听',
+    '重置布局',
+  ])
+  // Off-screen capture cannot composite the Windows acrylic background.
+  await shell.evaluate(() => {
+    delete document.documentElement.dataset.backdrop
+  })
+  await shell.screenshot({ path: path.join(evidence, 'window-menu.png'), animations: 'disabled' })
+  await musicItem.click()
   const reopened = await page(app, '/music/index.html')
   await expect(reopened.getByText('分离窗口', { exact: true })).toBeVisible()
   expect(await reopened.locator('audio').evaluate((a) => a.paused)).toBe(true)
+  await shell.getByRole('tab', { name: '模块 2', exact: true }).click()
+  await windowMenu.click()
+  await musicItem.click()
+  await expect(shell.getByRole('tab', { name: '音乐试听', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
   await reopened.evaluate(() => window.music.clean())
   expect(
     await reopened.evaluate(
@@ -202,6 +225,40 @@ try {
   await expect(shell.getByRole('tab', { name: '音乐试听', exact: true })).toBeVisible()
   const music = await page(app, '/music/index.html')
   expect(await music.locator('audio').evaluate((a) => a.paused)).toBe(true)
+  await shell.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
+  await shell.evaluate(() => {
+    window.addEventListener(
+      'beforeunload',
+      () => {
+        const saved = JSON.parse(localStorage.getItem('workbench.layout'))
+        const addSample = (node) => {
+          if (node.type === 'branch') node.data.forEach(addSample)
+          else if (node.data.views.includes('module-1')) node.data.views.push('component-example')
+        }
+        addSample(saved.layout.grid.root)
+        saved.layout.panels['component-example'] = {
+          id: 'component-example',
+          contentComponent: 'component-slot',
+          title: '示例组件',
+        }
+        localStorage.setItem('workbench.layout', JSON.stringify(saved))
+      },
+      { once: true },
+    )
+  })
+  await shell.reload()
+  await expect(shell.getByRole('tab')).toHaveCount(4)
+  await expect(shell.getByRole('tab', { name: '模块 4', exact: true })).toHaveCount(0)
+  await expect(shell.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(0)
+  await expect(shell.getByRole('tab', { name: '音乐试听', exact: true })).toBeVisible()
+  await expect
+    .poll(() =>
+      shell.evaluate(() => {
+        const { layout } = JSON.parse(localStorage.getItem('workbench.layout'))
+        return Object.keys(layout.panels).sort()
+      }),
+    )
+    .toEqual(['component-music', 'module-1', 'module-2', 'module-3'])
 } finally {
   await app.close()
 }
