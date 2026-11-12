@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!package-lock.json", "!docs/images", "!!.agents/skills/impeccable"]
+    "includes": [
+      "**",
+      "!package-lock.json",
+      "!docs/images",
+      "!!.agents/skills/impeccable",
+      "!!.agents/skills/diagnosing-bugs",
+      "!!.agents/skills/improve-codebase-architecture",
+      "!!.agents/skills/vercel-react-best-practices"
+    ]
   },
   "formatter": {
     "enabled": true,
