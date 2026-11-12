@@ -33,7 +33,7 @@ export function MusicGuide({
       </p>
       {step === 0 && connection && (
         <div>
-          本项目的 Codex 已配置 fitbay_music。其他本机客户端用 stdio 启动：
+          在本机 MCP 客户端添加 stdio 服务，使用以下命令启动。
           <code>node "{script}"</code>
         </div>
       )}

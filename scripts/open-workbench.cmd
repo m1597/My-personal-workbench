@@ -30,7 +30,6 @@ set "mode=workbench"
 for %%F in (host\music-plugins.mjs host\library-tools.mjs host\library-backup.mjs host\plugin-catalog.json) do if not exist "%prototype%\%%F" goto missing_component
 for %%F in (host\package.json host\installed-products.mjs host\fitbay.png host\main.mjs host\component-view.mjs host\music-preload.cjs host\music-service.mjs host\music-model.mjs host\lx-music.mjs host\lx-source-catalog.mjs host\music-source-pipe.mjs host\music-source-private.ps1 host\lx-worker.mjs host\lx-net.mjs host\lx-runtime.mjs host\lx-guest.js host\lx-audio-check.mjs host\desktop-lyrics.mjs host\music-lyrics.mjs host\lyric-preload.cjs host\lyric-window.html host\flac-stream.mjs host\local-stream.mjs host\music\local-files.mjs host\music\local-library.mjs host\music\library-worker.mjs host\music\store.mjs host\music\offline-source.mjs host\builtin-windows.mjs host\builtin-preload.cjs host\native-dock.mjs host\workbench-preload.cjs) do if not exist "%prototype%\%%F" goto missing_component
 if /i "%~1"=="--check" (
-  for %%F in (wave rules tags) do if not exist "%prototype%\plugin-packs\%%F.fitbayplugin" goto missing_component
   for %%F in (component.json index.html component.js component.css) do if not exist "%prototype%\music\%%F" goto missing_component
   echo OK: Workbench, component host and music are ready.
   goto launched
