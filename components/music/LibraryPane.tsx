@@ -2,6 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Checkbox,
+  Dialog,
+  DialogSurface,
+  DialogBody,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Menu,
+  MenuTrigger,
+  MenuPopover,
+  MenuList,
+  MenuItem,
   Input,
   Popover,
   PopoverSurface,
@@ -25,7 +36,7 @@ import {
 } from 'lucide-react'
 type FolderEntry = { id: string; name: string }
 type FolderNode = FolderEntry & { children: Map<string, FolderNode> }
-export type Playlist = { id: string; name: string; tracks: string[] }
+export type Playlist = { id: string; name: string; tracks: string[]; system?: boolean }
 export type LocalTrack = {
   id: string
   title: string
@@ -33,6 +44,8 @@ export type LocalTrack = {
   folders: FolderEntry[]
   album: string
   duration: number
+  recommendationSource?: string
+  listed: number
   available: number
 }
 export type ImportJob = {
@@ -63,7 +76,12 @@ type Props = {
   importFiles: (mode: 'folder' | 'files') => void
   cancel: () => void
   relocate: (id: string) => void
-  remove: (id: string) => void
+  playRow: (id: string) => void
+  error: string
+  remove: (id: string, trash: boolean) => Promise<boolean>
+  renameList: (id: string, name: string) => Promise<boolean>
+  deleteList: (id: string) => Promise<boolean>
+  removeFolder: (id: string) => Promise<boolean>
 }
 export function LibraryPane({
   tracks,
@@ -84,6 +102,11 @@ export function LibraryPane({
   cancel,
   relocate,
   remove,
+  error,
+  playRow,
+  renameList,
+  deleteList,
+  removeFolder,
 }: Props) {
   const [limit, setLimit] = useState(100)
   const sentinel = useRef<HTMLLIElement>(null)
@@ -103,6 +126,29 @@ export function LibraryPane({
   const [sidebar, setSidebar] = useState(false)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
+  const [action, setAction] = useState<{
+    kind: 'rename' | 'deleteList' | 'folder' | 'song'
+    id: string
+    name: string
+  }>()
+  const [editName, setEditName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [actionFailed, setActionFailed] = useState(false)
+  const saving = useRef(false)
+  const confirm = async (task: () => Promise<unknown>) => {
+    if (saving.current) return
+    setActionFailed(false)
+    saving.current = true
+    setSubmitting(true)
+    try {
+      if (await task()) setAction(undefined)
+      else setActionFailed(true)
+    } finally {
+      saving.current = false
+      setSubmitting(false)
+    }
+  }
+  useEffect(() => setActionFailed(false), [action])
   const folders = useMemo(() => {
     const root = new Map<string, FolderNode>()
     for (const track of tracks) {
@@ -155,15 +201,26 @@ export function LibraryPane({
                 }
               />
             )}
-            <Button
-              appearance="subtle"
-              size="small"
-              aria-pressed={collection === node.id}
-              icon={<Folder size={15} />}
-              onClick={() => choose(node.id)}
-            >
-              {node.name}
-            </Button>
+            <Menu openOnContext>
+              <MenuTrigger disableButtonEnhancement>
+                <Button
+                  appearance="subtle"
+                  size="small"
+                  aria-pressed={collection === node.id}
+                  icon={<Folder size={15} />}
+                  onClick={() => choose(node.id)}
+                >
+                  {node.name}
+                </Button>
+              </MenuTrigger>
+              <MenuPopover className="component-popup">
+                <MenuList>
+                  <MenuItem onClick={() => setAction({ kind: 'folder', ...node })}>
+                    从曲库移除文件夹
+                  </MenuItem>
+                </MenuList>
+              </MenuPopover>
+            </Menu>
           </div>
           {expanded.has(node.id) && (
             <div className="folder-children">{folderRows(node.children)}</div>
@@ -227,18 +284,41 @@ export function LibraryPane({
             </Button>
           </form>
         )}
-        {playlists.map((list) => (
-          <Button
-            key={list.id}
-            appearance="subtle"
-            size="small"
-            aria-pressed={collection === list.id}
-            icon={<ListMusic size={15} />}
-            onClick={() => choose(list.id)}
-          >
-            {list.name}
-          </Button>
-        ))}
+        {playlists.map((list) => {
+          const trigger = (
+            <Button
+              key={list.id}
+              appearance="subtle"
+              size="small"
+              aria-pressed={collection === list.id}
+              icon={<ListMusic size={15} />}
+              onClick={() => choose(list.id)}
+            >
+              {list.name}
+            </Button>
+          )
+          if (list.system) return trigger
+          return (
+            <Menu key={list.id} openOnContext>
+              <MenuTrigger disableButtonEnhancement>{trigger}</MenuTrigger>
+              <MenuPopover className="component-popup">
+                <MenuList>
+                  <MenuItem
+                    onClick={() => {
+                      setEditName(list.name)
+                      setAction({ kind: 'rename', ...list })
+                    }}
+                  >
+                    重命名歌单
+                  </MenuItem>
+                  <MenuItem onClick={() => setAction({ kind: 'deleteList', ...list })}>
+                    删除歌单
+                  </MenuItem>
+                </MenuList>
+              </MenuPopover>
+            </Menu>
+          )
+        })}
       </aside>
       <section className="local-library" aria-label="本地歌曲库">
         <div className="library-title">
@@ -296,7 +376,20 @@ export function LibraryPane({
             </div>
             <ul>
               {rows.slice(0, limit).map((t) => (
-                <li key={t.id} data-active={active === t.id} className="library-row">
+                <li
+                  key={t.id}
+                  data-active={active === t.id}
+                  className="library-row"
+                  onDoubleClick={(e) => {
+                    if (
+                      t.available &&
+                      e.target instanceof Element &&
+                      e.currentTarget.contains(e.target) &&
+                      !e.target.closest('button, input, .track-actions, [role="button"]')
+                    )
+                      playRow(t.id)
+                  }}
+                >
                   <Button
                     size="small"
                     appearance="subtle"
@@ -308,6 +401,11 @@ export function LibraryPane({
                   <div className="library-name">
                     <strong title={t.title}>{t.title}</strong>
                     <small title={t.artist}>{t.artist}</small>
+                    {t.recommendationSource && (
+                      <small title={t.recommendationSource}>
+                        推荐来源 · {t.recommendationSource}
+                      </small>
+                    )}
                     {!t.available && <small>文件不可用</small>}
                   </div>
                   <span className="library-album" title={t.album}>
@@ -327,17 +425,19 @@ export function LibraryPane({
                       </PopoverTrigger>
                       <PopoverSurface className="component-popup playlist-options">
                         <strong>我的歌单</strong>
-                        {playlists.length ? (
-                          playlists.map((list) => (
-                            <Checkbox
-                              key={list.id}
-                              label={list.name}
-                              checked={list.tracks.includes(t.id)}
-                              onChange={(_, v) =>
-                                void membership(list.id, t.id, v.checked === true)
-                              }
-                            />
-                          ))
+                        {playlists.some((p) => !p.system) ? (
+                          playlists
+                            .filter((p) => !p.system)
+                            .map((list) => (
+                              <Checkbox
+                                key={list.id}
+                                label={list.name}
+                                checked={list.tracks.includes(t.id)}
+                                onChange={(_, v) =>
+                                  void membership(list.id, t.id, v.checked === true)
+                                }
+                              />
+                            ))
                         ) : (
                           <small>在曲库导航中点「＋」新建歌单。</small>
                         )}
@@ -359,7 +459,7 @@ export function LibraryPane({
                       title="从曲库移除"
                       aria-label={'从曲库移除' + t.title}
                       icon={<Trash2 size={15} />}
-                      onClick={() => remove(t.id)}
+                      onClick={() => setAction({ kind: 'song', id: t.id, name: t.title })}
                     />
                   </div>
                 </li>
@@ -383,6 +483,99 @@ export function LibraryPane({
           </div>
         )}
       </section>
+      {action && (
+        <Dialog
+          open
+          onOpenChange={(_, next) => {
+            if (!next.open && !saving.current) setAction(undefined)
+          }}
+        >
+          <DialogSurface className="component-popup library-action-dialog">
+            <DialogBody>
+              <DialogTitle>
+                {
+                  {
+                    song: '移除歌曲',
+                    rename: '重命名歌单',
+                    deleteList: '删除歌单',
+                    folder: '移除文件夹',
+                  }[action.kind]
+                }
+              </DialogTitle>
+              <DialogContent>
+                {action.kind === 'rename' ? (
+                  <Input
+                    aria-label="新歌单名称"
+                    maxLength={80}
+                    value={editName}
+                    onChange={(_, v) => setEditName(v.value)}
+                  />
+                ) : action.kind === 'song' ? (
+                  <>从 FitBay 移除「{action.name}」会同步移除其歌单引用，原文件保留。</>
+                ) : action.kind === 'folder' ? (
+                  <>
+                    移除「{action.name}
+                    」及其子文件夹的曲库索引。原文件保留，已加入歌单的歌曲仍可从歌单播放。
+                  </>
+                ) : (
+                  <>删除「{action.name}」及其歌单内的引用。曲库和音乐文件保留。</>
+                )}
+                {actionFailed && error && <p role="alert">{error}</p>}
+              </DialogContent>
+              <DialogActions fluid>
+                {action.kind === 'song' ? (
+                  <>
+                    <Button
+                      appearance="primary"
+                      disabled={submitting}
+                      onClick={() => void confirm(() => remove(action.id, false))}
+                    >
+                      仅从 FitBay 移除
+                    </Button>
+                    {playlists.some((list) => list.id === collection && !list.system) && (
+                      <Button
+                        disabled={submitting}
+                        onClick={() => void confirm(() => membership(collection, action.id, false))}
+                      >
+                        仅从当前歌单移除
+                      </Button>
+                    )}
+                    <Button
+                      disabled={submitting}
+                      onClick={() => void confirm(() => remove(action.id, true))}
+                    >
+                      移至系统回收站…
+                    </Button>
+                  </>
+                ) : action.kind === 'rename' ? (
+                  <Button
+                    appearance="primary"
+                    disabled={submitting || !editName.trim()}
+                    onClick={() => void confirm(() => renameList(action.id, editName))}
+                  >
+                    保存名称
+                  </Button>
+                ) : (
+                  <Button
+                    appearance="primary"
+                    disabled={submitting}
+                    onClick={() =>
+                      void confirm(() =>
+                        action.kind === 'folder' ? removeFolder(action.id) : deleteList(action.id),
+                      )
+                    }
+                  >
+                    {action.kind === 'folder' ? '确认移除文件夹' : '确认删除歌单'}
+                  </Button>
+                )}
+                <Button disabled={submitting} onClick={() => setAction(undefined)}>
+                  取消
+                </Button>
+              </DialogActions>
+            </DialogBody>
+          </DialogSurface>
+        </Dialog>
+      )}
     </div>
   )
 }

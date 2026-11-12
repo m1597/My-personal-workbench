@@ -88,6 +88,10 @@ declare global {
       cancelImport(): Promise<void>
       refreshLocal(): Promise<void>
       removeLocal(id: string): Promise<void>
+      trashLocal(id: string): Promise<boolean>
+      removeFolder(id: string): Promise<string[]>
+      renamePlaylist(id: string, name: string): Promise<void>
+      deletePlaylist(id: string): Promise<void>
       relocateLocal(id: string): Promise<void>
       mediaFailed(id: string, url: string): Promise<void>
       localSource(id: string): Promise<string>
@@ -213,7 +217,9 @@ function Music() {
   const memberIds = new Set(playlist?.tracks)
   const categoryRows = (state?.localTracks ?? []).filter(
     (row) =>
-      collection === 'all' || memberIds.has(row.id) || row.folders.some((f) => f.id === collection),
+      (collection === 'all' && !!row.listed) ||
+      memberIds.has(row.id) ||
+      row.folders.some((f) => f.id === collection),
   )
   const localRows = categoryRows.filter((row) =>
     [row.title, row.artist, row.album].some((value) =>
@@ -435,10 +441,22 @@ function Music() {
             cancel={() => void act(() => host.cancelImport())}
             play={(id) => void act(() => startTrack(id))}
             relocate={(id) => void act(() => host.relocateLocal(id))}
-            remove={(id) =>
-              void act(async () => {
+            error={error}
+            playRow={(id) => void act(() => play(id, visibleQueue))}
+            renameList={(id, name) => act(() => host.renamePlaylist(id, name))}
+            deleteList={(id) => act(() => host.deletePlaylist(id))}
+            removeFolder={(id) =>
+              act(async () => {
+                const removed = await host.removeFolder(id)
+                if (removed.includes(current.current)) await end(false)
+              })
+            }
+            remove={(id, trash) =>
+              act(async () => {
+                if (trash) {
+                  if (!(await host.trashLocal(id))) return
+                } else await host.removeLocal(id)
                 if (current.current === id) await end(false)
-                await host.removeLocal(id)
               })
             }
           />

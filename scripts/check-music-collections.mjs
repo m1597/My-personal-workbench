@@ -126,14 +126,105 @@ try {
   await button('收藏').click()
   await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
   await resize(1040)
+  await page.evaluate(() => {
+    delete document.documentElement.dataset.backdrop
+  })
+  await button('通勤').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '重命名歌单' }).click()
+  await page.getByRole('textbox', { name: '新歌单名称' }).fill('收藏')
+  await button('保存名称').click()
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('已有同名歌单')
+  await page.getByRole('textbox', { name: '新歌单名称' }).fill('通勤精选')
+  await button('保存名称').click()
+  await expect(button('通勤精选')).toBeVisible()
+  await button('通勤精选').click()
+  await button('从曲库移除晨间').click()
+  await button('仅从当前歌单移除').click()
+  await expect(page.locator('.library-name strong')).toHaveText(['雨夜'])
+  await button('收藏').click()
+  await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
   await button('展开我的音乐').click()
-  await button('现场').click()
+  await button('录音').click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '从曲库移除文件夹' })).toBeVisible()
+  await page.screenshot({ path: path.join(evidence, 'folder-menu.png'), animations: 'disabled' })
+  await page.getByRole('menuitem', { name: '从曲库移除文件夹' }).click()
+  await button('确认移除文件夹').click()
+  await expect(button('录音')).toHaveCount(0)
+  await page.locator('.library-name strong').dblclick()
+  await expect(button('暂停晨间')).toBeVisible()
+  await button('全部歌曲').click()
+  await expect(page.locator('.library-name strong')).toHaveText(['雨夜'])
+  await page.locator('.library-name strong').click()
+  await expect(button('播放雨夜')).toBeVisible()
+  await page.locator('.library-name strong').dblclick()
+  await expect(button('暂停雨夜')).toBeVisible()
+  await button('管理歌单雨夜').click()
+  await expect(button('暂停雨夜')).toBeVisible()
+  await page.keyboard.press('Escape')
   await button('从曲库移除雨夜').click()
-  await expect(page.getByRole('heading', { name: '全部歌曲', exact: true })).toBeVisible()
-  await expect(page.locator('.library-row')).toHaveCount(2)
+  await page.screenshot({ path: path.join(evidence, 'remove-track.png'), animations: 'disabled' })
+  await button('仅从 FitBay 移除').click()
+  await expect(page.locator('.library-row')).toHaveCount(0)
+  await button('通勤精选').click()
+  await expect(page.locator('.library-row')).toHaveCount(0)
+  await button('通勤精选').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '删除歌单' }).click()
+  await button('确认删除歌单').click()
+  await expect(button('通勤精选')).toHaveCount(0)
   for (const [i, title] of titles.entries())
     assert.equal((await stat(path.join(root, directories[i], title + '.wav'))).size, wave.length)
-  console.log('PASS 文件夹层级、跨目录和多歌单、队列、重启与原件。截图 ' + evidence)
+
+  const file = path.join(root, directories[1], titles[1] + '.wav')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, file)
+  await page.evaluate(() => window.music.importLocal('files'))
+  await expect
+    .poll(() => page.evaluate(async () => (await window.music.state()).importJob.running))
+    .toBe(false)
+  await page.getByRole('tab', { name: '下载音乐' }).click()
+  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await button('全部歌曲').click()
+  await expect(page.locator('.library-name strong')).toHaveText(['海边'])
+  const trash = async () => {
+    await button('从曲库移除海边').click()
+    await button('移至系统回收站…').click()
+  }
+  await app.evaluate(({ dialog }, expected) => {
+    dialog.showMessageBox = async (opts) => {
+      if (opts.detail !== expected || opts.defaultId !== 0 || opts.cancelId !== 0)
+        throw Error('路径或取消选项错误')
+      return { response: 0 }
+    }
+  }, file)
+  await trash()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  assert.equal((await stat(file)).size, wave.length)
+  await app.evaluate(({ dialog, shell }, expected) => {
+    dialog.showMessageBox = async (opts) => {
+      if (opts.detail !== expected || opts.buttons[1] !== '移至回收站')
+        throw Error('回收站确认路径错误')
+      return { response: 1 }
+    }
+    const original = shell.trashItem
+    shell.trashItem = async (target) => {
+      shell.trashItem = original
+      if (target !== expected) throw Error('错误路径')
+      throw Error('模拟系统回收站失败')
+    }
+  }, file)
+  await trash()
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('曲库记录已保留')
+  assert.equal((await stat(file)).size, wave.length)
+  await button('移至系统回收站…').click()
+  await expect(page.locator('.library-row')).toHaveCount(0)
+  await assert.rejects(stat(file), { code: 'ENOENT' })
+  await button('收藏').click()
+  await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
+  console.log(
+    'PASS 文件夹移除保留歌单播放、重命名、删除歌单、单歌移除范围、双击播放、回收站取消/失败/成功。截图 ' +
+      evidence,
+  )
 } finally {
   await app.close()
 }

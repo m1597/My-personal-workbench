@@ -3,6 +3,12 @@ import { createHash, randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
 import { pathKey, regularFile } from './local-files.mjs'
 
+const folderKey = (dir) => createHash('sha256').update(pathKey(dir)).digest('hex')
+function playlistName(name) {
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > 80)
+    throw Error('歌单名称须为 1 至 80 个字符')
+  return name.trim()
+}
 export class LocalLibrary {
   constructor(store) {
     this.store = store
@@ -23,6 +29,13 @@ export class LocalLibrary {
         );
         CREATE INDEX IF NOT EXISTS playlist_track_lookup ON playlist_tracks(track);
       `)
+      if (
+        !this.db
+          .prepare('PRAGMA table_info(local_tracks)')
+          .all()
+          .some((col) => col.name === 'listed')
+      )
+        this.db.exec('ALTER TABLE local_tracks ADD COLUMN listed INTEGER NOT NULL DEFAULT 1')
       if (!store.get('local-index-v1')) {
         for (const row of this.db.prepare('SELECT track,file FROM library').all())
           this.saved(row.track, row.file)
@@ -54,7 +67,7 @@ export class LocalLibrary {
     if (replacing || existing)
       this.db
         .prepare(
-          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,available=1,unplayable=0 WHERE id=?',
+          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,available=1,unplayable=0,listed=1 WHERE id=?',
         )
         .run(...values, replacing ?? existing.id)
     else
@@ -74,10 +87,10 @@ export class LocalLibrary {
     )
     const rows = this.db
       .prepare(
-        'SELECT id,title,artist,album,duration,available,file FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id',
+        'SELECT id,title,artist,album,duration,available,listed,file FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id',
       )
       .all()
-    const parents = new Set(rows.map((r) => pathKey(path.dirname(r.file))))
+    const parents = new Set(rows.filter((r) => r.listed).map((r) => pathKey(path.dirname(r.file))))
     const cached = new Map()
     function folders(dir) {
       if (cached.has(dir)) return cached.get(dir)
@@ -87,13 +100,16 @@ export class LocalLibrary {
       let start = ancestors.findIndex((d) => roots.has(pathKey(d)))
       if (start < 0) start = ancestors.findIndex((d) => parents.has(pathKey(d)))
       const result = ancestors.slice(start).map((d) => ({
-        id: createHash('sha256').update(pathKey(d)).digest('hex'),
+        id: folderKey(d),
         name: path.basename(d) || path.parse(d).root,
       }))
       cached.set(dir, result)
       return result
     }
-    return rows.map(({ file, ...row }) => ({ ...row, folders: folders(path.dirname(file)) }))
+    return rows.map(({ file, ...row }) => ({
+      ...row,
+      folders: row.listed ? folders(path.dirname(file)) : [],
+    }))
   }
   playlists() {
     const lists = this.db.prepare('SELECT id,name FROM playlists ORDER BY rowid').all()
@@ -106,15 +122,52 @@ export class LocalLibrary {
     return [...byId.values()]
   }
   createPlaylist(name) {
-    if (typeof name !== 'string' || !name.trim() || name.trim().length > 80)
-      throw Error('歌单名称须为 1 至 80 个字符')
     const id = randomUUID()
     if (
-      !this.db.prepare('INSERT OR IGNORE INTO playlists(id,name) VALUES(?,?)').run(id, name.trim())
-        .changes
+      !this.db
+        .prepare('INSERT OR IGNORE INTO playlists(id,name) VALUES(?,?)')
+        .run(id, playlistName(name)).changes
     )
       throw Error('已有同名歌单')
     return id
+  }
+  renamePlaylist(id, name) {
+    if (
+      !this.db
+        .prepare('UPDATE OR IGNORE playlists SET name=? WHERE id=?')
+        .run(playlistName(name), id).changes
+    )
+      throw Error('已有同名歌单或歌单已移除')
+  }
+  deletePlaylist(id) {
+    if (!this.db.prepare('DELETE FROM playlists WHERE id=?').run(id).changes)
+      throw Error('未找到歌单')
+  }
+  removeFolder(id) {
+    if (this.worker) throw Error('请等待当前导入结束')
+    const rows = this.list().filter((row) => row.folders.some((folder) => folder.id === id))
+    if (!rows.length) throw Error('未找到文件夹')
+    let dir = path.dirname(this.row(rows[0].id).file)
+    while (folderKey(dir) !== id) {
+      if (path.dirname(dir) === dir) throw Error('文件夹已变化')
+      dir = path.dirname(dir)
+    }
+    const retained = new Set(this.playlists().flatMap((list) => list.tracks))
+    const detached = this.db.prepare('UPDATE local_tracks SET listed=0 WHERE id=?')
+    const removed = []
+    for (const row of rows) {
+      if (retained.has(row.id)) detached.run(row.id)
+      else {
+        this.remove(row.id)
+        removed.push(row.id)
+      }
+    }
+    for (const root of this.db.prepare('SELECT dir FROM music_roots').all()) {
+      const rel = path.relative(dir, root.dir)
+      if (!path.isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + path.sep))
+        this.db.prepare('DELETE FROM music_roots WHERE dir=?').run(root.dir)
+    }
+    return removed
   }
   setMembership(playlist, track, added) {
     if (typeof playlist !== 'string' || typeof track !== 'string' || typeof added !== 'boolean')

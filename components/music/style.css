@@ -573,3 +573,7 @@ li[data-active="true"] .music-track-icon,
     padding-inline: 0;
   }
 }
+
+.library-action-dialog .fui-DialogActions {
+  flex-wrap: wrap;
+}

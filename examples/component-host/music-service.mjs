@@ -1,8 +1,8 @@
-import { openAudio } from './music/local-files.mjs'
+import { openAudio, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
-import { ipcMain, dialog, safeStorage } from 'electron'
+import { ipcMain, dialog, safeStorage, shell } from 'electron'
 import { setTimeout as delay } from 'node:timers/promises'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
@@ -67,14 +67,65 @@ export function musicService(profile, isSender) {
   bind('cancelImport', () => store.library.cancel())
   bind('relocateLocal', (id) => selectLocal('files', text(id)))
   bind('refreshLocal', () => store.library.refresh())
+  bind('renamePlaylist', (id, name) => store.library.renamePlaylist(text(id), name))
+  bind('deletePlaylist', (id) => store.library.deletePlaylist(text(id)))
+  function updateLibrary(remove) {
+    store.db.exec('BEGIN IMMEDIATE')
+    try {
+      const removed = new Set(remove())
+      if (removed.has(store.get('current'))) store.checkpoint('', 0)
+      if (removed.size)
+        store.set(
+          'play-queue',
+          JSON.stringify(
+            JSON.parse(store.get('play-queue') || '[]').filter((id) => !removed.has(id)),
+          ),
+        )
+      store.db.exec('COMMIT')
+      if (removed.has(grant?.id)) grant = null
+      return [...removed]
+    } catch (error) {
+      store.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+  bind('removeFolder', (id) => updateLibrary(() => store.library.removeFolder(text(id))))
+  const forgetTrack = (id) =>
+    updateLibrary(() => {
+      store.library.remove(id)
+      return [id]
+    })
   bind('removeLocal', (id) => {
-    store.library.remove(text(id))
-    if (grant?.id === id) grant = null
-    if (store.get('current') === id) store.checkpoint('', 0)
-    store.set(
-      'play-queue',
-      JSON.stringify(JSON.parse(store.get('play-queue') || '[]').filter((key) => key !== id)),
-    )
+    forgetTrack(text(id))
+  })
+  bind('trashLocal', async (id) => {
+    const row = store.library.row(text(id))
+    if (localDialog || store.library.job.running) throw Error('请等待当前曲库操作结束')
+    localDialog = true
+    const epoch = viewEpoch
+    try {
+      const answer = await dialog.showMessageBox({
+        type: 'warning',
+        title: '移至系统回收站',
+        message: '将这个音频文件移至系统回收站？',
+        detail: row.file,
+        buttons: ['取消', '移至回收站'],
+        defaultId: 0,
+        cancelId: 0,
+      })
+      if (answer.response !== 1 || epoch !== viewEpoch) return false
+      if (store.library.row(id).file !== row.file || !(await regularFile(row.file)))
+        throw Error('文件已变化，曲库记录已保留')
+      try {
+        await shell.trashItem(row.file)
+      } catch {
+        throw Error('无法移至系统回收站，曲库记录已保留')
+      }
+      forgetTrack(id)
+      return true
+    } finally {
+      localDialog = false
+    }
   })
   bind('localSource', async (id) => {
     const epoch = viewEpoch

@@ -222,6 +222,7 @@ try {
   await page.screenshot({ path: path.join(root, 'small.png') })
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
   await page.getByRole('button', { name: '从曲库移除迁移' }).click()
+  await page.getByRole('button', { name: '仅从 FitBay 移除' }).click()
   await expect(page.getByRole('button', { name: '播放迁移' })).toHaveCount(0)
   assert.deepEqual(await readFile(relocated), long)
   await choose(app, [songs])
@@ -251,6 +252,7 @@ try {
   await page.getByRole('tab', { name: '本地曲库' }).click()
   await expect(page.getByRole('button', { name: '重新定位试音 mp3' })).toBeVisible()
   await page.getByRole('button', { name: '从曲库移除潮汐' }).click()
+  await page.getByRole('button', { name: '仅从 FitBay 移除' }).click()
   assert.ok((await stat(path.join(owned, 'saved.wav'))).isFile())
   console.log(
     'PASS 本地曲库四格式、原地导入、重复与取消、迁移重定位、长音频跳转、显示形态和重启。截图 ' +
