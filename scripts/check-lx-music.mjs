@@ -9,6 +9,41 @@ import { _electron as electron, expect } from '@playwright/test'
 import { runSource } from '../examples/component-host/lx-runtime.mjs'
 import { openPublic } from '../examples/component-host/lx-net.mjs'
 import { MusicStore } from '../components/music/store.mjs'
+import { platformSearch } from '../examples/component-host/lx-platform-search.mjs'
+
+const qqRequests = []
+const qqPage = await platformSearch(
+  'tx',
+  '分页测试',
+  2,
+  50,
+  new AbortController().signal,
+  async (url) => {
+    qqRequests.push(url)
+    const req =
+      qqRequests.length === 1
+        ? { code: 2001 }
+        : {
+            code: 0,
+            data: {
+              meta: { sum: 50 },
+              body: {
+                song: {
+                  list: Array(20).fill({ mid: 'test', file: { media_mid: 'test' }, interval: 125 }),
+                },
+              },
+            },
+          }
+    return { statusCode: 200, body: { code: 0, req } }
+  },
+)
+assert.equal(qqRequests.length, 2)
+assert.equal(qqRequests[0], qqRequests[1])
+const qqParams = JSON.parse(new URL(qqRequests[0]).searchParams.get('data')).req.param
+assert.equal(qqParams.num_per_page, 20)
+assert.equal(qqParams.page_num, 2)
+assert.equal(qqPage.hasMore, true)
+assert.equal(qqPage.items.length, 20)
 
 for (const addr of ['http://127.0.0.1', 'http://[::1]', 'http://169.254.169.254', 'file:///tmp/a'])
   await assert.rejects(openPublic(addr))

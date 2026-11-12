@@ -1,6 +1,8 @@
+import { setTimeout as delay } from 'node:timers/promises'
 import { sourceRequest } from './lx-net.mjs'
 
 const names = { tx: 'QQ 音乐', kg: '酷狗音乐' }
+export class CatalogUnavailable extends Error {}
 const labels = ['128k', '320k', 'flac', 'flac24bit']
 function types(sizes, hashes) {
   const list = []
@@ -55,7 +57,15 @@ function kgSong(s) {
     ),
   }
 }
-export async function platformSearch(platform, keyword, page, limit, signal) {
+export async function platformSearch(
+  platform,
+  keyword,
+  page,
+  limit,
+  signal,
+  request = sourceRequest,
+) {
+  const pageSize = platform === 'tx' ? Math.min(limit, 20) : limit
   let url
   if (platform === 'tx') {
     url = new URL('https://u.y.qq.com/cgi-bin/musicu.fcg')
@@ -66,7 +76,7 @@ export async function platformSearch(platform, keyword, page, limit, signal) {
         req: {
           module: 'music.search.SearchCgiService',
           method: 'DoSearchForQQMusicDesktop',
-          param: { query: keyword, page_num: page, num_per_page: limit, search_type: 0, grp: 1 },
+          param: { query: keyword, page_num: page, num_per_page: pageSize, search_type: 0, grp: 1 },
         },
       }),
     )
@@ -84,7 +94,11 @@ export async function platformSearch(platform, keyword, page, limit, signal) {
   const name = names[platform]
   let response
   try {
-    response = await sourceRequest(url.href, { signal })
+    response = await request(url.href, { signal })
+    if (platform === 'tx' && response.statusCode === 200 && response.body?.req?.code === 2001) {
+      await delay(1200, undefined, { signal })
+      response = await request(url.href, { signal })
+    }
   } catch {
     signal.throwIfAborted()
     throw Error(name + '目录连接失败，请稍后重试')
@@ -92,6 +106,8 @@ export async function platformSearch(platform, keyword, page, limit, signal) {
   const b = response.body
   if (response.statusCode !== 200)
     throw Error(name + '目录请求失败（HTTP ' + response.statusCode + '）')
+  if (platform === 'tx' && Number.isInteger(b?.req?.code) && b.req.code !== 0)
+    throw new CatalogUnavailable(name + '目录暂时无法返回搜索结果（业务码 ' + b.req.code + '）')
   const data = platform === 'tx' ? b?.req?.data : b?.data
   const songs = platform === 'tx' ? data?.body?.song?.list : data?.lists
   if (
@@ -106,6 +122,6 @@ export async function platformSearch(platform, keyword, page, limit, signal) {
   const total = platform === 'tx' ? data.meta?.sum : data.total
   return {
     items: items.filter(Boolean),
-    hasMore: songs.length >= limit && (!Number.isFinite(total) || page * limit < total),
+    hasMore: songs.length >= pageSize && (!Number.isFinite(total) || page * pageSize < total),
   }
 }

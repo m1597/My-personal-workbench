@@ -1,6 +1,6 @@
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
 import { titleMatch, artistMatches, inLibrary } from './music-discovery.mjs'
-import { platformSearch } from './lx-platform-search.mjs'
+import { CatalogUnavailable, platformSearch } from './lx-platform-search.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
 import { saveLyrics } from './music-lyrics.mjs'
 import path from 'node:path'
@@ -149,7 +149,15 @@ async function downloadResults(source, track, signal) {
   const pages = new Set()
   let offset = 0
   for (let page = 1; page <= 50 && results.length < 50; page++) {
-    const data = await versions(source, track, signal, 50, page, offset)
+    let data
+    try {
+      data = await versions(source, track, signal, 50, page, offset)
+    } catch (error) {
+      signal.throwIfAborted()
+      if (results.length && error instanceof CatalogUnavailable)
+        return { rows: results, partial: true }
+      throw error
+    }
     signal.throwIfAborted()
     const rows = searchRows(data)
     if (!rows.length) break
@@ -175,7 +183,7 @@ async function downloadResults(source, track, signal) {
     offset += rows.length
     if (data.hasMore === false || (Number.isFinite(data.total) && offset >= data.total)) break
   }
-  return results
+  return { rows: results, partial: false }
 }
 function extension(format) {
   if (format.container === 'FLAC') return '.flac'
@@ -491,8 +499,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       if (!track) throw Error('无效曲目')
       matches.clear()
       const audition = typeof id === 'string' && !id.startsWith('local-')
-      const rows = audition
-        ? searchRows(await versions(src, track, signal))
+      const { rows, partial } = audition
+        ? { rows: searchRows(await versions(src, track, signal)), partial: false }
         : await downloadResults(src, track, signal)
       signal.throwIfAborted()
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
@@ -514,7 +522,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           quality: recordingQualities(src, row),
         })
       }
-      return { items, quality: src.quality }
+      return { items, quality: src.quality, partial }
     }),
   )
   async function transfer(signal, key, quality, auditionId, detailed = false) {

@@ -4,6 +4,7 @@ import type { LocalTrack } from './LibraryPane'
 export type Versions = {
   items: { key: string; title: string; artist: string; album: string; quality?: string[] }[]
   quality: string[]
+  partial?: boolean
 }
 export function DownloadPane({
   tracks,
@@ -226,7 +227,9 @@ export function DownloadPane({
               ))}
             </Dropdown>
           </label>
-          <small>{result.items.length} 个版本</small>
+          <small>
+            {result.items.length} 个版本{result.partial && ' · 后续结果暂时不可用'}
+          </small>
           <ul>
             {result.items.map((item) => (
               <li key={item.key}>
