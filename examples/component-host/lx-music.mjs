@@ -99,7 +99,7 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
       `https://music.163.com/api/search/get?type=1&limit=${limit}&offset=${offset}&s=` + encodeURIComponent(keyword),
       { signal },
     )
-  } catch (e) {
+  } catch {
     signal.throwIfAborted()
     throw new RecordingError('network', '无法连接在线目录，请检查网络后重试')
   }
