@@ -390,6 +390,12 @@ export function musicService(profile, isSender) {
     )
       store.checkpoint(id, time)
   })
+  bind('heardLocal', (url) => {
+    if (!grant || grant.url !== text(url) || grant.audition) return
+    store.db
+      .prepare('UPDATE local_tracks SET lastHeardAt=? WHERE id=?')
+      .run(Date.now(), grant.libraryId ?? grant.id)
+  })
   bind('release', () => {
     grant = null
     store.release()

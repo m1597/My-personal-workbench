@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
-import { pathKey, regularFile } from './local-files.mjs'
+import { audioFileSize, pathKey } from './local-files.mjs'
 
 const folderKey = (dir) => createHash('sha256').update(pathKey(dir)).digest('hex')
 function playlistName(name) {
@@ -51,6 +51,13 @@ export class LocalLibrary {
             "UPDATE recommended_items SET error='请重新核对该录音的保存许可',diagnosis='unknown' WHERE error=?",
           )
           .run('音乐源未允许永久保存此录音，或仅提供试听')
+      }
+      const trackColumns = this.db.prepare('PRAGMA table_info(local_tracks)').all()
+      if (!trackColumns.some((column) => column.name === 'observedAt')) {
+        this.db.exec(`ALTER TABLE local_tracks ADD COLUMN observedAt INTEGER;
+          ALTER TABLE local_tracks ADD COLUMN lastHeardAt INTEGER;
+          ALTER TABLE local_tracks ADD COLUMN size INTEGER;`)
+        this.db.prepare('UPDATE local_tracks SET observedAt=?').run(Date.now())
       }
       const legacyColumns = new Set(
         this.db
@@ -103,15 +110,15 @@ export class LocalLibrary {
     if (replacing || existing)
       this.db
         .prepare(
-          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,available=1,unplayable=0,listed=1 WHERE id=?',
+          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,size=?,available=1,unplayable=0,listed=1 WHERE id=?',
         )
-        .run(...values, replacing ?? existing.id)
+        .run(...values, row.size ?? null, replacing ?? existing.id)
     else
       this.db
         .prepare(
-          'INSERT INTO local_tracks(path_key,file,title,artist,album,duration,id) VALUES(?,?,?,?,?,?,?)',
+          'INSERT INTO local_tracks(path_key,file,title,artist,album,duration,id,observedAt,size) VALUES(?,?,?,?,?,?,?,?,?)',
         )
-        .run(...values, 'local-' + randomUUID())
+        .run(...values, 'local-' + randomUUID(), Date.now(), row.size ?? null)
     this.changed?.()
     return !!(existing || replacing)
   }
@@ -124,7 +131,7 @@ export class LocalLibrary {
     )
     const rows = this.db
       .prepare(
-        `SELECT id,title,artist,album,duration,available,listed,file,(SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
+        `SELECT id,title,artist,album,duration,available,listed,file,observedAt,lastHeardAt,size,(SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
       )
       .all()
     const parents = new Set(rows.filter((r) => r.listed).map((r) => pathKey(path.dirname(r.file))))
@@ -243,16 +250,19 @@ export class LocalLibrary {
     return row
   }
   async verify(row) {
-    const ok = !row.unplayable && (await regularFile(row.file))
-    if (Number(ok) !== row.available)
+    const size = await audioFileSize(row.file)
+    const ok = !row.unplayable && size !== null
+    if (Number(ok) !== row.available || size !== row.size)
       this.db
-        .prepare('UPDATE local_tracks SET available=? WHERE id=? AND file=?')
-        .run(Number(ok), row.id, row.file)
+        .prepare('UPDATE local_tracks SET available=?,size=? WHERE id=? AND file=?')
+        .run(Number(ok), size, row.id, row.file)
     return ok
   }
   async refresh() {
     this.refreshing ??= (async () => {
-      const rows = this.db.prepare('SELECT id,file,available,unplayable FROM local_tracks').all()
+      const rows = this.db
+        .prepare('SELECT id,file,available,unplayable,size FROM local_tracks')
+        .all()
       for (let i = 0; i < rows.length; i += 16)
         await Promise.all(rows.slice(i, i + 16).map((r) => this.verify(r)))
     })().finally(() => {

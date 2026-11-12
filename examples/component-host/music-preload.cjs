@@ -50,6 +50,7 @@ const names = [
   'cancelBatch',
   'bytes',
   'progress',
+  'heardLocal',
   'release',
   'clean',
   'checked',

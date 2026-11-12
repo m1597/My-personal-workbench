@@ -1,0 +1,26 @@
+.infrequent-filters,
+.infrequent-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+.infrequent-filters label {
+  display: grid;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+}
+.infrequent-filters .fui-Dropdown {
+  min-width: 105px;
+}
+.infrequent p {
+  color: var(--text-secondary);
+}
+.music-shell .infrequent-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--stroke);
+  padding-block: var(--space-8);
+}

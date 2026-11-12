@@ -1,4 +1,5 @@
 import { TrackMenu } from './TrackMenu'
+import { observeListening } from './listening'
 import type { SourceInventory } from './MusicSourcesSettings'
 import {
   MusicSettings,
@@ -145,6 +146,7 @@ declare global {
       cancelBatch(batch: string): Promise<void>
       bytes(id: string): Promise<Uint8Array<ArrayBuffer>>
       progress(id: string, time: number, duration: number): Promise<void>
+      heardLocal(url: string): Promise<void>
       release(): Promise<void>
       clean(): Promise<void>
       checked(id: string, on: boolean): Promise<void>
@@ -188,7 +190,12 @@ function Music() {
   const [tab, setTab] = useState('library'),
     [requestedCollection, setCollection] = useState('all'),
     [search, setSearch] = useState('')
-  const [online, setOnline] = useState<{ row: Item; result: Versions; queueIds: string[] }>()
+  const [online, setOnline] = useState<{
+    row: Item
+    result: Versions
+    queueIds: string[]
+  }>()
+  const [infrequentDays, setInfrequentDays] = useState(90)
   const [resolving, setResolving] = useState(false)
   const [shuffled, setShuffled] = useState<string[] | null>(null)
   const switching = useRef(Promise.resolve())
@@ -197,6 +204,17 @@ function Music() {
     epoch = useRef(0),
     url = useRef('')
   const refresh = async () => setState(await host.state())
+  const heard = useEffectEvent((src: string) => {
+    if (src.startsWith('fitbay-audio:'))
+      void host
+        .heardLocal(src)
+        .then(refresh)
+        .catch((e) => setError(String(e)))
+  })
+  useEffect(() => {
+    if (!audio.current) return
+    return observeListening(audio.current, (src) => heard(src))
+  }, [])
   async function act(fn: () => Promise<unknown>) {
     try {
       setError('')
@@ -253,6 +271,7 @@ function Music() {
   const rows = state?.items.filter((i) => i.batch === batch) ?? []
   const playlist = state?.playlists.find((p) => p.id === requestedCollection)
   const collection =
+    requestedCollection === 'infrequent' ||
     playlist ||
     (requestedCollection !== 'all' &&
       state?.localTracks.some((track) => track.folders.some((f) => f.id === requestedCollection)))
@@ -262,6 +281,9 @@ function Music() {
   const categoryRows = (state?.localTracks ?? []).filter(
     (row) =>
       (collection === 'all' && !!row.listed) ||
+      (collection === 'infrequent' &&
+        !!row.listed &&
+        (row.lastHeardAt ?? row.observedAt) <= Date.now() - infrequentDays * 86400000) ||
       memberIds.has(row.id) ||
       row.folders.some((f) => f.id === collection),
   )
@@ -323,15 +345,15 @@ function Music() {
     const op = switching.current.then(update)
     switching.current = op.catch((e) => setError(String(e)))
   }
-  function startTrack(id: string) {
+  function startTrack(id: string, ids = visibleQueue) {
     if (current.current === id && audio.current) {
       ++epoch.current
       if (audio.current.paused) return audio.current.play()
       audio.current.pause()
       return Promise.resolve()
     }
-    if (shuffled) setShuffled(shuffleQueue(visibleQueue, id))
-    return play(id, visibleQueue)
+    if (shuffled) setShuffled(shuffleQueue(ids, id))
+    return play(id, ids)
   }
   function resumeOrStart() {
     if (!primary) return Promise.resolve()
@@ -536,6 +558,8 @@ function Music() {
             tracks={state?.localTracks ?? []}
             playlists={state?.playlists ?? []}
             collection={collection}
+            days={infrequentDays}
+            changeDays={setInfrequentDays}
             select={(id) => {
               setCollection(id)
               setSearch('')
@@ -553,7 +577,7 @@ function Music() {
             active={now}
             playing={!paused}
             cancel={() => void act(() => host.cancelImport())}
-            play={(id) => void act(() => startTrack(id))}
+            play={(id, ids) => void act(() => startTrack(id, ids))}
             relocate={(id) => void act(() => host.relocateLocal(id))}
             error={error}
             onQueue={onQueue}
@@ -567,14 +591,17 @@ function Music() {
                 if (removed.includes(current.current)) await end(false)
               })
             }
-            remove={(id, trash) =>
-              act(async () => {
+            remove={async (id, trash) => {
+              let removed = false
+              const ok = await act(async () => {
                 if (trash) {
                   if (!(await host.trashLocal(id))) return
                 } else await host.removeLocal(id)
+                removed = true
                 if (current.current === id) await end(false)
               })
-            }
+              return ok && (removed || collection !== 'infrequent')
+            }}
           />
         ) : tab === 'settings' ? (
           state && (

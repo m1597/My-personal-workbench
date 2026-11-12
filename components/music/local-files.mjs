@@ -10,12 +10,17 @@ export function pathKey(file) {
   return path.resolve(file).toLowerCase()
 }
 export async function regularFile(file) {
-  if (!Object.hasOwn(audioTypes, path.extname(file).toLowerCase())) return false
+  return (await audioFileSize(file)) !== null
+}
+export async function audioFileSize(file) {
+  if (!Object.hasOwn(audioTypes, path.extname(file).toLowerCase())) return null
   try {
     const info = await lstat(file)
     return info.size > 0 && info.isFile() && pathKey(await realpath(file)) === pathKey(file)
+      ? info.size
+      : null
   } catch {
-    return false
+    return null
   }
 }
 

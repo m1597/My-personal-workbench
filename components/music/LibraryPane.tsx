@@ -1,4 +1,5 @@
 import { TrackMenu } from './TrackMenu'
+import { InfrequentTracks } from './InfrequentTracks'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
@@ -47,6 +48,9 @@ export type LocalTrack = {
   notInterested?: boolean
   listed: number
   available: number
+  observedAt: number
+  lastHeardAt: number | null
+  size: number | null
 }
 export type ImportJob = {
   started?: boolean
@@ -63,6 +67,8 @@ type Props = {
   tracks: LocalTrack[]
   playlists: Playlist[]
   collection: string
+  days: number
+  changeDays: (days: number) => void
   select: (id: string) => void
   create: (name: string) => Promise<boolean>
   membership: (list: string, id: string, added: boolean) => Promise<unknown>
@@ -72,7 +78,7 @@ type Props = {
   job?: ImportJob
   active: string
   playing: boolean
-  play: (id: string) => void
+  play: (id: string, queue?: string[]) => void
   cancel: () => void
   relocate: (id: string) => void
   onQueue: (id: string, next: boolean) => void
@@ -88,6 +94,8 @@ export function LibraryPane({
   tracks,
   playlists,
   collection,
+  days,
+  changeDays,
   select,
   create,
   membership,
@@ -249,6 +257,14 @@ export function LibraryPane({
         >
           全部歌曲
         </Button>
+        <Button
+          appearance="subtle"
+          aria-pressed={collection === 'infrequent'}
+          icon={<ListMusic size={16} />}
+          onClick={() => choose('infrequent')}
+        >
+          不常听
+        </Button>
         <h3>文件夹</h3>
         {folderRows(folders)}
         <div className="playlist-heading">
@@ -321,159 +337,175 @@ export function LibraryPane({
           )
         })}
       </aside>
-      <section className="local-library" aria-label="本地歌曲库">
-        <div className="library-title">
-          <div>
-            <h2>{heading}</h2>
-            <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
-          </div>
-        </div>
-        <Input
-          aria-label="搜索本地歌曲"
-          type="search"
-          placeholder="搜索歌名、艺人或专辑"
-          contentBefore={<Search size={16} />}
-          value={search}
-          onChange={(_, v) => setSearch(v.value)}
+      {collection === 'infrequent' ? (
+        <InfrequentTracks
+          rows={rows}
+          days={days}
+          changeDays={changeDays}
+          active={active}
+          playing={playing}
+          play={play}
+          remove={remove}
         />
-        {job?.started && (
-          <div className="library-job" role="status">
-            <span>
-              {job.running ? '正在导入' : job.cancelled ? '导入已取消' : '导入完成'} · 新增{' '}
-              {job.added} · 重复 {job.duplicates} · 失败 {job.failed}
-            </span>
-            {job.running && (
-              <Button size="small" appearance="subtle" onClick={cancel}>
-                取消导入
-              </Button>
-            )}
-          </div>
-        )}
-        {rows.length ? (
-          <>
-            <div className="library-columns" aria-hidden="true">
-              <span>歌曲 / 艺人</span>
-              <span>专辑</span>
-              <span>时长</span>
+      ) : (
+        <section className="local-library" aria-label="本地歌曲库">
+          <div className="library-title">
+            <div>
+              <h2>{heading}</h2>
+              <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
             </div>
-            <ul>
-              {rows.slice(0, limit).map((t) => (
-                <TrackMenu
-                  key={t.id}
-                  queueable={!!t.available}
-                  onQueue={(next) => onQueue(t.id, next)}
-                  onDismiss={
-                    collection === 'system-recommendations' ? () => dismiss(t.id) : undefined
-                  }
-                  dismissed={t.notInterested}
-                >
-                  <li
-                    data-active={active === t.id}
-                    className="library-row"
-                    onDoubleClick={(e) => {
-                      if (
-                        t.available &&
-                        e.target instanceof Element &&
-                        e.currentTarget.contains(e.target) &&
-                        !e.target.closest('button, input, .track-actions, [role="button"]')
-                      )
-                        playRow(t.id)
-                    }}
+          </div>
+          <Input
+            aria-label="搜索本地歌曲"
+            type="search"
+            placeholder="搜索歌名、艺人或专辑"
+            contentBefore={<Search size={16} />}
+            value={search}
+            onChange={(_, v) => setSearch(v.value)}
+          />
+          {job?.started && (
+            <div className="library-job" role="status">
+              <span>
+                {job.running ? '正在导入' : job.cancelled ? '导入已取消' : '导入完成'} · 新增{' '}
+                {job.added} · 重复 {job.duplicates} · 失败 {job.failed}
+              </span>
+              {job.running && (
+                <Button size="small" appearance="subtle" onClick={cancel}>
+                  取消导入
+                </Button>
+              )}
+            </div>
+          )}
+          {rows.length ? (
+            <>
+              <div className="library-columns" aria-hidden="true">
+                <span>歌曲 / 艺人</span>
+                <span>专辑</span>
+                <span>时长</span>
+              </div>
+              <ul>
+                {rows.slice(0, limit).map((t) => (
+                  <TrackMenu
+                    key={t.id}
+                    queueable={!!t.available}
+                    onQueue={(next) => onQueue(t.id, next)}
+                    onDismiss={
+                      collection === 'system-recommendations' ? () => dismiss(t.id) : undefined
+                    }
+                    dismissed={t.notInterested}
                   >
-                    <Button
-                      size="small"
-                      appearance="subtle"
-                      disabled={!t.available}
-                      aria-label={(active === t.id && playing ? '暂停' : '播放') + t.title}
-                      icon={active === t.id && playing ? <Pause size={15} /> : <Play size={15} />}
-                      onClick={() => play(t.id)}
-                    />
-                    <div className="library-name">
-                      <strong title={t.title}>{t.title}</strong>
-                      <small title={t.artist}>{t.artist}</small>
-                      {t.recommendationSource && (
-                        <small title={t.recommendationSource}>
-                          推荐来源 · {t.recommendationSource}
-                        </small>
-                      )}
-                      {!t.available && <small>文件不可用</small>}
-                    </div>
-                    <span className="library-album" title={t.album}>
-                      {t.album || '—'}
-                    </span>
-                    <small className="library-time">{formatTime(t.duration)}</small>
-                    <div className="track-actions">
-                      <Popover>
-                        <PopoverTrigger disableButtonEnhancement>
-                          <Button
-                            size="small"
-                            appearance="subtle"
-                            aria-label={'管理歌单' + t.title}
-                            title="加入或移出歌单"
-                            icon={<ListPlus size={16} />}
-                          />
-                        </PopoverTrigger>
-                        <PopoverSurface className="component-popup playlist-options">
-                          <strong>我的歌单</strong>
-                          {playlists.some((p) => !p.system) ? (
-                            playlists
-                              .filter((p) => !p.system)
-                              .map((list) => (
-                                <Checkbox
-                                  key={list.id}
-                                  label={list.name}
-                                  checked={list.tracks.includes(t.id)}
-                                  onChange={(_, v) =>
-                                    void membership(list.id, t.id, v.checked === true)
-                                  }
-                                />
-                              ))
-                          ) : (
-                            <small>在曲库导航中点「＋」新建歌单。</small>
-                          )}
-                        </PopoverSurface>
-                      </Popover>
-                      {!t.available && (
-                        <Button
-                          size="small"
-                          appearance="subtle"
-                          title="重新定位"
-                          aria-label={'重新定位' + t.title}
-                          icon={<FolderSearch size={16} />}
-                          onClick={() => relocate(t.id)}
-                        />
-                      )}
+                    <li
+                      data-active={active === t.id}
+                      className="library-row"
+                      onDoubleClick={(e) => {
+                        if (
+                          t.available &&
+                          e.target instanceof Element &&
+                          e.currentTarget.contains(e.target) &&
+                          !e.target.closest('button, input, .track-actions, [role="button"]')
+                        )
+                          playRow(t.id)
+                      }}
+                    >
                       <Button
                         size="small"
                         appearance="subtle"
-                        title="从曲库移除"
-                        aria-label={'从曲库移除' + t.title}
-                        icon={<Trash2 size={15} />}
-                        onClick={() => setAction({ kind: 'song', id: t.id, name: t.title })}
+                        disabled={!t.available}
+                        aria-label={(active === t.id && playing ? '暂停' : '播放') + t.title}
+                        icon={active === t.id && playing ? <Pause size={15} /> : <Play size={15} />}
+                        onClick={() => play(t.id)}
                       />
-                    </div>
-                  </li>
-                </TrackMenu>
-              ))}
-              {rows.length > limit && <li ref={sentinel} aria-hidden="true" />}
-            </ul>
-          </>
-        ) : (
-          <div className="music-empty library-empty">
-            <Music2 size={28} />
-            <h2>
-              {total ? '没有匹配的歌曲' : collection === 'all' ? '曲库还是空的' : '这里还没有歌曲'}
-            </h2>
-            <p>
-              {total
-                ? '试试其他歌名、艺人或专辑。'
-                : collection === 'all'
-                  ? '选择音乐文件或文件夹，歌曲会保留在原位置。'
-                  : '在歌曲右侧打开「管理歌单」添加歌曲。'}
-            </p>
-          </div>
-        )}
-      </section>
+                      <div className="library-name">
+                        <strong title={t.title}>{t.title}</strong>
+                        <small title={t.artist}>{t.artist}</small>
+                        {t.recommendationSource && (
+                          <small title={t.recommendationSource}>
+                            推荐来源 · {t.recommendationSource}
+                          </small>
+                        )}
+                        {!t.available && <small>文件不可用</small>}
+                      </div>
+                      <span className="library-album" title={t.album}>
+                        {t.album || '—'}
+                      </span>
+                      <small className="library-time">{formatTime(t.duration)}</small>
+                      <div className="track-actions">
+                        <Popover>
+                          <PopoverTrigger disableButtonEnhancement>
+                            <Button
+                              size="small"
+                              appearance="subtle"
+                              aria-label={'管理歌单' + t.title}
+                              title="加入或移出歌单"
+                              icon={<ListPlus size={16} />}
+                            />
+                          </PopoverTrigger>
+                          <PopoverSurface className="component-popup playlist-options">
+                            <strong>我的歌单</strong>
+                            {playlists.some((p) => !p.system) ? (
+                              playlists
+                                .filter((p) => !p.system)
+                                .map((list) => (
+                                  <Checkbox
+                                    key={list.id}
+                                    label={list.name}
+                                    checked={list.tracks.includes(t.id)}
+                                    onChange={(_, v) =>
+                                      void membership(list.id, t.id, v.checked === true)
+                                    }
+                                  />
+                                ))
+                            ) : (
+                              <small>在曲库导航中点「＋」新建歌单。</small>
+                            )}
+                          </PopoverSurface>
+                        </Popover>
+                        {!t.available && (
+                          <Button
+                            size="small"
+                            appearance="subtle"
+                            title="重新定位"
+                            aria-label={'重新定位' + t.title}
+                            icon={<FolderSearch size={16} />}
+                            onClick={() => relocate(t.id)}
+                          />
+                        )}
+                        <Button
+                          size="small"
+                          appearance="subtle"
+                          title="从曲库移除"
+                          aria-label={'从曲库移除' + t.title}
+                          icon={<Trash2 size={15} />}
+                          onClick={() => setAction({ kind: 'song', id: t.id, name: t.title })}
+                        />
+                      </div>
+                    </li>
+                  </TrackMenu>
+                ))}
+                {rows.length > limit && <li ref={sentinel} aria-hidden="true" />}
+              </ul>
+            </>
+          ) : (
+            <div className="music-empty library-empty">
+              <Music2 size={28} />
+              <h2>
+                {total
+                  ? '没有匹配的歌曲'
+                  : collection === 'all'
+                    ? '曲库还是空的'
+                    : '这里还没有歌曲'}
+              </h2>
+              <p>
+                {total
+                  ? '试试其他歌名、艺人或专辑。'
+                  : collection === 'all'
+                    ? '选择音乐文件或文件夹，歌曲会保留在原位置。'
+                    : '在歌曲右侧打开「管理歌单」添加歌曲。'}
+              </p>
+            </div>
+          )}
+        </section>
+      )}
       {action && (
         <Dialog
           open

@@ -29,6 +29,7 @@ async function file(entry) {
       artist: text(common.artist) || '未知艺人',
       album: text(common.album),
       duration: format.duration,
+      size,
     })
   } catch {
     failed++
