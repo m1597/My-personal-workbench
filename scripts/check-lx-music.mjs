@@ -63,7 +63,8 @@ if (live) {
    await new Promise(done=>setTimeout(done,600))
    return [
      {name:info.keyword,singer:'测试艺人',albumName:'测试专辑',id:'test'},
-     {name:'可下载版本',singer:'测试艺人',albumName:'音频夹具',id:'audio'}
+     {name:'可下载版本',singer:'测试艺人',albumName:'音频夹具',id:'audio'},
+     ...Array.from({length:22},(_,i)=>({name:'其他录音'+i,singer:'测试艺人',id:String(i)}))
    ]
   }
   return info.musicInfo.id === 'audio' ? 'https://1.1.1.1/test-audio.mp3' : 'http://127.0.0.1/forbidden'
@@ -132,10 +133,18 @@ try {
     await page.getByRole('button', { name: '导入链接' }).click()
     await expect.poll(() => page.evaluate(() => window.music.lxInfo())).toBe('在线测试源')
   }
+  await page.getByRole('tab', { name: '下载音乐' }).click()
   const pane = page.getByRole('region', { name: '下载音乐' })
   const find = pane.getByRole('button', { name: '查找版本' })
   if (!live) {
+    await expect(find).toBeDisabled()
+    await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('只搜艺人')
+    await find.click()
+    await expect(pane.getByText('只搜艺人', { exact: true })).toBeVisible()
+    await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('')
     await pane.getByRole('textbox', { name: '歌名', exact: true }).fill('手动歌名')
+    await find.click()
+    await expect(pane.getByText('手动歌名', { exact: true })).toBeVisible()
     await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('手动艺人')
     await find.click()
     await pane.getByRole('button', { name: '取消', exact: true }).click()
@@ -151,6 +160,19 @@ try {
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })
+  if (!live) {
+    await app.evaluate(({ BaseWindow }) =>
+      BaseWindow.getAllWindows()
+        .find((w) => w.isVisible())
+        .setContentSize(900, 860),
+    )
+    const results = pane.getByRole('list')
+    await expect.poll(() => results.evaluate((el) => el.clientHeight)).toBeGreaterThan(380)
+    assert.ok(await results.evaluate((el) => el.scrollHeight > el.clientHeight))
+    const resultBounds = await results.boundingBox()
+    const playerBounds = await page.locator('.music-player').boundingBox()
+    assert.ok(playerBounds.y - resultBounds.y - resultBounds.height < 48)
+  }
   await page.screenshot({ path: path.join(root, 'versions.png') })
   await app.evaluate(({ BaseWindow }) =>
     BaseWindow.getAllWindows()
@@ -210,7 +232,7 @@ try {
       2,
     )
     console.log(
-      'PASS 三个主入口、手填和曲库搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
+      'PASS 四页入口、单歌名、单艺人、组合和曲库搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
         root,
     )
   } else {

@@ -232,9 +232,9 @@ export function registerLx(bind, getStore, dialog) {
       } else if (
         typeof id?.title === 'string' &&
         id.title.length <= 256 &&
-        id.title.trim() &&
         typeof id.artist === 'string' &&
-        id.artist.length <= 256
+        id.artist.length <= 256 &&
+        (id.title.trim() || id.artist.trim())
       ) {
         track = { title: id.title.trim(), artist: id.artist.trim() }
       }
