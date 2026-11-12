@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron')
 const names = [
+  'lyrics',
+  'showLyrics',
+  'lyricLine',
   'lxSources',
   'lxRefreshCatalog',
   'lxImportSelected',

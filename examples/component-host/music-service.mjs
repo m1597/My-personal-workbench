@@ -1,3 +1,5 @@
+import { desktopLyrics } from './desktop-lyrics.mjs'
+import { localLines, ownedLyrics } from './music-lyrics.mjs'
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
@@ -29,6 +31,7 @@ export function musicService(profile, isSender) {
       store.library.changed = queueTasteUpdate
     }
   }
+  const overlay = desktopLyrics()
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   let musicView
@@ -75,6 +78,14 @@ export function musicService(profile, isSender) {
       localDialog = false
     }
   }
+  bind('showLyrics', (on) => overlay.show(on === true))
+  bind('lyricLine', (line) => overlay.update(typeof line === 'string' ? line.slice(0, 500) : ''))
+  bind('lyrics', async (id) => {
+    if (grant?.id === id) return localLines(grant.file)
+    if (typeof id === 'string' && id.startsWith('local-'))
+      return localLines(store.library.row(text(id)).file)
+    return []
+  })
   bind('importLocal', (mode) => {
     if (!['folder', 'files'].includes(mode)) throw Error('导入方式无效')
     return selectLocal(mode)
@@ -123,11 +134,12 @@ export function musicService(profile, isSender) {
     localDialog = true
     const epoch = viewEpoch
     try {
+      const lyric = await ownedLyrics(store.db, row.file)
       const answer = await dialog.showMessageBox({
         type: 'warning',
         title: '移至系统回收站',
-        message: '将这个音频文件移至系统回收站？',
-        detail: row.file,
+        message: '将下列文件移至系统回收站？',
+        detail: [row.file, lyric].filter(Boolean).join('\n'),
         buttons: ['取消', '移至回收站'],
         defaultId: 0,
         cancelId: 0,
@@ -141,6 +153,14 @@ export function musicService(profile, isSender) {
         throw Error('无法移至系统回收站，曲库记录已保留')
       }
       forgetTrack(id)
+      if (lyric && lyric === (await ownedLyrics(store.db, row.file))) {
+        try {
+          await shell.trashItem(lyric)
+        } catch {
+          throw Error('音频已回收，歌词文件回收失败')
+        }
+        store.db.prepare('DELETE FROM lyric_files WHERE file=?').run(lyric)
+      }
       return true
     } finally {
       localDialog = false
@@ -429,6 +449,7 @@ export function musicService(profile, isSender) {
       }
     },
     dispose() {
+      overlay.show(false)
       lx.close()
       clearTimeout(updateTimer)
       taste?.controller?.abort()

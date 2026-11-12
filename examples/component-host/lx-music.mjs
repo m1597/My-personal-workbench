@@ -1,5 +1,6 @@
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
+import { saveLyrics } from './music-lyrics.mjs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream, lstatSync, unlinkSync } from 'node:fs'
@@ -450,7 +451,7 @@ export function registerLx(bind, getStore, dialog) {
       )
       if (typeof url !== 'string' || url.length > 16384) throw Error('音乐源未返回可用地址')
       try {
-        return await saveRecording(
+        const filename = await saveRecording(
           url,
           dir,
           { name: text(row.name), singer: text(row.singer), albumName: text(row.albumName) },
@@ -460,6 +461,37 @@ export function registerLx(bind, getStore, dialog) {
           versionInfo(src, row, quality),
           dailyId,
         )
+        if (filename && !auditionId) {
+          await saveLyrics(getStore().db, path.join(dir, filename), async () => {
+            const timeout = AbortSignal.any([signal, AbortSignal.timeout(6000)])
+            let result = row.lyric
+            if (!result) {
+              try {
+                result = await runSource(
+                  src.code,
+                  {
+                    action: 'lyric',
+                    source: src.platform,
+                    info: { musicInfo: row },
+                  },
+                  timeout,
+                )
+              } catch {
+                /* Some sources expose only audio. */
+              }
+            }
+            const raw = typeof result === 'string' ? result : result?.lyric
+            if (raw) return raw
+            const id = recordingId(src, row)
+            if (src.platform !== 'wy' || !/^\d+$/.test(id)) return ''
+            const response = await sourceRequest(
+              'https://music.163.com/api/song/lyric?lv=1&id=' + id,
+              { signal: timeout },
+            )
+            return response.body?.lrc?.lyric
+          }).catch(() => {})
+        }
+        return filename
       } catch (e) {
         if (attempt > 0 || !(e instanceof TransferError)) throw e
         signal.throwIfAborted()

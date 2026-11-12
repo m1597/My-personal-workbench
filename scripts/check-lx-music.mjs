@@ -72,6 +72,7 @@ if (live) {
      ...overlap, ...Array.from({length:20},(_,i)=>({name:'其他录音'+i,singer:'测试艺人',id:String(i)}))
    ]
   }
+  if(action==='lyric') return info.musicInfo.id === 'audio' ? {lyric:'[00:00.00]选定录音的歌词'} : null
   return info.musicInfo.id === 'audio' ? 'https://1.1.1.1/test-audio.mp3' : 'http://127.0.0.1/forbidden'
  })
  lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
@@ -275,7 +276,12 @@ try {
     }, path.resolve('tests/fixtures/local-music/tone.mp3'))
     await downloads.nth(1).click()
     await expect(pane.getByText(/已下载并入库/)).toBeVisible()
-    assert.equal((await fs.readdir(output)).length, 1)
+    const audio = (await fs.readdir(output)).find((name) => name.endsWith('.mp3'))
+    assert.ok(audio)
+    assert.equal(
+      await fs.readFile(path.join(output, path.parse(audio).name + '.lrc'), 'utf8'),
+      '[00:00.00]选定录音的歌词',
+    )
     assert.equal(
       await page.evaluate(async () => (await window.music.state()).localTracks.length),
       2,
@@ -287,8 +293,9 @@ try {
   } else {
     if (!status.includes('已下载并入库')) throw Error(status)
     const files = await fs.readdir(output)
-    assert.equal(files.length, 1)
-    assert.ok((await fs.stat(path.join(output, files[0]))).size > 0)
+    const audio = files.filter((name) => !name.endsWith('.lrc'))
+    assert.equal(audio.length, 1)
+    assert.ok((await fs.stat(path.join(output, audio[0]))).size > 0)
     assert.equal(
       await page.evaluate(async () => (await window.music.state()).localTracks.length),
       2,

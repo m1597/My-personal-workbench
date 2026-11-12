@@ -113,6 +113,9 @@ declare global {
       importLocal(mode: 'folder' | 'files'): Promise<void>
       cancelImport(): Promise<void>
       refreshLocal(): Promise<void>
+      lyrics(id: string): Promise<[number, string][]>
+      showLyrics(on: boolean): Promise<void>
+      lyricLine(line: string): Promise<void>
       removeLocal(id: string): Promise<void>
       trashLocal(id: string): Promise<boolean>
       removeFolder(id: string): Promise<string[]>
@@ -406,6 +409,34 @@ function Music() {
   const localMode = active ? 'duration' in active : tab === 'library'
   const chosenBatch = state?.batches.find((b) => b.id === batch)
   const elapsed = current.current ? time : (state?.position ?? 0)
+  const [lyricsOpen, setLyricsOpen] = useState(false)
+  const [lyrics, setLyrics] = useState<{
+    id: string
+    lines: [number, string][]
+  }>()
+  useEffect(() => {
+    let valid = true
+    if (lyricsOpen && now)
+      void host
+        .lyrics(now)
+        .then((lines) => {
+          if (valid) setLyrics({ id: now, lines })
+        })
+        .catch(() => {})
+    return () => {
+      valid = false
+    }
+  }, [lyricsOpen, now])
+  let lyric = ''
+  if (lyrics?.id === now) {
+    for (const [at, value] of lyrics.lines) {
+      if (at > elapsed) break
+      lyric = value
+    }
+  }
+  useEffect(() => {
+    if (lyricsOpen) void host.lyricLine(lyric).catch(() => {})
+  }, [lyric, lyricsOpen])
   const clock = formatTime
   const duration =
     audio.current?.duration ||
@@ -796,6 +827,21 @@ function Music() {
             onClick={() => setShuffled(shuffled ? null : shuffleQueue(queue, now))}
           >
             <span>{shuffled ? '随机播放' : '顺序播放'}</span>
+          </Button>
+          <Button
+            size="small"
+            appearance="subtle"
+            aria-label="桌面歌词"
+            title="桌面歌词"
+            aria-pressed={lyricsOpen}
+            onClick={() =>
+              void act(async () => {
+                await host.showLyrics(!lyricsOpen)
+                setLyricsOpen(!lyricsOpen)
+              })
+            }
+          >
+            词
           </Button>
           <PlaybackQueue
             active={active}

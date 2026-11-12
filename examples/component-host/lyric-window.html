@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" /><meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'unsafe-inline'"
+  /><title>桌面歌词</title
+  ><style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      color: #fff;
+      background: rgba(18, 24, 36, 0.76);
+      border: 1px solid #ffffff38;
+      border-radius: 14px;
+      font:
+        18px "HarmonyOS Sans SC",
+        "Microsoft YaHei UI",
+        sans-serif;
+      -webkit-app-region: drag;
+    }
+    .locked {
+      -webkit-app-region: no-drag;
+    }
+    strong {
+      flex: 1;
+      text-align: center;
+      font-size: 24px;
+      text-shadow: 0 1px 4px black;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    button {
+      -webkit-app-region: no-drag;
+      color: inherit;
+      background: #ffffff15;
+      border: 1px solid #ffffff48;
+      padding: 6px;
+      border-radius: 5px;
+    }
+  </style>
+  <body>
+    <strong>暂无同步歌词</strong><button aria-pressed="false">锁定</button>
+  </body>
+</html>
