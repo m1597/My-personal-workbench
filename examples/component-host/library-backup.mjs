@@ -53,6 +53,8 @@ function requireValue(value) {
 const text = (value, max) =>
   typeof value === 'string' && value.length <= max && !value.includes('\0')
 const list = (value, max) => Array.isArray(value) && value.length <= max
+// Match the built-in SQLite NOCASE collation used by both playlist tables.
+const playlistKey = (name) => name.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
 const time = (value) => Number.isSafeInteger(value) && value >= 0 && value <= 8640000000000000
 export function validateBackup(value) {
   requireValue(
@@ -75,7 +77,7 @@ export function validateBackup(value) {
         !smartIds.has(rule.id) &&
         text(rule.name, 100) &&
         rule.name.trim() &&
-        !smartNames.has(rule.name.toLowerCase()) &&
+        !smartNames.has(playlistKey(rule.name)) &&
         ['any', 'daily', 'download', 'local'].includes(rule.source) &&
         (rule.days === null ||
           (Number.isSafeInteger(rule.days) && rule.days >= 1 && rule.days <= 36500)) &&
@@ -84,7 +86,7 @@ export function validateBackup(value) {
         rule.plays >= 0 &&
         rule.plays <= 10000000,
     )
-    smartNames.add(rule.name.toLowerCase())
+    smartNames.add(playlistKey(rule.name))
     smartIds.add(rule.id)
   }
   for (const t of value.tracks) {
@@ -127,12 +129,12 @@ export function validateBackup(value) {
         !lists.has(p.id) &&
         text(p.name, 80) &&
         p.name.trim() &&
-        !names.has(p.name.toLowerCase()) &&
+        !names.has(playlistKey(p.name)) &&
         list(p.tracks, 200000) &&
         new Set(p.tracks).size === p.tracks.length &&
         p.tracks.every((id) => ids.has(id)),
     )
-    names.add(p.name.toLowerCase())
+    names.add(playlistKey(p.name))
     lists.add(p.id)
   }
   for (const h of value.history) {

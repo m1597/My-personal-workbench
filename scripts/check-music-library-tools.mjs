@@ -39,6 +39,12 @@ const list = store.library.createPlaylist('验收歌单')
 store.db.exec(
   "CREATE TABLE smart_playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL COLLATE NOCASE UNIQUE,source TEXT,days INTEGER,comparison TEXT,plays INTEGER); INSERT INTO smart_playlists VALUES('test-rule','最近推荐','daily',30,'eq',0)",
 )
+for (const name of ['É', 'é']) {
+  store.library.createPlaylist(name)
+  store.db
+    .prepare('INSERT INTO smart_playlists VALUES(?,?,?,?,?,?)')
+    .run(name, name, 'any', null, 'eq', 0)
+}
 for (const index of [1, 2, 0]) store.library.setMembership(list, tracks[index], true)
 store.db.prepare('UPDATE local_tracks SET favorite=1 WHERE id=?').run(tracks[1])
 store.set('draft', '轻快')
@@ -109,15 +115,33 @@ try {
   await ui.app.close()
 }
 await rename(old, moved)
+await mkdir(path.join(old, 'Live'), { recursive: true })
+await writeFile(path.join(old, 'Live', 'twin.wav'), recording('fitbay-tone-1'))
+await writeFile(path.join(old, 'Live', 'twin.lrc'), '[00:00.00]未授权歌词')
+store = new MusicStore(path.join(second, 'fitbay-music'))
+store.db
+  .prepare('INSERT INTO recommended_items(item,local) VALUES(?,?)')
+  .run('old-recommendation', tracks[0])
+store.db.close()
 ui = await launch(second)
 try {
   await ui.button('曲库管理').click()
   await ui.button('选择备份').click()
-  await expect(ui.page.getByText(/3 首歌曲 · 2 个歌单 · 1 首收藏 · 3 条播放记录/)).toBeVisible()
+  await expect(ui.page.getByText(/3 首歌曲 · 6 个歌单 · 1 首收藏 · 3 条播放记录/)).toBeVisible()
   assert.equal((await ui.page.evaluate(() => window.music.state())).localTracks.length, 0)
   await ui.page.screenshot({ path: path.join(root, 'restore-preview.png') })
   await ui.button('确认恢复').click()
   await expect(ui.page.getByText('曲库资料已恢复', { exact: true })).toBeVisible()
+  for (const id of [tracks[0], 'old-recommendation'])
+    assert.deepEqual(await ui.page.evaluate((id) => window.music.lyrics(id), id), [])
+  await assert.rejects(
+    ui.page.evaluate((id) => window.music.localSource(id), tracks[0]),
+    /不可用/,
+  )
+  await assert.rejects(
+    ui.page.evaluate((id) => window.music.trashLocal(id), tracks[0]),
+    /定位/,
+  )
   await ui.button('选择新目录').click()
   const live = ui.page.locator('.library-match').filter({ hasText: 'Live · 测试艺人' }),
     studio = ui.page.locator('.library-match').filter({ hasText: 'Studio · 测试艺人' })
@@ -134,6 +158,10 @@ try {
   await ui.button('确认更新路径').click()
   await expect(ui.page.getByText('已找回 2 首歌曲', { exact: true })).toBeVisible()
   const state = await ui.page.evaluate(() => window.music.state())
+  assert.deepEqual(
+    state.playlists.filter((p) => !p.system).map((p) => p.name),
+    exported.playlists.map((p) => p.name),
+  )
   assert.deepEqual(state.playlists.find((p) => p.id === list).tracks, [
     tracks[1],
     tracks[2],

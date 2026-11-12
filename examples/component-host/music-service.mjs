@@ -98,10 +98,10 @@ export function musicService(profile, isSender) {
     }
     const library = store.db
       .prepare(
-        'SELECT t.file FROM recommended_items r JOIN local_tracks t ON t.id=r.local WHERE r.item=?',
+        'SELECT t.file,t.awaitingLocation FROM recommended_items r JOIN local_tracks t ON t.id=r.local WHERE r.item=?',
       )
       .get(id)
-    if (library) return localLines(library.file)
+    if (library) return library.awaitingLocation ? [] : localLines(library.file)
     const item = store.item(id)
     if (!item.track || !['已入库', '就绪'].includes(item.status)) return []
     return localLines(store.local(item.track) ?? store.file(id))
