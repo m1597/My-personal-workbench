@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs'
 import path from 'node:path'
+import { once } from 'node:events'
 
 // The profile text and the exact set of incorporated signals are published together.
 export class MusicTaste {
@@ -94,12 +95,27 @@ export class MusicTaste {
     this.store.set('taste-consent', value ? '1' : '0')
     if (!value) this.controller?.abort()
   }
-  async refresh() {
+  async refresh(signal) {
+    signal?.throwIfAborted()
     if (this.store.get('taste-consent') !== '1') return ''
-    if (this.pending) return this.pending
+    if (this.pending) {
+      if (!signal) return this.pending
+      // Cancelling a recommendation stops its wait, leaving an existing background refresh alone.
+      const waiter = new AbortController()
+      try {
+        return await Promise.race([
+          this.pending,
+          once(signal, 'abort', { signal: waiter.signal }).then(() => signal.throwIfAborted()),
+        ])
+      } finally {
+        waiter.abort()
+      }
+    }
     const controller = new AbortController()
     this.controller = controller
-    this.pending = this.update(controller.signal).finally(() => {
+    this.pending = this.update(
+      signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+    ).finally(() => {
       this.controller = null
       this.pending = null
     })

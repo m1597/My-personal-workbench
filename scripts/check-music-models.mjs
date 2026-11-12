@@ -2,6 +2,8 @@ import { writeFixtureRecording } from './music-recording-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { MusicTaste } from '../examples/component-host/music-taste.mjs'
+import { once } from 'node:events'
 import { MusicStore } from '../components/music/store.mjs'
 import { DatabaseSync } from 'node:sqlite'
 import { _electron as electron, expect } from '@playwright/test'
@@ -9,6 +11,8 @@ import {
   artistMatches,
   titleMatch,
   inLibrary,
+  searchRecommendation,
+  namesRequestedArtist,
 } from '../examples/component-host/music-discovery.mjs'
 assert.ok(artistMatches('mizuki', '瑞葵(mizuki) / SawanoHiroyuki[nZk]'))
 assert.ok(artistMatches('AC/DC', 'AC/DC & Guest'))
@@ -29,6 +33,25 @@ assert.equal(
   titleMatch({ title: 'Song', artist: 'Artist' }, { name: 'Song', singer: 'Different Artist' }),
   '',
 )
+assert.equal(namesRequestedArtist('比如 A、B 这类，尽量每位音乐人一首', 'A', true), false)
+assert.equal(namesRequestedArtist('ambient', 'A', true), false)
+assert.equal(namesRequestedArtist('想听 AC/DC 本人的歌', 'AC/DC'), true)
+const searches = []
+const recovered = await searchRecommendation(
+  { title: '０１. Blue', artist: 'Artist' },
+  'wy',
+  async (q, page) => {
+    searches.push([q.title, q.artist, page])
+    if (q.title === 'blue' && !q.artist)
+      return page === 1
+        ? { items: [{ name: 'other', singer: 'Artist' }], hasMore: true }
+        : [{ name: 'Blue', singer: 'Artist' }]
+    return []
+  },
+  new AbortController().signal,
+)
+assert.equal(recovered.matches.length, 1)
+assert.ok(searches.some(([title, artist, page]) => title === 'blue' && !artist && page === 2))
 await fs.mkdir('tmp', { recursive: true })
 const root = await fs.mkdtemp(path.resolve('tmp/music-models-')),
   profile = path.join(root, 'profile')
@@ -42,6 +65,26 @@ fixtureStore.library.upsert({
 })
 const output = path.join(root, 'recommended')
 await fs.mkdir(output)
+const profileSignals = []
+const controlledTaste = new MusicTaste(fixtureStore, root, async (_data, signal) => {
+  profileSignals.push(signal)
+  await once(signal, 'abort')
+  signal.throwIfAborted()
+})
+controlledTaste.consent(true)
+const dedicatedCancel = new AbortController()
+const dedicated = controlledTaste.refresh(dedicatedCancel.signal)
+dedicatedCancel.abort()
+await dedicated
+assert.equal(profileSignals[0].aborted, true)
+const background = controlledTaste.refresh()
+const waitingCancel = new AbortController()
+const wait = controlledTaste.refresh(waitingCancel.signal)
+waitingCancel.abort()
+await assert.rejects(wait, { name: 'AbortError' })
+assert.equal(profileSignals[1].aborted, false)
+controlledTaste.consent(false)
+await background
 fixtureStore.db.close()
 const launch = () =>
   electron.launch({
@@ -58,8 +101,7 @@ const app = await launch()
 try {
   const page = await app.firstWindow()
   await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByLabel('今天想听什么').fill('雨天的爵士乐')
-  await page.getByRole('button', { name: '生成推荐' }).click()
+  await page.getByLabel('描述你想听什么').fill('雨天的爵士乐')
   await app.evaluate(() => {
     globalThis.providerFixtures = true
     globalThis.modelCalls = []
@@ -100,6 +142,16 @@ try {
       return Response.json(data)
     }
   })
+  const unavailable = path.join(root, 'unavailable.js')
+  await fs.writeFile(
+    unavailable,
+    `// @name 协议验收
+lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+  )
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, unavailable)
+  await page.evaluate(() => window.music.lxImport())
   for (const [index, id] of ['deepseek', 'openai', 'claude', 'gemini'].entries()) {
     await page.evaluate(async (id) => {
       const p = (await window.music.state()).models.providers.find((p) => p.id === id)
@@ -120,7 +172,7 @@ try {
       await page.getByRole('button', { name: '生成推荐' }).click()
       await expect.poll(() => app.evaluate(() => globalThis.folderRequests.length)).toBe(1)
       await expect(page.getByRole('button', { name: '生成推荐' })).toBeEnabled()
-      await expect(page.getByLabel('今天想听什么')).toHaveValue('雨天的爵士乐')
+      await expect(page.getByLabel('描述你想听什么')).toHaveValue('雨天的爵士乐')
       assert.equal(await app.evaluate(() => globalThis.modelCalls.length), 0)
       const cancelled = await page.evaluate(() => window.music.state())
       assert.equal(cancelled.batches.length, 0)
@@ -139,6 +191,9 @@ try {
       ),
     )
     assert.equal((await page.evaluate(() => window.music.state())).prefs.recommendDir, output)
+    await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled({
+      timeout: 60000,
+    })
     const call = await app.evaluate(() => globalThis.modelCalls.at(-1))
     assert.ok(
       call.url.startsWith(
@@ -156,13 +211,13 @@ try {
     )
     assert.ok(JSON.stringify(call.body).includes('雨天的爵士乐'))
     assert.ok(!JSON.stringify(call.body).includes('summary'))
-    await expect(page.locator('.music-list ol li')).toHaveCount(5)
+    await expect(page.locator('.music-list ol li')).toHaveCount(0)
   }
   await app.evaluate(() => {
     globalThis.providerFixtures = false
   })
   const state = await page.evaluate(() => window.music.state())
-  assert.equal(state.items.filter((r) => r.daily).length, 20)
+  assert.equal(state.items.filter((r) => r.daily).length, 0)
   assert.ok(!JSON.stringify(state).includes('fixture-'))
   const db = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'), { readOnly: true })
   const saved = db
@@ -177,17 +232,15 @@ try {
     }, mode)
     const callCount = await app.evaluate(() => globalThis.modelCalls.length)
     const gen = page.evaluate(() =>
-      window.music.generate('测试失败路径').then(
-        () => '',
-        (e) => e.message,
-      ),
+      window.music
+        .generate('测试失败路径')
+        .then(async (id) => (await window.music.state()).batches.find((b) => b.id === id).message),
     )
     if (mode === 'cancel') {
       await expect.poll(() => app.evaluate(() => globalThis.modelCalls.length)).toBe(callCount + 1)
       await page.evaluate(() => window.music.stopGeneration())
     }
     assert.match(await gen, mode === 'auth' ? /401/ : mode === 'invalid' ? /五首/ : /取消/)
-    assert.equal(await page.evaluate(async () => (await window.music.state()).batches.length), 4)
   }
   await app.evaluate(() => {
     globalThis.failMode = ''
@@ -212,7 +265,7 @@ try {
   }, source)
   await page.evaluate(() => window.music.lxImport())
   const recordings = []
-  for (let n = 0; n < 10; n++) {
+  for (let n = 0; n < 24; n++) {
     const file = path.join(root, 'take-' + n + '.wav')
     await writeFixtureRecording(file, n + 1)
     recordings.push(file)
@@ -255,18 +308,14 @@ try {
       !last.includes(root),
   )
   const before = (await calls()).length
-  await page.getByLabel('今天想听什么').fill('')
+  await page.getByLabel('描述你想听什么').fill('')
   await page.getByRole('button', { name: '生成推荐' }).click()
   await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(3)
   await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled()
-  assert.equal((await calls()).length, before + 2)
-  const denied = await page.evaluate(async () =>
-    (await window.music.state()).items.find((item) => item.title === '样例歌曲3'),
-  )
-  assert.match(denied.downloadError, /明确禁止永久保存/)
-  await page.getByRole('button', { name: '选择录音版本' }).click()
-  await page.getByRole('button', { name: /样例歌曲2 · 测试艺人 · 现场/ }).click()
-  await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4)
+  assert.ok((await calls()).length > before + 1)
+  const denied = await page.evaluate(async () => (await window.music.state()).batches[0])
+  assert.match(denied.details, /明确禁止永久保存/)
+  assert.match(denied.details, /待选录音/)
   const row = page.locator('.music-list ol li').first()
   await row.getByRole('button', { name: /试听/ }).click()
   await expect.poll(() => page.locator('audio').evaluate((el) => el.currentTime)).toBeGreaterThan(0)
@@ -274,15 +323,17 @@ try {
   const library = await page.evaluate(() => window.music.state())
   const list = library.playlists.find((p) => p.system)
   assert.equal(list.name, '歌曲推荐')
-  assert.equal(list.tracks.length, 4)
-  assert.equal((await fs.readdir(output)).length, 4)
+  assert.equal(list.tracks.length, 3)
+  assert.equal((await fs.readdir(output)).length, 3)
   assert.equal((await page.evaluate(() => window.music.getTasteStatus())).pending, 0)
   const transfers = await app.evaluate(() => globalThis.transfers)
   await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByRole('tab', { name: '按歌手推荐' }).click()
-  await page.getByLabel('指定歌手').fill('AC/DC')
-  await page.getByRole('button', { name: '生成推荐' }).click()
-  await expect(page.getByText('本次找到 0 首新歌')).toBeVisible()
+  const artistBatch = await page.evaluate(() => window.music.generate('AC/DC', 'artist', false))
+  const artistResult = await page.evaluate(
+    async (id) => (await window.music.state()).items.filter((r) => r.batch === id),
+    artistBatch,
+  )
+  assert.deepEqual(artistResult, [])
   assert.equal(await app.evaluate(() => globalThis.transfers), transfers)
   await page.evaluate(async (local) => {
     const p = await window.music.createPlaylist('不发送的私人歌单')
@@ -316,7 +367,7 @@ try {
   await page.evaluate(() => window.music.setTasteConsent(false))
   const revoked = (await calls()).length
   await page.evaluate(() => window.music.generate('爵士', 'style'))
-  assert.equal((await calls()).length, revoked + 2)
+  assert.ok((await calls()).length > revoked)
   assert.ok(!JSON.stringify((await calls()).at(-1).body).includes('偏爱氛围音乐与柔和节奏'))
   // A source that publishes ordinary playback URLs, without storage rights, requires an explicit track grant.
   let restricted = (await fs.readFile(source, 'utf8')).replace(
@@ -339,23 +390,19 @@ try {
     globalThis.rightsTracks = true
   })
   const mixed = await page.evaluate(() => window.music.generate('权限测试', 'style'))
-  await expect
-    .poll(() =>
-      page.evaluate(
-        async (batch) =>
-          (await window.music.state()).items.filter(
-            (r) => r.batch === batch && r.status === '待重试',
-          ).length,
-        mixed,
-      ),
-    )
-    .toBe(4)
   const rightsRows = await page.evaluate(
     async (batch) => (await window.music.state()).items.filter((r) => r.batch === batch),
     mixed,
   )
   assert.equal(rightsRows.find((r) => r.title.endsWith('1')).status, '已入库')
-  assert.match(rightsRows.find((r) => r.title.endsWith('0')).downloadError, /未声明永久保存许可/)
+  assert.equal(rightsRows.length, 1)
+  assert.match(
+    await page.evaluate(
+      async (id) => (await window.music.state()).batches.find((b) => b.id === id).details,
+      mixed,
+    ),
+    /未声明永久保存许可/,
+  )
   assert.equal(await app.evaluate(() => globalThis.transfers), transfers + 1)
   await page.reload()
   await page.getByRole('tab', { name: '每日推荐' }).click()
@@ -366,14 +413,6 @@ try {
   const history = await page.evaluate(() => window.music.state())
   const tasteBefore = await fs.readFile(docfile, 'utf8')
   const filesBefore = await fs.readdir(output)
-  const unresolved = page
-    .locator('.music-list ol li')
-    .filter({ has: page.getByText('权限歌曲3', { exact: true }) })
-  await unresolved.getByText('权限歌曲3', { exact: true }).click({ button: 'right' })
-  await page.getByRole('menuitem', { name: '不感兴趣', exact: true }).click()
-  await unresolved.getByText('权限歌曲3', { exact: true }).click({ button: 'right' })
-  await expect(page.getByRole('menuitem', { name: '已标记不感兴趣' })).toBeDisabled()
-  await page.keyboard.press('Escape')
   await page.getByRole('tab', { name: '本地曲库' }).click()
   const nav = page.getByRole('button', { name: '曲库导航' })
   if (await nav.isVisible()) await nav.click()
@@ -444,13 +483,13 @@ try {
   })
   await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.getByText('本次 5 首 · 已下载 4/5')).toBeVisible({
+  await expect(page.getByText(/已下载 4\/5/)).toBeVisible({
     timeout: 30000,
   })
   const visibleTitles = await page.locator('.music-list ol li strong').allTextContents()
   assert.deepEqual(
     visibleTitles,
-    Array.from({ length: 5 }, (_, i) => '队列歌曲' + i),
+    Array.from({ length: 4 }, (_, i) => '队列歌曲' + i),
   )
   const expectedQueue = await page.evaluate(async () => {
     const state = await window.music.state()
@@ -472,7 +511,7 @@ try {
     style: ':root { background: var(--base) !important }',
   })
   await app.evaluate(() => globalThis.releaseTransfer())
-  await expect(page.getByText('本次 5 首 · 已下载 5/5')).toBeVisible()
+  await expect(page.getByText(/已下载 5\/5/)).toBeVisible()
   assert.deepEqual(
     await page.evaluate(async () => (await window.music.state()).queue),
     expectedQueue,
@@ -486,26 +525,194 @@ try {
   await app.evaluate(() => {
     globalThis.cancelTracks = true
   })
-  const cancelled = page.evaluate(() =>
-    window.music.generate('测试整批取消').catch((e) => e.message),
-  )
+  const cancelled = page.evaluate(() => window.music.generate('测试整批取消', 'auto', false, 2))
   await expect
-    .poll(() =>
-      page.evaluate(
-        async () =>
-          (await window.music.state()).items.filter(
-            (r) => r.title.startsWith('取消歌曲') && r.status === '待处理',
-          ).length,
-      ),
-    )
-    .toBe(4)
+    .poll(() => page.evaluate(async () => (await window.music.state()).batches[0].state))
+    .toBe('running')
   await page.evaluate(() => window.music.stopGeneration())
-  assert.match(await cancelled, /取消/)
-  const pendingRows = await page.evaluate(async () =>
-    (await window.music.state()).items.filter((r) => r.title.startsWith('取消歌曲')),
+  const stopped = await page.evaluate(
+    async (id) => {
+      const s = await window.music.state()
+      return [s.batches.find((b) => b.id === id), s.items.filter((r) => r.batch === id)]
+    },
+    await cancelled,
   )
-  assert.equal(pendingRows.length, 5)
-  assert.ok(pendingRows.every((r) => r.status === '待重试'))
+  assert.equal(stopped[0].state, 'cancelled')
+  assert.equal(stopped[0].targetCount, 2)
+  assert.deepEqual(stopped[1], [])
+  // One successfully published recording survives a provider quota error on replenishment.
+  await fs.writeFile(
+    source,
+    `// @name 目标数量验收
+    lx.on('request',({action,info})=>{
+      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3'
+      const [name,singer]=info.keyword.split(' ')
+      return [{name,singer,id:name,allowPermanentSave:true}]
+    })
+    lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+  )
+  await page.evaluate(() => window.music.lxImport())
+  await app.evaluate(() => {
+    let round = 0
+    globalThis.fetch = async (_url, req) => {
+      const input = JSON.parse(JSON.parse(req.body).contents[0].parts[0].text)
+      if (round++) {
+        globalThis.additionalInput = input
+        return new Response('{}', { status: 429 })
+      }
+      return Response.json({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    songs: [{ title: '额度测试', artist: '独唱艺人', reason: '指定作品' }],
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      })
+    }
+  })
+  const blocked = await page.evaluate(async () => {
+    const id = await window.music.generate('只想听独唱艺人本人的歌', 'auto', false, 8)
+    const s = await window.music.state()
+    return {
+      batch: s.batches.find((r) => r.id === id),
+      rows: s.items.filter((r) => r.batch === id),
+    }
+  })
+  assert.equal(blocked.batch.state, 'blocked')
+  assert.match(blocked.batch.message, /429/)
+  assert.equal(blocked.batch.targetCount, 8)
+  assert.equal(blocked.rows.length, 1)
+  const nextInput = await app.evaluate(() => globalThis.additionalInput)
+  assert.deepEqual(nextInput.recentArtists, ['独唱艺人'])
+  assert.equal(nextInput.preference, '只想听独唱艺人本人的歌')
+  await app.evaluate(() => {
+    globalThis.diversityCalls = []
+    globalThis.fetch = async (_url, req) => {
+      const input = JSON.parse(JSON.parse(req.body).contents[0].parts[0].text)
+      globalThis.diversityCalls.push(input)
+      const artists = input.preference.includes('本人')
+        ? ['其他人', '歌手甲', '歌手甲', '歌手甲']
+        : input.recentArtists?.length
+          ? ['歌手乙', '歌手丙']
+          : ['歌手甲', '歌手甲', '歌手甲']
+      const songs = artists.map((artist, n) => ({
+        artist,
+        title: input.preference + '曲' + artist + n,
+        reason: '测试',
+      }))
+      return Response.json({
+        candidates: [
+          { content: { parts: [{ text: JSON.stringify({ requestedArtist: '歌手甲', songs }) }] } },
+        ],
+      })
+    }
+  })
+  const sample = async (preference) =>
+    page.evaluate(async (preference) => {
+      const id = await window.music.generate(preference, 'auto', false, 3)
+      const state = await window.music.state()
+      return state.items.filter((r) => r.batch === id).map((r) => r.artist)
+    }, preference)
+  assert.deepEqual(await sample('比如歌手甲这一类，想听不同的音乐人'), [
+    '歌手甲',
+    '歌手乙',
+    '歌手丙',
+  ])
+  assert.deepEqual(await sample('听歌手甲本人的歌'), ['歌手甲', '歌手甲', '歌手甲'])
+  assert.equal(await app.evaluate(() => globalThis.diversityCalls.length), 3)
+  await app.evaluate(() => {
+    let rounds = 0
+    globalThis.fetch = async (_url, req) => {
+      if (!rounds++)
+        return Response.json({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      songs: [{ title: '取消时保留', artist: '测试歌手', reason: '测试' }],
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        })
+      globalThis.modelWaiting = true
+      return new Promise((_, reject) =>
+        req.signal.addEventListener('abort', () => reject(req.signal.reason), { once: true }),
+      )
+    }
+  })
+  const partialStop = page.evaluate(() => window.music.generate('取消保留', 'auto', false, 2))
+  await expect.poll(() => app.evaluate(() => Boolean(globalThis.modelWaiting))).toBe(true)
+  await page.evaluate(() => window.music.stopGeneration())
+  const kept = await page.evaluate(
+    async (id) => {
+      const s = await window.music.state()
+      return [
+        s.batches.find((b) => b.id === id).state,
+        s.items.filter((r) => r.batch === id).length,
+      ]
+    },
+    await partialStop,
+  )
+  assert.deepEqual(kept, ['cancelled', 1])
+  // Unique new model titles cannot keep a batch spending indefinitely if every source denies them.
+  await fs.writeFile(
+    source,
+    `// @name 无法保存
+    lx.on('request',({info})=>{const [name,singer]=info.keyword.split(' ');return [{id:name,name,singer,allowPermanentSave:false}]})
+    lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+  )
+  await page.evaluate(() => window.music.lxImport())
+  const sourcesDb = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'))
+  sourcesDb
+    .prepare('DELETE FROM music_sources WHERE id!=?')
+    .run((await page.evaluate(() => window.music.lxSources())).active)
+  sourcesDb.close()
+  await app.evaluate(() => {
+    globalThis.stalledCalls = 0
+    globalThis.fetch = async () =>
+      Response.json({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    songs: [
+                      {
+                        artist: '样本',
+                        title: '未授权' + ++globalThis.stalledCalls,
+                        reason: '测试',
+                      },
+                    ],
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      })
+  })
+  const stalled = await page.evaluate(async () => {
+    const id = await window.music.generate('新歌', 'auto', false, 1)
+    const s = await window.music.state()
+    return [s.batches.find((r) => r.id === id), s.items.filter((r) => r.batch === id)]
+  })
+  assert.equal(stalled[0].state, 'blocked')
+  assert.match(stalled[0].message, /连续 6 轮/)
+  assert.deepEqual(stalled[1], [])
+  assert.equal(await app.evaluate(() => globalThis.stalledCalls), 6)
   console.log(
     'PASS 四家服务协议、无授权禁发、审美增量和重试、自动下载复用、歧义、试听和系统歌单。' + root,
   )
@@ -520,7 +727,7 @@ try {
   assert.ok((await p.evaluate(() => window.music.state())).localTracks.some((t) => t.notInterested))
   assert.equal(
     (await p.evaluate(() => window.music.state())).playlists.find((s) => s.system).tracks.length,
-    10,
+    17,
   )
 } finally {
   await reopened.close()

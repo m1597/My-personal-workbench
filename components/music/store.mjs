@@ -54,6 +54,8 @@ export class MusicStore {
     for (const file of readdirSync(this.cache)) {
       if (/^\.fitbay-[a-f0-9-]{36}\.part$/.test(file)) unlinkSync(path.join(this.cache, file))
     }
+    this.db.exec(`CREATE TABLE IF NOT EXISTS recommendation_runs(batch TEXT PRIMARY KEY,targetCount INTEGER NOT NULL,state TEXT NOT NULL,message TEXT);
+      UPDATE recommendation_runs SET state='cancelled',message='上次生成已中断' WHERE state='running'`)
     this.jobs = new Map()
     this.active = null
     this.db.exec("UPDATE items SET status='中断' WHERE status IN ('等候','下载中')")
@@ -256,11 +258,24 @@ export class MusicStore {
         .map((r) => r.local),
     )
     const batches = this.db
-      .prepare('SELECT * FROM batches WHERE day=? ORDER BY rowid DESC')
+      .prepare(
+        'SELECT b.*,r.targetCount,r.state,r.message FROM batches b LEFT JOIN recommendation_runs r ON b.id=r.batch WHERE b.day=? ORDER BY b.rowid DESC',
+      )
       .all(today)
+    const diagnostics =
+      this.db.prepare(`SELECT i.title,i.artist,i.status,r.summary,r.error FROM items i
+      JOIN recommended_items r ON r.item=i.id WHERE i.batch=? AND i.status NOT IN ('已入库','正在匹配','正在保存','待处理') ORDER BY i.rowid DESC LIMIT 50`)
+    for (const batch of batches) {
+      batch.details = batch.targetCount
+        ? diagnostics
+            .all(batch.id)
+            .map((i) => [i.title + ' · ' + i.artist, i.error || i.summary || i.status].join('：'))
+            .join('\n')
+        : null
+    }
     const items = this.db
       .prepare(
-        `SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.summary AS downloadSummary,r.diagnosis AS diagnosis,r.attemptSources,t.available AS localAvailable FROM items i JOIN batches b ON b.id=i.batch LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local WHERE b.day=? AND i.status != '已跳过' ORDER BY b.rowid DESC,i.rowid`,
+        `SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.summary AS downloadSummary,r.diagnosis AS diagnosis,r.attemptSources,t.available AS localAvailable FROM items i JOIN batches b ON b.id=i.batch LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local LEFT JOIN recommendation_runs run ON run.batch=b.id WHERE b.day=? AND i.status != '已跳过' AND (run.batch IS NULL OR (i.status='已入库' AND t.available=1)) ORDER BY b.rowid DESC,i.rowid`,
       )
       .all(today)
       .map((row) => ({
@@ -347,6 +362,11 @@ export class MusicStore {
           ),
         )
       }
+      this.db
+        .prepare(
+          'DELETE FROM recommendation_runs WHERE batch IN (SELECT id FROM batches WHERE day < ?)',
+        )
+        .run(today)
       this.db.prepare('DELETE FROM batches WHERE day < ?').run(today)
       if (stale.length)
         this.db.exec(`DELETE FROM online_recordings WHERE
@@ -363,7 +383,7 @@ export class MusicStore {
   generate(preference, summary) {
     return this.saveSuggestions(preference, offlineSuggestions(preference, summary), '待匹配')
   }
-  saveSuggestions(preference, rows, status, existingBatch) {
+  saveSuggestions(preference, rows, status, existingBatch, targetCount) {
     const feedback = this.feedbackIds()
     const accepted = rows.filter((row) => {
       if (feedback.has(songKey(row.title, row.artist))) return false
@@ -380,6 +400,10 @@ export class MusicStore {
         if (!this.db.prepare('SELECT 1 FROM batches WHERE id=? AND day=?').get(batch, day()))
           throw Error('推荐已过期')
       } else this.db.prepare('INSERT INTO batches VALUES(?,?,?)').run(batch, day(), preference)
+      if (targetCount)
+        this.db
+          .prepare("INSERT INTO recommendation_runs VALUES(?,?,'running','正在推荐')")
+          .run(batch, targetCount)
       for (const row of accepted) {
         const id = randomUUID()
         this.db

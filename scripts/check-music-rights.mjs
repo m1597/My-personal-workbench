@@ -280,14 +280,14 @@ try {
   const pagedSource = `// @name 分页夹具
     lx.on('request',({action,info})=>{
       if(action==='musicUrl') return 'https://1.1.1.1/audio'
-      if(info.page!==1 || info.limit!==20 || info.offset!==0) throw Error('推荐扩大了搜索范围')
+      if(info.limit!==20) throw Error('无效的每页条数')
       const [name,singer]=info.keyword.split(' ')
       const row={id:name,name,singer}
       if(name==='禁止落盘')return [{...row,singer:'同名歌的另一艺人',allowPermanentSave:false}]
       if(name==='允许保存')return {items:[row],total:30,hasMore:true}
       if(name==='试听片段')return {list:[{...row,trial:true}],hasMore:true}
       if(name==='明令禁止')return {songs:[{...row,allowPermanentSave:false}],total:11}
-      if(name==='无匹配')return {items:[...Array.from({length:20},(_,i)=>({...row,id:i,name:'其他曲目'})),row],total:21}
+      if(name==='无匹配')return {items:info.page===2 && info.offset===20 ? [{...row,allowPermanentSave:false}] : Array.from({length:20},(_,i)=>({...row,id:i,name:'其他曲目'})),total:21}
       return []
     })
     lx.send('inited',{sources:{wy:{actions:['musicUrl','search'],qualitys:['320k'],allowPermanentSave:true}}})`
@@ -311,7 +311,7 @@ try {
       允许保存: '已入库',
       试听片段: 'preview',
       明令禁止: 'denied',
-      无匹配: 'missing',
+      无匹配: 'denied',
     },
   )
   const legacyIdentity = JSON.stringify(['song', '允许保存', '艺人'])

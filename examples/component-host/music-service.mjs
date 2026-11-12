@@ -2,7 +2,7 @@ import { desktopLyrics } from './desktop-lyrics.mjs'
 import { musicPlugins } from './music-plugins.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
 import { localLines, ownedLyrics } from './music-lyrics.mjs'
-import { inLibrary, artistMatches } from './music-discovery.mjs'
+import { inLibrary, artistMatches, namesRequestedArtist } from './music-discovery.mjs'
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
@@ -12,7 +12,6 @@ import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
 import { ipcMain, dialog, safeStorage, shell, nativeImage } from 'electron'
-import { setTimeout as delay } from 'node:timers/promises'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
 import { localStream } from './local-stream.mjs'
@@ -397,7 +396,7 @@ export function musicService(
     clearTimeout(updateTimer)
     if (store.get('taste-consent') !== '1') return
     updateTimer = setTimeout(() => {
-      if (modelInfo(store).active !== 'offline') void taste.refresh().catch(() => {})
+      void taste.refresh().catch(() => {})
     }, 500)
     updateTimer.unref()
   }
@@ -408,89 +407,151 @@ export function musicService(
     queueTasteUpdate()
     return taste.status()
   })
-  bind('generate', (preference, mode = 'style', similar = false) => {
+  bind('generate', (preference, mode = 'auto', similar = false, targetCount = 5) => {
     text(preference)
-    if (!['artist', 'style'].includes(mode) || typeof similar !== 'boolean')
+    if (!['auto', 'artist', 'style'].includes(mode) || typeof similar !== 'boolean')
       throw Error('无效推荐方式')
+    if (!Number.isSafeInteger(targetCount) || targetCount < 1) throw Error('目标首数须为正整数')
     return generateTask(async (signal) => {
       const label = preference.trim() || (mode === 'artist' ? '按歌手推荐' : '按风格推荐')
-      if (modelInfo(store).active === 'offline') {
-        await delay(150, undefined, { signal })
-        return store.generate('离线示例 · ' + label, [])
-      }
       clearTimeout(updateTimer)
       if (!store.get('music-recommend-dir') && !(await chooseMusicDirectory('recommend', signal)))
         return null
       signal.throwIfAborted()
-      const profile = await taste.refresh()
-      signal.throwIfAborted()
-      const seen = []
-      const history = store.db
-        .prepare('SELECT title,artist FROM recommended_songs ORDER BY rowid')
-        .all()
-      let batch
-      let slots = 5
-      let catalogChoices = []
-      for (let round = 0; round < 2 && slots > 0; round++) {
-        const excluded = [...(profile ? history.slice(-20) : []), ...seen].map(
-          ({ title, artist }) => ({
-            title,
-            artist,
-          }),
-        )
-        const rows = await requestMusicModel(
-          store,
-          safeStorage,
-          'recommend',
-          {
-            preference,
-            mode,
-            similar: mode === 'artist' && similar,
-            ...(profile ? { profile } : {}),
-            ...(catalogChoices.length ? { catalogChoices } : {}),
-            ...(excluded.length ? { excluded } : {}),
-          },
-          signal,
-        )
+      const batch = store.saveSuggestions(label, [], '待处理', undefined, targetCount)
+      const update = (state, message) =>
+        store.db
+          .prepare('UPDATE recommendation_runs SET state=?,message=? WHERE batch=?')
+          .run(state, message, batch)
+      try {
+        if (!store.get('lx-source')) throw Error('请先在设置中导入音乐源')
+        const profile = await taste.refresh(signal)
         signal.throwIfAborted()
-        const local = store.db
-          .prepare(
-            'SELECT title,artist FROM local_tracks UNION SELECT i.title,i.artist FROM items i JOIN recommended_items r ON r.item=i.id JOIN local_tracks t ON t.id=r.local',
-          )
+        const seen = []
+        const history = store.db
+          .prepare('SELECT title,artist FROM recommended_songs ORDER BY rowid')
           .all()
-        const accepted = []
-        for (const row of rows) {
-          if (
-            mode === 'artist' &&
-            !similar &&
-            preference.trim() &&
-            !artistMatches(preference, row.artist)
+        const localRows = store.db.prepare(
+          'SELECT title,artist FROM local_tracks UNION SELECT i.title,i.artist FROM items i JOIN recommended_items r ON r.item=i.id JOIN local_tracks t ON t.id=r.local',
+        )
+        const savedRows = store.db.prepare(
+          "SELECT i.artist FROM items i JOIN recommended_items r ON r.item=i.id JOIN local_tracks t ON t.id=r.local WHERE i.batch=? AND i.status='已入库' AND t.available=1",
+        )
+        let saved = []
+        let deferred = []
+        let requiredArtist = mode === 'artist' && !similar ? preference.trim() : ''
+        const frequency = (row) =>
+          saved.filter(
+            (r) => artistMatches(row.artist, r.artist) || artistMatches(r.artist, row.artist),
+          ).length
+        const preferDifferentArtist = (row) =>
+          mode !== 'artist' &&
+          !requiredArtist &&
+          !(mode === 'auto' && namesRequestedArtist(preference, row.artist))
+        let catalogChoices = []
+        let repeated = 0
+        let stalled = 0
+        const sourceHealth = { unreachable: 0 }
+        while (saved.length < targetCount) {
+          signal.throwIfAborted()
+          const remaining = targetCount - saved.length
+          const excluded = [...(profile ? history.slice(-20) : []), ...seen.slice(-100)].map(
+            ({ title, artist }) => ({ title, artist }),
           )
-            continue
-          if (inLibrary(row, seen)) continue
-          seen.push(row)
-          if (inLibrary(row, local) || inLibrary(row, history)) continue
-          accepted.push(row)
-          if (accepted.length >= slots) break
-        }
-        if (accepted.length) {
-          batch = store.saveSuggestions(label, accepted, '待处理', batch)
-          await lx.batch(batch, signal)
-        }
-        signal.throwIfAborted()
-        const hasSource = !!store.get('lx-source')
-        if (batch) {
-          const retained = store.db
-            .prepare(
-              "SELECT count(*) AS n FROM items WHERE batch=? AND (?=0 OR status IN ('已入库','待选录音'))",
+          const { songs: rows, requestedArtist } = await requestMusicModel(
+            store,
+            safeStorage,
+            'recommend',
+            {
+              preference,
+              mode,
+              similar: mode === 'artist' && similar,
+              count: Math.min(5, remaining),
+              ...(profile ? { profile } : {}),
+              ...(catalogChoices.length ? { catalogChoices } : {}),
+              ...(excluded.length ? { excluded } : {}),
+              ...(mode !== 'artist' && saved.length
+                ? {
+                    recentArtists: [...new Set(saved.map((r) => r.artist))].slice(-30),
+                  }
+                : {}),
+            },
+            signal,
+          )
+          signal.throwIfAborted()
+          if (mode === 'auto' && !seen.length && !requiredArtist) {
+            if (requestedArtist && namesRequestedArtist(preference, requestedArtist, true))
+              requiredArtist = requestedArtist
+            else
+              requiredArtist =
+                rows.find((row) => namesRequestedArtist(preference, row.artist))?.artist ?? ''
+          }
+          const local = localRows.all()
+          const fresh = []
+          for (const row of rows) {
+            if (inLibrary(row, seen)) continue
+            seen.push(row)
+            if (requiredArtist && !artistMatches(requiredArtist, row.artist)) continue
+            if (!inLibrary(row, local) && !inLibrary(row, history)) fresh.push(row)
+          }
+          repeated = fresh.length || deferred.length ? 0 : repeated + 1
+          if (repeated >= 3)
+            throw Error('模型连续返回已排除的歌曲或不符合条件的艺人，未能提供更多新候选')
+          const previouslySaved = saved.length
+          const priorDeferred = new Set(deferred)
+          const candidates = [...deferred, ...fresh]
+          deferred = []
+          async function attempt(row) {
+            store.saveSuggestions(label, [row], '待处理', batch)
+            await lx.batch(batch, signal, sourceHealth)
+            signal.throwIfAborted()
+            saved = savedRows.all(batch)
+          }
+          while (candidates.length && saved.length < targetCount) {
+            if (mode !== 'artist') candidates.sort((a, b) => frequency(a) - frequency(b))
+            const next = candidates.shift()
+            if (preferDifferentArtist(next) && frequency(next) > 0) deferred.push(next)
+            else await attempt(next)
+          }
+          // Try fresh artists from another model/catalog round before using same-artist reserves.
+          // Once that search yields no new playable artist, release the preceding round's reserves.
+          if (saved.length === previouslySaved && priorDeferred.size) {
+            const reserves = deferred.filter((row) => priorDeferred.has(row))
+            deferred = deferred.filter((row) => !priorDeferred.has(row))
+            while (reserves.length && saved.length < targetCount) {
+              reserves.sort((a, b) => frequency(a) - frequency(b))
+              await attempt(reserves.shift())
+            }
+          }
+          stalled = saved.length > previouslySaved ? 0 : stalled + 1
+          if (stalled >= 6)
+            throw Error(
+              '连续 6 轮没有可入库的新录音，已停止继续调用模型。请查看匹配详情或更换音源、调整要求后重试',
             )
-            .get(batch, Number(hasSource))
-          slots = 5 - retained.n
+          if (saved.length < targetCount) {
+            update('running', '正在补推，还差 ' + (targetCount - saved.length) + ' 首')
+            catalogChoices = await lx.discoveries(
+              seen.filter((row) => !preferDifferentArtist(row) || !frequency(row)).slice(-20),
+              [...local, ...history, ...seen],
+              signal,
+            )
+            catalogChoices = catalogChoices.filter(
+              (row) => !preferDifferentArtist(row) || !frequency(row),
+            )
+          }
         }
-        if (!round && slots > 0 && hasSource)
-          catalogChoices = await lx.discoveries(seen, [...local, ...history], signal)
+        update('completed', '已达到目标首数')
+      } catch (error) {
+        update(
+          signal.aborted ? 'cancelled' : 'blocked',
+          signal.aborted
+            ? '本次生成已取消'
+            : error.code
+              ? '存储操作失败，请检查空间和目录权限后重试'
+              : String(error.message),
+        )
       }
-      return batch ?? store.saveSuggestions(label, [], '待处理')
+      return batch
     })
   })
   bind('stopGeneration', () => pending?.abort())

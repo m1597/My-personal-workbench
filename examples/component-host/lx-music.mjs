@@ -1,5 +1,5 @@
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
-import { titleMatch, artistMatches, inLibrary } from './music-discovery.mjs'
+import { titleMatch, artistMatches, inLibrary, searchRecommendation } from './music-discovery.mjs'
 import { CatalogUnavailable, platformSearch } from './lx-platform-search.mjs'
 import { describeFailure } from './music-download-diagnosis.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
@@ -553,7 +553,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       matches.clear()
       const audition = typeof id === 'string' && !id.startsWith('local-')
       const { rows, partial } = audition
-        ? { rows: searchRows(await versions(src, track, signal)), partial: false }
+        ? {
+            rows: searchRows(await versions(src, track, signal)),
+            partial: false,
+          }
         : await downloadResults(src, track, signal)
       signal.throwIfAborted()
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
@@ -808,19 +811,17 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       store.status(id, '正在匹配')
       const selectRecording = async (src) => {
         const cacheKey = src.search ? src.code + src.platform : src.platform
-        if (!cache.has(cacheKey)) cache.set(cacheKey, versions(src, item, signal))
-        const hits = searchRows(await cache.get(cacheKey))
-        const relevant = hits
-          .slice(0, 20)
-          .filter(
-            (row) =>
-              row &&
-              (!row.source || row.source === src.platform) &&
-              text(row.name) &&
-              text(row.singer) &&
-              JSON.stringify(row).length <= 16384 &&
-              titleMatch(item, row),
+        if (!cache.has(cacheKey))
+          cache.set(
+            cacheKey,
+            searchRecommendation(
+              item,
+              src.platform,
+              (query, page, offset) => versions(src, query, signal, 20, page, offset),
+              signal,
+            ),
           )
+        const { matches: relevant, diagnostics } = await cache.get(cacheKey)
         const officialWy = !src.search && src.platform === 'wy'
         if (officialWy && !cache.has('wyRights')) {
           const ids = relevant
@@ -855,7 +856,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         }
         if (!candidates.size) {
           if (!reasons.size)
-            throw new RecordingError('missing', '没有找到歌名和艺人都匹配且音质可用的录音')
+            throw new RecordingError(
+              'missing',
+              '没有找到歌名和艺人都匹配且音质可用的录音。检索：' + diagnostics.join('；'),
+            )
           if (reasons.size === 1 && reasons.has('ignored'))
             throw new RecordingError('ignored', '已标记不感兴趣')
           const error = new RecordingError(
@@ -955,6 +959,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         )
         .run(issue.detail, issue.kind, issue.summary, attemptSources, id)
       store.status(id, '待重试')
+      return attempts.every(({ error }) =>
+        ['network', 'source-request'].includes(failureKind(error)),
+      )
+        ? 'unreachable'
+        : undefined
     } finally {
       running.delete(id)
     }
@@ -1041,7 +1050,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
       return pool
     },
-    async batch(batch, signal) {
+    async batch(batch, signal, sourceHealth) {
       const epoch = generation
       const ids = getStore()
         .db.prepare("SELECT id FROM items WHERE batch=? AND status='待处理'")
@@ -1050,7 +1059,17 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         for (const { id } of ids) {
           if (epoch !== generation) break
           signal.throwIfAborted()
-          await prepare(id, undefined, signal)
+          const outcome = await prepare(id, undefined, signal)
+          if (sourceHealth) {
+            choices.delete(id)
+            sourceHealth.unreachable = outcome === 'unreachable' ? sourceHealth.unreachable + 1 : 0
+            if (sourceHealth.unreachable >= 3)
+              throw Error('连续多首歌曲的所有匹配来源均无法访问，请检查网络或音源状态')
+            const issue = getStore()
+              .db.prepare('SELECT diagnosis,summary FROM recommended_items WHERE item=?')
+              .get(id)
+            if (['source', 'storage'].includes(issue?.diagnosis)) throw Error(issue.summary)
+          }
         }
       } finally {
         if (signal.aborted)
