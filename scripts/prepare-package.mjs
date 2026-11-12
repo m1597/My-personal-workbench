@@ -83,11 +83,10 @@ export async function prepareProduct(product) {
   if (music) {
     const hostFiles = await readdir('examples/component-host', { withFileTypes: true })
     for (const entry of hostFiles) {
-      if (entry.isFile() && entry.name !== 'sample-preload.cjs')
+      if (entry.isFile() && !['sample-preload.cjs', 'music-plugins.mjs'].includes(entry.name))
         await cp(path.join(prototype, 'host', entry.name), path.join(app, 'host', entry.name))
     }
-    for (const file of ['fitbay.png', 'plugin-catalog.json'])
-      await cp(path.join(prototype, 'host', file), path.join(app, 'host', file))
+    await cp(path.join(prototype, 'host/fitbay.png'), path.join(app, 'host/fitbay.png'))
     await mkdir(path.join(app, 'host/music'))
     for (const file of [
       'offline-source.mjs',

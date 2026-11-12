@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 const names = [
+  'musicGuide',
+  'markMusicGuide',
   'lyrics',
   'showLyrics',
   'lyricLine',
@@ -65,17 +67,6 @@ const names = [
 ]
 const bridge = Object.fromEntries(
   names.map((name) => [name, (...args) => ipcRenderer.invoke('music:' + name, ...args)]),
-)
-contextBridge.exposeInMainWorld(
-  'musicPlugins',
-  Object.freeze({
-    list: () => ipcRenderer.invoke('music:pluginList'),
-    install: (id) => ipcRenderer.invoke('music:pluginInstall', id),
-    remove: (id) => ipcRenderer.invoke('music:pluginRemove', id),
-    call: (id, action, ...args) => ipcRenderer.invoke('music:pluginCall', id, action, args),
-    guide: () => ipcRenderer.invoke('music:musicGuide'),
-    markGuide: () => ipcRenderer.invoke('music:markMusicGuide'),
-  }),
 )
 bridge.onLyricsSaved = (listener) => {
   const notify = () => listener()

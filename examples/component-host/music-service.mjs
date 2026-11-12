@@ -1,5 +1,4 @@
 import { desktopLyrics } from './desktop-lyrics.mjs'
-import { musicPlugins } from './music-plugins.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
 import { localLines, ownedLyrics } from './music-lyrics.mjs'
 import { inLibrary, artistMatches, namesRequestedArtist } from './music-discovery.mjs'
@@ -11,7 +10,7 @@ import { audioTypes, openAudio, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
-import { ipcMain, dialog, safeStorage, shell, nativeImage } from 'electron'
+import { ipcMain, dialog, safeStorage, shell } from 'electron'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
 import { localStream } from './local-stream.mjs'
@@ -40,7 +39,6 @@ export function musicService(
     }
   }
   const overlay = desktopLyrics()
-  const plugins = musicPlugins(profile, () => store, dialog, nativeImage)
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   let musicView
@@ -60,10 +58,6 @@ export function musicService(
         throw e
       }
     })
-  bind('pluginList', () => plugins.list())
-  bind('pluginInstall', (id) => plugins.install(id))
-  bind('pluginRemove', (id) => plugins.remove(id))
-  bind('pluginCall', (id, action, args) => plugins.call(id, action, args))
   bind('musicGuide', () => ({
     seen: Boolean(store.get('music-guide-v1')),
     script: mcpScript,
@@ -646,7 +640,6 @@ export function musicService(
     register(session) {
       if (!sessions.has(session)) {
         session.protocol.handle('fitbay-audio', (req) => localStream(req, grant, store?.library))
-        session.protocol.handle('fitbay-plugin', (req) => plugins.resource(req))
         sessions.add(session)
       }
     },

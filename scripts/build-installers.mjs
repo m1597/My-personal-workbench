@@ -1,6 +1,6 @@
 import { build, Platform, Arch } from 'electron-builder'
 import nsis from 'app-builder-lib/out/targets/nsis/nsisUtil.js'
-import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
@@ -45,7 +45,7 @@ async function writeInstallerInclude(output, appOutDir) {
 }
 
 const dest = path.resolve('dist/installers')
-await mkdir(path.join(dest, 'plugins'), { recursive: true })
+await mkdir(dest, { recursive: true })
 const files = []
 for (const product of ['workbench', 'music']) {
   const music = product === 'music'
@@ -89,14 +89,8 @@ for (const product of ['workbench', 'music']) {
   await cp(path.join(output, filename), path.join(dest, filename))
   files.push(filename)
 }
-for (const id of ['wave', 'tags', 'rules']) {
-  const name = `${id}.fitbayplugin`
-  await cp(
-    path.resolve('dist/component-prototype/plugin-packs', name),
-    path.join(dest, 'plugins', name),
-  )
-  files.push(`plugins/${name}`)
-}
+for (const id of ['wave', 'tags', 'rules'])
+  await rm(path.join(dest, 'plugins', id + '.fitbayplugin'), { force: true })
 const sums = []
 for (const file of files) {
   const hash = createHash('sha256')
@@ -104,4 +98,4 @@ for (const file of files) {
   sums.push(`${hash.digest('hex')}  ${file}`)
 }
 await writeFile(path.join(dest, 'SHA256SUMS.txt'), `${sums.join('\n')}\n`)
-console.log(`两个安装程序和三个独立插件包：${dest}`)
+console.log(`两个独立安装程序：${dest}`)

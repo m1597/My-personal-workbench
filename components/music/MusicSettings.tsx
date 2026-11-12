@@ -5,8 +5,6 @@ import { LibraryTools } from './LibraryTools'
 import type { ImportJob } from './LibraryPane'
 import { AudioLines, Download, Keyboard, Library, PanelLeft, Sparkles } from 'lucide-react'
 import { MusicSourcesSettings } from './MusicSourcesSettings'
-import type { ReactNode } from 'react'
-import { Blocks } from 'lucide-react'
 import './settings.css'
 
 const categories = [
@@ -15,7 +13,6 @@ const categories = [
   { id: 'downloads', name: '下载', icon: Download },
   { id: 'model', name: '模型与推荐', icon: Sparkles },
   { id: 'keys', name: '全局快捷键', icon: Keyboard },
-  { id: 'plugins', name: '插件', icon: Blocks },
 ] as const
 export type SettingsCategory = (typeof categories)[number]['id']
 
@@ -165,7 +162,6 @@ function ShortcutField({
 }
 
 export function MusicSettings({
-  plugins,
   category,
   selectCategory,
   script,
@@ -177,7 +173,6 @@ export function MusicSettings({
 }: {
   script: string
   guideTarget?: string
-  plugins: ReactNode
   category: SettingsCategory
   selectCategory: (category: SettingsCategory) => void
   prefs: MusicPreferences
@@ -277,7 +272,6 @@ export function MusicSettings({
         ))}
       </nav>
       <div className="music-settings">
-        {category === 'plugins' && plugins}
         {category === 'library' && (
           <section>
             <h2>本地曲库</h2>

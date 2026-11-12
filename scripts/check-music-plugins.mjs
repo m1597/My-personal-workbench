@@ -1,48 +1,49 @@
-import { choosePluginFile, pluginFile } from './music-plugin-file-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
-import { mkdir, mkdtemp, writeFile, access } from 'node:fs/promises'
-import { musicPlugins } from '../dist/component-prototype/host/music-plugins.mjs'
+import { mkdir, mkdtemp, writeFile, readFile } from 'node:fs/promises'
 import { _electron as electron, expect } from '@playwright/test'
-import { selectMusicSettings } from './music-settings-fixture.mjs'
+import { MusicStore } from '../components/music/store.mjs'
 
-const root = await mkdtemp(path.resolve('tmp/music-plugins-'))
-// Exercise an older installed version without changing the shipped catalog.
-const upgradeProfile = path.join(root, 'upgrade')
-const oldDigest = 'a'.repeat(64)
-const oldFolder = path.join(upgradeProfile, 'fitbay-music', 'plugins', 'rules-' + oldDigest)
-await mkdir(oldFolder, { recursive: true })
-const registrations = new Map([['music-plugin-install-rules', oldDigest]])
-let chosen = path.join(root, 'bad')
-const manager = musicPlugins(upgradeProfile, () => registrations, {
-  showOpenDialog: async () => ({ canceled: false, filePaths: [chosen] }),
+await mkdir('tmp', { recursive: true })
+const root = await mkdtemp(path.resolve('tmp/music-guide-'))
+const profile = path.join(root, 'profile')
+const store = new MusicStore(path.join(profile, 'fitbay-music'))
+const digest = 'a'.repeat(64)
+store.set('music-plugin-install-rules', digest)
+store.db.close()
+const previous = path.join(profile, 'fitbay-music/plugins', 'rules-' + digest)
+await mkdir(previous, { recursive: true })
+const oldFile = path.join(previous, 'panel.js')
+await writeFile(oldFile, 'window.legacyPluginStarted = true')
+const app = await electron.launch({
+  args: [
+    path.resolve('dist/component-prototype/host'),
+    '--mode=music',
+    '--mute-audio',
+    '--user-data-dir=' + profile,
+  ],
+  env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
 })
-await writeFile(path.join(root, 'bad'), 'bad')
-assert.ok(manager.list().find((p) => p.id === 'rules').outdated)
-await assert.rejects(manager.install('rules'), /大小/)
-await access(oldFolder)
-assert.equal(registrations.get('music-plugin-install-rules'), oldDigest)
-chosen = pluginFile('rules')
-await manager.install('rules')
-await assert.rejects(access(oldFolder), { code: 'ENOENT' })
-await manager.remove('rules')
-assert.ok(manager.list().every((p) => !p.installed))
-const args = [
-  path.resolve('dist/component-prototype/host'),
-  '--mode=music',
-  '--mute-audio',
-  '--user-data-dir=' + path.join(root, 'profile'),
-]
-const launch = () =>
-  electron.launch({ args, env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' } })
-let app = await launch()
 try {
-  let page = await app.firstWindow()
+  const page = await app.firstWindow()
+  assert.ok(
+    await app.evaluate(({ app, BrowserWindow, screen }) => {
+      const left = Math.min(...screen.getAllDisplays().map((d) => d.bounds.x))
+      return (
+        app.commandLine.hasSwitch('mute-audio') &&
+        BrowserWindow.getAllWindows().every(
+          (w) => !w.isFocusable() && w.getBounds().x + w.getBounds().width <= left,
+        )
+      )
+    }),
+  )
   const guide = () => page.getByRole('complementary', { name: 'Music 使用引导' })
-  await expect(guide()).toBeVisible()
-  await page.evaluate(() => delete document.documentElement.dataset.backdrop)
-  const steps = ['sources', 'mcp', 'model', 'recommend', 'plugin']
+  const help = page.getByRole('button', { name: '使用引导', exact: true })
+  const steps = ['sources', 'mcp', 'model', 'recommend']
   const next = () => guide().getByRole('button', { name: '下一步' }).click()
+  await expect(guide()).toBeVisible()
+  await expect(help).toBeVisible()
+  await page.evaluate(() => delete document.documentElement.dataset.backdrop)
   async function checkStep(id, size) {
     const target = page.locator('[data-guide-active="true"]')
     await expect(target).toHaveAttribute('data-guide-anchor', id)
@@ -75,82 +76,55 @@ try {
       path: path.join(root, 'guide-' + size + '-' + id + '.png'),
     })
   }
+
   for (const [i, id] of steps.entries()) {
     if (i) await next()
     await checkStep(id, 'regular')
   }
   await guide().getByRole('button', { name: '完成' }).click()
-  await expect(page.getByRole('tab', { name: '本地曲库' })).toHaveAttribute('aria-selected', 'true')
-  const settings = async () => {
-    await page.getByRole('tab', { name: '设置', exact: true }).click()
-    await selectMusicSettings(page, '插件')
+  for (const name of ['本地曲库', '下载音乐', '每日推荐', '设置']) {
+    const tab = page.getByRole('tab', { name, exact: true })
+    await tab.click()
+    await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '插件', exact: true })).toHaveCount(0)
+    const controls = page.locator('.music-view-actions button')
+    assert.deepEqual(
+      await controls.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label'))),
+      ['使用引导', '只显示播放栏', '隐藏到后台'],
+    )
+    await help.hover()
+    await expect(page.getByRole('tooltip')).toContainText('使用引导')
+    await page.screenshot({
+      path: path.join(root, 'help-' + name + '.png'),
+      animations: 'disabled',
+    })
+    await help.click()
+    await expect(guide()).toContainText('导入音乐源')
+    await guide().getByRole('button', { name: '跳过' }).click()
+    await expect(tab).toHaveAttribute('aria-selected', 'true')
   }
-  await settings()
-  const row = (title) =>
-    page.locator('article').filter({ has: page.getByText(title, { exact: true }) })
-  const catalog = await page.evaluate(() => window.musicPlugins.list())
-  assert.equal(catalog.length, 3)
-  assert.ok(catalog.every((x) => !x.installed && x.bytes > 0))
-  await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: '重新查看使用引导' }).click()
   await app.evaluate(({ BaseWindow }) => {
-    const window = BaseWindow.getAllWindows()[0]
-    window.setMinimumSize(360, 320)
-    window.setContentSize(420, 480)
+    const w = BaseWindow.getAllWindows()[0]
+    w.setMinimumSize(360, 320)
+    w.setContentSize(420, 480)
   })
-  await next()
-  await guide().getByRole('button', { name: '上一步' }).click()
+  await help.click()
   for (const [i, id] of steps.entries()) {
     if (i) await next()
     await checkStep(id, 'small')
   }
   await guide().getByRole('button', { name: '完成' }).click()
-  await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setSize(940, 650))
-  await expect(page.getByRole('navigation', { name: '设置分类' })).toBeVisible()
-  await page.screenshot({ path: path.join(root, 'catalog.png') })
-  const bad = path.join(root, 'wrong.fitbayplugin')
-  await writeFile(bad, 'incorrect')
-  await app.evaluate(({ dialog }, file) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
-  }, bad)
-  const rules = row('智能歌单')
-  await rules.getByText('选择插件文件').click()
-  await expect(
-    page.getByRole('status').filter({ hasText: '安装包大小与当前版本不符' }),
-  ).toBeVisible()
-  await choosePluginFile(app, 'rules')
-  await rules.getByText('选择插件文件').click()
-  await rules.getByText('打开', { exact: true }).click()
-  await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  assert.equal(await page.evaluate(() => typeof window.musicPlugins), 'undefined')
+  assert.equal(await page.evaluate(() => window.legacyPluginStarted), undefined)
+  assert.equal(
+    await app.evaluate(({ webContents }, url) => {
+      const music = webContents.getAllWebContents().find((w) => w.getURL() === url)
+      return music.session.protocol.isProtocolHandled('fitbay-plugin')
+    }, page.url()),
+    false,
   )
-  await expect(page.locator('.music-extensions').getByRole('textbox').first()).toBeVisible()
-  assert.deepEqual(
-    await page.evaluate(async () =>
-      (await window.musicPlugins.list()).filter((x) => x.installed).map((x) => x.id),
-    ),
-    ['rules'],
-  )
-  await app.close()
-  app = await launch()
-  page = await app.firstWindow()
-  await expect(page.getByRole('tab', { name: '扩展', exact: true })).toBeVisible()
-  await expect(guide()).toHaveCount(0)
-  await settings()
-  await row('智能歌单').getByText('卸载', { exact: true }).click()
-  await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)
-  await assert.rejects(
-    page.evaluate(() => window.musicPlugins.call('rules', 'list')),
-    /请先安装/,
-  )
-  await page.getByRole('button', { name: '重新查看使用引导' }).click()
-  await guide().getByText('跳过').click()
-  await expect(guide()).toHaveCount(0)
-  console.log(
-    'PASS 五步随控件引导、真实跳转、双尺寸避让、重开与跳过；默认未安装、坏包拒绝、按需安装、跨重启与卸载禁用。',
-    root,
-  )
+  assert.equal(await readFile(oldFile, 'utf8'), 'window.legacyPluginStarted = true')
+  console.log('PASS 四页顶栏、四步引导、窄窗、旧插件不加载且原文件保留', root)
 } finally {
   await app.close()
 }

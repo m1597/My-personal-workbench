@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
-import { access, copyFile, writeFile } from 'node:fs/promises'
+import { access, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
 import { promisify } from 'node:util'
@@ -100,13 +100,8 @@ try {
     await assert.rejects(access(w), { code: 'ENOENT' })
     const music = await find('/music/index.html')
     await listen(music)
-    assert.deepEqual(
-      (await music.evaluate(() => window.musicPlugins.list()))
-        .filter((p) => p.installed)
-        .map((p) => p.id),
-      ['rules'],
-    )
-    console.log('PASS 卸载工作台后，Music 仍可播放并保留独立安装的插件')
+    assert.equal(await music.evaluate(() => typeof window.musicPlugins), 'undefined')
+    console.log('PASS 卸载工作台后，Music 仍可播放')
   } else if (scenario === 'workbench') {
     await assert.rejects(access(m), { code: 'ENOENT' })
     const shell = await find('/workbench/index.html')
@@ -123,42 +118,12 @@ try {
     const music = await find('/music/index.html')
     await listen(music)
     await checkInstalledMcp()
-    const installed = await music.evaluate(() => window.musicPlugins.list())
-    assert.equal(installed.length, 3)
-    assert.ok(installed.every((p) => !p.installed))
-    const packageFile = path.join(root, '独立智能歌单.fitbayplugin')
-    await copyFile(path.resolve('dist/installers/plugins/rules.fitbayplugin'), packageFile)
-    await app.evaluate(({ dialog }, file) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
-    }, packageFile)
-    await music.getByRole('tab', { name: '设置', exact: true }).click()
-    await selectMusicSettings(music, '插件')
-    const card = music
-      .locator('article')
-      .filter({ has: music.getByText('智能歌单', { exact: true }) })
-    await card.getByRole('button', { name: '选择插件文件', exact: true }).click()
-    await card.getByRole('button', { name: '打开', exact: true }).click()
-    const smart = music.getByRole('region', { name: '智能歌单', exact: true })
-    await smart.getByLabel('歌单名称').fill('安装验收歌单')
-    await smart.getByRole('combobox', { name: '歌曲来源' }).click()
-    await music.getByRole('option', { name: '本地导入' }).click()
-    await smart.getByRole('combobox', { name: '有效播放次数' }).click()
-    await music.getByRole('option', { name: '不限次数' }).click()
-    await smart.getByRole('button', { name: '保存规则' }).click()
-    await expect(smart.getByText('规则已保存')).toBeVisible()
-    await expect(smart.getByRole('button', { name: '试听安装测试音频' })).toBeVisible()
-    assert.deepEqual(
-      (await music.evaluate(() => window.musicPlugins.list()))
-        .filter((p) => p.installed)
-        .map((p) => p.id),
-      ['rules'],
-    )
+    assert.equal(await music.evaluate(() => typeof window.musicPlugins), 'undefined')
+    await expect(music.getByRole('button', { name: '使用引导' })).toBeVisible()
     // Off-screen Chromium screenshots omit the native acrylic composition.
     await music.evaluate(() => delete document.documentElement.dataset.backdrop)
     await music.screenshot({ path: path.join(root, 'installed-music.png') })
-    console.log(
-      'PASS 仅安装 Music，真实 WAV 导入与静音播放；独立选择智能歌单文件后可用，另两项仍未安装',
-    )
+    console.log('PASS 仅安装 Music，真实 WAV 导入与静音播放、引导入口与插件桥接撤下')
   } else {
     let shell, player
     if (scenario === 'music-first') {

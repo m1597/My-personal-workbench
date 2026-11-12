@@ -55,7 +55,7 @@ try {
   expect(loaded.localTracks.map((row) => row.title)).toEqual(['A', 'B', 'C'])
   await player.getByRole('button', { name: '播放A', exact: true }).click({ timeout: 5000 })
   await player.getByRole('tab', { name: '设置', exact: true }).click()
-  await expect(player.locator('.music-settings h2')).toHaveText(['本地曲库'])
+  await expect(player.locator('.music-settings h2')).toHaveText(['本地曲库', '曲库管理'])
   for (const name of ['音乐源', '下载', '模型与推荐', '全局快捷键']) {
     await selectMusicSettings(player, name)
     await expect(player.locator('.music-settings h2')).toHaveText([name])
@@ -163,7 +163,13 @@ try {
   const categories = player.getByRole('navigation', { name: '设置分类', includeHidden: true })
   await expect(categories).toBeHidden()
   await player.getByRole('button', { name: '设置分类', exact: true }).click()
-  await expect(categories.getByRole('button')).toHaveCount(6)
+  await expect(categories.getByRole('button')).toHaveText([
+    '本地曲库',
+    '音乐源',
+    '下载',
+    '模型与推荐',
+    '全局快捷键',
+  ])
   await player.screenshot({
     path: path.join(evidence, 'settings-narrow-menu.png'),
     animations: 'disabled',

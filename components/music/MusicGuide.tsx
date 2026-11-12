@@ -1,5 +1,6 @@
 import { Button, Popover, PopoverSurface } from '@fluentui/react-components'
 import { useLayoutEffect, useState } from 'react'
+import './guide.css'
 
 export const guideSteps = [
   {
@@ -26,27 +27,19 @@ export const guideSteps = [
     title: '写下今天想听什么',
     text: '例如「适合雨天散步的民谣」。输入偏好后，点生成按钮查看推荐。',
   },
-  {
-    page: 'plugins',
-    target: 'plugin',
-    title: '从本地安装插件',
-    text: '在需要的插件下选择对应的 .fitbayplugin 文件。安装后可从「扩展」打开。',
-  },
 ] as const
 
 export function MusicGuide({
   step,
   change,
   close,
-  allInstalled,
 }: {
   step: number
   change: (next: number) => void
   close: () => void
-  allInstalled: boolean
 }) {
   const item = guideSteps[step]
-  const name = item.target === 'plugin' && allInstalled ? 'installed-plugin' : item.target
+  const name = item.target
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => {
     const target = document.querySelector<HTMLElement>(`[data-guide-anchor="${name}"]`)
@@ -88,9 +81,7 @@ export function MusicGuide({
             {step + 1} / {guideSteps.length}
           </small>
         </header>
-        <p>
-          {name === 'installed-plugin' ? '所有插件都已安装。点「打开」进入对应的扩展。' : item.text}
-        </p>
+        <p>{item.text}</p>
         <div className="guide-actions">
           <Button size="small" appearance="subtle" onClick={close}>
             跳过

@@ -18,7 +18,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { componentView } from './component-view.mjs'
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'fitbay-plugin', privileges: { standard: true, secure: true } },
   {
     scheme: 'fitbay-audio',
     privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },

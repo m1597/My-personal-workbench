@@ -1,5 +1,4 @@
 import { TrackMenu } from './TrackMenu'
-import { PluginPage, PluginSettings, type PluginRow } from './MusicPlugins'
 import { guideSteps, MusicGuide } from './MusicGuide'
 import { observeListening } from './listening'
 import type { SourceInventory } from './MusicSourcesSettings'
@@ -17,6 +16,7 @@ import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/Co
 import {
   AudioLines,
   Disc3,
+  CircleHelp,
   PanelBottomClose,
   PanelTopOpen,
   PanelTopClose,
@@ -116,6 +116,8 @@ type Mode = { mode: string; presentation: Presentation }
 declare global {
   interface Window {
     music: LibraryToolsAPI & {
+      musicGuide(): Promise<{ seen: boolean; script: string }>
+      markMusicGuide(): Promise<void>
       setMusicQuality(quality: string): Promise<void>
       setMusicOutput(volume: number, muted: boolean): Promise<void>
       setMusicShortcut(action: TransportAction, key: string): Promise<void>
@@ -215,8 +217,6 @@ function shuffleQueue(ids: string[], first?: string) {
   return result
 }
 function Music() {
-  const [plugins, setPlugins] = useState<PluginRow[]>([])
-  const [pluginId, setPluginId] = useState('')
   const [guide, setGuide] = useState<number | null>(null)
   const guideOrigin = useRef({ tab: 'library', category: 'library' as SettingsCategory })
   function visitGuide(step: number) {
@@ -235,23 +235,16 @@ function Music() {
   }
   const startFirstGuide = useEffectEvent(() => visitGuide(0))
   const [script, setScript] = useState('')
-  const reloadPlugins = async () => setPlugins(await window.musicPlugins.list())
   useEffect(() => {
     let alive = true
-    void window.musicPlugins
-      .list()
-      .then((rows) => {
-        if (alive) setPlugins(rows)
-      })
-      .catch((e) => alive && setError(String(e)))
-    void window.musicPlugins
-      .guide()
+    void window.music
+      .musicGuide()
       .then(async (info) => {
         if (!alive) return
         setScript(info.script)
         if (!info.seen) {
           startFirstGuide()
-          await window.musicPlugins.markGuide()
+          await window.music.markMusicGuide()
         }
       })
       .catch((e) => alive && setError(String(e)))
@@ -698,9 +691,7 @@ function Music() {
                   ? '本地音乐'
                   : tab === 'settings'
                     ? '设置'
-                    : tab === 'plugins'
-                      ? '扩展'
-                      : '每日推荐'}
+                    : '每日推荐'}
             </small>
           </div>
         </header>
@@ -719,9 +710,24 @@ function Music() {
           <Tab value="download">下载音乐</Tab>
           <Tab value="audition">每日推荐</Tab>
           <Tab value="settings">设置</Tab>
-          {plugins.some((row) => row.installed) && <Tab value="plugins">扩展</Tab>}
         </TabList>
         <div className="music-view-actions">
+          <span className="music-guide-trigger">
+            <Button
+              appearance="subtle"
+              size="small"
+              aria-label="使用引导"
+              aria-describedby="music-guide-hint"
+              icon={<CircleHelp size={17} />}
+              onClick={() => {
+                if (guide === null) guideOrigin.current = { tab, category: settingsCategory }
+                visitGuide(0)
+              }}
+            />
+            <span role="tooltip" id="music-guide-hint">
+              打开 Music 使用引导
+            </span>
+          </span>
           <Button
             appearance="subtle"
             size="small"
@@ -740,18 +746,8 @@ function Music() {
           />
         </div>
       </div>
-      {guide !== null && state && (guideSteps[guide].page !== 'plugins' || plugins.length > 0) && (
-        <MusicGuide
-          key={
-            guideSteps[guide].target === 'plugin'
-              ? (plugins.find((row) => !row.installed)?.id ?? 'installed')
-              : guide
-          }
-          step={guide}
-          close={closeGuide}
-          change={visitGuide}
-          allInstalled={plugins.every((row) => row.installed)}
-        />
+      {guide !== null && state && (
+        <MusicGuide key={guide} step={guide} close={closeGuide} change={visitGuide} />
       )}
       <main key={tab} className="music-scroll">
         {tab === 'library' ? (
@@ -811,21 +807,6 @@ function Music() {
         ) : tab === 'settings' ? (
           state && (
             <MusicSettings
-              plugins={
-                <PluginSettings
-                  rows={plugins}
-                  reload={reloadPlugins}
-                  guide={() => {
-                    guideOrigin.current = { tab, category: settingsCategory }
-                    visitGuide(0)
-                  }}
-                  open={(id) => {
-                    setGuide(null)
-                    setPluginId(id)
-                    setTab('plugins')
-                  }}
-                />
-              }
               category={settingsCategory}
               selectCategory={(category) => {
                 setGuide(null)
@@ -839,17 +820,6 @@ function Music() {
               refresh={refresh}
             />
           )
-        ) : tab === 'plugins' ? (
-          <PluginPage
-            rows={plugins}
-            selected={pluginId}
-            select={setPluginId}
-            tracks={state?.localTracks ?? []}
-            activeId={now || undefined}
-            play={(id) => void act(() => startTrack(id, [id]))}
-            audio={audio.current}
-            refresh={refresh}
-          />
         ) : tab === 'download' ? (
           <DownloadPane
             preferredQuality={state?.prefs.quality}
