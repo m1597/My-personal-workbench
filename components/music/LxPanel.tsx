@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Select } from '@fluentui/react-components'
+import { Button, Input, Select } from '@fluentui/react-components'
 import type { LocalTrack } from './LibraryPane'
 export type Versions = {
   items: { key: string; title: string; artist: string; album: string }[]
@@ -19,6 +19,8 @@ export function LxPanel({
     [quality, setQuality] = useState(''),
     [status, setStatus] = useState(''),
     [busy, setBusy] = useState(false)
+  const [online, setOnline] = useState(false),
+    [link, setLink] = useState('')
   const songId = song?.id
   const host = window.music
   const live = useRef(true)
@@ -55,6 +57,18 @@ export function LxPanel({
       void host.lxCancel().catch(() => {})
     }
   }, [songId, act, search])
+  function importSource(url?: string) {
+    void act(async () => {
+      await host.lxImport(url)
+      if (!live.current) return
+      const active = await host.lxInfo()
+      setName(active)
+      setResult(undefined)
+      setOnline(false)
+      setLink('')
+      if (song && active) await search()
+    })
+  }
   return (
     <section className="lx-panel" aria-label="在线版本">
       <div className="lx-line">
@@ -65,21 +79,40 @@ export function LxPanel({
       </div>
       <div className="lx-line">
         <span>{name || '尚未导入音乐源'}</span>
-        <Button
-          size="small"
-          disabled={busy}
-          onClick={() =>
-            void act(async () => {
-              await host.lxImport()
-              setName(await host.lxInfo())
-              setResult(undefined)
-              if (song && (await host.lxInfo())) await search()
-            })
-          }
-        >
-          导入洛雪源
-        </Button>
+        <div className="lx-import-actions">
+          <Button size="small" disabled={busy} onClick={() => importSource()}>
+            本地导入
+          </Button>
+          <Button
+            size="small"
+            disabled={busy}
+            aria-expanded={online}
+            onClick={() => setOnline(!online)}
+          >
+            在线导入
+          </Button>
+        </div>
       </div>
+      {online && (
+        <form
+          className="lx-import-actions"
+          onSubmit={(e) => {
+            e.preventDefault()
+            importSource(link.trim())
+          }}
+        >
+          <Input
+            aria-label="音乐源链接"
+            placeholder="粘贴音乐源 JS 直链"
+            value={link}
+            disabled={busy}
+            onChange={(_, d) => setLink(d.value)}
+          />
+          <Button type="submit" size="small" appearance="primary" disabled={busy || !link.trim()}>
+            导入链接
+          </Button>
+        </form>
+      )}
       {busy ? (
         <div role="status">
           正在处理…{' '}

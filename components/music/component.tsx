@@ -65,7 +65,7 @@ declare global {
     music: {
       configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
       lxInfo(): Promise<string>
-      lxImport(): Promise<void>
+      lxImport(link?: string): Promise<void>
       lxCancel(): Promise<void>
       lxSearch(id: string): Promise<Versions>
       lxDownload(key: string, quality: string): Promise<string>

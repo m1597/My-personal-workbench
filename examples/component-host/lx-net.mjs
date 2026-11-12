@@ -4,6 +4,21 @@ import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import ipaddr from 'ipaddr.js'
 
+async function lookupPublicHost(hostname, signal) {
+  signal?.throwIfAborted()
+  if (!signal) return lookup(hostname, { all: true })
+  let abort
+  const cancelled = new Promise((_, reject) => {
+    abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+  })
+  try {
+    return await Promise.race([lookup(hostname, { all: true }), cancelled])
+  } finally {
+    signal.removeEventListener('abort', abort)
+  }
+}
+
 export async function openPublic(input, options = {}, redirects = 0) {
   const url = new URL(input)
   if (
@@ -17,7 +32,7 @@ export async function openPublic(input, options = {}, redirects = 0) {
   const hostname = url.hostname.replace(/^\[|\]$/g, '')
   let addresses = isIP(hostname)
     ? [{ address: hostname, family: isIP(hostname) }]
-    : await lookup(hostname, { all: true })
+    : await lookupPublicHost(hostname, options.signal)
   // Fake-IP proxies can return benchmarking addresses. Resolve the hostname independently.
   if (
     !isIP(hostname) &&

@@ -92,8 +92,38 @@ try {
   const page = await app.firstWindow()
   await page.getByRole('button', { name: '音乐源', exact: true }).click()
   await choose(sourceFile)
-  await page.getByRole('button', { name: '导入洛雪源' }).click()
+  await page.getByRole('button', { name: '本地导入' }).click()
   await expect.poll(() => page.evaluate(() => window.music.lxInfo())).not.toBe('')
+  const savedName = await page.evaluate(() => window.music.lxInfo())
+  await page.getByRole('button', { name: '在线导入' }).click()
+  await page.getByLabel('音乐源链接').fill('http://127.0.0.1/source.js')
+  await page.getByRole('button', { name: '导入链接' }).click()
+  await expect(page.getByText(/仅支持公网地址/)).toBeVisible()
+  assert.equal(await page.evaluate(() => window.music.lxInfo()), savedName)
+  await page.evaluate(() => {
+    delete document.documentElement.dataset.backdrop
+  })
+  await page.screenshot({ path: path.join(root, 'import.png') })
+  if (!live) {
+    const code = (await fs.readFile(sourceFile, 'utf8')).replace(/@name [^\n]+/, '@name 在线测试源')
+    await app.evaluate((_electron, code) => {
+      const https = process.getBuiltinModule('node:https')
+      const { Readable } = process.getBuiltinModule('node:stream')
+      const { EventEmitter } = process.getBuiltinModule('node:events')
+      const original = https.request
+      https.request = (url, _options, done) => {
+        https.request = original
+        if (url.href !== 'https://1.1.1.1/test-source.js') throw Error('测试地址不匹配')
+        const req = new EventEmitter()
+        req.end = () =>
+          done(Object.assign(Readable.from([Buffer.from(code)]), { statusCode: 200, headers: {} }))
+        return req
+      }
+    }, code)
+    await page.getByLabel('音乐源链接').fill('https://1.1.1.1/test-source.js')
+    await page.getByRole('button', { name: '导入链接' }).click()
+    await expect.poll(() => page.evaluate(() => window.music.lxInfo())).toBe('在线测试源')
+  }
   await page.getByRole('button', { name: '关闭', exact: true }).click()
   await page.getByRole('button', { name: '查找版本' + row.title, exact: true }).click()
   const pane = page.getByRole('region', { name: '在线版本' })

@@ -13,6 +13,33 @@ import { publish } from './music/store.mjs'
 class TransferError extends Error {}
 const text = (v) => (typeof v === 'string' ? v.trim().slice(0, 256) : '')
 const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
+async function fetchSource(link, signal) {
+  if (typeof link !== 'string' || link.length > 8192 || !/^https?:\/\//i.test(link))
+    throw Error('请输入 HTTP 或 HTTPS 音乐源直链')
+  const timeout = AbortSignal.timeout(20000)
+  try {
+    const response = await openPublic(link, {
+      signal: AbortSignal.any([signal, timeout]),
+    })
+    if (response.statusCode !== 200) {
+      response.destroy()
+      throw Error('无法读取音乐源，HTTP ' + response.statusCode)
+    }
+    const chunks = []
+    let bytes = 0
+    for await (const chunk of response) {
+      bytes += chunk.length
+      if (bytes > 1024 * 1024) throw Error('音乐源超过 1 MB')
+      chunks.push(chunk)
+    }
+    return Buffer.concat(chunks).toString('utf8')
+  } catch (error) {
+    signal.throwIfAborted()
+    if (timeout.aborted) throw Error('在线导入超时，请重试')
+    if (error.code) throw Error('无法读取音乐源，请检查链接和网络')
+    throw error
+  }
+}
 export async function inspectSource(code, signal) {
   if (typeof code !== 'string' || Buffer.byteLength(code) > 1024 * 1024) throw Error('源文件过大')
   const declared = await runSource(code, null, signal)
@@ -174,17 +201,22 @@ export function registerLx(bind, getStore, dialog) {
   bind('lxInfo', () => source()?.name ?? '')
   bind(
     'lxImport',
-    exclusive(async (signal) => {
-      const file = await dialog.showOpenDialog({
-        title: '导入洛雪音乐源',
-        properties: ['openFile'],
-        filters: [{ name: '洛雪音乐源', extensions: ['js'] }],
-      })
-      if (file.canceled) return
-      const selected = file.filePaths[0],
-        stat = await lstat(selected)
-      if (!stat.isFile() || stat.size > 1024 * 1024) throw Error('请选择 1 MB 以内的 JS 源文件')
-      const next = await inspectSource(await readFile(selected, 'utf8'), signal)
+    exclusive(async (signal, link) => {
+      let code
+      if (link !== undefined) code = await fetchSource(link, signal)
+      else {
+        const file = await dialog.showOpenDialog({
+          title: '导入洛雪音乐源',
+          properties: ['openFile'],
+          filters: [{ name: '洛雪音乐源', extensions: ['js'] }],
+        })
+        if (file.canceled) return
+        const selected = file.filePaths[0],
+          stat = await lstat(selected)
+        if (!stat.isFile() || stat.size > 1024 * 1024) throw Error('请选择 1 MB 以内的 JS 源文件')
+        code = await readFile(selected, 'utf8')
+      }
+      const next = await inspectSource(code, signal)
       signal.throwIfAborted()
       getStore().set('lx-source', JSON.stringify(next))
       matches.clear()

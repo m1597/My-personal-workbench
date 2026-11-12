@@ -379,3 +379,14 @@ li[data-active="true"] .music-track-icon,
     padding-inline: var(--space-4);
   }
 }
+
+.lx-import-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.lx-import-actions .fui-Input {
+  flex: 1;
+  min-width: 0;
+}
