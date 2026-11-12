@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { parseFile } from 'music-metadata'
@@ -28,6 +29,16 @@ register(
   () => store,
   {
     moduleURL: pathToFileURL(path.join(dir, 'host.mjs')).href,
+    nativeImage: {
+      createFromBuffer: (bytes) => ({
+        isEmpty: () => !bytes.equals(sourceImage),
+        getSize: () => ({ width: 1, height: 1 }),
+        resize: () => ({
+          getSize: () => ({ width: 1, height: 1 }),
+          toBitmap: () => Buffer.alloc(4),
+        }),
+      }),
+    },
     dialog: {
       showOpenDialog: async () => ({ canceled: false, filePaths: [path.join(album, 'cover.png')] }),
     },
@@ -51,7 +62,53 @@ try {
     files.set(id, { file, original })
   }
   const ids = [...files.keys()]
+  const oldName = path.basename(files.get(ids[1]).file)
+  const oldHash = createHash('sha256')
+    .update(await readFile(files.get(ids[1]).file))
+    .digest('hex')
+  store.set('root', album)
+  const legacy = store.db.prepare('INSERT INTO library(track,file,digest) VALUES(?,?,?)')
+  legacy.run('kept-recording', oldName, oldHash)
+  legacy.run('same-digest-another-file', 'another.flac', oldHash)
+  legacy.run('stale-digest', oldName, '0'.repeat(64))
   const other = await readFile(files.get(ids[3]).file)
+  const markAwaiting = (id, awaiting) =>
+    store.db
+      .prepare('UPDATE local_tracks SET awaitingLocation=?,available=? WHERE id=?')
+      .run(awaiting, 1 - awaiting, id)
+  const beforeRestore = await handlers.preview([ids[3]])
+  markAwaiting(ids[3], 1)
+  const denied = await handlers.apply(beforeRestore.token, [
+    { id: ids[3], values: { title: '不可写入' } },
+  ])
+  assert.match(denied[0].error ?? '', /重新定位/)
+  assert.deepEqual(await readFile(files.get(ids[3]).file), other)
+  const deniedRead = await handlers.preview([ids[3]], null, true)
+  assert.match(deniedRead.rows[0].error ?? '', /重新定位/)
+  assert.equal(deniedRead.rows[0].current, undefined)
+  markAwaiting(ids[3], 0)
+  await writeFile(path.join(album, 'cover.png'), sourceImage.subarray(0, 24))
+  await assert.rejects(handlers.chooseCover(), /封面/)
+  assert.equal((await handlers.preview([ids[3]], null, true)).rows[0].coverName, null)
+  await writeFile(path.join(album, 'cover.png'), sourceImage)
+  const midWrite = await handlers.preview([ids[3]])
+  const verify = store.library.verify.bind(store.library)
+  let checks = 0
+  store.library.verify = async (row) => {
+    const ok = await verify(row)
+    if (++checks === 2) markAwaiting(row.id, 1)
+    return ok
+  }
+  try {
+    const receipt = await handlers.apply(midWrite.token, [
+      { id: ids[3], values: { title: '应保留原件' } },
+    ])
+    assert.match(receipt[0].error ?? '', /重新预览|重新定位/)
+    assert.deepEqual(await readFile(files.get(ids[3]).file), other)
+  } finally {
+    store.library.verify = verify
+    markAwaiting(ids[3], 0)
+  }
   const snap = await handlers.preview(ids, null, true)
   for (const row of snap.rows) {
     assert.ok(!row.error, row.error)
@@ -63,6 +120,16 @@ try {
     ids.slice(0, 3).map((id) => ({ id, values: { title: '歌名', cover: true } })),
   )
   for (const row of saved) assert.ok(row.ok, row.error)
+  assert.equal(store.local('kept-recording'), files.get(ids[1]).file)
+  assert.equal(
+    store.db.prepare('SELECT digest FROM library WHERE track=?').get('same-digest-another-file')
+      .digest,
+    oldHash,
+  )
+  assert.equal(
+    store.db.prepare('SELECT digest FROM library WHERE track=?').get('stale-digest').digest,
+    '0'.repeat(64),
+  )
   assert.deepEqual(other, await readFile(files.get(ids[3]).file))
   for (const id of ids.slice(0, 3)) {
     const { file, original } = files.get(id)
@@ -131,6 +198,13 @@ if (process.argv.includes('--ui')) {
     await item.getByRole('button', { name: '安装本地包' }).click()
     await item.getByRole('button', { name: '打开', exact: true }).click()
     const panel = page.getByRole('region', { name: '歌曲标签与封面整理' })
+    const corrupt = path.join(dir, 'truncated.png')
+    await writeFile(corrupt, sourceImage.subarray(0, 48))
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+    }, corrupt)
+    await panel.getByRole('button', { name: '选择封面图片' }).click()
+    await expect(panel.getByRole('status')).toContainText('封面图片不完整或无法解码')
     await panel.getByRole('button', { name: '选择筛选结果' }).click()
     await panel.getByRole('checkbox', { name: '查找歌曲同目录的封面图片' }).check()
     await panel.getByRole('button', { name: '预览资料' }).click()

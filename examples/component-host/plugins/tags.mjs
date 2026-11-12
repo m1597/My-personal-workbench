@@ -11,6 +11,14 @@ const maxBatch = 50
 const fingerprint = (s) => [s.dev, s.ino, s.size, s.mtimeNs, s.ctimeNs].join(':')
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const changed = () => Error('文件或索引已变化，请重新预览')
+async function verifiedTrack(store, id) {
+  const row = store.library.row(id)
+  if (row.awaitingLocation) throw Error('请先在曲库重新定位这首歌')
+  if (!(await store.library.verify(row))) throw Error('曲目不可用，请重新定位')
+  const current = store.library.row(id)
+  if (current.awaitingLocation || current.file !== row.file) throw changed()
+  return current
+}
 
 async function regular(file, limit) {
   const entry = await lstat(file, { bigint: true })
@@ -34,7 +42,7 @@ async function regular(file, limit) {
     await handle.close()
   }
 }
-async function coverAt(file) {
+async function coverAt(file, nativeImage) {
   const { bytes, stamp } = await regular(file, maxImage)
   const mimeType =
     bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
@@ -43,9 +51,16 @@ async function coverAt(file) {
         ? 'image/png'
         : null
   if (!mimeType) throw Error('请选择 JPEG 或 PNG 封面')
+  const complete =
+    mimeType === 'image/png'
+      ? bytes.length >= 45 &&
+        bytes.subarray(-12).equals(Buffer.from('0000000049454e44ae426082', 'hex'))
+      : bytes.at(-2) === 255 && bytes.at(-1) === 217
+  if (!complete || !nativeImage || nativeImage.createFromBuffer(bytes).isEmpty())
+    throw Error('封面图片不完整或无法解码，请重新选择')
   return { file, stamp, picture: { mimeType, data: bytes, type: 'FrontCover', description: '' } }
 }
-async function adjacentCover(file) {
+async function adjacentCover(file, nativeImage) {
   for (const name of [
     'cover.jpg',
     'cover.jpeg',
@@ -56,7 +71,7 @@ async function adjacentCover(file) {
     'front.png',
   ]) {
     try {
-      return await coverAt(path.join(path.dirname(file), name))
+      return await coverAt(path.join(path.dirname(file), name), nativeImage)
     } catch (e) {
       if (e.code !== 'ENOENT') continue
     }
@@ -150,7 +165,7 @@ export function register(bind, getStore, env) {
       filters: [{ name: '封面图片', extensions: ['png', 'jpg', 'jpeg'] }],
     })
     if (result.canceled) return null
-    const cover = await coverAt(result.filePaths[0])
+    const cover = await coverAt(result.filePaths[0], env.nativeImage)
     selectedCover = { token: randomUUID(), file: cover.file, stamp: cover.stamp }
     return { token: selectedCover.token, name: path.basename(cover.file) }
   })
@@ -172,13 +187,13 @@ export function register(bind, getStore, env) {
       let chosen
       if (coverToken) {
         if (coverToken !== selectedCover?.token) throw Error('封面选择已过期')
-        chosen = await coverAt(selectedCover.file)
+        chosen = await coverAt(selectedCover.file, env.nativeImage)
         if (chosen.stamp !== selectedCover.stamp) throw changed()
       }
       for (const id of new Set(ids)) {
         let audio
         try {
-          const row = getStore().library.row(id)
+          const row = await verifiedTrack(getStore(), id)
           const file = row.file
           const ext = path.extname(file)
           const { bytes, stamp } = await regular(file, maxAudio)
@@ -194,7 +209,7 @@ export function register(bind, getStore, env) {
             artist: names?.[1] || current.artist,
             album: current.album || path.basename(path.dirname(file)),
           }
-          const candidate = chosen ?? (adjacent ? await adjacentCover(file) : null)
+          const candidate = chosen ?? (adjacent ? await adjacentCover(file, env.nativeImage) : null)
           const oldCover = front(await artwork(lib, audio, bytes))
           const newCover =
             candidate && (!oldCover || hash(candidate.picture.data) !== hash(oldCover.data))
@@ -268,7 +283,7 @@ export function register(bind, getStore, env) {
       for (const { id, values } of changes) {
         const plan = preview.rows.get(id)
         try {
-          await writeChanges(getStore(), lib, id, plan, values)
+          await writeChanges(getStore(), lib, id, plan, values, env.nativeImage)
           result.push({ id, ok: true })
         } catch (e) {
           result.push({ id, error: message(e) })
@@ -281,8 +296,8 @@ export function register(bind, getStore, env) {
     }
   })
 }
-async function writeChanges(store, lib, id, plan, values) {
-  const row = store.library.row(id)
+async function writeChanges(store, lib, id, plan, values, nativeImage) {
+  const row = await verifiedTrack(store, id)
   if (row.file !== plan.file) throw changed()
   const { bytes, stamp, mode } = await regular(row.file, maxAudio)
   if (stamp !== plan.stamp) throw changed()
@@ -296,7 +311,7 @@ async function writeChanges(store, lib, id, plan, values) {
       if (Object.hasOwn(values, key)) audio.setProperty(key.toUpperCase(), values[key].trim())
     let expectedPictures = pictures
     if (values.cover) {
-      const cover = await coverAt(plan.cover.file)
+      const cover = await coverAt(plan.cover.file, nativeImage)
       if (cover.stamp !== plan.cover.stamp) throw changed()
       expectedPictures = [cover.picture, ...pictures.filter((p) => p.type !== 'FrontCover')]
       if (audio.getFormat() !== 'WAV') audio.setPictures(expectedPictures)
@@ -330,13 +345,17 @@ async function writeChanges(store, lib, id, plan, values) {
       await out.close()
     }
     if (
-      store.library.row(id).file !== row.file ||
+      (await verifiedTrack(store, id)).file !== row.file ||
       fingerprint(lstatSync(row.file, { bigint: true })) !== stamp
     )
       throw changed()
     const tag = verified.tag()
+    const oldHash = hash(bytes),
+      newHash = hash(modified)
     store.db.exec('BEGIN IMMEDIATE')
     try {
+      const current = store.library.row(id)
+      if (current.awaitingLocation || current.file !== row.file) throw changed()
       store.db
         .prepare('UPDATE local_tracks SET title=?,artist=?,album=?,size=? WHERE id=?')
         .run(
@@ -348,7 +367,17 @@ async function writeChanges(store, lib, id, plan, values) {
         )
       store.db
         .prepare('UPDATE recording_copies SET digest=? WHERE local=? AND digest=?')
-        .run(hash(modified), id, hash(bytes))
+        .run(newHash, id, oldHash)
+      const legacyRoot = store.get('root')
+      if (
+        legacyRoot &&
+        path.resolve(legacyRoot).toLowerCase() ===
+          path.dirname(path.resolve(row.file)).toLowerCase()
+      ) {
+        store.db
+          .prepare('UPDATE library SET digest=? WHERE file=? COLLATE NOCASE AND digest=?')
+          .run(newHash, name, oldHash)
+      }
       renameSync(temp, row.file)
       temp = null
       store.db.exec('COMMIT')
