@@ -861,7 +861,13 @@ function Music() {
                 <div className="music-batch-status">
                   <p role="status">
                     已下载 {rows.length}/{batch.targetCount}
-                    {batch.message ? '，' + batch.message : ''}
+                    {batch.state === 'completed' && rows.length < batch.targetCount
+                      ? '，部分已下载歌曲已移除或暂不可用'
+                      : running && rows.length >= batch.targetCount
+                        ? '，正在完成本批'
+                        : running && batch.message?.startsWith('正在补推')
+                          ? '，正在补推'
+                          : batch.message && `，${batch.message}`}
                   </p>
                   {batch.details && (
                     <details className="music-failure-details">
