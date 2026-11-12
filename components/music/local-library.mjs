@@ -39,14 +39,24 @@ export class LocalLibrary {
           .some((col) => col.name === 'listed')
       )
         this.db.exec('ALTER TABLE local_tracks ADD COLUMN listed INTEGER NOT NULL DEFAULT 1')
-      if (
+      const legacyColumns = new Set(
         this.db
-          .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='recording_versions'")
-          .get()
-      ) {
+          .prepare('PRAGMA table_info(recording_versions)')
+          .all()
+          .map((col) => col.name),
+      )
+      if (legacyColumns.size) {
         // Legacy mappings retain provenance but cannot prove the identity of current file bytes.
-        this.db.exec(`INSERT OR IGNORE INTO recording_copies(version,local,automatic,source,platform,sourceId,quality)
-          SELECT version,local,automatic,source,platform,sourceId,quality FROM recording_versions;
+        const columns = [
+          'version',
+          'local',
+          'automatic',
+          ...['source', 'platform', 'sourceId', 'quality'].filter((name) =>
+            legacyColumns.has(name),
+          ),
+        ].join(',')
+        this.db.exec(`INSERT OR IGNORE INTO recording_copies(${columns})
+          SELECT ${columns} FROM recording_versions;
           DROP TABLE recording_versions;`)
       }
       if (!store.get('local-index-v1')) {

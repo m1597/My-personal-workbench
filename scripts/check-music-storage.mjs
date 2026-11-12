@@ -18,6 +18,24 @@ const settle = async () => {
   while (store.jobs.size) await delay(5)
 }
 try {
+  store.db.exec(`CREATE TABLE recording_versions(version TEXT PRIMARY KEY, local TEXT NOT NULL, automatic INTEGER NOT NULL);
+    INSERT INTO recording_versions VALUES('old-version','old-copy',1)`)
+  restart()
+  assert.deepEqual(
+    { ...store.db.prepare("SELECT * FROM recording_copies WHERE version='old-version'").get() },
+    {
+      version: 'old-version',
+      local: 'old-copy',
+      automatic: 1,
+      source: null,
+      platform: null,
+      sourceId: null,
+      quality: null,
+      digest: null,
+    },
+  )
+  restart()
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM recording_copies').get().n, 1)
   const batch = store.generate('电子')
   let rows = store.snapshot().items
   assert.equal(rows.length, 5)
