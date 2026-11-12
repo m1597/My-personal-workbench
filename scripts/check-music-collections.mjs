@@ -164,7 +164,17 @@ try {
   for (const label of ['全部歌曲', '春天', '通勤']) {
     await expect(button(label)).toHaveCSS('font-size', '16px')
   }
-  await expect(page.getByRole('heading', { name: '我的歌单' })).toHaveCSS('font-size', '16px')
+  for (const name of ['文件夹', '我的歌单']) {
+    const heading = page.getByRole('heading', { name, exact: true })
+    await expect(heading).toHaveCSS('font-size', '18px')
+    const gap = await heading.evaluate((el) => {
+      const header = el.closest('.playlist-heading') ?? el
+      return (
+        header.nextElementSibling.getBoundingClientRect().top - el.getBoundingClientRect().bottom
+      )
+    })
+    assert.equal(Math.round(gap), 8)
+  }
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).queue.length))
     .toBe(2)

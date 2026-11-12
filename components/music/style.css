@@ -536,13 +536,15 @@ li[data-active="true"] .music-track-icon,
   text-align: start;
 }
 .library-sidebar h3 {
-  font-size: var(--font-size-heading);
+  font-size: var(--font-size-empty);
+  line-height: 1.4;
   color: var(--text-secondary);
   margin: 0;
 }
 .library-sidebar > h3,
 .library-sidebar > .playlist-heading {
   margin-top: var(--space-12);
+  margin-bottom: var(--space-6);
 }
 .folder-children {
   padding-inline-start: var(--space-12);
