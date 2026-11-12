@@ -31,7 +31,13 @@ import {
 import { LibraryPane, formatTime, type LocalTrack, type ImportJob } from './LibraryPane'
 import './style.css'
 type Batch = { id: string; day: string; preference: string }
-type Track = { id: string; artist: string; title: string; album: string; version: string }
+type Track = {
+  id: string
+  artist: string
+  title: string
+  album: string
+  version: string
+}
 type Item = {
   id: string
   batch: string
@@ -47,6 +53,7 @@ import { ModelSettings, type ModelInfo } from './ModelSettings'
 import { LxPanel } from './LxPanel'
 import type { Versions } from './LxPanel'
 type State = {
+  profile: string
   models: ModelInfo
   items: Item[]
   batches: Batch[]
@@ -79,7 +86,8 @@ declare global {
       playQueue(id: string, ids: string[], position: number): Promise<void>
       state(): Promise<State>
       draft(s: string): Promise<void>
-      generate(s: string, summary?: string[]): Promise<string>
+      generateProfile(description: string, summary?: string[]): Promise<void>
+      generate(s: string, profile?: string): Promise<string>
       stopGeneration(): Promise<void>
       match(id: string): Promise<void>
       choose(id: string, track: string): Promise<void>
@@ -115,6 +123,7 @@ function shuffleQueue(ids: string[], first?: string) {
 function Music() {
   const [state, setState] = useState<State>(),
     [draft, setDraft] = useState(''),
+    [description, setDescription] = useState(''),
     [batch, setBatch] = useState(''),
     [includedSummary, setIncludedSummary] = useState<string[]>(),
     [preview, setPreview] = useState(false),
@@ -297,14 +306,15 @@ function Music() {
     !current.current && active && available.has(active.id)
       ? '从 ' + Math.floor(elapsed) + ' 秒继续'
       : '播放'
-  async function generate() {
+  async function generate(profileTask = false) {
     if (provider?.id !== 'offline' && !provider?.hasKey) {
       setSettings(true)
       return
     }
     setBusy(true)
     try {
-      setBatch(await host.generate(draft, includedSummary))
+      if (profileTask) await host.generateProfile(description, includedSummary)
+      else setBatch(await host.generate(draft, state?.profile))
       setIncludedSummary(undefined)
       setPreview(false)
     } finally {
@@ -394,6 +404,52 @@ function Music() {
                   }}
                 />
               )}
+              {provider?.id !== 'offline' && (
+                <>
+                  <h2>个人音乐偏好资料</h2>
+                  <p>{state?.profile || '尚未生成资料'}</p>
+                  <Button
+                    className="music-summary"
+                    size="small"
+                    appearance="transparent"
+                    aria-expanded={preview}
+                    icon={preview ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    onClick={() => setPreview(!preview)}
+                  >
+                    生成或更新偏好资料{includedSummary ? ' · 已附加' : ''}
+                  </Button>
+                  {preview && (
+                    <div className="music-summary-content">
+                      <Input
+                        aria-label="长期音乐偏好自述"
+                        placeholder="长期喜欢哪些风格、艺人或声音？"
+                        maxLength={1000}
+                        value={description}
+                        onChange={(_, v) => setDescription(v.value)}
+                      />
+                      <p>曲库艺人分布（最多 50 位）</p>
+                      <p>{(includedSummary ?? state?.summary)?.join('；') || '音乐库为空'}</p>
+                      <Checkbox
+                        disabled={!includedSummary && !state?.summary.length}
+                        label="本次附加以上摘要"
+                        checked={!!includedSummary}
+                        onChange={(_, v) =>
+                          setIncludedSummary(v.checked === true ? state?.summary : undefined)
+                        }
+                      />
+                      <Button
+                        disabled={busy || (!description.trim() && !includedSummary?.length)}
+                        onClick={() => void act(() => generate(true))}
+                      >
+                        发送并生成资料
+                      </Button>
+                    </div>
+                  )}
+                  <small>
+                    生成资料时向所选服务发送自述和勾选的摘要。生成推荐时发送上方已有资料及当次风格。
+                  </small>
+                </>
+              )}
               <div className="music-input">
                 <Input
                   id="preference"
@@ -405,42 +461,28 @@ function Music() {
                     void host.draft(d.value).catch((e) => setError(String(e)))
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.nativeEvent.isComposing && draft.trim() && !busy)
-                      void act(generate)
+                    if (
+                      e.key === 'Enter' &&
+                      !e.nativeEvent.isComposing &&
+                      (draft.trim() || state?.profile) &&
+                      !busy
+                    )
+                      void act(() => generate())
                   }}
                 />
                 <Button
                   appearance="primary"
-                  disabled={busy || !draft.trim()}
+                  disabled={busy || (!draft.trim() && !state?.profile)}
                   icon={<ListMusic size={16} />}
-                  onClick={() => void act(generate)}
+                  onClick={() => void act(() => generate())}
                 >
-                  {provider?.id === 'offline' ? '生成离线试听单' : '生成推荐'}
+                  {provider?.id === 'offline'
+                    ? '生成离线试听单'
+                    : state?.profile
+                      ? '用已有资料推荐'
+                      : '生成推荐'}
                 </Button>
               </div>
-              <Button
-                className="music-summary"
-                size="small"
-                appearance="transparent"
-                aria-expanded={preview}
-                icon={preview ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                onClick={() => setPreview(!preview)}
-              >
-                预览曲库摘要{includedSummary ? ' · 已附加' : ''}
-              </Button>
-              {preview && (
-                <div className="music-summary-content">
-                  <p>{(includedSummary ?? state?.summary)?.join('；') || '音乐库为空'}</p>
-                  <Checkbox
-                    disabled={!includedSummary && !state?.summary.length}
-                    label="本次附加以上摘要"
-                    checked={!!includedSummary}
-                    onChange={(_, v) =>
-                      setIncludedSummary(v.checked === true ? state?.summary : undefined)
-                    }
-                  />
-                </div>
-              )}
               {busy && (
                 <Button size="small" onClick={() => void host.stopGeneration()}>
                   取消生成
@@ -460,8 +502,8 @@ function Music() {
                 <h2>推荐记录</h2>
                 {chosenBatch && (
                   <Dropdown
-                    size="small"
                     inlinePopup
+                    size="small"
                     aria-label="推荐记录"
                     listbox={{ className: 'component-popup' }}
                     value={chosenBatch.day + ' · ' + chosenBatch.preference}

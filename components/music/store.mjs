@@ -70,6 +70,14 @@ export class MusicStore {
       .all()
       .map((t) => [t.title, t.artist].map((v) => v.slice(0, 100)).join(' · '))
   }
+  preferenceSummary() {
+    return this.db
+      .prepare(
+        'SELECT artist, COUNT(*) AS count FROM local_tracks GROUP BY artist ORDER BY count DESC,artist LIMIT 50',
+      )
+      .all()
+      .map(({ artist, count }) => artist.slice(0, 100) + ' · ' + count + ' 首')
+  }
   snapshot() {
     const batches = this.db.prepare('SELECT * FROM batches ORDER BY rowid DESC').all()
     const items = this.db
@@ -85,7 +93,8 @@ export class MusicStore {
       queue: JSON.parse(this.get('play-queue') || '[]'),
       batches,
       items,
-      summary: this.summary(),
+      summary: this.preferenceSummary(),
+      profile: this.get('taste-profile') || '',
       draft: this.get('draft'),
       current: this.get('current'),
       position: Number(this.get('position')),

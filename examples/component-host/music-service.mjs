@@ -1,6 +1,6 @@
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
-import { modelInfo, configureModel, recommend } from './music-model.mjs'
+import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
 import { ipcMain, dialog, safeStorage } from 'electron'
 import { setTimeout as delay } from 'node:timers/promises'
 import { MusicStore } from './music/store.mjs'
@@ -123,31 +123,57 @@ export function musicService(profile, isSender) {
     configureModel(store, safeStorage, id, model, key, forget)
   })
   bind('draft', (v) => store.set('draft', text(v)))
-  bind('generate', async (preference, summary) => {
-    text(preference)
-    if (!preference.trim() || pending) throw Error('请检查偏好和生成状态')
-    if (
-      summary !== undefined &&
-      (!Array.isArray(summary) ||
-        summary.length > 5 ||
-        summary.some((line) => typeof line !== 'string') ||
-        JSON.stringify(summary) !== JSON.stringify(store.summary()))
-    )
-      throw Error('摘要已变更，请重新预览')
-    const request = { preference, ...(summary ? { summary } : {}) }
-    const task = new AbortController()
-    pending = task
+  async function generateTask(run) {
+    if (pending) throw Error('请先结束当前生成')
+    pending = new AbortController()
     try {
-      if (modelInfo(store).active !== 'offline') {
-        const rows = await recommend(store, safeStorage, preference, summary, task.signal)
-        task.signal.throwIfAborted()
-        return store.saveSuggestions(preference, rows, '模型推荐')
-      }
-      await delay(150, undefined, { signal: task.signal })
-      return store.generate(request.preference, request.summary)
+      return await run(pending.signal)
     } finally {
       pending = null
     }
+  }
+  bind('generateProfile', (description, summary) => {
+    text(description)
+    if (
+      summary !== undefined &&
+      (!Array.isArray(summary) ||
+        JSON.stringify(summary) !== JSON.stringify(store.preferenceSummary()))
+    )
+      throw Error('摘要已变更，请重新预览')
+    if (!description.trim() && !summary?.length) throw Error('请填写自述或附加曲库摘要')
+    if (modelInfo(store).active === 'offline') throw Error('请选择模型服务生成偏好资料')
+    return generateTask(async (signal) => {
+      const result = await requestMusicModel(
+        store,
+        safeStorage,
+        'profile',
+        { description, ...(summary ? { summary } : {}) },
+        signal,
+      )
+      signal.throwIfAborted()
+      store.set('taste-profile', result)
+    })
+  })
+  bind('generate', (preference, profile = '') => {
+    text(preference)
+    if (profile !== (store.get('taste-profile') || '')) throw Error('资料已变更，请重新预览')
+    if (!preference.trim() && !profile) throw Error('请填写当次风格或先生成资料')
+    return generateTask(async (signal) => {
+      const label = preference.trim() || '个人偏好'
+      if (modelInfo(store).active === 'offline') {
+        await delay(150, undefined, { signal })
+        return store.generate(label, profile ? [profile] : [])
+      }
+      const rows = await requestMusicModel(
+        store,
+        safeStorage,
+        'recommend',
+        { preference, ...(profile ? { profile } : {}) },
+        signal,
+      )
+      signal.throwIfAborted()
+      return store.saveSuggestions(label, rows, '模型推荐')
+    })
   })
   bind('stopGeneration', () => pending?.abort())
   bind('match', (batch) => store.match(text(batch)))

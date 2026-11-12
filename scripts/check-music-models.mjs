@@ -16,15 +16,17 @@ fixtureStore.library.upsert({
   file: path.resolve('tests/fixtures/local-music/tone.mp3'),
 })
 fixtureStore.db.close()
-const app = await electron.launch({
-  args: [
-    path.resolve('dist/component-prototype/host'),
-    '--mode=music',
-    '--user-data-dir=' + profile,
-    '--workbench=' + path.resolve('out/renderer/index.html'),
-  ],
-  env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
-})
+const launch = () =>
+  electron.launch({
+    args: [
+      path.resolve('dist/component-prototype/host'),
+      '--mode=music',
+      '--user-data-dir=' + profile,
+      '--workbench=' + path.resolve('out/renderer/index.html'),
+    ],
+    env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+  })
+const app = await launch()
 try {
   const page = await app.firstWindow()
   await page.getByRole('tab', { name: '推荐试听' }).click()
@@ -51,7 +53,10 @@ try {
         artist: i === 0 ? 'AC/DC' : '测试艺人',
         reason: '适合雨天',
       }))
-      const content = globalThis.failMode === 'invalid' ? '{}' : JSON.stringify({ songs })
+      const result = JSON.stringify(body).includes('可复用的中文音乐品味资料')
+        ? { profile: '偏爱氛围音乐与柔和节奏' }
+        : { songs }
+      const content = globalThis.failMode === 'invalid' ? '{}' : JSON.stringify(result)
       let data
       if (id === 'openai')
         data = { output: [{ type: 'message', content: [{ type: 'output_text', text: content }] }] }
@@ -141,30 +146,74 @@ try {
   await app.evaluate(() => {
     globalThis.failMode = ''
   })
-  await page.getByRole('button', { name: '预览曲库摘要' }).click()
-  const include = page.getByLabel('本次附加以上摘要')
-  await include.check()
-  await page.getByRole('button', { name: '生成推荐' }).click()
+  const edit = page.getByRole('button', { name: /生成或更新偏好资料/ })
+  await edit.click()
+  await page.getByLabel('长期音乐偏好自述').fill('喜欢器乐')
+  await page.getByLabel('本次附加以上摘要').check()
+  await page.getByRole('button', { name: '发送并生成资料' }).click()
+  await expect(page.getByText('偏爱氛围音乐与柔和节奏', { exact: true })).toBeVisible()
+  const sent = await app.evaluate(() => JSON.stringify(globalThis.modelCalls.at(-1).body))
+  assert.ok(
+    sent.includes('喜欢器乐') &&
+      sent.includes('测试艺人') &&
+      !sent.includes('私人专辑') &&
+      !sent.includes('tone.mp3'),
+  )
+  const reopened = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'), {
+    readOnly: true,
+  })
+  assert.equal(
+    reopened.prepare("SELECT value FROM state WHERE key='taste-profile'").get().value,
+    '偏爱氛围音乐与柔和节奏',
+  )
+  reopened.close()
+  await page.reload()
+  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByLabel('今天想听什么').fill('')
+  await page.getByRole('button', { name: '用已有资料推荐' }).click()
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).batches.length))
     .toBe(5)
-  const sent = await app.evaluate(() => JSON.stringify(globalThis.modelCalls.at(-1).body))
+  const reuse = await app.evaluate(() => JSON.stringify(globalThis.modelCalls.at(-1).body))
   assert.ok(
-    sent.includes('已同意的摘要') && !sent.includes('私人专辑') && !sent.includes('tone.mp3'),
+    reuse.includes('偏爱氛围音乐与柔和节奏') &&
+      !reuse.includes('测试艺人') &&
+      !reuse.includes('喜欢器乐'),
   )
-  await page.getByRole('button', { name: '预览曲库摘要' }).click()
-  await include.check()
+  await edit.click()
+  await page.getByLabel('本次附加以上摘要').check()
   await page.getByRole('tab', { name: '本地曲库' }).click()
   await page.getByRole('button', { name: '从曲库移除已同意的摘要' }).click()
   await page.getByRole('tab', { name: '推荐试听' }).click()
-  await page.getByRole('button', { name: '生成推荐' }).click()
+  await page.getByRole('button', { name: '发送并生成资料' }).click()
   await expect(page.getByText(/摘要已变更/)).toBeVisible()
-  await include.uncheck()
-  await page.getByRole('button', { name: '生成推荐' }).click()
-  await expect
-    .poll(() => page.evaluate(async () => (await window.music.state()).batches.length))
-    .toBe(6)
+  assert.equal(
+    await page.evaluate(async () => (await window.music.state()).profile),
+    '偏爱氛围音乐与柔和节奏',
+  )
   console.log('PASS 四家协议、配置隔离、取消、错误和推荐到洛雪匹配。截图目录 ' + root)
 } finally {
   await app.close()
+}
+
+const restarted = await launch()
+try {
+  const page = await restarted.firstWindow()
+  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await expect(page.getByText('偏爱氛围音乐与柔和节奏', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '用已有资料推荐' })).toBeEnabled()
+  const batch = await page.evaluate(async () => {
+    const profile = (await window.music.state()).profile
+    await window.music.configureModel('offline', '', '', false)
+    return window.music.generate('', profile)
+  })
+  assert.equal(
+    await page.evaluate(
+      async (batch) => (await window.music.state()).items.find((i) => i.batch === batch).title,
+      batch,
+    ),
+    '夜航',
+  )
+} finally {
+  await restarted.close()
 }

@@ -17,6 +17,7 @@ const names = [
   'playQueue',
   'draft',
   'generate',
+  'generateProfile',
   'stopGeneration',
   'match',
   'choose',
