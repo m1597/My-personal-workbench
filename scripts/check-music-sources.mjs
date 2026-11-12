@@ -31,6 +31,25 @@ assert.deepEqual(parseSourceIndex(markdown), [
 ])
 assert.equal(catalogId(mirror + 'fish/latest.js'), 'fish')
 const db = new DatabaseSync(':memory:')
+{
+  const db = new DatabaseSync(':memory:')
+  db.exec('CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT)')
+  const catalog = sourceCatalog(db)
+  const script =
+    "lx.on('request',()=>null);lx.send('inited',{sources:{tx:{actions:['musicUrl'],qualitys:['320k']},kg:{actions:['musicUrl','search'],qualitys:['128k']}}})"
+  const saved = await inspectSource(script, undefined, 'kg')
+  delete saved.catalogVersion
+  delete saved.platforms.tx
+  const id = catalog.install(saved, null, true)
+  await catalog.upgrade()
+  assert.equal(catalog.list().active, id)
+  assert.equal(catalog.describe(id).platform, 'kg')
+  assert.deepEqual(catalog.describe(id).platformDetails, [
+    { platform: 'tx', search: 'platform', quality: ['320k'] },
+    { platform: 'kg', search: 'source', quality: ['128k'] },
+  ])
+  db.close()
+}
 db.exec('CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
 const code = (name) =>
   '// @name ' +

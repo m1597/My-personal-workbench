@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Input, Dropdown, Option, Combobox, Tab, TabList } from '@fluentui/react-components'
 import type { LocalTrack } from './LibraryPane'
 export type Versions = {
-  items: { key: string; title: string; artist: string; album: string }[]
+  items: { key: string; title: string; artist: string; album: string; quality?: string[] }[]
   quality: string[]
 }
 export function DownloadPane({
@@ -235,7 +235,12 @@ export function DownloadPane({
                   <small>{[item.artist, item.album].filter(Boolean).join(' · ')}</small>
                 </div>
                 <Button
-                  disabled={busy}
+                  disabled={busy || (item.quality !== undefined && !item.quality.includes(quality))}
+                  title={
+                    item.quality && !item.quality.includes(quality)
+                      ? '此版本没有所选音质'
+                      : undefined
+                  }
                   size="small"
                   onClick={() =>
                     void act(async () => {

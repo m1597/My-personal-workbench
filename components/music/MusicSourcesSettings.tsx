@@ -7,6 +7,7 @@ type Installed = CatalogEntry & {
   origins: string[]
   platform: string
   searchPlatforms?: string[]
+  platformDetails?: { platform: string; search: string; quality: string[] }[]
   search: string
   musicUrl: boolean
   quality: string[]
@@ -97,8 +98,21 @@ export function MusicSourcesSettings() {
       )}
       {active && (
         <p>
-          {active.platform} · {active.search === 'source' ? '源内搜索' : '平台目录搜索'} ·{' '}
-          {active.quality.join(' / ')} ·{' '}
+          {(active.platformDetails?.length ? active.platformDetails : [active]).map((p) => (
+            <span key={p.platform}>
+              {(
+                {
+                  wy: '网易云音乐',
+                  tx: 'QQ 音乐',
+                  kg: '酷狗音乐',
+                  kw: '酷我音乐',
+                  mg: '咪咕音乐',
+                } as Record<string, string>
+              )[p.platform] ?? p.platform}{' '}
+              · {p.search === 'source' ? '源内搜索' : '平台目录搜索'} · {p.quality.join(' / ')}
+              <br />
+            </span>
+          ))}
           {active.permanentSave === true
             ? '声明允许永久保存'
             : active.permanentSave === false

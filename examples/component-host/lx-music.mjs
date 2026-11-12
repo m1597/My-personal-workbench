@@ -1,4 +1,5 @@
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
+import { platformSearch } from './lx-platform-search.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
 import { saveLyrics } from './music-lyrics.mjs'
 import path from 'node:path'
@@ -36,6 +37,10 @@ const explanations = {
 }
 
 const text = (v) => (typeof v === 'string' ? v.trim().slice(0, 256) : '')
+function recordingQualities(source, row) {
+  if (source.search || !['tx', 'kg'].includes(source.platform)) return source.quality
+  return source.quality.filter((q) => row.types?.some((t) => t.type === q))
+}
 async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
   const keyword = [row.title, row.artist === '未知艺人' ? '' : row.artist].filter(Boolean).join(' ')
   if (source.search)
@@ -44,6 +49,8 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
       { action: 'search', source: source.platform, info: { keyword, limit, page, offset } },
       signal,
     )
+  if (source.platform === 'tx' || source.platform === 'kg')
+    return platformSearch(source.platform, keyword, page, limit, signal)
   let response
   try {
     response = await sourceRequest(
@@ -184,7 +191,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
     })
     if (res.statusCode !== 200) {
       res.destroy()
-      throw Error('音频服务器拒绝下载')
+      throw Error('音频服务器拒绝下载（HTTP ' + res.statusCode + '），可切换音乐源后重试')
     }
     res.setTimeout(120000, () => res.destroy(new TransferError('音频传输超时，请稍后重试')))
     const hash = version && createHash('sha256')
@@ -260,7 +267,12 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
   }
 }
 function recordingId(src, row) {
-  const id = row.songmid ?? row.id ?? row.hash ?? row.meta?.[src.platform]?.id
+  const id =
+    (src.platform === 'kg' && !src.search ? row.hash : undefined) ??
+    row.songmid ??
+    row.id ??
+    row.hash ??
+    row.meta?.[src.platform]?.id
   return ['number', 'string'].includes(typeof id) && String(id).trim() ? String(id) : null
 }
 function versionInfo(src, row, quality) {
@@ -316,8 +328,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     const saved = getStore().get('lx-source')
     if (!saved) return null
     const current = JSON.parse(saved)
-    if (current.permissionsVersion === 1 && (!withPlatforms || current.platforms)) return current
-    const parsed = await inspectSource(current.code, signal)
+    if (current.permissionsVersion === 1 && (!withPlatforms || current.catalogVersion === 2))
+      return current
+    const parsed = await inspectSource(current.code, signal, current.platform)
     signal.throwIfAborted()
     if (getStore().get('lx-source') !== saved) throw Error('音乐源已变更，请重试')
     catalog().install(parsed, null, true)
@@ -338,7 +351,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }
   let bank
   const catalog = () => (bank ??= sourceCatalog(getStore().db))
-  bind('lxSources', () => catalog().list())
+  bind('lxSources', async () => {
+    await catalog().upgrade()
+    return catalog().list()
+  })
   bind(
     'lxRefreshCatalog',
     exclusive((signal) => catalog().refresh(signal), 'import'),
@@ -401,7 +417,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       matches.clear()
       const audition = typeof id === 'string' && !id.startsWith('local-')
       const rows = audition
-        ? await versions(src, track, signal)
+        ? searchRows(await versions(src, track, signal))
         : await downloadResults(src, track, signal)
       signal.throwIfAborted()
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
@@ -420,6 +436,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           title: text(row.name),
           artist: text(row.singer),
           album: text(row.albumName),
+          quality: recordingQualities(src, row),
         })
       }
       return { items, quality: src.quality }
@@ -437,7 +454,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       !src ||
       !row ||
       match.sourceCode !== src.code ||
-      !src.quality.includes(quality) ||
+      !recordingQualities(src, row).includes(quality) ||
       (auditionId && match.auditionId !== auditionId)
     )
       throw Error('请重新选择版本和音质')
@@ -491,12 +508,28 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     if (saved) lyricsSaved?.()
   }
   async function fetchRecording(src, row, quality, dir, signal, auditionId, dailyId) {
+    if (!recordingQualities(src, row).includes(quality))
+      throw Error('此录音不提供所选音质，请重新选择')
     for (let attempt = 0; ; attempt++) {
-      const url = await runSource(
-        src.code,
-        { action: 'musicUrl', source: src.platform, info: { type: quality, musicInfo: row } },
-        signal,
-      )
+      let url
+      try {
+        url = await runSource(
+          src.code,
+          { action: 'musicUrl', source: src.platform, info: { type: quality, musicInfo: row } },
+          signal,
+        )
+      } catch (error) {
+        signal.throwIfAborted()
+        throw Error(
+          src.name +
+            '（' +
+            src.platform +
+            '）未能取得该版本的 ' +
+            quality +
+            ' 地址：' +
+            error.message,
+        )
+      }
       if (typeof url !== 'string' || url.length > 16384) throw Error('音乐源未返回可用地址')
       try {
         const filename = await saveRecording(
@@ -679,6 +712,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   return {
     async sourceTool(name, args, signal) {
       const bank = catalog()
+      await bank.upgrade()
       switch (name) {
         case 'list_sources':
           return bank.list()

@@ -31,14 +31,14 @@ export async function fetchSource(link, signal, headers) {
     throw error
   }
 }
-export async function inspectSource(code, signal) {
+export async function inspectSource(code, signal, preferredPlatform) {
   if (typeof code !== 'string' || Buffer.byteLength(code) > 1024 * 1024) throw Error('源文件过大')
   const declared = await runSource(code, null, signal)
   const platforms = {}
   for (const platform of ['wy', 'kw', 'tx', 'kg', 'mg']) {
     const d = declared?.[platform]
     if (!Array.isArray(d?.actions) || !d.actions.includes('musicUrl')) continue
-    if (!d.actions.includes('search') && platform !== 'wy') continue
+    if (!d.actions.includes('search') && !['wy', 'tx', 'kg'].includes(platform)) continue
     const quality = qualities.filter((q) => d.qualitys?.includes(q))
     if (!quality.length) continue
     platforms[platform] = {
@@ -53,10 +53,11 @@ export async function inspectSource(code, signal) {
       quality,
     }
   }
-  const first = Object.values(platforms)[0]
+  const first = platforms[preferredPlatform] ?? Object.values(platforms)[0]
   if (!first) throw Error('此源缺少可用的搜索平台、取址操作或音质')
   return {
     ...first,
+    catalogVersion: 2,
     platforms,
     code,
     name: text(code.match(/@name\s+([^\r\n*]+)/)?.[1]) || '自定义音乐源',
@@ -145,6 +146,11 @@ function capabilities(src) {
     name: src.name,
     platform: src.platform,
     searchPlatforms: src.platforms ? Object.keys(src.platforms) : undefined,
+    platformDetails: Object.values(src.platforms ?? {}).map((p) => ({
+      platform: p.platform,
+      search: p.search ? 'source' : 'platform',
+      quality: p.quality,
+    })),
     search: src.search ? 'source' : 'platform',
     musicUrl: true,
     quality: src.quality,
@@ -265,7 +271,35 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
       return capabilities(JSON.parse(row.payload))
     })
   }
+  let upgrading
+  async function upgradeInstalled() {
+    migrate()
+    for (const row of db.prepare('SELECT id,payload FROM music_sources').all()) {
+      const old = JSON.parse(row.payload)
+      if (old.catalogVersion === 2) continue
+      let next
+      try {
+        next = await inspectSource(old.code, undefined, old.platform)
+      } catch {
+        continue
+      }
+      transaction(() => {
+        const updated = db
+          .prepare('UPDATE music_sources SET payload=? WHERE id=? AND payload=?')
+          .run(JSON.stringify(next), row.id, row.payload)
+        if (updated.changes && get('lx-source') && JSON.parse(get('lx-source')).code === old.code)
+          set('lx-source', JSON.stringify(next))
+      })
+    }
+  }
   return {
+    upgrade() {
+      upgrading ??= upgradeInstalled().catch((error) => {
+        upgrading = undefined
+        throw error
+      })
+      return upgrading
+    },
     list,
     importSelected,
     select,
