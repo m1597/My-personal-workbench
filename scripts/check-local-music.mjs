@@ -121,7 +121,7 @@ try {
   await page.getByRole('button', { name: '播放试音 flac', exact: true }).click()
   const filtered = (await page.evaluate(() => window.music.state())).queue
   await page.getByRole('searchbox').fill('不存在')
-  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await expect(page.getByRole('button', { name: '停止播放' })).toBeEnabled()
   await page.locator('audio').evaluate((a) => {
     a.currentTime = a.duration - 0.2
@@ -177,7 +177,7 @@ try {
     q: (await window.music.state()).queue,
   }))
   await page.getByRole('searchbox').fill('没有结果')
-  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await dragMusicIn(app)
   await dragMusicOut(app)
   assert.deepEqual(
@@ -203,7 +203,7 @@ try {
   await page.getByRole('button', { name: '停止播放' }).click()
   const relocated = path.join(root, '迁移.wav')
   await rename(longFile, relocated)
-  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByRole('tab', { name: '本地曲库' }).click()
   await expect(page.getByText('文件不可用', { exact: true })).toBeVisible()
   await choose(app, [relocated])
@@ -247,7 +247,7 @@ try {
   )
   // A replaced or damaged local file stays in the library and can be relocated.
   await writeFile(duplicate, Buffer.alloc(0))
-  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByRole('tab', { name: '本地曲库' }).click()
   await expect(page.getByRole('button', { name: '重新定位试音 mp3' })).toBeVisible()
   await page.getByRole('button', { name: '从曲库移除潮汐' }).click()

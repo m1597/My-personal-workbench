@@ -318,6 +318,19 @@ li[data-active="true"] .music-track-icon,
   display: grid;
   gap: 8px;
 }
+.download-search {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  align-items: end;
+  gap: var(--space-8);
+}
+.lx-panel .download-search label {
+  display: grid;
+  min-width: 0;
+}
+.download-search .fui-Combobox {
+  min-width: 0;
+}
 .lx-line,
 .lx-panel li {
   display: flex;

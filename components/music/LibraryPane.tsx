@@ -1,4 +1,3 @@
-import { LxPanel } from './LxPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
@@ -47,7 +46,6 @@ export type ImportJob = {
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 type Props = {
-  refresh: () => Promise<void>
   rows: LocalTrack[]
   tracks: LocalTrack[]
   playlists: Playlist[]
@@ -68,7 +66,6 @@ type Props = {
   remove: (id: string) => void
 }
 export function LibraryPane({
-  refresh,
   tracks,
   playlists,
   collection,
@@ -102,7 +99,6 @@ export function LibraryPane({
     observer.observe(target)
     return () => observer.disconnect()
   }, [limit, rows.length])
-  const [online, setOnline] = useState<LocalTrack | null | undefined>()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [sidebar, setSidebar] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -133,7 +129,6 @@ export function LibraryPane({
   const choose = (id: string) => {
     select(id)
     setSidebar(false)
-    setOnline(undefined)
     setLimit(100)
     sentinel.current?.closest('.music-scroll')?.scrollTo(0, 0)
   }
@@ -252,9 +247,6 @@ export function LibraryPane({
             <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
           </div>
           <div className="library-import">
-            <Button size="small" onClick={() => setOnline(null)}>
-              音乐源
-            </Button>
             <Button
               size="small"
               icon={<FileMusic size={16} />}
@@ -274,14 +266,6 @@ export function LibraryPane({
             </Button>
           </div>
         </div>
-        {online !== undefined && (
-          <LxPanel
-            key={online?.id ?? 'source'}
-            song={online}
-            close={() => setOnline(undefined)}
-            refresh={refresh}
-          />
-        )}
         <Input
           aria-label="搜索本地歌曲"
           type="search"
@@ -359,17 +343,6 @@ export function LibraryPane({
                         )}
                       </PopoverSurface>
                     </Popover>
-                    <Button
-                      size="small"
-                      appearance="subtle"
-                      title="查找在线版本"
-                      aria-label={'查找版本' + t.title}
-                      icon={<Search size={15} />}
-                      onClick={() => {
-                        setOnline(t)
-                        document.querySelector('.music-scroll')?.scrollTo(0, 0)
-                      }}
-                    />
                     {!t.available && (
                       <Button
                         size="small"

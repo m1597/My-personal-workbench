@@ -61,9 +61,12 @@ if (live) {
  lx.on('request',async ({action,info})=>{
   if(action==='search'){
    await new Promise(done=>setTimeout(done,600))
-   return [{name:'离线测试',singer:'测试艺人',albumName:'测试专辑',id:'test'}]
+   return [
+     {name:info.keyword,singer:'测试艺人',albumName:'测试专辑',id:'test'},
+     {name:'可下载版本',singer:'测试艺人',albumName:'音频夹具',id:'audio'}
+   ]
   }
-  return 'http://127.0.0.1/forbidden'
+  return info.musicInfo.id === 'audio' ? 'https://1.1.1.1/test-audio.mp3' : 'http://127.0.0.1/forbidden'
  })
  lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
   )
@@ -90,7 +93,12 @@ const choose = (file) =>
   }, file)
 try {
   const page = await app.firstWindow()
-  await page.getByRole('button', { name: '音乐源', exact: true }).click()
+  const tabs = page.getByRole('tab')
+  await expect(tabs).toHaveCount(3)
+  for (const [index, name] of ['本地曲库', '下载音乐', '每日推荐'].entries())
+    await expect(tabs.nth(index)).toHaveAccessibleName(name)
+  await expect(page.getByRole('button', { name: /音乐源|查找版本/ })).toHaveCount(0)
+  await page.getByRole('tab', { name: '下载音乐' }).click()
   await choose(sourceFile)
   await page.getByRole('button', { name: '本地导入' }).click()
   await expect.poll(() => page.evaluate(() => window.music.lxInfo())).not.toBe('')
@@ -124,13 +132,20 @@ try {
     await page.getByRole('button', { name: '导入链接' }).click()
     await expect.poll(() => page.evaluate(() => window.music.lxInfo())).toBe('在线测试源')
   }
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
-  await page.getByRole('button', { name: '查找版本' + row.title, exact: true }).click()
-  const pane = page.getByRole('region', { name: '在线版本' })
+  const pane = page.getByRole('region', { name: '下载音乐' })
+  const find = pane.getByRole('button', { name: '查找版本' })
   if (!live) {
+    await pane.getByRole('textbox', { name: '歌名', exact: true }).fill('手动歌名')
+    await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('手动艺人')
+    await find.click()
     await pane.getByRole('button', { name: '取消', exact: true }).click()
-    await pane.getByRole('button', { name: '重新搜索' }).click()
+    await find.click()
+    await expect(pane.getByText('手动歌名 手动艺人', { exact: true })).toBeVisible()
   }
+  await pane.getByRole('combobox', { name: '从曲库选择' }).click()
+  await pane.getByRole('option', { name: row.title + ' · ' + row.artist }).click()
+  await expect(pane.getByRole('textbox', { name: '歌名', exact: true })).toHaveValue(row.title)
+  await find.click()
   const downloads = pane.getByRole('button', { name: '下载', exact: true })
   await downloads.first().waitFor({ timeout: 65000 })
   await page.evaluate(() => {
@@ -167,7 +182,37 @@ try {
   if (!live) {
     assert.match(status, /仅支持公网地址/)
     assert.deepEqual(await fs.readdir(output), [])
-    console.log('PASS 独立源导入、取消重搜、选版本和失败不落文件')
+    await app.evaluate((_electron, file) => {
+      const https = process.getBuiltinModule('node:https')
+      const fs = process.getBuiltinModule('node:fs')
+      const { EventEmitter } = process.getBuiltinModule('node:events')
+      const original = https.request
+      https.request = (url, _options, done) => {
+        https.request = original
+        if (url.href !== 'https://1.1.1.1/test-audio.mp3') throw Error('音频地址不匹配')
+        const req = new EventEmitter()
+        req.end = () =>
+          done(
+            Object.assign(fs.createReadStream(file), {
+              statusCode: 200,
+              headers: {},
+              setTimeout() {},
+            }),
+          )
+        return req
+      }
+    }, path.resolve('tests/fixtures/local-music/tone.mp3'))
+    await downloads.nth(1).click()
+    await expect(pane.getByText(/已下载并入库/)).toBeVisible()
+    assert.equal((await fs.readdir(output)).length, 1)
+    assert.equal(
+      await page.evaluate(async () => (await window.music.state()).localTracks.length),
+      2,
+    )
+    console.log(
+      'PASS 三个主入口、手填和曲库搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
+        root,
+    )
   } else {
     if (!status.includes('已下载并入库')) throw Error(status)
     const files = await fs.readdir(output)

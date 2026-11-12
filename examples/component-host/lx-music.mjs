@@ -227,13 +227,21 @@ export function registerLx(bind, getStore, dialog) {
     exclusive(async (signal, id) => {
       const src = source()
       if (!src) throw Error('请先导入洛雪音乐源')
-      if (typeof id !== 'string') throw Error('无效曲目')
+      let track
+      if (typeof id === 'string') {
+        track = id.startsWith('local-') ? getStore().library.row(id) : getStore().item(id)
+      } else if (
+        typeof id?.title === 'string' &&
+        id.title.length <= 256 &&
+        id.title.trim() &&
+        typeof id.artist === 'string' &&
+        id.artist.length <= 256
+      ) {
+        track = { title: id.title.trim(), artist: id.artist.trim() }
+      }
+      if (!track) throw Error('无效曲目')
       matches.clear()
-      const rows = await versions(
-        src,
-        id.startsWith('local-') ? getStore().library.row(id) : getStore().item(id),
-        signal,
-      )
+      const rows = await versions(src, track, signal)
       signal.throwIfAborted()
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
       const items = []

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Input, Dropdown, Option } from '@fluentui/react-components'
+import { Button, Input, Dropdown, Option, Combobox } from '@fluentui/react-components'
 import type { LocalTrack } from './LibraryPane'
 export type Versions = {
   items: { key: string; title: string; artist: string; album: string }[]
@@ -8,10 +8,12 @@ export type Versions = {
 export function LxPanel({
   song,
   close,
+  tracks,
   refresh,
 }: {
-  song: Pick<LocalTrack, 'id' | 'title'> | null
-  close: () => void
+  song?: Pick<LocalTrack, 'id' | 'title'> | null
+  tracks?: LocalTrack[]
+  close?: () => void
   refresh: () => Promise<void>
 }) {
   const [name, setName] = useState(''),
@@ -21,7 +23,20 @@ export function LxPanel({
     [busy, setBusy] = useState(false)
   const [online, setOnline] = useState(false),
     [link, setLink] = useState('')
+  const [title, setTitle] = useState('')
+  const [artist, setArtist] = useState('')
+  const [filter, setFilter] = useState('')
+  const [picked, setPicked] = useState('')
   const songId = song?.id
+  const matching: LocalTrack[] = []
+  if (tracks) {
+    const keyword = filter.trim().toLocaleLowerCase()
+    for (const track of tracks) {
+      if ((track.title + ' ' + track.artist).toLocaleLowerCase().includes(keyword))
+        matching.push(track)
+      if (matching.length >= 50) break
+    }
+  }
   const host = window.music
   const live = useRef(true)
   const act = useCallback(async (fn: () => Promise<void>) => {
@@ -35,22 +50,21 @@ export function LxPanel({
       if (live.current) setBusy(false)
     }
   }, [])
-  const search = useCallback(async () => {
-    if (!songId) return
+  const search = useCallback(async (query: string | { title: string; artist: string }) => {
     setResult(undefined)
-    const found = await host.lxSearch(songId)
+    const found = await host.lxSearch(query)
     if (!live.current) return
     setResult(found)
     setQuality(found.quality.includes('320k') ? '320k' : found.quality[0])
     if (!found.items.length) setStatus('没有找到匹配版本')
-  }, [songId])
+  }, [])
   useEffect(() => {
     live.current = true
     void act(async () => {
       const n = await host.lxInfo()
       if (!live.current) return
       setName(n)
-      if (n && songId) await search()
+      if (n && songId) await search(songId)
     })
     return () => {
       live.current = false
@@ -66,16 +80,18 @@ export function LxPanel({
       setResult(undefined)
       setOnline(false)
       setLink('')
-      if (song && active) await search()
+      if (songId && active) await search(songId)
     })
   }
   return (
-    <section className="lx-panel" aria-label="在线版本">
+    <section className="lx-panel" aria-label={tracks ? '下载音乐' : '在线版本'}>
       <div className="lx-line">
         <strong>{song ? '查找版本 · ' + song.title : '音乐源'}</strong>
-        <Button size="small" onClick={close}>
-          关闭
-        </Button>
+        {close && (
+          <Button size="small" onClick={close}>
+            关闭
+          </Button>
+        )}
       </div>
       <div className="lx-line">
         <span>{name || '尚未导入音乐源'}</span>
@@ -113,6 +129,84 @@ export function LxPanel({
           </Button>
         </form>
       )}
+      {tracks && (
+        <form
+          className="download-search"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!busy && name && title.trim())
+              void act(() => search(picked || { title: title.trim(), artist: artist.trim() }))
+          }}
+        >
+          {tracks.length > 0 && (
+            <label>
+              从曲库选择
+              <Combobox
+                inlinePopup
+                aria-label="从曲库选择"
+                listbox={{ className: 'component-popup' }}
+                placeholder="输入歌名或艺人筛选"
+                value={filter}
+                disabled={busy}
+                selectedOptions={picked ? [picked] : []}
+                onChange={(e) => {
+                  setFilter(e.target.value)
+                  setPicked('')
+                }}
+                onOptionSelect={(_, data) => {
+                  const track = matching.find((t) => t.id === data.optionValue)
+                  if (!track) return
+                  setPicked(track.id)
+                  setTitle(track.title)
+                  setArtist(track.artist)
+                  setFilter('')
+                  setResult(undefined)
+                  setStatus('')
+                }}
+              >
+                {matching.map((t) => (
+                  <Option key={t.id} value={t.id} text={t.title + ' · ' + t.artist}>
+                    {t.title + ' · ' + t.artist}
+                  </Option>
+                ))}
+              </Combobox>
+            </label>
+          )}
+          <label>
+            歌名
+            <Input
+              aria-label="歌名"
+              value={title}
+              maxLength={256}
+              disabled={busy}
+              onChange={(_, data) => {
+                setTitle(data.value)
+                setPicked('')
+                setResult(undefined)
+                setStatus('')
+              }}
+            />
+          </label>
+          <label>
+            艺人
+            <Input
+              aria-label="艺人"
+              value={artist}
+              maxLength={256}
+              disabled={busy}
+              onChange={(_, data) => {
+                setArtist(data.value)
+                setPicked('')
+                setResult(undefined)
+                setStatus('')
+              }}
+            />
+          </label>
+          <Button type="submit" appearance="primary" disabled={!name || !title.trim() || busy}>
+            查找版本
+          </Button>
+        </form>
+      )}
       {busy ? (
         <div role="status">
           正在处理…{' '}
@@ -121,10 +215,10 @@ export function LxPanel({
           </Button>
         </div>
       ) : (
-        song &&
+        songId &&
         !result?.items.length &&
         name && (
-          <Button size="small" onClick={() => void act(search)}>
+          <Button size="small" onClick={() => void act(() => search(songId))}>
             重新搜索
           </Button>
         )
@@ -181,4 +275,14 @@ export function LxPanel({
       {status && <p role="status">{status}</p>}
     </section>
   )
+}
+
+export function DownloadPane({
+  tracks,
+  refresh,
+}: {
+  tracks: LocalTrack[]
+  refresh: () => Promise<void>
+}) {
+  return <LxPanel tracks={tracks} refresh={refresh} />
 }

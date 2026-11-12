@@ -54,7 +54,7 @@ type Item = {
   candidates: Track[]
 }
 import { ModelSettings, type ModelInfo } from './ModelSettings'
-import { LxPanel } from './LxPanel'
+import { DownloadPane, LxPanel } from './LxPanel'
 import type { Versions } from './LxPanel'
 type State = {
   profile: string
@@ -79,7 +79,7 @@ declare global {
       lxInfo(): Promise<string>
       lxImport(link?: string): Promise<void>
       lxCancel(): Promise<void>
-      lxSearch(id: string): Promise<Versions>
+      lxSearch(query: string | { title: string; artist: string }): Promise<Versions>
       lxDownload(key: string, quality: string): Promise<string>
       createPlaylist(name: string): Promise<string>
       setMembership(playlist: string, track: string, added: boolean): Promise<void>
@@ -357,7 +357,13 @@ function Music() {
           </div>
           <div className="music-heading">
             <h1>Music</h1>
-            <small>{tab === 'library' ? '本地音乐' : (provider?.label ?? 'DeepSeek')}</small>
+            <small>
+              {tab === 'download'
+                ? '在线下载'
+                : tab === 'library'
+                  ? '本地音乐'
+                  : (provider?.label ?? 'DeepSeek')}
+            </small>
           </div>
         </header>
       )}
@@ -368,12 +374,12 @@ function Music() {
         onTabSelect={(_, data) => setTab(String(data.value))}
       >
         <Tab value="library">本地曲库</Tab>
-        <Tab value="audition">推荐试听</Tab>
+        <Tab value="download">下载音乐</Tab>
+        <Tab value="audition">每日推荐</Tab>
       </TabList>
       <main className="music-scroll">
         {tab === 'library' ? (
           <LibraryPane
-            refresh={refresh}
             rows={localRows}
             total={categoryRows.length}
             tracks={state?.localTracks ?? []}
@@ -406,6 +412,8 @@ function Music() {
               })
             }
           />
+        ) : tab === 'download' ? (
+          <DownloadPane tracks={state?.localTracks ?? []} refresh={refresh} />
         ) : (
           <>
             <section className="music-compose">

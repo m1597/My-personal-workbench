@@ -29,7 +29,7 @@ const launch = () =>
 const app = await launch()
 try {
   const page = await app.firstWindow()
-  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByLabel('今天想听什么').fill('雨天的爵士乐')
   await page.getByRole('button', { name: '生成推荐' }).click()
   await expect(page.getByLabel('服务商', { exact: true })).toHaveText('DeepSeek')
@@ -168,7 +168,7 @@ try {
   )
   reopened.close()
   await page.reload()
-  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByLabel('今天想听什么').fill('')
   await page.getByRole('button', { name: '用已有资料推荐' }).click()
   await expect
@@ -184,7 +184,7 @@ try {
   await page.getByLabel('本次附加以上摘要').check()
   await page.getByRole('tab', { name: '本地曲库' }).click()
   await page.getByRole('button', { name: '从曲库移除已同意的摘要' }).click()
-  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByRole('button', { name: '发送并生成资料' }).click()
   await expect(page.getByText(/摘要已变更/)).toBeVisible()
   assert.equal(
@@ -199,7 +199,7 @@ try {
 const restarted = await launch()
 try {
   const page = await restarted.firstWindow()
-  await page.getByRole('tab', { name: '推荐试听' }).click()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await expect(page.getByText('偏爱氛围音乐与柔和节奏', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '用已有资料推荐' })).toBeEnabled()
   const batch = await page.evaluate(async () => {
