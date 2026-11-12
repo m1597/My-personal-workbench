@@ -110,7 +110,7 @@ export function publishToLibrary(temp, row, store) {
     throw e
   }
 }
-export async function saveRecording(url, dir, info, store, signal) {
+export async function saveRecording(url, dir, info, store, signal, auditionId) {
   const temp = path.join(dir, '.fitbay-' + randomUUID() + '.part')
   try {
     const res = await openPublic(url, {
@@ -152,28 +152,27 @@ export async function saveRecording(url, dir, info, store, signal) {
     const file = path.join(dir, filename)
     signal.throwIfAborted()
     if (
-      await lstat(file).then(
+      !auditionId &&
+      (await lstat(file).then(
         () => true,
         (e) => {
           if (e.code === 'ENOENT') return false
           throw e
         },
-      )
+      ))
     )
       throw Error('目标文件已存在，请选择其他目录')
     await verifyAudio(temp, signal)
     signal.throwIfAborted()
-    publishToLibrary(
-      temp,
-      {
-        file,
-        title: text(common.title) || info.name,
-        artist: text(common.artist) || info.singer || '未知艺人',
-        album: text(common.album) || text(info.albumName),
-        duration: format.duration,
-      },
-      store,
-    )
+    const metadata = {
+      file,
+      title: text(common.title) || info.name,
+      artist: text(common.artist) || info.singer || '未知艺人',
+      album: text(common.album) || text(info.albumName),
+      duration: format.duration,
+    }
+    if (auditionId) store.cacheOnline(auditionId, temp, metadata, extension(format))
+    else publishToLibrary(temp, metadata, store)
     return filename
   } finally {
     await rm(temp, { force: true })
@@ -248,7 +247,10 @@ export function registerLx(bind, getStore, dialog) {
       for (const row of rows.slice(0, 30)) {
         if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
         const key = randomUUID()
-        matches.set(key, row)
+        matches.set(key, {
+          row,
+          auditionId: typeof id === 'string' && !id.startsWith('local-') ? id : null,
+        })
         items.push({
           key,
           title: text(row.name),
@@ -259,38 +261,62 @@ export function registerLx(bind, getStore, dialog) {
       return { items, quality: src.quality }
     }),
   )
-  bind(
-    'lxDownload',
-    exclusive(async (signal, key, quality) => {
-      const src = source(),
-        row = matches.get(key)
-      if (!src || !row || !src.quality.includes(quality)) throw Error('请重新选择版本和音质')
+  async function transfer(signal, key, quality, auditionId) {
+    const src = source(),
+      match = matches.get(key),
+      row = match?.row
+    if (
+      !src ||
+      !row ||
+      !src.quality.includes(quality) ||
+      (auditionId && match.auditionId !== auditionId)
+    )
+      throw Error('请重新选择版本和音质')
+    let dir = getStore().cache
+    if (!auditionId) {
       const folder = await dialog.showOpenDialog({
         title: '选择歌曲下载文件夹',
         properties: ['openDirectory', 'createDirectory'],
       })
       if (folder.canceled) return ''
-      signal.throwIfAborted()
-      for (let attempt = 0; ; attempt++) {
-        const url = await runSource(
-          src.code,
-          { action: 'musicUrl', source: src.platform, info: { type: quality, musicInfo: row } },
+      dir = folder.filePaths[0]
+    } else {
+      const item = getStore().item(auditionId)
+      if (item.status !== '模型推荐' && !item.track?.startsWith('online-'))
+        throw Error('推荐曲目无效')
+    }
+    signal.throwIfAborted()
+    for (let attempt = 0; ; attempt++) {
+      const url = await runSource(
+        src.code,
+        { action: 'musicUrl', source: src.platform, info: { type: quality, musicInfo: row } },
+        signal,
+      )
+      if (typeof url !== 'string' || url.length > 16384) throw Error('音乐源未返回可用地址')
+      try {
+        return await saveRecording(
+          url,
+          dir,
+          { name: text(row.name), singer: text(row.singer), albumName: text(row.albumName) },
+          getStore(),
           signal,
+          auditionId,
         )
-        if (typeof url !== 'string' || url.length > 16384) throw Error('音乐源未返回可用地址')
-        try {
-          return await saveRecording(
-            url,
-            folder.filePaths[0],
-            { name: text(row.name), singer: text(row.singer), albumName: text(row.albumName) },
-            getStore(),
-            signal,
-          )
-        } catch (e) {
-          if (attempt > 0 || !(e instanceof TransferError)) throw e
-          signal.throwIfAborted()
-        }
+      } catch (e) {
+        if (attempt > 0 || !(e instanceof TransferError)) throw e
+        signal.throwIfAborted()
       }
+    }
+  }
+  bind(
+    'lxDownload',
+    exclusive((signal, key, quality) => transfer(signal, key, quality)),
+  )
+  bind(
+    'lxPreview',
+    exclusive((signal, id, key, quality) => {
+      if (typeof id !== 'string' || !id) throw Error('推荐曲目无效')
+      return transfer(signal, key, quality, id)
     }),
   )
   bind('lxCancel', () => active?.abort())

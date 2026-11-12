@@ -6,7 +6,6 @@ import {
   Dropdown,
   Option,
   Slider,
-  Input,
   Tab,
   TabList,
 } from '@fluentui/react-components'
@@ -20,11 +19,9 @@ import {
   SkipBack,
   Shuffle,
   ListOrdered,
-  ChevronDown,
   FolderPlus,
   Square,
   ListMusic,
-  ChevronRight,
 } from 'lucide-react'
 import {
   type Playlist,
@@ -50,11 +47,14 @@ type Item = {
   reason: string
   track: string
   status: string
+  audioDuration: number | null
+  online: boolean
   checked: number
   candidates: Track[]
 }
-import { ModelSettings, type ModelInfo } from './ModelSettings'
-import { DownloadPane, LxPanel } from './LxPanel'
+import { RecommendationComposer } from './RecommendationComposer'
+import type { ModelInfo } from './ModelSettings'
+import { DownloadPane } from './LxPanel'
 import type { Versions } from './LxPanel'
 type State = {
   profile: string
@@ -80,6 +80,7 @@ declare global {
       lxImport(link?: string): Promise<void>
       lxCancel(): Promise<void>
       lxSearch(query: string | { title: string; artist: string }): Promise<Versions>
+      lxPreview(id: string, key: string, quality: string): Promise<string>
       lxDownload(key: string, quality: string): Promise<string>
       createPlaylist(name: string): Promise<string>
       setMembership(playlist: string, track: string, added: boolean): Promise<void>
@@ -93,8 +94,13 @@ declare global {
       playQueue(id: string, ids: string[], position: number): Promise<void>
       state(): Promise<State>
       draft(s: string): Promise<void>
-      generateProfile(description: string, summary?: string[]): Promise<void>
-      generate(s: string, profile?: string): Promise<string>
+      generateProfile(description: string, summary?: string[]): Promise<string>
+      generate(
+        s: string,
+        profile?: string,
+        mode?: 'style' | 'artist',
+        similar?: boolean,
+      ): Promise<string>
       stopGeneration(): Promise<void>
       match(id: string): Promise<void>
       choose(id: string, track: string): Promise<void>
@@ -129,22 +135,16 @@ function shuffleQueue(ids: string[], first?: string) {
 }
 function Music() {
   const [state, setState] = useState<State>(),
-    [draft, setDraft] = useState(''),
-    [description, setDescription] = useState(''),
     [batch, setBatch] = useState(''),
-    [includedSummary, setIncludedSummary] = useState<string[]>(),
-    [preview, setPreview] = useState(false),
     [paused, setPaused] = useState(true),
     [time, setTime] = useState(0),
-    [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [docked, setDocked] = useState(false)
   const [tab, setTab] = useState('library'),
     [requestedCollection, setCollection] = useState('all'),
     [search, setSearch] = useState('')
-  const [settings, setSettings] = useState(false),
-    [online, setOnline] = useState<Item | null>(null)
-  const provider = state?.models.providers.find((x) => x.id === state.models.active)
+  const [online, setOnline] = useState<{ row: Item; result: Versions; queueIds: string[] }>()
+  const [resolving, setResolving] = useState(false)
   const [shuffled, setShuffled] = useState<string[] | null>(null)
   const switching = useRef(Promise.resolve())
   const audio = useRef<HTMLAudioElement>(null),
@@ -168,7 +168,6 @@ function Music() {
     void host
       .state()
       .then((s) => {
-        setDraft(s.draft)
         setState(s)
         setBatch(s.items.find((i) => i.id === s.current)?.batch ?? s.batches[0]?.id ?? '')
       })
@@ -221,16 +220,17 @@ function Music() {
       value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
     ),
   )
+  const queueable = (row: Item) => playable(row) || row.online
   const visibleQueue =
     tab === 'library'
       ? localRows.filter((row) => row.available).map((row) => row.id)
-      : rows.filter(playable).map((row) => row.id)
+      : rows.filter(queueable).map((row) => row.id)
   const legacyQueue =
     state?.items
       .filter(
         (row) =>
           row.batch === state.items.find((item) => item.id === state.current)?.batch &&
-          playable(row),
+          queueable(row),
       )
       .map((row) => row.id) ?? []
   const queue = state?.queue.length ? state.queue : legacyQueue
@@ -241,16 +241,21 @@ function Music() {
   ])
   const order = shuffled ?? queue
   const index = order.indexOf(now)
-  const following = index >= 0 ? order.slice(index + 1).find((id) => available.has(id)) : undefined
+  const navigable = new Set([
+    ...available,
+    ...(state?.items ?? []).filter((r) => r.online).map((r) => r.id),
+  ])
+  const following = index >= 0 ? order.slice(index + 1).find((id) => navigable.has(id)) : undefined
   const preceding =
     index > 0
       ? order
           .slice(0, index)
           .reverse()
-          .find((id) => available.has(id))
+          .find((id) => navigable.has(id))
       : undefined
   function startTrack(id: string) {
     if (current.current === id && audio.current) {
+      ++epoch.current
       if (audio.current.paused) return audio.current.play()
       audio.current.pause()
       return Promise.resolve()
@@ -260,13 +265,13 @@ function Music() {
   }
   function resumeOrStart() {
     if (!primary) return Promise.resolve()
-    if (primary === now && queue.includes(primary)) return play(primary, queue)
+    if (primary === now && queue.includes(primary)) return navigate(primary, queue)
     if (shuffled) {
       const nextOrder = shuffleQueue(visibleQueue)
       setShuffled(nextOrder)
-      return play(nextOrder[0], visibleQueue)
+      return navigate(nextOrder[0], visibleQueue)
     }
-    return play(primary, visibleQueue)
+    return navigate(primary, visibleQueue)
   }
   function play(id: string, ids = visibleQueue) {
     const seq = ++epoch.current
@@ -280,19 +285,24 @@ function Music() {
       }
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
       const local = state?.localTracks.find((t) => t.id === id)
-      const src = local
+      const item = state?.items.find((r) => r.id === id)
+      const stream = local || item?.online
+      const src = stream
         ? await host.localSource(id)
         : URL.createObjectURL(new Blob([await host.bytes(id)], { type: 'audio/wav' }))
       if (seq !== epoch.current) {
-        if (!local) URL.revokeObjectURL(src)
+        if (!stream) URL.revokeObjectURL(src)
         return
       }
       el.pause()
       if (url.current) URL.revokeObjectURL(url.current)
       current.current = id
-      url.current = local ? '' : src
+      url.current = stream ? '' : src
       const resume =
-        id === state?.current && state.position < (local?.duration ?? 20) - 0.1 ? state.position : 0
+        id === state?.current &&
+        state.position < (local?.duration ?? item?.audioDuration ?? 20) - 0.1
+          ? state.position
+          : 0
       el.src = src
       el.currentTime = resume
       await host.playQueue(id, ids, resume)
@@ -302,11 +312,17 @@ function Music() {
     switching.current = operation.catch(() => {})
     return operation
   }
+  async function navigate(id: string, ids: string[]) {
+    const row = state?.items.find((r) => r.id === id)
+    if (row?.online && !playable(row)) await audition(row, undefined, undefined, ids)
+    else await play(id, ids)
+  }
   async function next() {
-    if (following) await play(following, queue)
+    if (following) await navigate(following, queue)
   }
   async function end(clean = true) {
     ++epoch.current
+    if (resolving) await host.lxCancel()
     const el = audio.current
     if (el) {
       el.pause()
@@ -327,25 +343,43 @@ function Music() {
   const elapsed = current.current ? time : (state?.position ?? 0)
   const clock = formatTime
   const duration =
-    audio.current?.duration || (active ? ('duration' in active ? active.duration : 20) : 0)
+    audio.current?.duration ||
+    (active ? ('duration' in active ? active.duration : (active.audioDuration ?? 20)) : 0)
   const primary = active && available.has(active.id) ? active.id : visibleQueue[0]
   const resumeLabel =
     !current.current && active && available.has(active.id)
       ? '从 ' + Math.floor(elapsed) + ' 秒继续'
       : '播放'
-  async function generate(profileTask = false) {
-    if (provider?.id !== 'offline' && !provider?.hasKey) {
-      setSettings(true)
-      return
-    }
-    setBusy(true)
+  async function audition(row: Item, key?: string, quality?: string, queueIds = visibleQueue) {
+    const request = ++epoch.current
+    setResolving(true)
     try {
-      if (profileTask) await host.generateProfile(description, includedSummary)
-      else setBatch(await host.generate(draft, state?.profile))
-      setIncludedSummary(undefined)
-      setPreview(false)
+      if (!key || !quality) {
+        const result = await host.lxSearch(row.id)
+        if (request !== epoch.current) return
+        if (!result.items.length) throw Error('音乐源中没有找到此录音')
+        const exact = result.items.filter(
+          (v) =>
+            v.title.trim().toLocaleLowerCase() === row.title.trim().toLocaleLowerCase() &&
+            v.artist.trim().toLocaleLowerCase() === row.artist.trim().toLocaleLowerCase(),
+        )
+        if (exact.length !== 1) {
+          setTab('audition')
+          setBatch(row.batch)
+          setOnline({ row, result, queueIds })
+          return
+        }
+        key = exact[0].key
+        quality = result.quality.includes('320k') ? '320k' : result.quality[0]
+      }
+      await host.lxPreview(row.id, key, quality)
+      setOnline(undefined)
+      await refresh()
+      if (request === epoch.current) await play(row.id, queueIds)
+    } catch (e) {
+      if (request === epoch.current) throw e
     } finally {
-      setBusy(false)
+      setResolving(false)
     }
   }
   return (
@@ -358,11 +392,7 @@ function Music() {
           <div className="music-heading">
             <h1>Music</h1>
             <small>
-              {tab === 'download'
-                ? '在线下载'
-                : tab === 'library'
-                  ? '本地音乐'
-                  : (provider?.label ?? 'DeepSeek')}
+              {tab === 'download' ? '在线下载' : tab === 'library' ? '本地音乐' : '每日推荐'}
             </small>
           </div>
         </header>
@@ -416,124 +446,14 @@ function Music() {
           <DownloadPane tracks={state?.localTracks ?? []} refresh={refresh} />
         ) : (
           <>
-            <section className="music-compose">
-              <h2>
-                <label htmlFor="preference">今天想听什么</label>
-              </h2>
-              <div className="model-toolbar">
-                <span>
-                  {provider?.label ?? 'DeepSeek'}
-                  {provider?.id !== 'offline' && provider?.model ? ' · ' + provider.model : ''}
-                </span>
-                <Button
-                  size="small"
-                  disabled={busy || !provider}
-                  onClick={() => setSettings((v) => !v)}
-                >
-                  模型设置
-                </Button>
-              </div>
-              {settings && state && (
-                <ModelSettings
-                  info={state.models}
-                  close={() => setSettings(false)}
-                  save={async (...args) => {
-                    await host.configureModel(...args)
-                    await refresh()
-                  }}
-                />
-              )}
-              {provider?.id !== 'offline' && (
-                <>
-                  <h2>个人音乐偏好资料</h2>
-                  <p>{state?.profile || '尚未生成资料'}</p>
-                  <Button
-                    className="music-summary"
-                    size="small"
-                    appearance="transparent"
-                    aria-expanded={preview}
-                    icon={preview ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    onClick={() => setPreview(!preview)}
-                  >
-                    生成或更新偏好资料{includedSummary ? ' · 已附加' : ''}
-                  </Button>
-                  {preview && (
-                    <div className="music-summary-content">
-                      <Input
-                        aria-label="长期音乐偏好自述"
-                        placeholder="长期喜欢哪些风格、艺人或声音？"
-                        maxLength={1000}
-                        value={description}
-                        onChange={(_, v) => setDescription(v.value)}
-                      />
-                      <p>曲库艺人分布（最多 50 位）</p>
-                      <p>{(includedSummary ?? state?.summary)?.join('；') || '音乐库为空'}</p>
-                      <Checkbox
-                        disabled={!includedSummary && !state?.summary.length}
-                        label="本次附加以上摘要"
-                        checked={!!includedSummary}
-                        onChange={(_, v) =>
-                          setIncludedSummary(v.checked === true ? state?.summary : undefined)
-                        }
-                      />
-                      <Button
-                        disabled={busy || (!description.trim() && !includedSummary?.length)}
-                        onClick={() => void act(() => generate(true))}
-                      >
-                        发送并生成资料
-                      </Button>
-                    </div>
-                  )}
-                  <small>
-                    生成资料时向所选服务发送自述和勾选的摘要。生成推荐时发送上方已有资料及当次风格。
-                  </small>
-                </>
-              )}
-              <div className="music-input">
-                <Input
-                  id="preference"
-                  maxLength={1000}
-                  value={draft}
-                  placeholder="输入心情、风格或喜欢的艺人"
-                  onChange={(_, d) => {
-                    setDraft(d.value)
-                    void host.draft(d.value).catch((e) => setError(String(e)))
-                  }}
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === 'Enter' &&
-                      !e.nativeEvent.isComposing &&
-                      (draft.trim() || state?.profile) &&
-                      !busy
-                    )
-                      void act(() => generate())
-                  }}
-                />
-                <Button
-                  appearance="primary"
-                  disabled={busy || (!draft.trim() && !state?.profile)}
-                  icon={<ListMusic size={16} />}
-                  onClick={() => void act(() => generate())}
-                >
-                  {provider?.id === 'offline'
-                    ? '生成离线试听单'
-                    : state?.profile
-                      ? '用已有资料推荐'
-                      : '生成推荐'}
-                </Button>
-              </div>
-              {busy && (
-                <Button size="small" onClick={() => void host.stopGeneration()}>
-                  取消生成
-                </Button>
-              )}
-            </section>
-            {online && online.batch === batch && (
-              <LxPanel
-                key={online.id}
-                song={online}
-                close={() => setOnline(null)}
+            {state && (
+              <RecommendationComposer
+                models={state.models}
+                profile={state.profile}
+                summary={state.summary}
+                initialDraft={state.draft}
                 refresh={refresh}
+                generated={setBatch}
               />
             )}
             <section className="music-list">
@@ -612,20 +532,55 @@ function Music() {
                               <span>{r.artist}</span>
                             </div>
                             <p>{r.reason}</p>
-                            <small>
-                              {r.status}
-                              {version ? ' · ' + version.album + ' · ' + version.version : ''}
-                            </small>
-                            {r.status === '模型推荐' && (
+                            {r.status !== '模型推荐' && (
+                              <small>
+                                {r.status}
+                                {version ? ' · ' + version.album + ' · ' + version.version : ''}
+                              </small>
+                            )}
+                            {r.online && !playable(r) && (
                               <Button
                                 size="small"
-                                onClick={() => {
-                                  setOnline(r)
-                                  document.querySelector('.music-scroll')?.scrollTo(0, 0)
-                                }}
+                                disabled={resolving}
+                                onClick={() => void act(() => audition(r))}
                               >
-                                查找在线版本
+                                试听在线录音
                               </Button>
+                            )}
+                            {online?.row.id === r.id && (
+                              <section className="music-versions" aria-label="选择试听版本">
+                                {online.result.items.map((v) => (
+                                  <Button
+                                    key={v.key}
+                                    size="small"
+                                    disabled={resolving}
+                                    onClick={() =>
+                                      void act(() =>
+                                        audition(
+                                          r,
+                                          v.key,
+                                          online.result.quality.includes('320k')
+                                            ? '320k'
+                                            : online.result.quality[0],
+                                          online.queueIds,
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    {[v.title, v.artist, v.album].filter(Boolean).join(' · ')} ·
+                                    试听
+                                  </Button>
+                                ))}
+                                <Button
+                                  size="small"
+                                  onClick={() => {
+                                    if (resolving) void host.lxCancel()
+                                    setOnline(undefined)
+                                  }}
+                                >
+                                  取消
+                                </Button>
+                              </section>
                             )}
                             {r.status === '待选版本' && (
                               <div className="music-versions">
@@ -648,13 +603,17 @@ function Music() {
                                 取消
                               </Button>
                             )}
-                            {['已过期', '文件缺失', '已取消', '中断', '下载失败'].includes(
-                              r.status,
-                            ) && (
-                              <Button size="small" onClick={() => void act(() => host.retry(r.id))}>
-                                重新获取
-                              </Button>
-                            )}
+                            {!r.online &&
+                              ['已过期', '文件缺失', '已取消', '中断', '下载失败'].includes(
+                                r.status,
+                              ) && (
+                                <Button
+                                  size="small"
+                                  onClick={() => void act(() => host.retry(r.id))}
+                                >
+                                  重新获取
+                                </Button>
+                              )}
                           </div>
                           {playable(r) && (
                             <Checkbox
@@ -709,7 +668,7 @@ function Music() {
             icon={<SkipBack size={17} />}
             disabled={!preceding}
             onClick={() => {
-              if (preceding) void act(() => play(preceding, queue))
+              if (preceding) void act(() => navigate(preceding, queue))
             }}
           />
           <Button
@@ -720,8 +679,10 @@ function Music() {
             title={paused ? resumeLabel : '暂停'}
             icon={paused ? <Play size={16} /> : <Pause size={16} />}
             onClick={() => {
-              if (!paused) audio.current?.pause()
-              else void act(resumeOrStart)
+              if (!paused) {
+                ++epoch.current
+                audio.current?.pause()
+              } else void act(resumeOrStart)
             }}
           />
           <Button
@@ -729,7 +690,7 @@ function Music() {
             aria-label="下一首"
             title="下一首"
             icon={<SkipForward size={17} />}
-            disabled={!following}
+            disabled={resolving || !following}
             onClick={() => void act(next)}
           />
           <Button
@@ -737,7 +698,7 @@ function Music() {
             aria-label={localMode ? '停止播放' : '结束试听并清理缓存'}
             title={localMode ? '停止播放' : '结束试听并清理缓存'}
             icon={<Square size={14} />}
-            disabled={localMode ? !current.current : !state?.items.some(playable)}
+            disabled={!resolving && (localMode ? !current.current : !state?.items.some(playable))}
             onClick={() => void act(() => end(!localMode))}
           />
         </div>

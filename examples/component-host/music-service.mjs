@@ -1,10 +1,11 @@
+import { openAudio } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
 import { ipcMain, dialog, safeStorage } from 'electron'
 import { setTimeout as delay } from 'node:timers/promises'
 import { MusicStore } from './music/store.mjs'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { localStream } from './local-stream.mjs'
 export function musicService(profile, isSender) {
   let store,
@@ -77,6 +78,33 @@ export function musicService(profile, isSender) {
   })
   bind('localSource', async (id) => {
     const epoch = viewEpoch
+    if (!text(id).startsWith('local-')) {
+      const item = store.item(id)
+      if (!item.track?.startsWith('online-') || !['就绪', '已入库'].includes(item.status))
+        throw Error('推荐录音未就绪')
+      const saved = store.local(item.track),
+        file = saved ?? store.file(id)
+      if (!saved) {
+        let verified = false
+        try {
+          const handle = await openAudio(file)
+          const hash = createHash('sha256')
+          for await (const chunk of handle.createReadStream()) hash.update(chunk)
+          verified = hash.digest('hex') === item.digest
+        } catch {
+          /* Missing or changed cache. */
+        }
+        if (!verified) {
+          store.status(id, '文件缺失')
+          throw Error('试听缓存缺失或校验失败，请重新获取')
+        }
+      }
+      if (viewEpoch !== epoch) throw Error('窗口已关闭')
+      store.release()
+      store.active = id
+      grant = { url: 'fitbay-audio://track/' + randomUUID(), id, file, audition: true }
+      return grant.url
+    }
     const row = store.library.row(text(id))
     if (!(await store.library.verify(row))) throw Error('文件不可用，请重新定位')
     if (viewEpoch !== epoch) throw Error('窗口已关闭')
@@ -91,7 +119,10 @@ export function musicService(profile, isSender) {
   })
   bind('mediaFailed', (id, url) => {
     if (grant && grant.id === id && grant.url === url) {
-      store.db.prepare('UPDATE local_tracks SET available=0,unplayable=1 WHERE id=?').run(id)
+      if (grant.audition) {
+        store.status(id, '文件缺失')
+        store.release()
+      } else store.db.prepare('UPDATE local_tracks SET available=0,unplayable=1 WHERE id=?').run(id)
       grant = null
     }
   })
@@ -156,27 +187,41 @@ export function musicService(profile, isSender) {
       )
       signal.throwIfAborted()
       store.set('taste-profile', result)
+      return result
     })
   })
-  bind('generate', (preference, profile = '') => {
+  bind('generate', (preference, profile = '', mode = 'style', similar = false) => {
     text(preference)
-    if (profile !== (store.get('taste-profile') || '')) throw Error('资料已变更，请重新预览')
+    if (!['artist', 'style'].includes(mode) || typeof similar !== 'boolean')
+      throw Error('无效推荐方式')
+    if (profile && profile !== store.get('taste-profile')) throw Error('资料已变更，请重新预览')
     if (!preference.trim() && !profile) throw Error('请填写当次风格或先生成资料')
     return generateTask(async (signal) => {
       const label = preference.trim() || '个人偏好'
       if (modelInfo(store).active === 'offline') {
         await delay(150, undefined, { signal })
-        return store.generate(label, profile ? [profile] : [])
+        return store.generate('离线示例 · ' + label, profile ? [profile] : [])
       }
       const rows = await requestMusicModel(
         store,
         safeStorage,
         'recommend',
-        { preference, ...(profile ? { profile } : {}) },
+        {
+          preference,
+          mode,
+          similar: mode === 'artist' && similar,
+          ...(profile ? { profile } : {}),
+        },
         signal,
       )
       signal.throwIfAborted()
-      return store.saveSuggestions(label, rows, '模型推荐')
+      const artistKey = (v) => v.normalize('NFKC').trim().toLocaleLowerCase()
+      const acceptable =
+        mode === 'artist' && !similar && preference.trim()
+          ? rows.filter((row) => artistKey(row.artist) === artistKey(preference))
+          : rows
+      if (!acceptable.length) throw Error('未找到该歌手的推荐歌曲，请检查歌手名或开启相似歌手')
+      return store.saveSuggestions(label, acceptable, '模型推荐')
     })
   })
   bind('stopGeneration', () => pending?.abort())

@@ -1,7 +1,6 @@
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
-import { catalogue } from './offline-source.mjs'
 import { pathKey, regularFile } from './local-files.mjs'
 
 export class LocalLibrary {
@@ -36,7 +35,7 @@ export class LocalLibrary {
     }
   }
   saved(track, filename) {
-    const t = catalogue.find((i) => i.id === track),
+    const t = this.store.metadata(track),
       root = this.store.get('root')
     if (t && root && path.basename(filename) === filename)
       this.upsert({
@@ -44,7 +43,7 @@ export class LocalLibrary {
         title: t.title,
         artist: t.artist,
         album: t.album,
-        duration: 20,
+        duration: t.duration ?? 20,
       })
   }
   upsert(row, replacing) {

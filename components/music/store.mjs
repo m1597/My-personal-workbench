@@ -7,6 +7,7 @@ import {
   copyFileSync,
   constants,
   lstatSync,
+  readdirSync,
 } from 'node:fs'
 import { writeFile, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -36,6 +37,12 @@ export class MusicStore {
     CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY,batch TEXT,title TEXT,artist TEXT,reason TEXT,track TEXT,status TEXT,checked INTEGER DEFAULT 0,used INTEGER,digest TEXT);
     CREATE TABLE IF NOT EXISTS library(track TEXT PRIMARY KEY,file TEXT,digest TEXT,album TEXT,version TEXT);
     CREATE TABLE IF NOT EXISTS saves(track TEXT PRIMARY KEY,temp TEXT,file TEXT,digest TEXT);`)
+    this.db.exec(
+      'CREATE TABLE IF NOT EXISTS online_recordings(track TEXT PRIMARY KEY,title TEXT,artist TEXT,album TEXT,duration REAL,ext TEXT)',
+    )
+    for (const file of readdirSync(this.cache)) {
+      if (/^\.fitbay-[a-f0-9-]{36}\.part$/.test(file)) unlinkSync(path.join(this.cache, file))
+    }
     this.jobs = new Map()
     this.active = null
     this.db.exec("UPDATE items SET status='中断' WHERE status IN ('等候','下载中')")
@@ -51,9 +58,48 @@ export class MusicStore {
   set(key, value) {
     this.db.prepare('INSERT OR REPLACE INTO state VALUES(?,?)').run(key, String(value))
   }
-  file(id, ext = '.wav') {
+  metadata(track) {
+    return (
+      catalogue.find((t) => t.id === track) ??
+      this.db
+        .prepare('SELECT *, track AS id, album AS version FROM online_recordings WHERE track=?')
+        .get(track)
+    )
+  }
+  cacheOnline(id, temp, metadata, ext) {
+    const row = this.item(id)
+    if (
+      !['模型推荐', '已过期', '文件缺失'].includes(row.status) ||
+      this.active === id ||
+      !['.wav', '.mp3', '.flac', '.m4a'].includes(ext)
+    )
+      throw Error('请重新选择推荐录音')
+    const digest = hash(readFileSync(temp))
+    const track = 'online-' + digest
+    const dest = this.file(id, ext)
+    // A crash between cache publication and the SQLite commit may leave this private file behind.
+    if (existsSync(dest)) unlinkSync(dest)
+    let published = false
+    this.db.exec('BEGIN')
+    try {
+      this.db
+        .prepare('INSERT OR REPLACE INTO online_recordings VALUES(?,?,?,?,?,?)')
+        .run(track, metadata.title, metadata.artist, metadata.album, metadata.duration, ext)
+      this.db
+        .prepare("UPDATE items SET track=?,digest=?,status='就绪',used=? WHERE id=?")
+        .run(track, digest, Date.now(), id)
+      publish(temp, dest)
+      published = true
+      this.db.exec('COMMIT')
+    } catch (e) {
+      this.db.exec('ROLLBACK')
+      if (published) unlinkSync(dest)
+      throw e
+    }
+  }
+  file(id, ext) {
     if (!/^[a-f0-9-]{36}$/.test(id)) throw Error('未知曲目')
-    return path.join(this.cache, id + ext)
+    return path.join(this.cache, id + (ext ?? this.metadata(this.item(id).track)?.ext ?? '.wav'))
   }
   removeCache(id, ext) {
     const f = this.file(id, ext)
@@ -81,10 +127,13 @@ export class MusicStore {
   snapshot() {
     const batches = this.db.prepare('SELECT * FROM batches ORDER BY rowid DESC').all()
     const items = this.db
-      .prepare('SELECT * FROM items ORDER BY rowid')
+      .prepare(
+        'SELECT i.*, o.duration AS audioDuration FROM items i LEFT JOIN online_recordings o ON i.track=o.track ORDER BY i.rowid',
+      )
       .all()
       .map((row) => ({
         ...row,
+        online: row.status === '模型推荐' || row.track?.startsWith('online-') || false,
         candidates: catalogue.filter((t) => t.title === row.title && t.artist === row.artist),
       }))
     return {
@@ -233,7 +282,7 @@ export class MusicStore {
   }
   keep(id) {
     const row = this.item(id),
-      t = catalogue.find((t) => t.id === row.track),
+      t = this.metadata(row.track),
       root = this.get('root')
     if (!root || !t) throw Error('请先选择音乐库和版本')
     if (this.local(t.id)) {
@@ -253,7 +302,7 @@ export class MusicStore {
       op = {
         track: t.id,
         temp: '.fitbay-' + uuid + '.part',
-        file: t.id + '-' + uuid + '.wav',
+        file: t.id + '-' + uuid + (t.ext ?? '.wav'),
         digest: row.digest,
       }
       this.db
@@ -276,7 +325,7 @@ export class MusicStore {
     }
     if (!lstatSync(dest).isFile() || hash(readFileSync(dest)) !== op.digest)
       throw Error('目标校验失败')
-    const t = catalogue.find((t) => t.id === op.track)
+    const t = this.metadata(op.track)
     this.db
       .prepare('INSERT OR REPLACE INTO library VALUES(?,?,?,?,?)')
       .run(t.id, op.file, op.digest, t.album, t.version)
@@ -288,10 +337,7 @@ export class MusicStore {
     for (const op of this.db.prepare('SELECT * FROM saves').all()) {
       try {
         this.finish(op)
-      } catch {
-        // Missing volumes and partial writes remain journaled for a manual retry.
-        continue
-      }
+      } catch {}
     }
   }
 }

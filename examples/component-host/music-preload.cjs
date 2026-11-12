@@ -4,6 +4,7 @@ const names = [
   'lxImport',
   'lxSearch',
   'lxDownload',
+  'lxPreview',
   'lxCancel',
   'configureModel',
   'state',
