@@ -10,8 +10,8 @@ import {
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
-import { readdir } from 'node:fs/promises'
-import { audioTypes, openAudio, regularFile } from './music/local-files.mjs'
+import { lstat, readdir, realpath } from 'node:fs/promises'
+import { audioTypes, openAudio, pathKey, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
@@ -167,13 +167,28 @@ export function musicService(
     }
   }
   bind('removeFolder', (id) => updateLibrary(() => store.library.removeFolder(text(id))))
-  const forgetTrack = (id) =>
+  bind('openFolder', async (id) => {
+    const [member] = store.library.folderMembers(text(id))
+    const dir = path.dirname(member.file)
+    if (!(await lstat(dir)).isDirectory() || pathKey(await realpath(dir)) !== pathKey(dir))
+      throw Error('文件夹已变化，请重新导入')
+    if (await shell.openPath(dir)) throw Error('无法打开文件夹，请检查目录是否可用')
+  })
+  function trackIds(value) {
+    const ids = Array.isArray(value) ? value : [value]
+    if (!ids.length) throw Error('请选择歌曲')
+    return [...new Set(ids.map(text))]
+  }
+  const forgetTracks = (ids) =>
     updateLibrary(() => {
-      store.library.remove(id)
-      return [id]
+      for (const id of ids) {
+        store.library.row(id)
+        store.library.remove(id)
+      }
+      return ids
     })
-  bind('removeLocal', (id) => {
-    forgetTrack(text(id))
+  bind('removeLocal', (value) => {
+    forgetTracks(trackIds(value))
   })
   async function recyclableLyrics(audio) {
     const lyric = await ownedLyrics(store.db, audio)
@@ -194,39 +209,45 @@ export function musicService(
       return null
     }
   }
-  bind('trashLocal', async (id) => {
-    const row = store.library.row(text(id))
-    if (row.awaitingLocation) throw Error('请先重新定位音频')
+  bind('trashLocal', async (value) => {
+    const rows = trackIds(value).map((id) => store.library.row(id))
+    if (rows.some((row) => row.awaitingLocation)) throw Error('请先重新定位音频')
     if (localDialog || store.library.job.running) throw Error('请等待当前曲库操作结束')
     localDialog = true
     const epoch = viewEpoch
     try {
-      const lyric = await recyclableLyrics(row.file)
+      const targets = []
+      for (const row of rows) targets.push({ row, lyric: await recyclableLyrics(row.file) })
       const answer = await dialog.showMessageBox({
         type: 'warning',
         title: '移至系统回收站',
         message: '将下列文件移至系统回收站？',
-        detail: [row.file, lyric].filter(Boolean).join('\n'),
+        detail: targets
+          .flatMap(({ row, lyric }) => (lyric ? [row.file, lyric] : [row.file]))
+          .join('\n'),
         buttons: ['取消', '移至回收站'],
         defaultId: 0,
         cancelId: 0,
       })
       if (answer.response !== 1 || epoch !== viewEpoch) return false
-      if (store.library.row(id).file !== row.file || !(await regularFile(row.file)))
-        throw Error('文件已变化，曲库记录已保留')
-      try {
-        await shell.trashItem(row.file)
-      } catch {
-        throw Error('无法移至系统回收站，曲库记录已保留')
-      }
-      forgetTrack(id)
-      if (lyric && lyric === (await recyclableLyrics(row.file))) {
+      for (const { row, lyric } of targets) {
+        if (epoch !== viewEpoch) throw Error('窗口已关闭，尚未处理的歌曲已保留')
+        if (store.library.row(row.id).file !== row.file || !(await regularFile(row.file)))
+          throw Error('文件已变化，曲库记录已保留')
         try {
-          await shell.trashItem(lyric)
+          await shell.trashItem(row.file)
         } catch {
-          throw Error('音频已回收，歌词文件回收失败')
+          throw Error('无法移至系统回收站，曲库记录已保留')
         }
-        store.db.prepare('DELETE FROM lyric_files WHERE file=?').run(lyric)
+        forgetTracks([row.id])
+        if (lyric && lyric === (await recyclableLyrics(row.file))) {
+          try {
+            await shell.trashItem(lyric)
+          } catch {
+            throw Error('音频已回收，歌词文件回收失败')
+          }
+          store.db.prepare('DELETE FROM lyric_files WHERE file=?').run(lyric)
+        }
       }
       return true
     } finally {

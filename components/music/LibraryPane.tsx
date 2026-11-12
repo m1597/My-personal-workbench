@@ -23,7 +23,6 @@ import {
 } from '@fluentui/react-components'
 import {
   Folder,
-  ChevronRight,
   Plus,
   ListMusic,
   ListPlus,
@@ -38,13 +37,12 @@ import {
   History,
 } from 'lucide-react'
 type FolderEntry = { id: string; name: string }
-type FolderNode = FolderEntry & { children: Map<string, FolderNode> }
 export type Playlist = { id: string; name: string; tracks: string[]; system?: boolean }
 export type LocalTrack = {
   id: string
   title: string
   artist: string
-  folders: FolderEntry[]
+  folder: FolderEntry | null
   album: string
   duration: number
   recommendationSource?: string
@@ -93,9 +91,10 @@ type Props = {
   dismiss: (id: string) => void
   playRow: (id: string) => void
   error: string
-  remove: (id: string, trash: boolean) => Promise<boolean>
+  remove: (id: string | string[], trash: boolean) => Promise<boolean>
   renameList: (id: string, name: string) => Promise<boolean>
   deleteList: (id: string) => Promise<boolean>
+  openFolder: (id: string) => void
   removeFolder: (id: string) => Promise<boolean>
 }
 export function LibraryPane({
@@ -126,6 +125,7 @@ export function LibraryPane({
   renameList,
   deleteList,
   removeFolder,
+  openFolder,
 }: Props) {
   const [limit, setLimit] = useState(100)
   const [selection, setSelection] = useState<Set<string> | null>(null)
@@ -157,12 +157,12 @@ export function LibraryPane({
     observer.observe(target)
     return () => observer.disconnect()
   }, [limit, rows.length])
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [sidebar, setSidebar] = useState(false)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [action, setAction] = useState<{
-    kind: 'rename' | 'deleteList' | 'folder' | 'song'
+    kind: 'rename' | 'deleteList' | 'folder' | 'song' | 'batch'
+    ids?: string[]
     id: string
     name: string
   }>()
@@ -184,28 +184,13 @@ export function LibraryPane({
     }
   }
   const folders = useMemo(() => {
-    const root = new Map<string, FolderNode>()
-    for (const track of tracks) {
-      let branch = root
-      for (const folder of track.folders) {
-        let node = branch.get(folder.id)
-        if (!node) {
-          node = { ...folder, children: new Map() }
-          branch.set(folder.id, node)
-        }
-        branch = node.children
-      }
-    }
-    return root
+    const entries = new Map<string, FolderEntry>()
+    for (const { folder } of tracks) if (folder) entries.set(folder.id, folder)
+    return [...entries.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [tracks])
+  const currentFolder = folders.find((f) => f.id === collection)
   const heading =
-    playlists.find((p) => p.id === collection)?.name ??
-    (collection !== 'all'
-      ? tracks
-          .find((t) => t.folders.some((f) => f.id === collection))
-          ?.folders.find((f) => f.id === collection)?.name
-      : undefined) ??
-    '全部歌曲'
+    playlists.find((p) => p.id === collection)?.name ?? currentFolder?.name ?? '全部歌曲'
   const choose = (id: string) => {
     setSelection(null)
     select(id)
@@ -213,55 +198,6 @@ export function LibraryPane({
     setLimit(100)
     sentinel.current?.closest('.music-scroll')?.scrollTo(0, 0)
   }
-  const folderRows = (branch: Map<string, FolderNode>): React.ReactNode =>
-    Array.from(branch.values())
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((node) => (
-        <div key={node.id}>
-          <div className="folder-line">
-            {node.children.size > 0 && (
-              <Button
-                appearance="subtle"
-                size="small"
-                aria-label={(expanded.has(node.id) ? '收起' : '展开') + node.name}
-                aria-expanded={expanded.has(node.id)}
-                icon={<ChevronRight size={14} />}
-                onClick={() =>
-                  setExpanded((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(node.id)) next.delete(node.id)
-                    else next.add(node.id)
-                    return next
-                  })
-                }
-              />
-            )}
-            <Menu openOnContext>
-              <MenuTrigger disableButtonEnhancement>
-                <Button
-                  appearance="subtle"
-                  size="small"
-                  aria-pressed={collection === node.id}
-                  icon={<Folder size={15} />}
-                  onClick={() => choose(node.id)}
-                >
-                  {node.name}
-                </Button>
-              </MenuTrigger>
-              <MenuPopover className="component-popup">
-                <MenuList>
-                  <MenuItem onClick={() => setAction({ kind: 'folder', ...node })}>
-                    从曲库移除文件夹
-                  </MenuItem>
-                </MenuList>
-              </MenuPopover>
-            </Menu>
-          </div>
-          {expanded.has(node.id) && (
-            <div className="folder-children">{folderRows(node.children)}</div>
-          )}
-        </div>
-      ))
   return (
     <div className="library-layout">
       <Button
@@ -308,7 +244,30 @@ export function LibraryPane({
           我的收藏
         </Button>
         <h3>文件夹</h3>
-        {folderRows(folders)}
+        {folders.map((node) => (
+          <Menu key={node.id} openOnContext>
+            <MenuTrigger disableButtonEnhancement>
+              <Button
+                appearance="subtle"
+                size="small"
+                title={node.name}
+                aria-pressed={collection === node.id}
+                icon={<Folder size={15} />}
+                onClick={() => choose(node.id)}
+              >
+                {node.name}
+              </Button>
+            </MenuTrigger>
+            <MenuPopover className="component-popup">
+              <MenuList>
+                <MenuItem onClick={() => openFolder(node.id)}>打开文件所在位置</MenuItem>
+                <MenuItem onClick={() => setAction({ kind: 'folder', ...node })}>
+                  从曲库移除文件夹
+                </MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>
+        ))}
         <div className="playlist-heading">
           <h3>我的歌单</h3>
           <Button
@@ -458,6 +417,23 @@ export function LibraryPane({
                   </MenuList>
                 </MenuPopover>
               </Menu>
+              {currentFolder && (
+                <Button
+                  size="small"
+                  disabled={batchBusy || !selectedIds.length}
+                  icon={<Trash2 size={15} />}
+                  onClick={() =>
+                    setAction({
+                      kind: 'batch',
+                      id: collection,
+                      ids: selectedIds,
+                      name: '所选 ' + selectedIds.length + ' 首歌曲',
+                    })
+                  }
+                >
+                  移除所选歌曲
+                </Button>
+              )}
               {playlists.some((list) => list.id === collection) && (
                 <Button
                   size="small"
@@ -652,6 +628,7 @@ export function LibraryPane({
                 {
                   {
                     song: '移除歌曲',
+                    batch: '移除所选歌曲',
                     rename: '重命名歌单',
                     deleteList: '删除歌单',
                     folder: '移除文件夹',
@@ -666,12 +643,12 @@ export function LibraryPane({
                     value={editName}
                     onChange={(_, v) => setEditName(v.value)}
                   />
-                ) : action.kind === 'song' ? (
+                ) : action.kind === 'song' || action.kind === 'batch' ? (
                   <>从 FitBay 移除「{action.name}」会同步移除其歌单引用，原文件保留。</>
                 ) : action.kind === 'folder' ? (
                   <>
                     移除「{action.name}
-                    」及其子文件夹的曲库索引。原文件保留，已加入歌单的歌曲仍可从歌单播放。
+                    」内歌曲的曲库索引。原文件保留，已加入歌单的歌曲仍可从歌单播放。
                   </>
                 ) : (
                   <>删除「{action.name}」及其歌单内的引用。曲库和音乐文件保留。</>
@@ -679,12 +656,12 @@ export function LibraryPane({
                 {failedAction === action && error && <p role="alert">{error}</p>}
               </DialogContent>
               <DialogActions fluid>
-                {action.kind === 'song' ? (
+                {action.kind === 'song' || action.kind === 'batch' ? (
                   <>
                     <Button
                       appearance="primary"
                       disabled={submitting}
-                      onClick={() => void confirm(() => remove(action.id, false))}
+                      onClick={() => void confirm(() => remove(action.ids ?? action.id, false))}
                     >
                       仅从 FitBay 移除
                     </Button>
@@ -698,7 +675,7 @@ export function LibraryPane({
                     )}
                     <Button
                       disabled={submitting}
-                      onClick={() => void confirm(() => remove(action.id, true))}
+                      onClick={() => void confirm(() => remove(action.ids ?? action.id, true))}
                     >
                       移至系统回收站
                     </Button>

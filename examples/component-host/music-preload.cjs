@@ -36,6 +36,7 @@ const names = [
   'applyRelocation',
   'removeLocal',
   'removeFolder',
+  'openFolder',
   'trashLocal',
   'renamePlaylist',
   'deletePlaylist',

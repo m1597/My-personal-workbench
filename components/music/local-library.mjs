@@ -197,12 +197,6 @@ export class LocalLibrary {
     return !!(existing || replacing)
   }
   list() {
-    const roots = new Set(
-      this.db
-        .prepare('SELECT dir FROM music_roots')
-        .all()
-        .map((r) => pathKey(r.dir)),
-    )
     const rows = this.db
       .prepare(
         `SELECT id,title,artist,album,duration,available,listed,file,observedAt,lastHeardAt,hiddenFromRecent,size,favorite,
@@ -211,26 +205,51 @@ export class LocalLibrary {
         (SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
       )
       .all()
-    const parents = new Set(rows.filter((r) => r.listed).map((r) => pathKey(path.dirname(r.file))))
-    const cached = new Map()
-    function folders(dir) {
-      if (cached.has(dir)) return cached.get(dir)
-      const ancestors = [dir]
-      while (path.dirname(ancestors[0]) !== ancestors[0])
-        ancestors.unshift(path.dirname(ancestors[0]))
-      let start = ancestors.findIndex((d) => roots.has(pathKey(d)))
-      if (start < 0) start = ancestors.findIndex((d) => parents.has(pathKey(d)))
-      const result = ancestors.slice(start).map((d) => ({
-        id: folderKey(d),
-        name: path.basename(d) || path.parse(d).root,
-      }))
-      cached.set(dir, result)
-      return result
+    const directories = new Map()
+    const names = new Map()
+    for (const row of rows) {
+      if (!row.listed) continue
+      const dir = path.dirname(row.file)
+      const key = pathKey(dir)
+      if (directories.has(key)) continue
+      const name = path.basename(dir) || dir
+      const folder = { id: folderKey(dir), name }
+      directories.set(key, folder)
+      const group = names.get(name.toLowerCase()) || []
+      group.push({ dir, folder })
+      names.set(name.toLowerCase(), group)
+    }
+    for (const group of names.values()) {
+      if (group.length < 2) continue
+      // Add the shortest unique path suffix, including the drive when necessary.
+      const parts = group.map(({ dir }) => dir.split(path.sep))
+      for (const [i, { folder }] of group.entries()) {
+        for (let depth = 2; depth <= parts[i].length; depth++) {
+          const suffix = parts[i].slice(-depth).join(path.sep)
+          folder.name = suffix
+          if (
+            !parts.some(
+              (other, j) =>
+                j !== i &&
+                other.slice(-depth).join(path.sep).toLowerCase() === suffix.toLowerCase(),
+            )
+          )
+            break
+        }
+      }
     }
     return rows.map(({ file, ...row }) => ({
       ...row,
-      folders: row.listed ? folders(path.dirname(file)) : [],
+      folder: row.listed ? directories.get(pathKey(path.dirname(file))) : null,
     }))
+  }
+  folderMembers(id) {
+    const members = this.db
+      .prepare('SELECT id,file FROM local_tracks WHERE listed=1')
+      .all()
+      .filter((row) => folderKey(path.dirname(row.file)) === id)
+    if (!members.length) throw Error('未找到文件夹')
+    return members
   }
   playlists() {
     const lists = this.db.prepare('SELECT id,name FROM playlists ORDER BY rowid').all()
@@ -283,13 +302,7 @@ export class LocalLibrary {
   }
   removeFolder(id) {
     if (this.worker) throw Error('请等待当前导入结束')
-    const rows = this.list().filter((row) => row.folders.some((folder) => folder.id === id))
-    if (!rows.length) throw Error('未找到文件夹')
-    let dir = path.dirname(this.row(rows[0].id).file)
-    while (folderKey(dir) !== id) {
-      if (path.dirname(dir) === dir) throw Error('文件夹已变化')
-      dir = path.dirname(dir)
-    }
+    const rows = this.folderMembers(id)
     const retained = new Set(this.playlists().flatMap((list) => list.tracks))
     for (const row of this.db.prepare('SELECT id FROM local_tracks WHERE favorite=1').all())
       retained.add(row.id)
@@ -302,11 +315,7 @@ export class LocalLibrary {
         removed.push(row.id)
       }
     }
-    for (const root of this.db.prepare('SELECT dir FROM music_roots').all()) {
-      const rel = path.relative(dir, root.dir)
-      if (!path.isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + path.sep))
-        this.db.prepare('DELETE FROM music_roots WHERE dir=?').run(root.dir)
-    }
+    this.db.prepare('DELETE FROM music_roots WHERE dir=?').run(path.dirname(rows[0].file))
     return removed
   }
   setMembership(playlist, tracks, added) {

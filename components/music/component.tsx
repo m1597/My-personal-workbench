@@ -153,8 +153,9 @@ declare global {
       lyrics(id: string): Promise<[number, string][]>
       showLyrics(on: boolean): Promise<void>
       lyricLine(line: string): Promise<void>
-      removeLocal(id: string): Promise<void>
-      trashLocal(id: string): Promise<boolean>
+      removeLocal(id: string | string[]): Promise<void>
+      trashLocal(id: string | string[]): Promise<boolean>
+      openFolder(id: string): Promise<void>
       removeFolder(id: string): Promise<string[]>
       renamePlaylist(id: string, name: string): Promise<void>
       deletePlaylist(id: string): Promise<void>
@@ -411,7 +412,7 @@ function Music() {
     ['recent', 'favorites'].includes(requestedCollection) ||
     playlist ||
     (requestedCollection !== 'all' &&
-      state?.localTracks.some((track) => track.folders.some((f) => f.id === requestedCollection)))
+      state?.localTracks.some((track) => track.folder?.id === requestedCollection))
       ? requestedCollection
       : 'all'
   const memberIds = new Set(playlist?.tracks)
@@ -426,7 +427,7 @@ function Music() {
             !!row.listed &&
             (row.lastHeardAt ?? row.observedAt) <= Date.now() - infrequentDays * 86400000) ||
           memberIds.has(row.id) ||
-          row.folders.some((f) => f.id === collection),
+          row.folder?.id === collection,
       )
   const localRows = categoryRows.filter((row) =>
     [row.title, row.artist, row.album].some((value) =>
@@ -791,6 +792,7 @@ function Music() {
             playRow={(id) => void act(() => play(id, visibleQueue))}
             renameList={(id, name) => act(() => host.renamePlaylist(id, name))}
             deleteList={(id) => act(() => host.deletePlaylist(id))}
+            openFolder={(id) => void act(() => host.openFolder(id))}
             removeFolder={(id) =>
               act(async () => {
                 const removed = await host.removeFolder(id)
@@ -804,7 +806,8 @@ function Music() {
                   if (!(await host.trashLocal(id))) return
                 } else await host.removeLocal(id)
                 removed = true
-                if (current.current === id) await end(false)
+                if (Array.isArray(id) ? id.includes(current.current) : id === current.current)
+                  await end(false)
               })
               return ok && (removed || collection !== 'infrequent')
             }}
