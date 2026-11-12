@@ -29,8 +29,8 @@ declare global {
     componentHost?: {
       sampleEnabled?: boolean
       dropZone(value: Region[] | null): void
-      setMaterial(value: Material): void
-      overlayFrame(): Promise<string | null>
+      setMaterial?(value: Material): void
+      overlayFrame?(): Promise<string | null>
       status(): Promise<HostState>
       close?(): Promise<void>
       restore(): Promise<void>
@@ -334,7 +334,9 @@ function ComponentBackdrop({ host }: { host: Window['componentHost'] }) {
     async function refresh() {
       if (!image || !host || disposed) return
       const frame =
-        image.clientWidth && image.clientHeight ? await host.overlayFrame().catch(() => null) : null
+        image.clientWidth && image.clientHeight
+          ? await host.overlayFrame?.().catch(() => null)
+          : null
       if (disposed) return
       if (frame) image.src = frame
       // Let the settings remain reachable if a crashed renderer cannot supply a frame.
@@ -383,7 +385,11 @@ export function MusicPlayerBar() {
       const encoded = JSON.stringify([bounds, composited])
       if (previous !== encoded) {
         previous = encoded
-        window.musicDock?.bounds(bounds, 'bar', composited)
+        window.musicDock?.bounds(
+          composited && !window.musicDock.overlayFrame ? null : bounds,
+          'bar',
+          composited,
+        )
       }
       frame = requestAnimationFrame(measure)
     }
@@ -483,7 +489,7 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
       const encoded = JSON.stringify([current?.transfer, bounds, composited])
       if (encoded !== previous) {
         previous = encoded
-        host.bounds(bounds, current?.transfer, composited)
+        host.bounds(composited && !host.overlayFrame ? null : bounds, current?.transfer, composited)
       }
       frame = requestAnimationFrame(measure)
     }

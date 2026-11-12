@@ -30,7 +30,7 @@ export default function App() {
   useLayoutEffect(() => {
     const material = { transparency, frost, brightness }
     applyMaterial(material)
-    window.componentHost?.setMaterial(material)
+    window.componentHost?.setMaterial?.(material)
   }, [transparency, frost, brightness])
   const [theme] = useState(() => ({
     name: 'workbench',
