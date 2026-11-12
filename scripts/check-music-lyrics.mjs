@@ -20,6 +20,7 @@ for (const [title, file] of [
   ['A', a],
   ['B', b],
   ['C', path.join(root, 'C.wav')],
+  ['D', path.join(root, 'D.wav')],
 ]) {
   await writeFile(file, recording('fitbay-tone-1'))
   store.library.upsert({ title, file, artist: '测试', album: '', duration: 20 })
@@ -41,6 +42,8 @@ await saveLyrics(store.db, b, async () => {
 })
 assert.equal(await ownedLyrics(store.db, b), null)
 await saveLyrics(store.db, path.join(root, 'C.wav'), async () => '[00:01]下载歌词')
+await writeFile(path.join(root, 'D.flac'), await readFile('tests/fixtures/local-music/tone.flac'))
+await saveLyrics(store.db, path.join(root, 'D.wav'), async () => '[00:01]共有歌词')
 store.db.close()
 const app = await electron.launch({
   args: [
@@ -106,6 +109,8 @@ try {
   const c = path.join(root, 'C.wav')
   assert.deepEqual(await trash('C'), { files: [c, lyricPath(c)], detail: c + '\n' + lyricPath(c) })
   assert.deepEqual(await trash('B'), { files: [c, lyricPath(c), b], detail: b })
+  const shared = path.join(root, 'D.wav')
+  assert.deepEqual(await trash('D'), { files: [c, lyricPath(c), b, shared], detail: shared })
   console.log(
     'PASS 同步歌词、本地优先、文件归属、桌面歌词开关与锁定、暂停定位、切歌、仅移除索引。' + root,
   )

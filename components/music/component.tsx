@@ -98,6 +98,7 @@ declare global {
       setMusicMediaKeys(enabled: boolean): Promise<void>
       chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
       configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
+      onLyricsSaved(listener: () => void): () => void
       onSourcesChanged(listener: () => void): () => void
       lxSources(): Promise<SourceInventory>
       lxRefreshCatalog(): Promise<SourceInventory>
@@ -440,16 +441,22 @@ function Music() {
     lines: [number, string][]
   }>()
   useEffect(() => {
-    let valid = true
-    if (lyricsOpen && now)
+    if (!lyricsOpen || !now) return
+    let revision = 0
+    function refreshLyrics() {
+      const request = ++revision
       void host
         .lyrics(now)
         .then((lines) => {
-          if (valid) setLyrics({ id: now, lines })
+          if (request === revision) setLyrics({ id: now, lines })
         })
         .catch(() => {})
+    }
+    const unsubscribe = host.onLyricsSaved(refreshLyrics)
+    refreshLyrics()
     return () => {
-      valid = false
+      revision++
+      unsubscribe()
     }
   }, [lyricsOpen, now])
   let lyric = ''

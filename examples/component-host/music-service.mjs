@@ -3,7 +3,8 @@ import { localLines, ownedLyrics } from './music-lyrics.mjs'
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
-import { openAudio, regularFile } from './music/local-files.mjs'
+import { readdir } from 'node:fs/promises'
+import { audioTypes, openAudio, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
@@ -51,7 +52,14 @@ export function musicService(profile, isSender) {
         throw e
       }
     })
-  const lx = registerLx(bind, () => store, dialog)
+  const lx = registerLx(
+    bind,
+    () => store,
+    dialog,
+    () => {
+      if (musicView && !musicView.isDestroyed()) musicView.send('music:lyrics-saved')
+    },
+  )
   const text = (value) => {
     if (typeof value !== 'string' || value.length > 1000) throw Error('输入过长')
     return value
@@ -81,10 +89,18 @@ export function musicService(profile, isSender) {
   bind('showLyrics', (on) => overlay.show(on === true))
   bind('lyricLine', (line) => overlay.update(typeof line === 'string' ? line.slice(0, 500) : ''))
   bind('lyrics', async (id) => {
+    if (!text(id)) return []
     if (grant?.id === id) return localLines(grant.file)
-    if (typeof id === 'string' && id.startsWith('local-'))
-      return localLines(store.library.row(text(id)).file)
-    return []
+    if (id.startsWith('local-')) return localLines(store.library.row(id).file)
+    const library = store.db
+      .prepare(
+        'SELECT t.file FROM recommended_items r JOIN local_tracks t ON t.id=r.local WHERE r.item=?',
+      )
+      .get(id)
+    if (library) return localLines(library.file)
+    const item = store.item(id)
+    if (!item.track || !['已入库', '就绪'].includes(item.status)) return []
+    return localLines(store.local(item.track) ?? store.file(id))
   })
   bind('importLocal', (mode) => {
     if (!['folder', 'files'].includes(mode)) throw Error('导入方式无效')
@@ -128,13 +144,32 @@ export function musicService(profile, isSender) {
   bind('removeLocal', (id) => {
     forgetTrack(text(id))
   })
+  async function recyclableLyrics(audio) {
+    const lyric = await ownedLyrics(store.db, audio)
+    if (!lyric) return null
+    const current = path.parse(audio)
+    try {
+      const entries = await readdir(current.dir)
+      const shared = entries.some((name) => {
+        const entry = path.parse(name)
+        return (
+          name.toLowerCase() !== current.base.toLowerCase() &&
+          entry.name.toLowerCase() === current.name.toLowerCase() &&
+          Object.hasOwn(audioTypes, entry.ext.toLowerCase())
+        )
+      })
+      return shared ? null : lyric
+    } catch {
+      return null
+    }
+  }
   bind('trashLocal', async (id) => {
     const row = store.library.row(text(id))
     if (localDialog || store.library.job.running) throw Error('请等待当前曲库操作结束')
     localDialog = true
     const epoch = viewEpoch
     try {
-      const lyric = await ownedLyrics(store.db, row.file)
+      const lyric = await recyclableLyrics(row.file)
       const answer = await dialog.showMessageBox({
         type: 'warning',
         title: '移至系统回收站',
@@ -153,7 +188,7 @@ export function musicService(profile, isSender) {
         throw Error('无法移至系统回收站，曲库记录已保留')
       }
       forgetTrack(id)
-      if (lyric && lyric === (await ownedLyrics(store.db, row.file))) {
+      if (lyric && lyric === (await recyclableLyrics(row.file))) {
         try {
           await shell.trashItem(lyric)
         } catch {

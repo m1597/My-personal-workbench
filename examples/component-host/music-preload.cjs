@@ -59,6 +59,11 @@ const names = [
 const bridge = Object.fromEntries(
   names.map((name) => [name, (...args) => ipcRenderer.invoke('music:' + name, ...args)]),
 )
+bridge.onLyricsSaved = (listener) => {
+  const notify = () => listener()
+  ipcRenderer.on('music:lyrics-saved', notify)
+  return () => ipcRenderer.removeListener('music:lyrics-saved', notify)
+}
 bridge.onSourcesChanged = (listener) => {
   const notify = () => listener()
   ipcRenderer.on('music:sources-changed', notify)

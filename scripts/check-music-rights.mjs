@@ -53,6 +53,8 @@ const oldItem = store.db.prepare('SELECT id FROM items WHERE batch=?').get(oldBa
 const oldAudio = path.join(root, 'old-audio.part')
 await fs.copyFile(path.resolve('tests/fixtures/local-music/tone.mp3'), oldAudio)
 store.cacheOnline(oldItem, oldAudio, { ...suggestion, album: '旧版', duration: 4 }, '.mp3')
+await fs.writeFile(lyricPath(store.file(oldItem)), '[00:00]旧队列缓存歌词')
+store.checkpoint(rows.find((row) => row.title === '允许保存').id, 0)
 store.db.close()
 const db = new DatabaseSync(path.join(musicRoot, 'music.sqlite'))
 const app = await electron.launch({
@@ -131,7 +133,16 @@ try {
   await page.evaluate(() => window.music.lxImport())
   const run = (id) => page.evaluate((id) => window.music.prepareRecommendation(id), id)
   const state = () => page.evaluate(() => window.music.state())
+  const openWindow = app.waitForEvent('window')
+  await page.getByRole('button', { name: '桌面歌词', exact: true }).click()
+  const overlay = await openWindow
+  await expect(overlay.locator('strong')).toHaveText('暂无同步歌词')
   for (const row of rows) await run(row.id)
+  await expect(overlay.locator('strong')).toHaveText('录音 允许保存')
+  assert.deepEqual(await page.evaluate((id) => window.music.lyrics(id), oldItem), [
+    [0, '旧队列缓存歌词'],
+  ])
+  await page.getByRole('button', { name: '桌面歌词', exact: true }).click()
   const initial = await state()
   const deniedWereSaved = initial.items
     .filter((r) => r.title !== '允许保存' && r.status === '已入库')

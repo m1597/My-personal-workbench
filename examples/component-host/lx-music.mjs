@@ -301,7 +301,7 @@ function markSaved(store, id, local) {
     .run(local, id)
   store.status(id, '已入库')
 }
-export function registerLx(bind, getStore, dialog) {
+export function registerLx(bind, getStore, dialog, lyricsSaved) {
   let active = null
   let activeScope
   const matches = new Map()
@@ -458,7 +458,7 @@ export function registerLx(bind, getStore, dialog) {
     return fetchRecording(src, row, quality, dir, signal, auditionId)
   }
   async function saveRecordingLyrics(src, row, audio, signal) {
-    await saveLyrics(getStore().db, audio, async () => {
+    const saved = await saveLyrics(getStore().db, audio, async () => {
       const timeout = AbortSignal.any([signal, AbortSignal.timeout(6000)])
       let result = row.lyric
       if (!result) {
@@ -484,7 +484,8 @@ export function registerLx(bind, getStore, dialog) {
         signal: timeout,
       })
       return response.body?.lrc?.lyric
-    }).catch(() => {})
+    }).catch(() => false)
+    if (saved) lyricsSaved?.()
   }
   async function fetchRecording(src, row, quality, dir, signal, auditionId, dailyId) {
     for (let attempt = 0; ; attempt++) {

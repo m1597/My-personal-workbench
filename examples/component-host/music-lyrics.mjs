@@ -72,6 +72,7 @@ export async function saveLyrics(db, audio, fetchLyric) {
   records(db)
     .prepare('INSERT OR REPLACE INTO lyric_files VALUES (?,?,?,?)')
     .run(audio, file, digest(raw), identity)
+  return true
 }
 export async function ownedLyrics(db, audio) {
   const file = lyricPath(audio)
