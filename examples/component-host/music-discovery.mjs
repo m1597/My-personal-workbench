@@ -183,23 +183,37 @@ export function recordingQueries(item) {
   ]
   return queries.filter(
     (q, index) =>
-      queries.findIndex((other) => q.title === other.title && q.artist === other.artist) === index,
+      queries.findIndex(
+        (other) => fold(q.title) === fold(other.title) && fold(q.artist) === fold(other.artist),
+      ) === index,
   )
 }
 
-export async function searchRecommendation(item, platform, search, signal, constraints) {
+export async function searchRecommendation(
+  item,
+  platform,
+  search,
+  signal,
+  constraints,
+  phase = 'full',
+  accept = () => true,
+) {
   const queries = recordingQueries(item)
   const diagnostics = []
-  for (const query of queries) {
-    let offset = 0
-    const pages = new Set()
-    for (let page = 1; page <= 5; page++) {
+  let pending = (phase === 'shallow' ? queries.slice(0, 1) : queries).map((query) => ({
+    query,
+    offset: 0,
+    pages: new Set(),
+  }))
+  for (let page = 1; pending.length && page <= (phase === 'shallow' ? 1 : 5); page++) {
+    const further = []
+    for (const { query, pages, offset } of pending) {
       signal.throwIfAborted()
       const data = await search(query, page, offset)
       const rows = Array.isArray(data) ? data : (data?.items ?? data?.list ?? data?.songs)
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
       const signature = JSON.stringify(rows)
-      if (pages.has(signature)) break
+      if (pages.has(signature)) continue
       pages.add(signature)
       diagnostics.push(
         [query.title, query.artist].filter(Boolean).join(' ') +
@@ -218,16 +232,23 @@ export async function searchRecommendation(item, platform, search, signal, const
           JSON.stringify(row).length <= 16384 &&
           titleMatch(item, row, constraints),
       )
-      if (matches.length) return { matches, diagnostics }
-      offset += rows.length
+      if (
+        matches.length &&
+        !(phase === 'deep' && query === queries[0] && page === 1) &&
+        (await accept(matches))
+      )
+        return { matches, diagnostics }
+      const nextOffset = offset + rows.length
       if (
         !rows.length ||
         data.hasMore === false ||
-        (Number.isFinite(data.total) && offset >= data.total) ||
-        (rows.length < 20 && data.hasMore !== true && !(data.total > offset))
+        (Number.isFinite(data.total) && nextOffset >= data.total) ||
+        (rows.length < 20 && data.hasMore !== true && !(data.total > nextOffset))
       )
-        break
+        continue
+      further.push({ query, pages, offset: nextOffset })
     }
+    pending = further
   }
   return { matches: [], diagnostics }
 }

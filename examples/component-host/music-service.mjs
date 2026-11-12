@@ -471,6 +471,12 @@ export function musicService(
         const savedRows = store.db.prepare(
           "SELECT i.artist FROM items i JOIN recommended_items r ON r.item=i.id JOIN local_tracks t ON t.id=r.local WHERE i.batch=? AND i.status='已入库' AND t.available=1",
         )
+        const reservations = store.db.prepare(
+          "SELECT artist FROM items WHERE batch=? AND status IN ('待处理','正在匹配','正在保存','正在校验')",
+        )
+        const pendingItem = store.db.prepare(
+          "SELECT id FROM items WHERE batch=? AND title=? AND artist=? AND status='待处理' ORDER BY rowid DESC LIMIT 1",
+        )
         let saved = []
         let deferred = []
         let requiredArtist = mode === 'artist' && !similar ? preference.trim() : ''
@@ -487,10 +493,14 @@ export function musicService(
         let stalled = 0
         const sourceHealth = {
           unreachable: 0,
+          queries: new Map(),
+          cooldown: new Map(),
+          catalogRecordings: new Map(),
           constraints: { version: recordingPreference(preference), artist: '' },
         }
         while (saved.length < targetCount) {
           signal.throwIfAborted()
+          update('running', seen.length ? '正在补推候选歌曲' : '正在生成候选歌曲')
           const remaining = targetCount - saved.length
           const excluded = [...(profile ? history.slice(-20) : []), ...seen.slice(-100)].map(
             ({ title, artist }) => ({ title, artist }),
@@ -540,27 +550,27 @@ export function musicService(
           const candidates = [...deferred, ...fresh]
           deferred = []
           async function attempt(queue, allowRepeat) {
-            while (queue.length && saved.length < targetCount) {
-              signal.throwIfAborted()
-              const group = []
-              const slots = Math.min(3, targetCount - saved.length)
-              while (group.length < slots && queue.length) {
-                const represented = [...saved, ...group]
+            if (!queue.length) return
+            update('running', '正在匹配录音')
+            await lx.batch(batch, signal, sourceHealth, () => {
+              const represented = [...savedRows.all(batch), ...reservations.all(batch)]
+              if (represented.length >= targetCount) return
+              while (queue.length) {
                 if (mode !== 'artist')
                   queue.sort((a, b) => frequency(a, represented) - frequency(b, represented))
                 const index = queue.findIndex(
                   (row) =>
                     allowRepeat || !preferDifferentArtist(row) || !frequency(row, represented),
                 )
-                if (index < 0) break
-                group.push(queue.splice(index, 1)[0])
+                if (index < 0) return
+                const row = queue.splice(index, 1)[0]
+                store.saveSuggestions(label, [row], '待处理', batch)
+                const entry = pendingItem.get(batch, row.title, row.artist)
+                if (entry) return entry.id
               }
-              if (!group.length) break
-              store.saveSuggestions(label, group, '待处理', batch)
-              await lx.batch(batch, signal, sourceHealth)
-              signal.throwIfAborted()
-              saved = savedRows.all(batch)
-            }
+            })
+            signal.throwIfAborted()
+            saved = savedRows.all(batch)
           }
           await attempt(candidates, false)
           deferred = candidates
@@ -577,11 +587,12 @@ export function musicService(
               '连续 6 轮没有可入库的新录音，已停止继续调用模型。请查看匹配详情或更换音源、调整要求后重试',
             )
           if (saved.length < targetCount) {
-            update('running', '正在补推，还差 ' + (targetCount - saved.length) + ' 首')
+            update('running', '正在为补推查找可保存的录音')
             catalogChoices = await lx.discoveries(
               seen.filter((row) => !preferDifferentArtist(row) || !frequency(row)).slice(-20),
               [...local, ...history, ...seen],
               signal,
+              sourceHealth,
             )
             catalogChoices = catalogChoices.filter(
               (row) => !preferDifferentArtist(row) || !frequency(row),

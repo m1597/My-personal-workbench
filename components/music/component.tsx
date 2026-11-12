@@ -351,7 +351,7 @@ function Music() {
     generating ||
     !!state?.importJob.running ||
     state?.items.some((i) =>
-      ['等候', '下载中', '待处理', '正在匹配', '正在保存'].includes(i.status),
+      ['等候', '下载中', '待处理', '正在匹配', '正在保存', '正在校验'].includes(i.status),
     )
   useEffect(() => {
     if (working) {
@@ -910,9 +910,7 @@ function Music() {
                         ? '，部分已下载歌曲已移除或暂不可用'
                         : running && rows.length >= batch.targetCount
                           ? '，正在完成本批'
-                          : running && batch.message?.startsWith('正在补推')
-                            ? '，正在补推'
-                            : batch.message && `，${batch.message}`}
+                          : batch.message && `，${batch.message}`}
                     </p>
                   ) : (
                     <p role="status">已下载 {downloaded.length} 首</p>

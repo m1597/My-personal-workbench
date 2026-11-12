@@ -67,7 +67,7 @@ export class MusicStore {
       JOIN recommended_items r ON r.item=i.id WHERE i.status != '已在曲库'`)
     this.migrateFeedbackDigests()
     this.db.exec(
-      "UPDATE items SET status='待重试' WHERE id IN (SELECT item FROM recommended_items) AND status IN ('正在匹配','正在保存','待处理','待选录音')",
+      "UPDATE items SET status='待重试' WHERE id IN (SELECT item FROM recommended_items) AND status IN ('正在匹配','正在保存','正在校验','待处理','待选录音')",
     )
     this.recover()
     this.cleanup(false)
@@ -212,7 +212,9 @@ export class MusicStore {
     try {
       for (const row of matches) {
         this.db.prepare('INSERT OR IGNORE INTO dismissed_items VALUES(?)').run(row.id)
-        if (['待处理', '正在匹配', '正在保存', '待选录音', '待重试'].includes(row.status))
+        if (
+          ['待处理', '正在匹配', '正在保存', '正在校验', '待选录音', '待重试'].includes(row.status)
+        )
           this.status(row.id, '已标记不感兴趣')
         const copies = row.local
           ? this.db
@@ -264,8 +266,27 @@ export class MusicStore {
       .all(today)
     const diagnostics =
       this.db.prepare(`SELECT i.title,i.artist,i.status,r.summary,r.error FROM items i
-      JOIN recommended_items r ON r.item=i.id WHERE i.batch=? AND i.status NOT IN ('已入库','正在匹配','正在保存','待处理') ORDER BY i.rowid DESC LIMIT 50`)
+      JOIN recommended_items r ON r.item=i.id WHERE i.batch=? AND i.status NOT IN ('已入库','正在匹配','正在保存','正在校验','待处理') ORDER BY i.rowid DESC LIMIT 50`)
+    const activeItems = this.db.prepare(
+      "SELECT title,status FROM items WHERE batch=? AND status IN ('正在匹配','正在保存','正在校验') ORDER BY rowid",
+    )
     for (const batch of batches) {
+      if (batch.state === 'running') {
+        const active = activeItems.all(batch.id)
+        const descriptions = []
+        for (const [status, label] of [
+          ['正在保存', '正在下载'],
+          ['正在校验', '正在校验录音'],
+          ['正在匹配', '正在匹配录音'],
+        ]) {
+          const titles = active.filter((row) => row.status === status).map((row) => row.title)
+          if (titles.length)
+            descriptions.push(
+              label + (status === '正在匹配' ? '' : '《' + titles.join('》《') + '》'),
+            )
+        }
+        if (descriptions.length) batch.message = descriptions.join(' · ')
+      }
       batch.details = batch.targetCount
         ? diagnostics
             .all(batch.id)
@@ -404,7 +425,7 @@ export class MusicStore {
       } else this.db.prepare('INSERT INTO batches VALUES(?,?,?)').run(batch, day(), preference)
       if (targetCount)
         this.db
-          .prepare("INSERT INTO recommendation_runs VALUES(?,?,'running','正在推荐')")
+          .prepare("INSERT INTO recommendation_runs VALUES(?,?,'running','正在准备推荐')")
           .run(batch, targetCount)
       for (const row of accepted) {
         const id = randomUUID()
