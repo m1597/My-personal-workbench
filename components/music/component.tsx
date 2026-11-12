@@ -1,4 +1,5 @@
 import { TrackMenu } from './TrackMenu'
+import type { SourceInventory } from './MusicSourcesSettings'
 import {
   MusicSettings,
   type MusicPreferences,
@@ -94,6 +95,10 @@ declare global {
       setMusicMediaKeys(enabled: boolean): Promise<void>
       chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
       configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
+      lxSources(): Promise<SourceInventory>
+      lxRefreshCatalog(): Promise<SourceInventory>
+      lxImportSelected(ids: string[]): Promise<{ origin: string; id?: string; error?: string }[]>
+      lxSelectSource(id: string): Promise<void>
       lxInfo(): Promise<string>
       lxImport(link?: string): Promise<void>
       lxCancel(scope?: 'import'): Promise<void>

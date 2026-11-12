@@ -1,3 +1,5 @@
+import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
+export { inspectSource } from './lx-source-catalog.mjs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream, lstatSync, unlinkSync } from 'node:fs'
@@ -31,60 +33,8 @@ const explanations = {
   preview: '仅供试听',
   unknown: '未声明永久保存许可',
 }
+
 const text = (v) => (typeof v === 'string' ? v.trim().slice(0, 256) : '')
-const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
-async function fetchSource(link, signal) {
-  if (typeof link !== 'string' || link.length > 8192 || !/^https?:\/\//i.test(link))
-    throw Error('请输入 HTTP 或 HTTPS 音乐源直链')
-  const timeout = AbortSignal.timeout(20000)
-  try {
-    const response = await openPublic(link, {
-      signal: AbortSignal.any([signal, timeout]),
-    })
-    if (response.statusCode !== 200) {
-      response.destroy()
-      throw Error('无法读取音乐源，HTTP ' + response.statusCode)
-    }
-    const chunks = []
-    let bytes = 0
-    for await (const chunk of response) {
-      bytes += chunk.length
-      if (bytes > 1024 * 1024) throw Error('音乐源超过 1 MB')
-      chunks.push(chunk)
-    }
-    return Buffer.concat(chunks).toString('utf8')
-  } catch (error) {
-    signal.throwIfAborted()
-    if (timeout.aborted) throw Error('在线导入超时，请重试')
-    if (error.code) throw Error('无法读取音乐源，请检查链接和网络')
-    throw error
-  }
-}
-export async function inspectSource(code, signal) {
-  if (typeof code !== 'string' || Buffer.byteLength(code) > 1024 * 1024) throw Error('源文件过大')
-  const declared = await runSource(code, null, signal)
-  for (const platform of ['wy', 'kw', 'tx', 'kg', 'mg']) {
-    const d = declared?.[platform]
-    if (!Array.isArray(d?.actions) || !d.actions.includes('musicUrl')) continue
-    if (!d.actions.includes('search') && platform !== 'wy') continue
-    const quality = qualities.filter((q) => d.qualitys?.includes(q))
-    if (!quality.length) continue
-    return {
-      code,
-      name: text(code.match(/@name\s+([^\r\n*]+)/)?.[1]) || '自定义音乐源',
-      platform,
-      permissionsVersion: 1,
-      permanentSave: [d.allowPermanentSave, d.permanentDownload].includes(false)
-        ? false
-        : [d.allowPermanentSave, d.permanentDownload].includes(true)
-          ? true
-          : undefined,
-      search: d.actions.includes('search'),
-      quality,
-    }
-  }
-  throw Error('此源缺少可用的搜索平台、取址操作或音质')
-}
 async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
   const keyword = [row.title, row.artist === '未知艺人' ? '' : row.artist].filter(Boolean).join(' ')
   if (source.search)
@@ -342,7 +292,7 @@ export function registerLx(bind, getStore, dialog) {
     const parsed = await inspectSource(current.code, signal)
     signal.throwIfAborted()
     if (getStore().get('lx-source') !== saved) throw Error('音乐源已变更，请重试')
-    getStore().set('lx-source', JSON.stringify(parsed))
+    catalog().install(parsed, null, true)
     return parsed
   }
   const exclusive =
@@ -358,12 +308,27 @@ export function registerLx(bind, getStore, dialog) {
         if (active === task) active = null
       }
     }
+  let bank
+  const catalog = () => (bank ??= sourceCatalog(getStore().db))
+  bind('lxSources', () => catalog().list())
+  bind(
+    'lxRefreshCatalog',
+    exclusive((signal) => catalog().refresh(signal), 'import'),
+  )
+  bind(
+    'lxImportSelected',
+    exclusive((signal, ids) => catalog().importSelected(ids, signal), 'import'),
+  )
+  bind('lxSelectSource', (id) => {
+    catalog().select(id)
+    matches.clear()
+  })
   bind('lxInfo', () => source()?.name ?? '')
   bind(
     'lxImport',
     exclusive(async (signal, link) => {
       let code
-      if (link !== undefined) code = await fetchSource(link, signal)
+      if (link !== undefined) code = await readSourceLink(link, signal)
       else {
         const file = await dialog.showOpenDialog({
           title: '导入洛雪音乐源',
@@ -378,7 +343,7 @@ export function registerLx(bind, getStore, dialog) {
       }
       const next = await inspectSource(code, signal)
       signal.throwIfAborted()
-      getStore().set('lx-source', JSON.stringify(next))
+      catalog().install(next, catalogId(link), true)
       matches.clear()
     }, 'import'),
   )
@@ -412,6 +377,7 @@ export function registerLx(bind, getStore, dialog) {
         if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
         const key = randomUUID()
         matches.set(key, {
+          sourceCode: src.code,
           row,
           auditionId: typeof id === 'string' && !id.startsWith('local-') ? id : null,
         })
@@ -432,6 +398,7 @@ export function registerLx(bind, getStore, dialog) {
     if (
       !src ||
       !row ||
+      match.sourceCode !== src.code ||
       !src.quality.includes(quality) ||
       (auditionId && match.auditionId !== auditionId)
     )
@@ -632,6 +599,24 @@ export function registerLx(bind, getStore, dialog) {
   let generation = 0
   let processing = Promise.resolve()
   return {
+    async sourceTool(name, args, signal) {
+      const bank = catalog()
+      switch (name) {
+        case 'list_sources':
+          return bank.list()
+        case 'source_capabilities':
+          return bank.describe(args.id)
+        case 'select_source': {
+          const result = bank.select(args.id)
+          matches.clear()
+          return result
+        }
+        case 'import_sources':
+          return bank.importSelected(args.ids, signal)
+        default:
+          throw Error('未知的音源操作')
+      }
+    },
     batch(batch) {
       const epoch = generation
       const ids = getStore().db.prepare('SELECT id FROM items WHERE batch=?').all(batch)

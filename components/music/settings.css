@@ -51,3 +51,16 @@
   border: 1px solid var(--stroke);
   border-radius: var(--radius-6);
 }
+
+.music-source-settings fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-12);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-6);
+}
+.source-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  margin-bottom: var(--space-12);
+}
