@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import { recording } from '../components/music/offline-source.mjs'
 import { MusicStore } from '../components/music/store.mjs'
 import { DatabaseSync } from 'node:sqlite'
 import { _electron as electron, expect } from '@playwright/test'
@@ -16,6 +15,9 @@ fixtureStore.library.upsert({
   duration: 4,
   file: path.resolve('tests/fixtures/local-music/tone.mp3'),
 })
+const output = path.join(root, 'recommended')
+await fs.mkdir(output)
+fixtureStore.set('music-recommend-dir', output)
 fixtureStore.db.close()
 const launch = () =>
   electron.launch({
@@ -34,11 +36,6 @@ try {
   await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByLabel('今天想听什么').fill('雨天的爵士乐')
   await page.getByRole('button', { name: '生成推荐' }).click()
-  await expect(page.getByLabel('服务商', { exact: true })).toHaveText('DeepSeek')
-  await page.evaluate(() => {
-    delete document.documentElement.dataset.backdrop
-  })
-  await page.screenshot({ path: path.join(root, 'settings.png') })
   await app.evaluate(() => {
     globalThis.modelCalls = []
     globalThis.fetch = async (url, req) => {
@@ -70,16 +67,12 @@ try {
     }
   })
   for (const [index, id] of ['deepseek', 'openai', 'claude', 'gemini'].entries()) {
-    if (index) await page.getByRole('button', { name: '模型设置' }).click()
-    await page.getByRole('combobox', { name: '服务商' }).click()
-    await page
-      .getByRole('option', {
-        name: { deepseek: 'DeepSeek', openai: 'OpenAI', claude: 'Claude', gemini: 'Gemini' }[id],
-        exact: true,
-      })
-      .click()
-    await page.getByLabel('API Key').fill('fixture-' + id)
-    await page.getByRole('button', { name: '保存设置' }).click()
+    await page.evaluate(async (id) => {
+      const p = (await window.music.state()).models.providers.find((p) => p.id === id)
+      await window.music.configureModel(id, p.model, 'fixture-' + id, false)
+    }, id)
+    await page.reload()
+    await page.getByRole('tab', { name: '每日推荐' }).click()
     await page.getByRole('button', { name: '生成推荐' }).click()
     await expect
       .poll(() => page.evaluate(async () => (await window.music.state()).batches.length))
@@ -103,7 +96,7 @@ try {
     assert.ok(!JSON.stringify(call.body).includes('summary'))
   }
   const state = await page.evaluate(() => window.music.state())
-  assert.equal(state.items.filter((r) => r.status === '模型推荐').length, 20)
+  assert.equal(state.items.filter((r) => r.daily).length, 20)
   assert.ok(!JSON.stringify(state).includes('fixture-'))
   const db = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'), { readOnly: true })
   const saved = db
@@ -130,243 +123,168 @@ try {
     assert.match(await gen, mode === 'auth' ? /401/ : mode === 'invalid' ? /五首/ : /取消/)
     assert.equal(await page.evaluate(async () => (await window.music.state()).batches.length), 4)
   }
+  await app.evaluate(() => {
+    globalThis.failMode = ''
+  })
   const source = path.join(root, 'source.js')
   await fs.writeFile(
     source,
-    "// @name 推荐测试源\nlx.on('request',({action,info})=>action==='search'?[{name:info.keyword,singer:'测试艺人',id:'1'}]:'https://1.1.1.1/audition.mp3');lx.send('inited',{sources:{wy:{actions:['musicUrl','search'],qualitys:['320k']}}})",
+    `// @name 自动保存源
+    lx.on('request',({action,info})=>{
+      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3';
+      const [name,artist]=info.keyword.split(' ');
+      const row={id:name,name,singer:artist,albumName:'原版'};
+      if(name.endsWith('2')) return [row,{...row,id:name+'-live',albumName:'现场'}];
+      if(name.endsWith('3')) return [{...row,allowPermanentSave:false}];
+      return [row]
+    });
+    lx.send('inited',{sources:{wy:{allowPermanentSave:true,actions:['search','musicUrl'],qualitys:['320k']}}})
+  `,
   )
   await app.evaluate(({ dialog }, file) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, source)
   await page.evaluate(() => window.music.lxImport())
-  await page.getByRole('button', { name: '试听在线录音' }).first().click()
-  await expect(page.getByRole('region', { name: '选择试听版本' })).toBeVisible()
-  const tone = recording('fitbay-tone-1')
-  const longTone = Buffer.concat([tone, tone.subarray(44)])
-  longTone.writeUInt32LE(longTone.length - 8, 4)
-  longTone.writeUInt32LE(longTone.length - 44, 40)
-  const longFile = path.join(root, '40-seconds.wav')
-  await fs.writeFile(longFile, longTone)
-  await app.evaluate(
-    (_e, files) => {
-      const https = process.getBuiltinModule('node:https')
-      const fs = process.getBuiltinModule('node:fs')
-      const { EventEmitter } = process.getBuiltinModule('node:events')
-      let served = 0
-      const original = https.request
-      https.request = (url, opts, done) => {
-        if (url.href !== 'https://1.1.1.1/audition.mp3') return original(url, opts, done)
-        const req = new EventEmitter()
-        const respond = () =>
-          done(
-            Object.assign(fs.createReadStream(files[Math.min(served++, files.length - 1)]), {
-              statusCode: 200,
-              headers: {},
-              setTimeout() {},
-            }),
-          )
-        opts.signal?.addEventListener('abort', () => req.emit('error', opts.signal.reason), {
-          once: true,
-        })
-        req.end = () => {
-          if (globalThis.holdTransfer) globalThis.releaseTransfer = respond
-          else respond()
-        }
-        return req
-      }
-    },
-    [longFile, path.resolve('tests/fixtures/local-music/tone.flac')],
+  await app.evaluate((_e, file) => {
+    const https = process.getBuiltinModule('node:https'),
+      fs = process.getBuiltinModule('node:fs'),
+      { EventEmitter } = process.getBuiltinModule('node:events')
+    const original = https.request
+    globalThis.transfers = 0
+    https.request = (url, opts, done) => {
+      if (url.href !== 'https://1.1.1.1/daily.mp3') return original(url, opts, done)
+      globalThis.transfers++
+      const req = new EventEmitter()
+      req.end = () =>
+        done(
+          Object.assign(fs.createReadStream(file), {
+            statusCode: 200,
+            headers: {},
+            setTimeout() {},
+          }),
+        )
+      return req
+    }
+  }, path.resolve('tests/fixtures/local-music/tone.mp3'))
+  const calls = () => app.evaluate(() => globalThis.modelCalls)
+  await page.evaluate(() => window.music.setTasteConsent(true))
+  const docfile = path.join(profile, 'fitbay-music/music-taste.json')
+  await expect.poll(() => fs.readFile(docfile, 'utf8').catch(() => '')).toContain('偏爱氛围')
+  const initial = await fs.readFile(docfile, 'utf8')
+  const last = JSON.stringify((await calls()).at(-1).body)
+  assert.ok(
+    last.includes('私人专辑') &&
+      last.includes('曲库新增') &&
+      !last.includes('tone.mp3') &&
+      !last.includes(root),
   )
-  const versions = page.getByRole('region', { name: '选择试听版本' })
-  await versions.getByRole('button', { name: / · 试听$/ }).click()
-  await expect
-    .poll(() => page.locator('audio').evaluate((el) => el.currentSrc))
-    .toMatch(/^fitbay-audio:/)
+  const before = (await calls()).length
+  await page.getByLabel('今天想听什么').fill('')
+  await page.getByRole('button', { name: '生成推荐' }).click()
+  await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(3)
+  assert.equal((await calls()).length, before + 1)
+  await expect(
+    page.getByText('音乐源未允许永久保存此录音，或仅提供试听', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '选择录音版本' }).click()
+  await page.getByRole('button', { name: /样例歌曲2 · 测试艺人 · 现场/ }).click()
+  await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4)
+  const row = page.locator('.music-list ol li').first()
+  await row.getByRole('button', { name: /试听/ }).click()
   await expect.poll(() => page.locator('audio').evaluate((el) => el.currentTime)).toBeGreaterThan(0)
-  await page.getByRole('checkbox', { name: '保留', exact: true }).first().check()
-  const dest = path.join(root, 'retained')
-  await fs.mkdir(dest)
-  await app.evaluate(({ dialog }, dir) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
-  }, dest)
-  await page.getByRole('button', { name: /保留所选/ }).click()
-  await expect(page.getByText('已入库', { exact: true })).toBeVisible()
-  await page.locator('audio').evaluate((el) => {
-    el.pause()
-    el.currentTime = 30
-  })
-  await expect
-    .poll(() => page.evaluate(async () => (await window.music.state()).position))
-    .toBeCloseTo(30)
-  await page.reload()
-  await page.getByRole('button', { name: '从 30 秒继续' }).click()
-  await expect
-    .poll(() => page.locator('audio').evaluate((el) => el.currentTime))
-    .toBeGreaterThanOrEqual(30)
-  await page.getByRole('tab', { name: '下载音乐' }).click()
-  await expect(page.getByRole('button', { name: '下一首' })).toBeEnabled()
-  await page.locator('audio').evaluate((el) => {
-    el.currentTime = el.duration - 0.2
-  })
-  await expect(versions).toBeVisible()
-
-  await versions.getByRole('button', { name: / · 试听$/ }).click()
-  await expect
-    .poll(() =>
-      page.evaluate(
-        async () => (await window.music.state()).items.filter((r) => r.status === '就绪').length,
-      ),
-    )
-    .toBe(1)
-  await page.getByRole('button', { name: '结束试听并清理缓存' }).click()
-  await expect(page.getByText('已过期', { exact: true })).toBeVisible()
-  assert.equal((await fs.readdir(dest)).length, 1)
-  assert.deepEqual(await fs.readdir(path.join(profile, 'fitbay-music/audition-cache')), [])
-  await page.getByRole('button', { name: '试听在线录音' }).first().click()
-  await app.evaluate(() => {
-    globalThis.holdTransfer = true
-  })
-  await versions.getByRole('button', { name: / · 试听$/ }).click()
-  await expect.poll(() => app.evaluate(() => typeof globalThis.releaseTransfer)).toBe('function')
   await page.getByRole('tab', { name: '本地曲库' }).click()
-  await page.getByRole('button', { name: '播放已同意的摘要' }).click()
-  await expect
-    .poll(() => page.evaluate(async () => (await window.music.state()).current))
-    .toMatch(/^local-/)
-  await app.evaluate(() => {
-    globalThis.holdTransfer = false
-    globalThis.releaseTransfer()
-  })
-  await expect
-    .poll(() =>
-      page.evaluate(async () =>
-        (await window.music.state()).items.some((r) => r.status === '就绪'),
-      ),
-    )
-    .toBe(true)
-  await expect(page.locator('.music-player strong')).toHaveText('已同意的摘要')
-  const cached = await page.evaluate(
-    async () => (await window.music.state()).items.find((r) => r.status === '就绪').id,
-  )
-  await fs.copyFile(
-    path.resolve('tests/fixtures/local-music/tone.mp3'),
-    path.join(profile, 'fitbay-music/audition-cache', cached + '.flac'),
-  )
-  const rejected = await page.evaluate(
-    (id) => window.music.localSource(id).catch((e) => String(e)),
-    cached,
-  )
-  assert.match(rejected, /校验失败/)
-  await page.reload()
+  const library = await page.evaluate(() => window.music.state())
+  const list = library.playlists.find((p) => p.system)
+  assert.equal(list.name, '歌曲推荐')
+  assert.equal(list.tracks.length, 4)
+  assert.equal((await fs.readdir(output)).length, 4)
+  assert.equal((await page.evaluate(() => window.music.getTasteStatus())).pending, 0)
+  const transfers = await app.evaluate(() => globalThis.transfers)
   await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByRole('button', { name: '试听在线录音' }).first().click()
-  await versions.getByRole('button', { name: / · 试听$/ }).click()
-  await expect
-    .poll(() => page.evaluate(async () => (await window.music.state()).current))
-    .toBe(cached)
-  await page.getByRole('button', { name: '试听在线录音' }).first().click()
-  await app.evaluate(() => {
-    globalThis.releaseTransfer = null
-    globalThis.holdTransfer = true
-  })
-  await versions.getByRole('button', { name: / · 试听$/ }).click()
-  await expect.poll(() => app.evaluate(() => typeof globalThis.releaseTransfer)).toBe('function')
-  await page.getByRole('button', { name: '结束试听并清理缓存' }).click()
-  await expect
-    .poll(() => page.locator('audio').evaluate((el) => [el.paused, el.getAttribute('src')]))
-    .toEqual([true, null])
-  await expect
-    .poll(() =>
-      page.evaluate(
-        async () => (await window.music.state()).items.filter((r) => r.status === '就绪').length,
-      ),
-    )
-    .toBe(0)
-  await app.evaluate(() => {
-    globalThis.failMode = ''
-  })
-  await page.getByRole('tab', { name: '按歌手' }).click()
+  await page.getByRole('tab', { name: '按歌手推荐' }).click()
   await page.getByLabel('指定歌手').fill('AC/DC')
   await page.getByRole('button', { name: '生成推荐' }).click()
   await expect(page.locator('.music-list ol li')).toHaveCount(1)
-  await page.getByLabel('发现相似歌手').check()
-  await page.getByRole('button', { name: '生成推荐' }).click()
-  await expect(page.locator('.music-list ol li')).toHaveCount(5)
-  await page.getByRole('tab', { name: '按风格' }).click()
-  await page.getByLabel('使用我的偏好资料').check()
-  const callsBeforeConsent = await app.evaluate(() => globalThis.modelCalls.length)
-  await page.getByRole('button', { name: '按我的偏好推荐' }).click()
-  await expect(page.getByText(/测试艺人 · [12] 首/)).toBeVisible()
-  assert.equal(await app.evaluate(() => globalThis.modelCalls.length), callsBeforeConsent)
-  await page.getByLabel('长期音乐偏好自述').fill('喜欢器乐')
-  await page.getByRole('button', { name: '同意发送并继续推荐' }).click()
+  await expect(page.locator('.music-list ol li').getByText('已入库')).toBeVisible()
+  assert.equal(await app.evaluate(() => globalThis.transfers), transfers)
+  await page.evaluate(async (local) => {
+    const p = await window.music.createPlaylist('不发送的私人歌单')
+    await window.music.setMembership(p, local, true)
+  }, list.tracks[0])
+  await app.evaluate(() => {
+    globalThis.failMode = 'auth'
+  })
   await expect
-    .poll(() => page.evaluate(async () => (await window.music.state()).batches.length))
-    .toBe(7)
-  const sent = await app.evaluate(() => JSON.stringify(globalThis.modelCalls.at(-2).body))
+    .poll(() => page.evaluate(async () => (await window.music.getTasteStatus()).status))
+    .toBe('待重试')
+  assert.equal(await fs.readFile(docfile, 'utf8'), initial)
+  assert.equal((await page.evaluate(() => window.music.getTasteStatus())).pending, 1)
+  await app.evaluate(() => {
+    globalThis.failMode = ''
+  })
+  await page.evaluate(() => window.music.generate('AC/DC', 'artist', false))
+  const update = JSON.stringify((await calls()).at(-2).body)
   assert.ok(
-    sent.includes('喜欢器乐') &&
-      sent.includes('测试艺人') &&
-      !sent.includes('私人专辑') &&
-      !sent.includes('tone.mp3'),
+    update.includes('主动加入自建歌单') &&
+      !update.includes('不发送的私人歌单') &&
+      !update.includes('tone.mp3'),
   )
+  assert.equal((await page.evaluate(() => window.music.getTasteStatus())).pending, 0)
+  await page.evaluate(() => window.music.setTasteConsent(false))
+  const revoked = (await calls()).length
+  await page.evaluate(() => window.music.generate('爵士', 'style'))
+  assert.equal((await calls()).length, revoked + 1)
+  assert.ok(!JSON.stringify((await calls()).at(-1).body).includes('偏爱氛围音乐与柔和节奏'))
+  // A source that publishes ordinary playback URLs, without storage rights, requires an explicit track grant.
+  let restricted = (await fs.readFile(source, 'utf8')).replace(
+    'allowPermanentSave:true,actions',
+    'actions',
+  )
+  restricted = restricted.replace(
+    "if(name.endsWith('2'))",
+    "if(name.endsWith('1'))return [{...row,allowPermanentSave:true}]; if(name.endsWith('2'))",
+  )
+  await fs.writeFile(source, restricted)
+  await page.evaluate(() => window.music.lxImport())
+  const mixed = await page.evaluate(() => window.music.generate('权限测试', 'style'))
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async (batch) =>
+          (await window.music.state()).items.filter(
+            (r) => r.batch === batch && r.status === '待重试',
+          ).length,
+        mixed,
+      ),
+    )
+    .toBe(4)
+  const rightsRows = await page.evaluate(
+    async (batch) => (await window.music.state()).items.filter((r) => r.batch === batch),
+    mixed,
+  )
+  assert.equal(rightsRows.find((r) => r.title.endsWith('1')).status, '已入库')
+  assert.match(rightsRows.find((r) => r.title.endsWith('0')).downloadError, /未允许永久保存/)
+  assert.equal(await app.evaluate(() => globalThis.transfers), transfers)
+  await page.reload()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })
-  await expect(page.getByRole('button', { name: '按我的偏好推荐' })).toBeEnabled()
-  await page.screenshot({ path: path.join(root, 'daily-recommendation.png') })
-  const reopened = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'), {
-    readOnly: true,
-  })
-  assert.equal(
-    reopened.prepare("SELECT value FROM state WHERE key='taste-profile'").get().value,
-    '偏爱氛围音乐与柔和节奏',
+  await page.screenshot({ path: path.join(root, 'daily.png') })
+  console.log(
+    'PASS 四家服务协议、无授权禁发、审美增量和重试、自动下载复用、歧义、试听和系统歌单。' + root,
   )
-  reopened.close()
-  await page.reload()
-  await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByLabel('使用我的偏好资料').check()
-  await page.getByRole('button', { name: '按我的偏好推荐' }).click()
-  await expect
-    .poll(() => page.evaluate(async () => (await window.music.state()).batches.length))
-    .toBe(8)
-  const reuse = await app.evaluate(() => JSON.stringify(globalThis.modelCalls.at(-1).body))
-  assert.ok(
-    reuse.includes('偏爱氛围音乐与柔和节奏') &&
-      !reuse.includes('测试艺人') &&
-      !reuse.includes('喜欢器乐'),
-  )
-  const stale = await page.evaluate(async () => {
-    const state = await window.music.state()
-    await window.music.removeLocal(state.localTracks[0].id)
-    return window.music.generateProfile('旧摘要', state.summary).catch((e) => String(e))
-  })
-  assert.match(stale, /摘要已变更/)
-  console.log('PASS 四家协议、配置隔离、取消、错误和推荐到洛雪匹配。截图目录 ' + root)
 } finally {
   await app.close()
 }
-
-const restarted = await launch()
+const reopened = await launch()
 try {
-  const page = await restarted.firstWindow()
-  await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByRole('button', { name: '模型设置' }).click()
-  await expect(page.getByText('偏爱氛围音乐与柔和节奏', { exact: true })).toBeVisible()
-  await page.getByLabel('使用我的偏好资料').check()
-  await expect(page.getByRole('button', { name: '按我的偏好推荐' })).toBeEnabled()
-  const batch = await page.evaluate(async () => {
-    const profile = (await window.music.state()).profile
-    await window.music.configureModel('offline', '', '', false)
-    return window.music.generate('', profile)
-  })
+  const p = await reopened.firstWindow()
+  assert.equal((await p.evaluate(() => window.music.getTasteStatus())).consented, false)
   assert.equal(
-    await page.evaluate(
-      async (batch) => (await window.music.state()).items.find((i) => i.batch === batch).title,
-      batch,
-    ),
-    '夜航',
+    (await p.evaluate(() => window.music.state())).playlists.find((s) => s.system).tracks.length,
+    4,
   )
 } finally {
-  await restarted.close()
+  await reopened.close()
 }

@@ -27,6 +27,9 @@ export class LocalLibrary {
           track TEXT NOT NULL REFERENCES local_tracks(id) ON DELETE CASCADE,
           PRIMARY KEY(playlist,track)
         );
+        CREATE TABLE IF NOT EXISTS recording_versions(version TEXT PRIMARY KEY, local TEXT NOT NULL, automatic INTEGER NOT NULL, source TEXT, platform TEXT, sourceId TEXT, quality TEXT);
+        CREATE TABLE IF NOT EXISTS recommended_items(item TEXT PRIMARY KEY, local TEXT, error TEXT DEFAULT '');
+        CREATE INDEX IF NOT EXISTS recorded_local ON recording_versions(local);
         CREATE INDEX IF NOT EXISTS playlist_track_lookup ON playlist_tracks(track);
       `)
       if (
@@ -76,6 +79,7 @@ export class LocalLibrary {
           'INSERT INTO local_tracks(path_key,file,title,artist,album,duration,id) VALUES(?,?,?,?,?,?,?)',
         )
         .run(...values, 'local-' + randomUUID())
+    this.changed?.()
     return !!(existing || replacing)
   }
   list() {
@@ -87,7 +91,7 @@ export class LocalLibrary {
     )
     const rows = this.db
       .prepare(
-        'SELECT id,title,artist,album,duration,available,listed,file FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id',
+        `SELECT id,title,artist,album,duration,available,listed,file,(SELECT source || ' · ' || quality FROM recording_versions v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
       )
       .all()
     const parents = new Set(rows.filter((r) => r.listed).map((r) => pathKey(path.dirname(r.file))))
@@ -119,7 +123,24 @@ export class LocalLibrary {
       .all()) {
       byId.get(row.playlist).tracks.push(row.track)
     }
-    return [...byId.values()]
+    const recommended = this.db
+      .prepare(
+        'SELECT DISTINCT r.local FROM recommended_items r JOIN local_tracks t ON r.local=t.id',
+      )
+      .all()
+    return [
+      ...(recommended.length
+        ? [
+            {
+              id: 'system-recommendations',
+              name: '歌曲推荐',
+              system: true,
+              tracks: recommended.map((r) => r.local),
+            },
+          ]
+        : []),
+      ...byId.values(),
+    ]
   }
   createPlaylist(name) {
     const id = randomUUID()
@@ -181,6 +202,7 @@ export class LocalLibrary {
       this.db
         .prepare('DELETE FROM playlist_tracks WHERE playlist=? AND track=?')
         .run(playlist, track)
+    this.changed?.()
   }
   row(id) {
     const row = this.db.prepare('SELECT * FROM local_tracks WHERE id=?').get(id)

@@ -49,6 +49,9 @@ export class MusicStore {
     for (const { id } of this.db.prepare('SELECT id FROM items').all())
       this.removeCache(id, '.part')
     this.library = new LocalLibrary(this)
+    this.db.exec(
+      "UPDATE items SET status='待重试' WHERE id IN (SELECT item FROM recommended_items) AND status IN ('正在匹配','正在保存','待处理','待选录音')",
+    )
     this.recover()
     this.cleanup(false)
   }
@@ -128,11 +131,12 @@ export class MusicStore {
     const batches = this.db.prepare('SELECT * FROM batches ORDER BY rowid DESC').all()
     const items = this.db
       .prepare(
-        'SELECT i.*, o.duration AS audioDuration FROM items i LEFT JOIN online_recordings o ON i.track=o.track ORDER BY i.rowid',
+        'SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,t.available AS localAvailable FROM items i LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local ORDER BY i.rowid',
       )
       .all()
       .map((row) => ({
         ...row,
+        status: row.daily && row.status === '已入库' && !row.localAvailable ? '待重试' : row.status,
         online: row.status === '模型推荐' || row.track?.startsWith('online-') || false,
         candidates: catalogue.filter((t) => t.title === row.title && t.artist === row.artist),
       }))
@@ -144,7 +148,7 @@ export class MusicStore {
       batches,
       items,
       summary: this.preferenceSummary(),
-      profile: this.get('taste-profile') || '',
+
       draft: this.get('draft'),
       current: this.get('current'),
       position: Number(this.get('position')),
@@ -165,6 +169,10 @@ export class MusicStore {
             'INSERT INTO items(id,batch,title,artist,reason,status,used) VALUES(?,?,?,?,?,?,?)',
           )
           .run(randomUUID(), batch, row.title, row.artist, row.reason, status, Date.now())
+      if (status === '待处理')
+        this.db
+          .prepare('INSERT INTO recommended_items(item) SELECT id FROM items WHERE batch=?')
+          .run(batch)
       this.db.exec('COMMIT')
     } catch (e) {
       this.db.exec('ROLLBACK')

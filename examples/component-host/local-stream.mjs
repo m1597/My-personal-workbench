@@ -8,7 +8,7 @@ export async function localStream(request, grant, library) {
     return new Response(null, { status: 403 })
   let file
   try {
-    const row = grant.audition ? grant : library.row(grant.id)
+    const row = grant.audition ? grant : library.row(grant.libraryId ?? grant.id)
     if (row.file !== grant.file || (!grant.audition && !(await library.verify(row))))
       return new Response(null, { status: 404 })
     file = await openAudio(row.file)

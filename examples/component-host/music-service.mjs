@@ -1,3 +1,4 @@
+import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import { getMusicPreferences, setMusicQuality } from './music-preferences.mjs'
 import { openAudio, regularFile } from './music/local-files.mjs'
@@ -12,6 +13,8 @@ import { localStream } from './local-stream.mjs'
 export function musicService(profile, isSender) {
   let store,
     pending,
+    taste,
+    updateTimer,
     choosing,
     grant,
     localDialog = false,
@@ -22,7 +25,14 @@ export function musicService(profile, isSender) {
     ipcMain.handle('music:' + name, async (event, ...args) => {
       if (!isSender(event)) throw Error('DENIED')
       try {
-        store ??= new MusicStore(path.join(profile, 'fitbay-music'))
+        if (!store) {
+          const root = path.join(profile, 'fitbay-music')
+          store = new MusicStore(root)
+          taste = new MusicTaste(store, root, (data, signal) =>
+            requestMusicModel(store, safeStorage, 'profile', data, signal),
+          )
+          store.library.changed = queueTasteUpdate
+        }
         shortcuts.activate(event.sender, store)
         return await fn(...args)
       } catch (e) {
@@ -33,7 +43,7 @@ export function musicService(profile, isSender) {
         throw e
       }
     })
-  const closeLx = registerLx(bind, () => store, dialog)
+  const lx = registerLx(bind, () => store, dialog)
   const text = (value) => {
     if (typeof value !== 'string' || value.length > 1000) throw Error('输入过长')
     return value
@@ -134,6 +144,24 @@ export function musicService(profile, isSender) {
   bind('localSource', async (id) => {
     const epoch = viewEpoch
     if (!text(id).startsWith('local-')) {
+      const entry = store.db.prepare('SELECT local FROM recommended_items WHERE item=?').get(id)
+      if (entry) {
+        const row =
+          entry.local && store.db.prepare('SELECT * FROM local_tracks WHERE id=?').get(entry.local)
+        if (!row || !(await store.library.verify(row))) {
+          store.status(id, '待重试')
+          throw Error('本地录音不可用，请重试')
+        }
+        if (epoch !== viewEpoch) throw Error('窗口已关闭')
+        store.release()
+        grant = {
+          id,
+          libraryId: row.id,
+          file: row.file,
+          url: 'fitbay-audio://track/' + randomUUID(),
+        }
+        return grant.url
+      }
       const item = store.item(id)
       if (!item.track?.startsWith('online-') || !['就绪', '已入库'].includes(item.status))
         throw Error('推荐录音未就绪')
@@ -177,7 +205,12 @@ export function musicService(profile, isSender) {
       if (grant.audition) {
         store.status(id, '文件缺失')
         store.release()
-      } else store.db.prepare('UPDATE local_tracks SET available=0,unplayable=1 WHERE id=?').run(id)
+      } else {
+        store.db
+          .prepare('UPDATE local_tracks SET available=0,unplayable=1 WHERE id=?')
+          .run(grant.libraryId ?? id)
+        if (grant.libraryId) store.status(id, '待重试')
+      }
       grant = null
     }
   })
@@ -239,41 +272,34 @@ export function musicService(profile, isSender) {
       pending = null
     }
   }
-  bind('generateProfile', (description, summary) => {
-    text(description)
-    if (
-      summary !== undefined &&
-      (!Array.isArray(summary) ||
-        JSON.stringify(summary) !== JSON.stringify(store.preferenceSummary()))
-    )
-      throw Error('摘要已变更，请重新预览')
-    if (!description.trim() && !summary?.length) throw Error('请填写自述或附加曲库摘要')
-    if (modelInfo(store).active === 'offline') throw Error('请选择模型服务生成偏好资料')
-    return generateTask(async (signal) => {
-      const result = await requestMusicModel(
-        store,
-        safeStorage,
-        'profile',
-        { description, ...(summary ? { summary } : {}) },
-        signal,
-      )
-      signal.throwIfAborted()
-      store.set('taste-profile', result)
-      return result
-    })
+  function queueTasteUpdate() {
+    clearTimeout(updateTimer)
+    if (store.get('taste-consent') !== '1') return
+    updateTimer = setTimeout(() => {
+      if (modelInfo(store).active !== 'offline') void taste.refresh().catch(() => {})
+    }, 500)
+    updateTimer.unref()
+  }
+  bind('getTasteStatus', () => taste.status())
+  bind('setTasteConsent', (value) => {
+    taste.consent(value)
+    if (!value) pending?.abort()
+    queueTasteUpdate()
+    return taste.status()
   })
-  bind('generate', (preference, profile = '', mode = 'style', similar = false) => {
+  bind('generate', (preference, mode = 'style', similar = false) => {
     text(preference)
     if (!['artist', 'style'].includes(mode) || typeof similar !== 'boolean')
       throw Error('无效推荐方式')
-    if (profile && profile !== store.get('taste-profile')) throw Error('资料已变更，请重新预览')
-    if (!preference.trim() && !profile) throw Error('请填写当次风格或先生成资料')
     return generateTask(async (signal) => {
-      const label = preference.trim() || '个人偏好'
+      const label = preference.trim() || (mode === 'artist' ? '按歌手推荐' : '按风格推荐')
       if (modelInfo(store).active === 'offline') {
         await delay(150, undefined, { signal })
-        return store.generate('离线示例 · ' + label, profile ? [profile] : [])
+        return store.generate('离线示例 · ' + label, [])
       }
+      clearTimeout(updateTimer)
+      const profile = await taste.refresh()
+      signal.throwIfAborted()
       const rows = await requestMusicModel(
         store,
         safeStorage,
@@ -293,7 +319,9 @@ export function musicService(profile, isSender) {
           ? rows.filter((row) => artistKey(row.artist) === artistKey(preference))
           : rows
       if (!acceptable.length) throw Error('未找到该歌手的推荐歌曲，请检查歌手名或开启相似歌手')
-      return store.saveSuggestions(label, acceptable, '模型推荐')
+      const batch = store.saveSuggestions(label, acceptable, '待处理')
+      lx.batch(batch)
+      return batch
     })
   })
   bind('stopGeneration', () => pending?.abort())
@@ -369,7 +397,9 @@ export function musicService(profile, isSender) {
       }
     },
     dispose() {
-      closeLx()
+      lx.close()
+      clearTimeout(updateTimer)
+      taste?.controller?.abort()
       viewEpoch++
       grant = null
       store?.library.cancel()

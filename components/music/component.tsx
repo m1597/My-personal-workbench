@@ -53,18 +53,20 @@ type Item = {
   reason: string
   track: string
   status: string
+  daily: string | null
+  localId: string | null
+  downloadError: string
   audioDuration: number | null
   online: boolean
   checked: number
   candidates: Track[]
 }
-import { RecommendationComposer } from './RecommendationComposer'
+import { RecommendationComposer, RecordingActions } from './RecommendationComposer'
 import type { ModelInfo } from './ModelSettings'
 import { DownloadPane } from './LxPanel'
 import type { Versions } from './LxPanel'
 type State = {
   prefs: MusicPreferences
-  profile: string
   models: ModelInfo
   items: Item[]
   batches: Batch[]
@@ -111,13 +113,9 @@ declare global {
       draft(s: string): Promise<void>
       getTasteStatus(): Promise<TasteStatus>
       setTasteConsent(value: boolean): Promise<TasteStatus>
-      generateProfile(description: string, summary?: string[]): Promise<string>
-      generate(
-        s: string,
-        profile?: string,
-        mode?: 'style' | 'artist',
-        similar?: boolean,
-      ): Promise<string>
+      prepareRecommendation(id: string, key?: string): Promise<void>
+      recommendationChoices(id: string): Promise<Versions['items']>
+      generate(s: string, mode?: 'style' | 'artist', similar?: boolean): Promise<string>
       stopGeneration(): Promise<void>
       match(id: string): Promise<void>
       choose(id: string, track: string): Promise<void>
@@ -213,7 +211,10 @@ function Music() {
     }
   }, [tab])
   const working =
-    !!state?.importJob.running || state?.items.some((i) => ['等候', '下载中'].includes(i.status))
+    !!state?.importJob.running ||
+    state?.items.some((i) =>
+      ['等候', '下载中', '待处理', '正在匹配', '正在保存'].includes(i.status),
+    )
   useEffect(() => {
     if (working) {
       const t = setInterval(() => void host.state().then(setState), 200)
@@ -244,7 +245,7 @@ function Music() {
   const visibleQueue =
     tab === 'library'
       ? localRows.filter((row) => row.available).map((row) => row.id)
-      : rows.filter(queueable).map((row) => row.id)
+      : [...new Set(rows.filter(queueable).map((row) => row.localId ?? row.id))]
   const legacyQueue =
     state?.items
       .filter(
@@ -306,7 +307,7 @@ function Music() {
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
       const local = state?.localTracks.find((t) => t.id === id)
       const item = state?.items.find((r) => r.id === id)
-      const stream = local || item?.online
+      const stream = local || item?.online || item?.daily
       const src = stream
         ? await host.localSource(id)
         : URL.createObjectURL(new Blob([await host.bytes(id)], { type: 'audio/wav' }))
@@ -512,8 +513,7 @@ function Music() {
             {state && (
               <RecommendationComposer
                 models={state.models}
-                profile={state.profile}
-                summary={state.summary}
+                openSettings={() => setTab('settings')}
                 initialDraft={state.draft}
                 refresh={refresh}
                 generated={setBatch}
@@ -554,36 +554,40 @@ function Music() {
                         取消本批下载
                       </Button>
                     )}
-                    <Button
-                      size="small"
-                      appearance="subtle"
-                      disabled={!selected.length}
-                      icon={<FolderPlus size={15} />}
-                      onClick={() => void act(() => host.keep(batch))}
-                    >
-                      保留所选（{selected.length}）
-                    </Button>
+                    {!rows.some((r) => r.daily) && (
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        disabled={!selected.length}
+                        icon={<FolderPlus size={15} />}
+                        onClick={() => void act(() => host.keep(batch))}
+                      >
+                        保留所选（{selected.length}）
+                      </Button>
+                    )}
                   </div>
                   <ol>
                     {rows.map((r) => {
                       const version = r.candidates.find((t) => t.id === r.track)
                       return (
-                        <li key={r.id} data-active={r.id === active?.id}>
+                        <li key={r.id} data-active={(r.localId ?? r.id) === active?.id}>
                           <div className="music-track-icon">
                             {playable(r) ? (
                               <Button
                                 appearance="subtle"
                                 icon={
-                                  r.id === current.current && !paused ? (
+                                  (r.localId ?? r.id) === current.current && !paused ? (
                                     <Pause size={16} />
                                   ) : (
                                     <Play size={16} />
                                   )
                                 }
                                 aria-label={
-                                  (r.id === current.current && !paused ? '暂停' : '试听') + r.title
+                                  ((r.localId ?? r.id) === current.current && !paused
+                                    ? '暂停'
+                                    : '试听') + r.title
                                 }
-                                onClick={() => void act(() => startTrack(r.id))}
+                                onClick={() => void act(() => startTrack(r.localId ?? r.id))}
                               />
                             ) : (
                               <Disc3 size={18} />
@@ -600,6 +604,14 @@ function Music() {
                                 {r.status}
                                 {version ? ' · ' + version.album + ' · ' + version.version : ''}
                               </small>
+                            )}
+                            {r.daily && (
+                              <RecordingActions
+                                id={r.id}
+                                status={r.status}
+                                message={r.downloadError}
+                                refresh={refresh}
+                              />
                             )}
                             {r.online && !playable(r) && (
                               <Button
@@ -678,7 +690,7 @@ function Music() {
                                 </Button>
                               )}
                           </div>
-                          {playable(r) && (
+                          {!r.daily && playable(r) && (
                             <Checkbox
                               aria-label="保留"
                               title={'保留' + r.title}
@@ -696,7 +708,7 @@ function Music() {
               ) : (
                 <div className="music-empty">
                   <ListMusic size={24} />
-                  <p>生成的试听单会按日期保存在这里</p>
+                  <p>推荐结果会按日期保存在这里</p>
                 </div>
               )}
             </section>

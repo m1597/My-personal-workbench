@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream, lstatSync, unlinkSync } from 'node:fs'
 import { readFile, rm, lstat } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
@@ -8,6 +8,8 @@ import { parseFile } from 'music-metadata'
 import { runSource } from './lx-runtime.mjs'
 import { sourceRequest, openPublic } from './lx-net.mjs'
 import { verifyAudio } from './lx-audio-check.mjs'
+import { pathKey } from './music/local-files.mjs'
+import { getMusicPreferences } from './music-preferences.mjs'
 import { publish } from './music/store.mjs'
 
 class TransferError extends Error {}
@@ -53,6 +55,11 @@ export async function inspectSource(code, signal) {
       code,
       name: text(code.match(/@name\s+([^\r\n*]+)/)?.[1]) || '自定义音乐源',
       platform,
+      permanentSave: [d.allowPermanentSave, d.permanentDownload].includes(false)
+        ? false
+        : [d.allowPermanentSave, d.permanentDownload].includes(true)
+          ? true
+          : undefined,
       search: d.actions.includes('search'),
       quality,
     }
@@ -91,13 +98,32 @@ function extension(format) {
     return '.m4a'
   throw Error('返回的文件不是支持的音频格式')
 }
-export function publishToLibrary(temp, row, store) {
+export function publishToLibrary(temp, row, store, version, dailyId) {
   const file = row.file
   const before = lstatSync(temp, { bigint: true })
   store.db.exec('BEGIN IMMEDIATE')
   let published = false
   try {
     store.library.upsert(row)
+    if (version) {
+      const local = store.db
+        .prepare('SELECT id FROM local_tracks WHERE path_key=?')
+        .get(pathKey(file)).id
+      store.db
+        .prepare(
+          'INSERT OR REPLACE INTO recording_versions(version,local,automatic,source,platform,sourceId,quality) VALUES(?,?,?,?,?,?,?)',
+        )
+        .run(
+          version.key,
+          local,
+          Number(!!dailyId),
+          version.source,
+          version.platform,
+          version.sourceId,
+          version.quality,
+        )
+      if (dailyId) markSaved(store, dailyId, local)
+    }
     publish(temp, file)
     published = true
     store.db.exec('COMMIT')
@@ -110,7 +136,7 @@ export function publishToLibrary(temp, row, store) {
     throw e
   }
 }
-export async function saveRecording(url, dir, info, store, signal, auditionId) {
+export async function saveRecording(url, dir, info, store, signal, auditionId, version, dailyId) {
   const temp = path.join(dir, '.fitbay-' + randomUUID() + '.part')
   try {
     const res = await openPublic(url, {
@@ -148,7 +174,10 @@ export async function saveRecording(url, dir, info, store, signal, auditionId) {
       .trim()
       .replace(/[. ]+$/, '')
     const filename =
-      (/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(name) ? '_' : '') + name + extension(format)
+      (/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(name) ? '_' : '') +
+      name +
+      (dailyId ? ' - ' + version.key.slice(0, 12) : '') +
+      extension(format)
     const file = path.join(dir, filename)
     signal.throwIfAborted()
     if (
@@ -172,11 +201,23 @@ export async function saveRecording(url, dir, info, store, signal, auditionId) {
       duration: format.duration,
     }
     if (auditionId) store.cacheOnline(auditionId, temp, metadata, extension(format))
-    else publishToLibrary(temp, metadata, store)
+    else publishToLibrary(temp, metadata, store, version, dailyId)
     return filename
   } finally {
     await rm(temp, { force: true })
   }
+}
+function versionInfo(src, row, quality) {
+  const id = row.songmid ?? row.id ?? row.hash ?? row.meta?.[src.platform]?.id
+  if (!['number', 'string'].includes(typeof id) || !String(id).trim()) return null
+  const key = createHash('sha256')
+    .update(JSON.stringify([src.name, src.platform, String(id), quality]))
+    .digest('hex')
+  return { key, source: src.name, platform: src.platform, sourceId: String(id), quality }
+}
+function markSaved(store, id, local) {
+  store.db.prepare("UPDATE recommended_items SET local=?,error='' WHERE item=?").run(local, id)
+  store.status(id, '已入库')
 }
 export function registerLx(bind, getStore, dialog) {
   let active = null
@@ -274,18 +315,24 @@ export function registerLx(bind, getStore, dialog) {
       throw Error('请重新选择版本和音质')
     let dir = getStore().cache
     if (!auditionId) {
-      const folder = await dialog.showOpenDialog({
-        title: '选择歌曲下载文件夹',
-        properties: ['openDirectory', 'createDirectory'],
-      })
-      if (folder.canceled) return ''
-      dir = folder.filePaths[0]
+      dir = getMusicPreferences(getStore()).manualDir
+      if (!dir) {
+        const folder = await dialog.showOpenDialog({
+          title: '选择歌曲下载文件夹',
+          properties: ['openDirectory', 'createDirectory'],
+        })
+        if (folder.canceled) return ''
+        dir = folder.filePaths[0]
+      }
     } else {
       const item = getStore().item(auditionId)
       if (item.status !== '模型推荐' && !item.track?.startsWith('online-'))
         throw Error('推荐曲目无效')
     }
     signal.throwIfAborted()
+    return fetchRecording(src, row, quality, dir, signal, auditionId)
+  }
+  async function fetchRecording(src, row, quality, dir, signal, auditionId, dailyId) {
     for (let attempt = 0; ; attempt++) {
       const url = await runSource(
         src.code,
@@ -301,6 +348,8 @@ export function registerLx(bind, getStore, dialog) {
           getStore(),
           signal,
           auditionId,
+          versionInfo(src, row, quality),
+          dailyId,
         )
       } catch (e) {
         if (attempt > 0 || !(e instanceof TransferError)) throw e
@@ -319,9 +368,147 @@ export function registerLx(bind, getStore, dialog) {
       return transfer(signal, key, quality, id)
     }),
   )
+  const choices = new Map()
+  const running = new Map()
+  async function prepare(id, selected) {
+    const store = getStore()
+    if (!store.db.prepare('SELECT item FROM recommended_items WHERE item=?').get(id))
+      throw Error('无效推荐记录')
+    if (running.has(id)) return
+    const task = new AbortController()
+    running.set(id, task)
+    const { signal } = task
+    try {
+      const src = source()
+      if (!src) throw Error('请在下载音乐页导入可下载的音乐源')
+      const prefs = getMusicPreferences(store)
+      const quality = src.quality.includes(prefs.quality)
+        ? prefs.quality
+        : src.quality.includes('320k')
+          ? '320k'
+          : src.quality[0]
+      const item = store.item(id)
+      let pick
+      if (selected) {
+        const saved = choices.get(id)
+        if (
+          saved?.sourceCode !== src.code ||
+          saved.quality !== quality ||
+          !saved.rows.has(selected)
+        )
+          throw Error('候选已变更，请重试')
+        pick = saved.rows.get(selected)
+      } else {
+        store.status(id, '正在匹配')
+        const hits = await versions(src, item, signal)
+        signal.throwIfAborted()
+        if (!Array.isArray(hits)) throw Error('音乐源返回的结果无效')
+        const candidates = new Map()
+        let denied = false
+        for (const row of hits.slice(0, 30)) {
+          if (!row || !text(row.name) || !text(row.singer) || JSON.stringify(row).length > 16384)
+            continue
+          const rights = [
+            row.allowPermanentSave,
+            row.permanentDownload,
+            row.meta?.allowPermanentSave,
+          ]
+          if (
+            row.trial ||
+            row.isPreview ||
+            row.freeTrialInfo ||
+            rights.includes(false) ||
+            src.permanentSave === false ||
+            row.downloadable === false ||
+            (!src.permanentSave && !rights.includes(true))
+          ) {
+            denied = true
+            continue
+          }
+          const key = versionInfo(src, row, quality)?.key
+          if (key) candidates.set(key, row)
+        }
+        if (!candidates.size)
+          throw Error(
+            denied ? '音乐源未允许永久保存此录音，或仅提供试听' : '未找到可保存的完整录音',
+          )
+        const same = (a, b) =>
+          a.trim().normalize('NFKC').toLowerCase() === b.trim().normalize('NFKC').toLowerCase()
+        const exact = [...candidates.values()].filter(
+          (row) => same(row.name, item.title) && same(row.singer, item.artist),
+        )
+        if (exact.length !== 1) {
+          choices.set(id, { sourceCode: src.code, quality, rows: candidates })
+          store.status(id, '待选录音')
+          return
+        }
+        pick = exact[0]
+      }
+      const version = versionInfo(src, pick, quality).key
+      const cached = store.db
+        .prepare(
+          'SELECT t.* FROM recording_versions v JOIN local_tracks t ON t.id=v.local WHERE v.version=?',
+        )
+        .get(version)
+      if (cached && (await store.library.verify(cached))) {
+        signal.throwIfAborted()
+        markSaved(store, id, cached.id)
+      } else {
+        if (!prefs.recommendDir) throw Error('请在设置中选择推荐下载目录')
+        store.status(id, '正在保存')
+        await fetchRecording(src, pick, quality, prefs.recommendDir, signal, undefined, id)
+      }
+      choices.delete(id)
+    } catch (e) {
+      store.db
+        .prepare('UPDATE recommended_items SET error=? WHERE item=?')
+        .run(String(e.code ? '保存失败，请检查目录与网络' : e.message).slice(0, 200), id)
+      store.status(id, '待重试')
+    } finally {
+      running.delete(id)
+    }
+  }
+  bind('prepareRecommendation', (id, key) => {
+    if (typeof id !== 'string' || (key !== undefined && typeof key !== 'string'))
+      throw Error('无效录音')
+    return prepare(id, key)
+  })
+  bind('recommendationChoices', (id) => {
+    if (typeof id !== 'string') throw Error('无效录音')
+    return [...(choices.get(id)?.rows ?? [])].map(([key, v]) => ({
+      key,
+      title: text(v.name),
+      artist: text(v.singer),
+      album: text(v.albumName),
+    }))
+  })
   bind('lxCancel', () => active?.abort())
-  return () => {
-    active?.abort()
-    matches.clear()
+  let generation = 0
+  let processing = Promise.resolve()
+  return {
+    batch(batch) {
+      const epoch = generation
+      const ids = getStore().db.prepare('SELECT id FROM items WHERE batch=?').all(batch)
+      processing = processing
+        .then(async () => {
+          for (const { id } of ids) {
+            if (epoch !== generation) break
+            await prepare(id)
+          }
+        })
+        .catch(() => {})
+    },
+    close() {
+      generation++
+      for (const task of running.values()) task.abort()
+      active?.abort()
+      matches.clear()
+      choices.clear()
+      getStore()
+        ?.db.prepare(
+          "UPDATE items SET status='待重试' WHERE id IN (SELECT item FROM recommended_items) AND status IN ('正在匹配','正在保存','待处理','待选录音')",
+        )
+        .run()
+    },
   }
 }
