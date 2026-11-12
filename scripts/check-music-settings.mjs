@@ -15,18 +15,20 @@ for (const title of ['A', 'B', 'C']) {
   store.library.upsert({ file, title, artist: '测试', album: '', duration: 20 })
 }
 store.db.close()
-const app = await electron.launch({
-  args: [
-    path.resolve('dist/component-prototype/host'),
-    '--mode=workbench',
-    '--workbench=' + path.resolve('out/renderer/index.html'),
-    '--user-data-dir=' + profile,
-  ],
-  env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
-})
+const launch = () =>
+  electron.launch({
+    args: [
+      path.resolve('dist/component-prototype/host'),
+      '--mode=workbench',
+      '--workbench=' + path.resolve('out/renderer/index.html'),
+      '--user-data-dir=' + profile,
+    ],
+    env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+  })
+let app = await launch()
 try {
   expect(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio'))).toBe(true)
-  const shell = await app.firstWindow()
+  let shell = await app.firstWindow()
   await app.evaluate(({ globalShortcut }) => {
     globalThis.testMusicCallbacks = new Map()
     const register = globalShortcut.register.bind(globalShortcut)
@@ -36,7 +38,7 @@ try {
       if (ok) globalThis.testMusicCallbacks.set(key, callback)
       return ok
     }
-    if (!register('Ctrl+Alt+F23', () => {})) throw Error('测试冲突键无法预占')
+    if (!register('Ctrl+Alt+Shift+F12', () => {})) throw Error('测试冲突键无法预占')
   })
   const open = async () => {
     await shell.getByRole('button', { name: '窗口', exact: true }).click()
@@ -58,11 +60,22 @@ try {
     await expect(player.locator('.music-settings h2')).toHaveText([name])
   }
   const prefs = () => player.evaluate(async () => (await window.music.state()).prefs)
-  const combo = 'Ctrl+Alt+F22'
-  await player.getByRole('textbox', { name: '播放 / 暂停', exact: true }).fill(combo)
+  const combo = 'Ctrl+Alt+Shift+F10'
+  const record = async (label, accelerator) => {
+    const field = player.getByRole('textbox', { name: label, exact: true })
+    await field.click()
+    await player.keyboard.press(accelerator.replace('Ctrl+', 'Control+'))
+    await expect(field).toHaveValue(accelerator)
+  }
+  await record('播放 / 暂停', combo)
   await player.getByRole('button', { name: '保存播放 / 暂停快捷键' }).click()
   await expect.poll(async () => (await prefs()).shortcuts.toggle).toBe(combo)
-  await player.getByRole('textbox', { name: '播放 / 暂停', exact: true }).fill('Ctrl+Alt+F23')
+  const toggle = player.getByRole('textbox', { name: '播放 / 暂停', exact: true })
+  await toggle.click()
+  await player.keyboard.press('Escape')
+  await expect(toggle).toHaveValue(combo)
+  await expect(player.getByRole('button', { name: '保存播放 / 暂停快捷键' })).toBeDisabled()
+  await record('播放 / 暂停', 'Ctrl+Alt+Shift+F12')
   await player.getByRole('button', { name: '保存播放 / 暂停快捷键' }).click()
   await expect(player.getByText(/快捷键已被占用/).first()).toBeVisible()
   expect((await prefs()).shortcuts.toggle).toBe(combo)
@@ -96,10 +109,10 @@ try {
   await key(combo)
   await expect.poll(paused).toBe(false)
   for (const [label, acc, expected] of [
-    ['下一首', 'Ctrl+Alt+F21', 'B'],
-    ['上一首', 'Ctrl+Alt+F20', 'A'],
+    ['下一首', 'Ctrl+Alt+Shift+F9', 'B'],
+    ['上一首', 'Ctrl+Alt+Shift+F8', 'A'],
   ]) {
-    await player.getByRole('textbox', { name: label, exact: true }).fill(acc)
+    await record(label, acc)
     await player.getByRole('button', { name: '保存' + label + '快捷键' }).click()
     await key(acc)
     await expect(player.locator('.music-transport strong')).toHaveText(expected)
@@ -163,8 +176,11 @@ try {
     .poll(() => app.evaluate(({ globalShortcut }, k) => globalShortcut.isRegistered(k), combo))
     .toBe(false)
   expect(
-    await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Ctrl+Alt+F23')),
+    await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Ctrl+Alt+Shift+F12')),
   ).toBe(true)
+  await app.close()
+  app = await launch()
+  shell = await app.firstWindow()
   player = await open()
   await player.getByRole('tab', { name: '设置', exact: true }).click()
   expect((await prefs()).shortcuts.toggle).toBe(combo)

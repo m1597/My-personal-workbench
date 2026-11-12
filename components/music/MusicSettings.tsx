@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type KeyboardEvent, useEffect, useState } from 'react'
 import { Button, Checkbox, Dropdown, Field, Input, Option } from '@fluentui/react-components'
 import { ModelSettings, type ModelInfo } from './ModelSettings'
 import type { ImportJob } from './LibraryPane'
@@ -34,16 +34,42 @@ export type MusicPreferences = {
 const actions = { toggle: '播放 / 暂停', previous: '上一首', next: '下一首' } as const
 const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
 
+function recordedKey(e: KeyboardEvent<HTMLInputElement>) {
+  const modifiers = [
+    e.ctrlKey && 'Ctrl',
+    e.altKey && 'Alt',
+    e.shiftKey && 'Shift',
+    e.metaKey && 'Super',
+  ].filter(Boolean)
+  const physical = /^(?:Key([A-Z])|Digit([0-9]))$/.exec(e.code)
+  const key = physical?.[1] ?? physical?.[2] ?? e.key.replace(/^Arrow/, '').replace(/^ $/, 'Space')
+  if (/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(key)) return [...modifiers, key].join('+')
+  if (
+    modifiers.length &&
+    /^(?:[A-Z0-9]|Space|Up|Down|Left|Right|Home|End|PageUp|PageDown|Insert|Delete)$/.test(key)
+  )
+    return [...modifiers, key].join('+')
+  return undefined
+}
+
 function ShortcutField({
   action,
   saved,
   change,
+  manual,
 }: {
   action: TransportAction
   saved: string
   change(key: string): Promise<boolean>
+  manual: boolean
 }) {
   const [value, setValue] = useState(saved)
+  const [recording, setRecording] = useState(false)
+  const [hint, setHint] = useState('')
+  function begin() {
+    setHint('')
+    setRecording(true)
+  }
   const normalKey = (part: string) => {
     const aliases: Record<string, string> = {
       ctrl: 'Ctrl',
@@ -80,11 +106,43 @@ function ShortcutField({
         if (await change(key)) setValue(key)
       }}
     >
-      <Field label={actions[action]}>
+      <Field label={actions[action]} hint={hint || undefined}>
         <Input
-          value={value}
+          value={recording ? '' : value}
+          readOnly={!manual}
           maxLength={60}
-          placeholder="例如 Ctrl+Alt+P"
+          placeholder={manual ? '例如 Ctrl+Alt+P' : recording ? '请按组合键' : '点击录制'}
+          onFocus={() => !manual && begin()}
+          onClick={() => !manual && begin()}
+          onBlur={() => setRecording(false)}
+          onKeyDown={(e) => {
+            if (manual || e.key === 'Tab') return
+            if (!recording && e.key === 'Enter') {
+              e.preventDefault()
+              begin()
+              return
+            }
+            if (!recording) return
+            e.preventDefault()
+            e.stopPropagation()
+            if (e.repeat) return
+            if (e.key === 'Escape') {
+              setRecording(false)
+              setHint('')
+              return
+            }
+            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
+            const clear =
+              e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey
+            const key = clear ? '' : recordedKey(e)
+            if (key === undefined) {
+              setHint('请按修饰键与字母、数字或导航键的组合，或直接按功能键')
+              return
+            }
+            setValue(key)
+            setHint('')
+            setRecording(false)
+          }}
           onChange={(_, d) => setValue(d.value)}
         />
       </Field>
@@ -117,6 +175,7 @@ export function MusicSettings({
 }) {
   const [navOpen, setNavOpen] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [manualKeys, setManualKeys] = useState(false)
   const [feedback, setFeedback] = useState<{ category: SettingsCategory; text: string }>()
   const [busy, setBusy] = useState(false)
   const [taste, setTaste] = useState<Awaited<ReturnType<typeof window.music.getTasteStatus>>>()
@@ -333,7 +392,12 @@ export function MusicSettings({
                 void update(() => window.music.setMusicMediaKeys(d.checked === true))
               }
             />
-            <p>自定义组合可使用 Ctrl、Alt、Shift、Win 或功能键。清空并保存可解除绑定。</p>
+            <p>点击输入框后按组合键或功能键，再点击保存。Esc 取消录制，退格键清空绑定。</p>
+            <Checkbox
+              label="手动输入组合键"
+              checked={manualKeys}
+              onChange={(_, d) => setManualKeys(d.checked === true)}
+            />
             {Object.entries(actions).map(([id]) => {
               const action = id as TransportAction
               return (
@@ -341,6 +405,7 @@ export function MusicSettings({
                   key={action}
                   action={action}
                   saved={prefs.shortcuts[action]}
+                  manual={manualKeys}
                   change={(key) => update(() => window.music.setMusicShortcut(action, key))}
                 />
               )
