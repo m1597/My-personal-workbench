@@ -64,11 +64,12 @@ if (live) {
    await new Promise(done=>setTimeout(done,600))
    if(info.limit !== 50) throw Error('下载查询上限错误')
    if(info.keyword === '只搜艺人') return [{name:info.keyword,singer:'测试艺人',id:'single'}]
-   if(info.page > 1) return {items:Array.from({length:30},(_,i)=>({name:'分页录音'+i,singer:'测试艺人',id:'p'+i})),hasMore:false}
+   const overlap = [{name:'摘要版本',hash:'h'}, {name:'平台版本',meta:{wy:{id:123}}}]
+   if(info.page > 1) return {items:[...overlap.map(r=>({...r,rank:10})), ...Array.from({length:30},(_,i)=>({name:'分页录音'+i,singer:'测试艺人',id:'p'+i}))],hasMore:false}
    return [
      {name:info.keyword,singer:'测试艺人',albumName:'测试专辑',id:'test'},
      {name:'可下载版本',singer:'测试艺人',albumName:'音频夹具',id:'audio'},
-     ...Array.from({length:22},(_,i)=>({name:'其他录音'+i,singer:'测试艺人',id:String(i)}))
+     ...overlap, ...Array.from({length:20},(_,i)=>({name:'其他录音'+i,singer:'测试艺人',id:String(i)}))
    ]
   }
   return info.musicInfo.id === 'audio' ? 'https://1.1.1.1/test-audio.mp3' : 'http://127.0.0.1/forbidden'
@@ -195,6 +196,9 @@ try {
     await find.click()
     await expect(pane.getByText('手动歌名 手动艺人', { exact: true })).toBeVisible()
     await expect(pane.getByRole('listitem')).toHaveCount(50)
+    for (const title of ['摘要版本', '平台版本', '分页录音25']) {
+      await expect(pane.getByText(title, { exact: true })).toHaveCount(1)
+    }
   }
   await pane.getByRole('combobox', { name: '从曲库选择' }).click()
   await pane.getByRole('option', { name: row.title + ' · ' + row.artist }).click()

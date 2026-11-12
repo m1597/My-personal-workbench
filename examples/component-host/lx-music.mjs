@@ -106,7 +106,10 @@ async function downloadResults(source, track, signal) {
     pages.add(signature)
     for (const row of rows) {
       if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
-      const identity = JSON.stringify([row.source ?? source.platform, row.id ?? row.songmid ?? row])
+      const identity = JSON.stringify([
+        row.source ?? source.platform,
+        recordingId(source, row) ?? row,
+      ])
       if (seen.has(identity)) continue
       seen.add(identity)
       results.push(row)
@@ -247,9 +250,13 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
     await rm(temp, { force: true })
   }
 }
-function versionInfo(src, row, quality) {
+function recordingId(src, row) {
   const id = row.songmid ?? row.id ?? row.hash ?? row.meta?.[src.platform]?.id
-  if (!['number', 'string'].includes(typeof id) || !String(id).trim()) return null
+  return ['number', 'string'].includes(typeof id) && String(id).trim() ? String(id) : null
+}
+function versionInfo(src, row, quality) {
+  const id = recordingId(src, row)
+  if (id === null) return null
   const key = createHash('sha256')
     .update(JSON.stringify([src.name, src.platform, String(id), quality]))
     .digest('hex')
