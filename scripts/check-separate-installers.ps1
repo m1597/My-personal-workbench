@@ -58,13 +58,19 @@ function EnsureAbsent($p) {
     throw "There is already a running $($p.Exe). Use a clean Windows test session."
   }
 }
-function InstallProduct($p) {
+function InstallProduct($p, [switch]$discoverMusic) {
   EnsureAbsent $p
   $dst=Join-Path $work $p.Name
+  $arguments="/S /currentuser /D="+$dst
+  if ($discoverMusic) {
+    if ($p.Name -ne 'Music' -or -not $owned.ContainsKey('Workbench')) {throw 'Install the isolated Workbench first.'}
+    $dst=Join-Path $owned['Workbench'] 'Music'
+    $arguments='/S /currentuser'
+  }
   $setup=Join-Path $repo "dist/installers/FitBay-$($p.Name)-Setup-$version-x64.exe"
-  $owned[$p.Name]=$true
+  $owned[$p.Name]=$dst
   # NSIS /D is the last argument and takes the entire unquoted remainder, including spaces.
-  $r=Start-Process -FilePath $setup -ArgumentList ("/S /currentuser /D="+$dst) -WindowStyle Hidden -PassThru -Wait
+  $r=Start-Process -FilePath $setup -ArgumentList $arguments -WindowStyle Hidden -PassThru -Wait
   if ($r.ExitCode -ne 0) {throw "$($p.Name) installer exited $($r.ExitCode)"}
   if (-not (SamePath (ReadRegistration $p) $dst)) {throw "Wrong installation registration for $($p.Name)."}
   $exe=Join-Path $dst $p.Exe
@@ -120,7 +126,7 @@ function CheckDirectoryConflict($workbench,$music) {
 }
 function RemoveProduct($p) {
   if (-not $owned.ContainsKey($p.Name)) {return}
-  $dst=Join-Path $work $p.Name
+  $dst=$owned[$p.Name]
   $entry="HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$($p.Guid)"
   $found = ReadRegistration $p
   if ($found -and -not (SamePath $found $dst)) {throw "Installation ownership changed; retaining $($p.Name)."}
@@ -151,7 +157,7 @@ function RemoveProduct($p) {
   $owned.Remove($p.Name)
   foreach ($peer in $products) {
     if (-not $owned.ContainsKey($peer.Name)) {continue}
-    $peerRoot=Join-Path $work $peer.Name
+    $peerRoot=$owned[$peer.Name]
     if (-not (SamePath (ReadRegistration $peer) $peerRoot) -or -not (Test-Path -LiteralPath (Join-Path $peerRoot $peer.Exe))) {
       throw "Uninstalling $($p.Name) removed the other installed product or its registration."
     }
@@ -184,7 +190,9 @@ try {
     InstallProduct $products[0]
     TestUI 'workbench'
     CheckDirectoryConflict $products[0] $products[1]
+    InstallProduct $products[1] -discoverMusic
     RemoveProduct $products[0]
+    RemoveProduct $products[1]
     InstallProduct $products[1]
     TestUI 'music'
     InstallProduct $products[0]

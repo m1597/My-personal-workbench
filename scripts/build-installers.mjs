@@ -15,6 +15,30 @@ const earlyDestination =
   /(Function \.onInit\s+Call setInstallSectionSpaceRequired\s+)SetOutPath \$INSTDIR/
 if (!earlyDestination.test(template)) throw Error('需要重新核对 NSIS 初始化和安装路径检查顺序')
 await writeFile(installer, template.replace(earlyDestination, '$1SetOutPath $TEMP'))
+// The assisted install-mode page recalculates INSTDIR after customInit. Supply the
+// Music default inside the per-user calculation, before its explicit /D override.
+const multiUser = path.join(templates, 'multiUser.nsh')
+const modes = await readFile(multiUser, 'utf8')
+// biome-ignore lint/suspicious/noTemplateCurlyInString: match the literal NSIS preprocessor expression.
+const defaultPath = 'StrCpy $INSTDIR "$0\\${APP_FILENAME}"'
+if (!modes.includes(defaultPath)) throw Error('需要重新核对 NSIS 当前用户默认安装路径')
+await writeFile(
+  multiUser,
+  modes.replace(defaultPath, defaultPath + '\n      !insertmacro FitBayDefaultDir'),
+)
+const assisted = path.join(templates, 'assistedInstaller.nsh')
+const pages = await readFile(assisted, 'utf8')
+const normalize = /Function instFilesPre\s+\$\{StrContains\}[\s\S]*?FunctionEnd/
+if (!normalize.test(pages)) throw Error('需要重新核对 NSIS 目录页校验时机')
+await writeFile(
+  assisted,
+  pages
+    .replace('!include StrContains.nsh', '')
+    .replace(
+      normalize,
+      'Function instFilesPre\n      Call FitBayValidateDestination\n    FunctionEnd',
+    ),
+)
 nsis.nsisTemplatesDir = templates
 
 // Compile owned paths into the uninstaller; there is no editable on-disk delete list.

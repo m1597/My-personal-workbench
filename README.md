@@ -60,9 +60,9 @@ SQLite 和媒体播放当前用于第一方Music组件。Git 只备份已提交�
 
 ## Windows 安装包
 
-`npm run dist:win` 在 `dist/installers/` 生成 Windows x64 安装器和 SHA-256 清单。双击 `FitBay-Setup-0.1.0-x64.exe`，默认只装工作台，勾选 Music 会依次打开两个安装向导。此入口内含完整安装包，可以单文件离线使用。
+`npm run dist:win` 在 `dist/installers/` 生成 Windows x64 安装器和 SHA-256 清单。双击 `FitBay-Setup-0.1.0-x64.exe`，选择一次 FitBay 安装目录，默认只装工作台。勾选 Music 后，工作台安装在所选目录，Music 自动安装在其中的 Music 子目录。此入口内含完整安装包，可以单文件离线使用。
 
-只用工作台可运行 `FitBay-Workbench-Setup-0.1.0-x64.exe`。只用曲库或以后补装 Music 可运行 `FitBay-Music-Setup-0.1.0-x64.exe`。首次安装时为两者分别选独立的空目录。两者共存时，可从「FitBay Music」直接启动，也可在工作台的「窗口 → Music」打开音乐组件，拖出标签可分离。
+只用工作台可运行 `FitBay-Workbench-Setup-0.1.0-x64.exe`。只用曲库或以后补装 Music 可运行 `FitBay-Music-Setup-0.1.0-x64.exe`。首次补装会从已安装工作台的登记位置预填 Music 子目录。两者共存时，可从「FitBay Music」直接启动，也可在工作台的「窗口 → Music」打开音乐组件，拖出标签可分离。
 
 Music 内部插件延期，本版保留已有用户资料。
 

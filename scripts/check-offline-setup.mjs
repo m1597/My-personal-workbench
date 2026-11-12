@@ -23,7 +23,7 @@ OutFile "${root}\\${id}.exe"
 Section
 FileOpen $0 "${log}" a
 FileSeek $0 0 END
-FileWrite $0 "${id}$\\n"
+FileWriteUTF16LE $0 "${id} $INSTDIR$\\n"
 FileClose $0
 ReadEnvStr $0 "FITBAY_TEST_FAIL"
 StrCmp $0 "${id}" 0 +2
@@ -39,6 +39,7 @@ SectionEnd`,
 }
 const selector = path.join(root, 'selector-test.exe')
 await buildOfflineSetup(path.join(root, 'Workbench.exe'), path.join(root, 'Music.exe'), selector)
+const installDir = path.join(root, '自选 FitBay 目录')
 for (const [args, fail, calls] of [
   [[], '', ['Workbench']],
   [['/WITHMUSIC'], '', ['Workbench', 'Music']],
@@ -46,12 +47,16 @@ for (const [args, fail, calls] of [
   [['/WITHMUSIC'], 'Music', ['Workbench', 'Music']],
 ]) {
   await writeFile(log, '')
-  const result = spawnSync(selector, ['/S', ...args], {
+  const result = spawnSync(selector, ['/S', ...args, `/D=${installDir}`], {
+    windowsVerbatimArguments: true,
     env: { ...process.env, FITBAY_TEST_FAIL: fail },
     timeout: 20000,
     windowsHide: true,
   })
   assert.equal(result.status, fail ? 7 : 0)
-  assert.deepEqual((await readFile(log, 'utf8')).trim().split(/\r?\n/), calls)
+  assert.deepEqual(
+    (await readFile(log, 'utf16le')).trim().split(/\r?\n/),
+    calls.map((id) => `${id} ${id === 'Music' ? path.join(installDir, 'Music') : installDir}`),
+  )
 }
 console.log('PASS 离线选择器默认仅工作台、附加 Music、两阶段错误传播和停止顺序。')

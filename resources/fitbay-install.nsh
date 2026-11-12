@@ -8,7 +8,19 @@
   !define FITBAY_SLOT "Workbench"
   !define FITBAY_PEER "Music"
 !endif
-!define FITBAY_REG "Software\FitBay\Installations"
+!define /ifndef FITBAY_REG "Software\FitBay\Installations"
+
+!macro FitBayDefaultDir
+  !ifndef BUILD_UNINSTALLER
+    !if "${FITBAY_SLOT}" == "Music"
+      SetRegView 64
+      ReadRegStr $0 HKCU "${FITBAY_REG}" "Workbench"
+      ${If} $0 != ""
+        StrCpy $INSTDIR "$0\Music"
+      ${EndIf}
+    !endif
+  !endif
+!macroend
 
 !macro customInstallMode
   StrCpy $isForceCurrentInstall 1
@@ -43,6 +55,11 @@
 
   Function FitBayValidateDestination
     System::Call 'kernel32::GetFullPathNameW(w "$INSTDIR\.", i ${NSIS_MAX_STRLEN}, w .r2, p 0) i.r0'
+    ${If} $0 == 0
+    ${OrIf} $0 >= ${NSIS_MAX_STRLEN}
+      Goto invalidPath
+    ${EndIf}
+    StrCpy $INSTDIR "$2"
     StrCpy $1 "$2"
     checkAncestor:
       System::Call 'kernel32::GetFileAttributesW(w r1) i.r0'
@@ -70,9 +87,24 @@
       !insertmacro rejectOverlap "$1"
     ${EndIf}
     ReadRegStr $1 HKCU "${FITBAY_REG}" "${FITBAY_PEER}"
+    StrCpy $4 ""
     ${If} $1 != ""
+      System::Call 'kernel32::GetFullPathNameW(w "$1\.", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'
+      ${If} $0 == 0
+      ${OrIf} $0 >= ${NSIS_MAX_STRLEN}
+        Goto invalidPath
+      ${EndIf}
+      !if "${FITBAY_SLOT}" == "Music"
+        StrCmp "$1\Music" "$2" peerChecked
+      !else
+        ${If} "$2\Music" == "$1"
+          StrCpy $4 "Music"
+          Goto peerChecked
+        ${EndIf}
+      !endif
       !insertmacro rejectOverlap "$1"
     ${EndIf}
+    peerChecked:
     ReadRegStr $1 HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
     ${If} $1 != ""
       System::Call 'kernel32::GetFullPathNameW(w "$1\.", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'
@@ -85,6 +117,7 @@
     ${DoWhile} $1 != ""
       ${If} $1 != "."
       ${AndIf} $1 != ".."
+      ${AndIf} $1 != $4
         FindClose $0
         Goto invalidPath
       ${EndIf}
@@ -94,7 +127,7 @@
     validPath:
       Return
     invalidPath:
-      MessageBox MB_OK|MB_ICONEXCLAMATION "请选择独立的空文件夹。安装目录不能与其他产品或用户数据重叠，也不能经过目录链接。" /SD IDOK
+      MessageBox MB_OK|MB_ICONEXCLAMATION "首次安装请选择空目录。工作台下只允许已登记的 Music 子目录，安装位置不能与用户数据重叠或经过目录链接。" /SD IDOK
       SetErrorLevel 2
       Quit
   FunctionEnd
@@ -114,15 +147,6 @@
     ${EndIf}
   !macroend
 
-  ; The assisted NSIS template normalizes the folder in instFilesPre after the directory page.
-  !macro customPageAfterChangeDir
-    !undef MUI_PAGE_CUSTOMFUNCTION_PRE
-    !define MUI_PAGE_CUSTOMFUNCTION_PRE FitBayInstFilesPre
-    Function FitBayInstFilesPre
-      Call instFilesPre
-      Call FitBayValidateDestination
-    FunctionEnd
-  !macroend
 !endif
 
 !macro customInstall
@@ -133,7 +157,11 @@
 !macro customUnInstall
   SetRegView 64
   ReadRegStr $0 HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
-  ${If} $0 == "$INSTDIR"
-    DeleteRegValue HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
+  ${If} $0 != ""
+    GetFullPathName $0 "$0\."
+    GetFullPathName $1 "$INSTDIR\."
+    ${If} $0 == $1
+      DeleteRegValue HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
+    ${EndIf}
   ${EndIf}
 !macroend
