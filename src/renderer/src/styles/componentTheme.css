@@ -23,6 +23,9 @@
   border-radius: var(--radius-9);
   box-shadow: var(--shadow-menu);
 }
+:where([data-music-view]) .component-popup.fui-Listbox {
+  background: color-mix(in srgb, var(--menu-surface) 40%, var(--solid-surface));
+}
 .component-popup [role="option"][aria-selected="true"] {
   background: var(--accent-soft);
 }
