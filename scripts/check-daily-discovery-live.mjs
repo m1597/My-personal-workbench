@@ -158,6 +158,34 @@ try {
   assert.equal(playback.paused, false)
   assert.equal(playback.protocol, 'fitbay-audio:')
   assert.equal(result.prefs.recommendDir, output)
+  async function visibleBatch() {
+    const latest = db.prepare('SELECT id FROM batches ORDER BY rowid DESC LIMIT 1').get().id
+    const candidates = db.prepare('SELECT title,artist FROM items WHERE batch=?').all(latest)
+    const titles = await page.locator('.music-list ol li strong').allTextContents()
+    assert.ok(titles.length <= 5)
+    const visible = titles.map((title) => {
+      const song = candidates.find((candidate) => candidate.title === title)
+      assert.ok(song, '页面混入旧批次')
+      assert.ok(!inLibrary(song, baseline), '页面混入已有曲目')
+      return song
+    })
+    return {
+      id: latest,
+      visible,
+      summary: await page.locator('.music-tools small, .music-empty p').first().innerText(),
+    }
+  }
+  const firstBatch = await visibleBatch()
+  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled({
+    timeout: 1200000,
+  })
+  const secondBatch = await visibleBatch()
+  assert.notEqual(firstBatch.id, secondBatch.id)
+  const overlap = secondBatch.visible.filter((song) => inLibrary(song, firstBatch.visible))
+  assert.deepEqual(overlap, [])
+  await page.screenshot({ path: path.join(root, '第二次推荐.png') })
+  console.log('两次真实生成', JSON.stringify({ firstBatch, secondBatch, overlap }))
   await app.close()
   app = await launch()
   const restarted = await app.firstWindow()
@@ -168,6 +196,9 @@ try {
     taste: taste.status,
     baseline: baseline.length,
     preference,
+    firstBatch,
+    secondBatch,
+    overlap,
     saved: saved.length,
     rows: rows.map(({ title, artist, status, error }) => ({
       title,

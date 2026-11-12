@@ -138,11 +138,18 @@ try {
   store.checkpoint(saved.id, 0.5)
   fs.writeFileSync(store.file(missed.id, '.mp3'), 'temporary')
   const feedback = store.feedbackIds()
+  // Simulate upgrading a database that predates cross-day song identities.
+  store.db.exec('DROP TABLE recommended_songs')
   restart()
   const later = store.snapshot()
   assert.ok(!later.batches.some((b) => b.id === oldDaily))
   assert.ok(!later.items.some((r) => [missed.id, saved.id].includes(r.id)))
   assert.throws(() => store.item(missed.id))
+  assert.ok(
+    store.db
+      .prepare('SELECT 1 FROM recommended_songs WHERE title=? AND artist=?')
+      .get('错过录音', '测试艺人'),
+  )
   assert.deepEqual(later.queue, [localId])
   assert.equal(later.current, localId)
   assert.equal(later.position, 0.5)

@@ -3,11 +3,18 @@ import { Button, Checkbox, Input, Tab, TabList } from '@fluentui/react-component
 import type { ModelInfo } from './ModelSettings'
 type Props = {
   models: ModelInfo
+  onGenerating(busy: boolean): void
   initialDraft: string
   refresh(): Promise<void>
   openSettings(): void
 }
-export function RecommendationComposer({ models, initialDraft, refresh, openSettings }: Props) {
+export function RecommendationComposer({
+  models,
+  initialDraft,
+  refresh,
+  openSettings,
+  onGenerating,
+}: Props) {
   const [mode, setMode] = useState<'artist' | 'style'>('style')
   const [artist, setArtist] = useState('')
   const [style, setStyle] = useState(initialDraft)
@@ -20,6 +27,7 @@ export function RecommendationComposer({ models, initialDraft, refresh, openSett
       openSettings()
       return
     }
+    onGenerating(true)
     setBusy(true)
     setError('')
     try {
@@ -31,7 +39,9 @@ export function RecommendationComposer({ models, initialDraft, refresh, openSett
       await refresh()
     } catch (e) {
       setError(String(e).split('Error: ').pop() || '推荐失败')
+      await refresh().catch(() => {})
     } finally {
+      onGenerating(false)
       setBusy(false)
     }
   }

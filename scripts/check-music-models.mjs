@@ -60,6 +60,7 @@ try {
   await page.getByLabel('今天想听什么').fill('雨天的爵士乐')
   await page.getByRole('button', { name: '生成推荐' }).click()
   await app.evaluate(() => {
+    globalThis.providerFixtures = true
     globalThis.modelCalls = []
     globalThis.fetch = async (url, req) => {
       const body = JSON.parse(req.body)
@@ -76,7 +77,11 @@ try {
             ? '取消歌曲'
             : globalThis.rightsTracks
               ? '权限歌曲'
-              : '样例歌曲') + i,
+              : globalThis.providerFixtures
+                ? id + '歌曲'
+                : globalThis.queueTracks
+                  ? '队列歌曲'
+                  : '样例歌曲') + i,
         artist: i === 0 ? 'AC/DC' : '测试艺人',
         reason: '适合雨天',
       }))
@@ -150,7 +155,11 @@ try {
     )
     assert.ok(JSON.stringify(call.body).includes('雨天的爵士乐'))
     assert.ok(!JSON.stringify(call.body).includes('summary'))
+    await expect(page.locator('.music-list ol li')).toHaveCount(5)
   }
+  await app.evaluate(() => {
+    globalThis.providerFixtures = false
+  })
   const state = await page.evaluate(() => window.music.state())
   assert.equal(state.items.filter((r) => r.daily).length, 20)
   assert.ok(!JSON.stringify(state).includes('fixture-'))
@@ -211,7 +220,7 @@ try {
       if (url.href !== 'https://1.1.1.1/daily.mp3') return original(url, opts, done)
       globalThis.transfers++
       const req = new EventEmitter()
-      req.end = () =>
+      const deliver = () =>
         done(
           Object.assign(fs.createReadStream(file), {
             statusCode: 200,
@@ -219,6 +228,10 @@ try {
             setTimeout() {},
           }),
         )
+      req.end = () => {
+        if (globalThis.holdTransfer === globalThis.transfers) globalThis.releaseTransfer = deliver
+        else deliver()
+      }
       return req
     }
   }, path.resolve('tests/fixtures/local-music/tone.mp3'))
@@ -238,8 +251,12 @@ try {
   await page.getByLabel('今天想听什么').fill('')
   await page.getByRole('button', { name: '生成推荐' }).click()
   await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(3)
+  await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled()
   assert.equal((await calls()).length, before + 2)
-  await expect(page.getByText('匹配录音：明确禁止永久保存', { exact: true })).toBeVisible()
+  const denied = await page.evaluate(async () =>
+    (await window.music.state()).items.find((item) => item.title === '样例歌曲3'),
+  )
+  assert.match(denied.downloadError, /明确禁止永久保存/)
   await page.getByRole('button', { name: '选择录音版本' }).click()
   await page.getByRole('button', { name: /样例歌曲2 · 测试艺人 · 现场/ }).click()
   await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4)
@@ -258,17 +275,7 @@ try {
   await page.getByRole('tab', { name: '按歌手推荐' }).click()
   await page.getByLabel('指定歌手').fill('AC/DC')
   await page.getByRole('button', { name: '生成推荐' }).click()
-  const collision = page
-    .locator('.music-list li')
-    .filter({ hasText: '已在曲库' })
-    .filter({ hasText: 'AC/DC' })
-  await expect(collision.first()).toBeVisible()
-  const artistBatch = await page.evaluate(async () => {
-    const state = await window.music.state()
-    return state.items.filter((r) => r.batch === state.batches[0].id)
-  })
-  assert.equal(artistBatch.length, 1)
-  assert.equal(artistBatch[0].diagnosis, 'duplicate')
+  await expect(page.getByText('本次找到 0 首新歌')).toBeVisible()
   assert.equal(await app.evaluate(() => globalThis.transfers), transfers)
   await page.evaluate(async (local) => {
     const p = await window.music.createPlaylist('不发送的私人歌单')
@@ -398,21 +405,71 @@ try {
         retry,
       ),
     )
-    .toEqual(['权限歌曲0', '权限歌曲1', '权限歌曲2', '权限歌曲4'])
-  // A resolver changing its track ID does not make an already-owned song a new discovery.
+    .toEqual([])
+  // A changed source recording ID cannot reintroduce an already recommended song.
   await fs.writeFile(
     source,
     restricted.replace('id:name,name,singer', 'id:name+"-second-take",name,singer'),
   )
   await page.evaluate(() => window.music.lxImport())
   const variant = await page.evaluate(() => window.music.generate('版本测试', 'style'))
-  const song = await page.evaluate(
-    async (b) =>
-      (await window.music.state()).items.find((r) => r.batch === b && r.title === '权限歌曲1'),
+  const repeat = await page.evaluate(
+    async (b) => (await window.music.state()).items.filter((r) => r.batch === b),
     variant,
   )
-  assert.equal(song.status, '已在曲库')
+  assert.deepEqual(repeat, [])
   assert.equal(await app.evaluate(() => globalThis.transfers), transfers + 1)
+  await fs.writeFile(
+    source,
+    `// @name 本批播放验收
+    lx.on('request',({action,info})=>{
+      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3';
+      const [name,singer]=info.keyword.split(' ');
+      return [{id:name,name,singer,allowPermanentSave:true}]
+    });
+    lx.send('inited',{sources:{wy:{allowPermanentSave:true,actions:['search','musicUrl'],qualitys:['320k']}}})`,
+  )
+  await page.evaluate(() => window.music.lxImport())
+  await app.evaluate(() => {
+    globalThis.rightsTracks = false
+    globalThis.queueTracks = true
+    globalThis.holdTransfer = globalThis.transfers + 5
+  })
+  await page.getByRole('tab', { name: '每日推荐' }).click()
+  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await expect(page.getByText('本次 5 首 · 已下载 4/5')).toBeVisible({
+    timeout: 30000,
+  })
+  const visibleTitles = await page.locator('.music-list ol li strong').allTextContents()
+  assert.deepEqual(
+    visibleTitles,
+    Array.from({ length: 5 }, (_, i) => '队列歌曲' + i),
+  )
+  const expectedQueue = await page.evaluate(async () => {
+    const state = await window.music.state()
+    return state.items
+      .filter((r) => r.batch === state.batches[0].id && r.localId)
+      .map((r) => r.localId)
+  })
+  assert.equal(expectedQueue.length, 4)
+  await page.getByRole('button', { name: '播放本次推荐' }).click()
+  await expect
+    .poll(() => page.evaluate(async () => (await window.music.state()).queue))
+    .toEqual(expectedQueue)
+  await expect
+    .poll(() => page.locator('audio').evaluate((el) => !el.paused && el.currentTime > 0))
+    .toBe(true)
+  await expect(page.getByRole('button', { name: '取消生成' })).toBeVisible()
+  await page.screenshot({
+    path: path.join(root, '四首播放中.png'),
+    style: ':root { background: var(--base) !important }',
+  })
+  await app.evaluate(() => globalThis.releaseTransfer())
+  await expect(page.getByText('本次 5 首 · 已下载 5/5')).toBeVisible()
+  assert.deepEqual(
+    await page.evaluate(async () => (await window.music.state()).queue),
+    expectedQueue,
+  )
   await fs.writeFile(
     source,
     `// @name 可取消源
@@ -456,7 +513,7 @@ try {
   assert.ok((await p.evaluate(() => window.music.state())).localTracks.some((t) => t.notInterested))
   assert.equal(
     (await p.evaluate(() => window.music.state())).playlists.find((s) => s.system).tracks.length,
-    5,
+    10,
   )
 } finally {
   await reopened.close()

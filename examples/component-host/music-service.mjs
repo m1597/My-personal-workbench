@@ -425,10 +425,19 @@ export function musicService(
       const profile = await taste.refresh()
       signal.throwIfAborted()
       const seen = []
+      const history = store.db
+        .prepare('SELECT title,artist FROM recommended_songs ORDER BY rowid')
+        .all()
       let batch
       let slots = 5
       let catalogChoices = []
       for (let round = 0; round < 2 && slots > 0; round++) {
+        const excluded = [...(profile ? history.slice(-20) : []), ...seen].map(
+          ({ title, artist }) => ({
+            title,
+            artist,
+          }),
+        )
         const rows = await requestMusicModel(
           store,
           safeStorage,
@@ -439,14 +448,7 @@ export function musicService(
             similar: mode === 'artist' && similar,
             ...(profile ? { profile } : {}),
             ...(catalogChoices.length ? { catalogChoices } : {}),
-            ...(seen.length
-              ? {
-                  excluded: seen.map(({ title, artist }) => ({
-                    title,
-                    artist,
-                  })),
-                }
-              : {}),
+            ...(excluded.length ? { excluded } : {}),
           },
           signal,
         )
@@ -467,28 +469,28 @@ export function musicService(
             continue
           if (inLibrary(row, seen)) continue
           seen.push(row)
-          accepted.push({ ...row, collision: inLibrary(row, local) })
-          if (accepted.filter((r) => !r.collision).length >= slots) break
+          if (inLibrary(row, local) || inLibrary(row, history)) continue
+          accepted.push(row)
+          if (accepted.length >= slots) break
         }
-        if (!accepted.length && batch) break
-        if (!accepted.length && !round) {
-          if (mode === 'artist' && !similar && preference.trim())
-            throw Error('未找到该歌手的推荐歌曲，请检查歌手名或开启相似歌手')
-          throw Error('模型没有提供可用歌曲')
+        if (accepted.length) {
+          batch = store.saveSuggestions(label, accepted, '待处理', batch)
+          await lx.batch(batch, signal)
         }
-        batch = store.saveSuggestions(label, accepted, '待处理', batch)
-        await lx.batch(batch, signal)
         signal.throwIfAborted()
-        const retained = store.db
-          .prepare(
-            "SELECT count(*) AS n FROM items WHERE batch=? AND status IN ('已入库','待选录音')",
-          )
-          .get(batch)
-        slots = 5 - retained.n
-        if (!store.get('lx-source') || !getMusicPreferences(store).recommendDir) break
-        if (!round && slots > 0) catalogChoices = await lx.discoveries(seen, local, signal)
+        const hasSource = !!store.get('lx-source')
+        if (batch) {
+          const retained = store.db
+            .prepare(
+              "SELECT count(*) AS n FROM items WHERE batch=? AND (?=0 OR status IN ('已入库','待选录音'))",
+            )
+            .get(batch, Number(hasSource))
+          slots = 5 - retained.n
+        }
+        if (!round && slots > 0 && hasSource)
+          catalogChoices = await lx.discoveries(seen, [...local, ...history], signal)
       }
-      return batch
+      return batch ?? store.saveSuggestions(label, [], '待处理')
     })
   })
   bind('stopGeneration', () => pending?.abort())

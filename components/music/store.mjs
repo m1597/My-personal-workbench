@@ -60,6 +60,9 @@ export class MusicStore {
     for (const { id } of this.db.prepare('SELECT id FROM items').all())
       this.removeCache(id, '.part')
     this.library = new LocalLibrary(this)
+    this.db.exec(`CREATE TABLE IF NOT EXISTS recommended_songs(title TEXT,artist TEXT,PRIMARY KEY(title,artist));
+      INSERT OR IGNORE INTO recommended_songs SELECT i.title,i.artist FROM items i
+      JOIN recommended_items r ON r.item=i.id WHERE i.status != '已在曲库'`)
     this.migrateFeedbackDigests()
     this.db.exec(
       "UPDATE items SET status='待重试' WHERE id IN (SELECT item FROM recommended_items) AND status IN ('正在匹配','正在保存','待处理','待选录音')",
@@ -392,7 +395,11 @@ export class MusicStore {
             row.collision ? '已在曲库' : status,
             Date.now(),
           )
-        if (status === '待处理')
+        if (status === '待处理') {
+          if (!row.collision)
+            this.db
+              .prepare('INSERT OR IGNORE INTO recommended_songs VALUES(?,?)')
+              .run(row.title, row.artist)
           this.db
             .prepare('INSERT INTO recommended_items(item,error,diagnosis) VALUES(?,?,?)')
             .run(
@@ -400,6 +407,7 @@ export class MusicStore {
               row.collision ? '本地曲库已有这首歌，本次未重复下载' : '',
               row.collision ? 'duplicate' : '',
             )
+        }
       }
       this.db.exec('COMMIT')
     } catch (e) {

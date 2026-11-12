@@ -54,7 +54,7 @@ body {
 }
 .music-header > button,
 .music-section-head .fui-Dropdown,
-.music-tools button:last-child {
+.music-tools button:last-child:not(.music-play-batch) {
   margin-left: auto;
 }
 .music-mark,

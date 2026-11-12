@@ -311,7 +311,9 @@ function Music() {
       window.removeEventListener('focus', rescan)
     }
   }, [tab])
+  const [generating, setGenerating] = useState(false)
   const working =
+    generating ||
     !!state?.importJob.running ||
     state?.items.some((i) =>
       ['等候', '下载中', '待处理', '正在匹配', '正在保存'].includes(i.status),
@@ -348,7 +350,19 @@ function Music() {
       window.removeEventListener('focus', update)
     }
   }, [tab])
-  const rows = state?.items ?? []
+  const batchRows = (state?.items ?? []).filter(
+    (row) => row.batch === state?.batches[0]?.id && row.status !== '已在曲库',
+  )
+  const priority = (row: Item) =>
+    row.daily && row.status === '已入库' && row.localAvailable
+      ? 0
+      : row.status === '待选录音'
+        ? 1
+        : 2
+  const rows = batchRows.sort((a, b) => priority(a) - priority(b)).slice(0, 5)
+  const downloaded = [
+    ...new Set(rows.flatMap((r) => (priority(r) === 0 && r.localId ? [r.localId] : []))),
+  ]
   async function forBatches(items: Item[], action: (batch: string) => Promise<unknown>) {
     for (const id of new Set(items.map((item) => item.batch))) await action(id)
   }
@@ -794,27 +808,33 @@ function Music() {
                 models={state.models}
                 openSettings={() => openSettings('model')}
                 initialDraft={state.draft}
+                onGenerating={setGenerating}
                 refresh={refresh}
               />
             )}
             <section className="music-list">
               <div className="music-section-head">
-                <h2>今日推荐</h2>
+                <h2>本次推荐</h2>
               </div>
               {rows.length > 0 ? (
                 <>
                   <div className="music-tools">
                     <small>
-                      {rows.length} 首候选 · 已入库{' '}
-                      {
-                        new Set(
-                          rows
-                            .filter((r) => r.status === '已入库' && r.localId && r.localAvailable)
-                            .map((r) => r.localId),
-                        ).size
-                      }{' '}
-                      首
+                      本次 {rows.length} 首 · 已下载 {downloaded.length}/{rows.length}
                     </small>
+                    {rows.some((r) => r.daily) && (
+                      <Button
+                        className="music-play-batch"
+                        size="small"
+                        disabled={!downloaded.length}
+                        onClick={() => {
+                          setShuffled(null)
+                          void act(() => play(downloaded[0], downloaded))
+                        }}
+                      >
+                        播放本次推荐
+                      </Button>
+                    )}
                     {rows.some((r) => r.status === '待匹配') && (
                       <Button
                         size="small"
@@ -1016,7 +1036,9 @@ function Music() {
               ) : (
                 <div className="music-empty">
                   <ListMusic size={24} />
-                  <p>{state?.batches.length ? '今天没有可显示的推荐' : '今天的推荐会显示在这里'}</p>
+                  <p>
+                    {state?.batches.length ? '本次找到 0 首新歌' : '生成后，这里会显示本次推荐'}
+                  </p>
                 </div>
               )}
             </section>
