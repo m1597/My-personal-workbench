@@ -32,6 +32,7 @@ const app = await electron.launch({
 })
 try {
   const page = await app.firstWindow()
+  await page.getByRole('button', { name: '跳过', exact: true }).click()
   expect(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio'))).toBe(true)
   await page.getByRole('button', { name: '播放A', exact: true }).click()
   const pid = await app.evaluate(() => process.pid)

@@ -167,11 +167,15 @@ export function MusicSettings({
   plugins,
   category,
   selectCategory,
+  script,
+  guideTarget,
   prefs,
   models,
   job,
   refresh,
 }: {
+  script: string
+  guideTarget?: string
   plugins: ReactNode
   category: SettingsCategory
   selectCategory: (category: SettingsCategory) => void
@@ -217,6 +221,10 @@ export function MusicSettings({
       clearInterval(timer)
     }
   }, [category, taste?.consented])
+  function editModel(open: boolean) {
+    if (guideTarget === 'model') selectCategory('model')
+    setEditing(open)
+  }
   async function update(action: () => Promise<unknown>, message = '已保存') {
     setBusy(true)
     setFeedback(undefined)
@@ -304,7 +312,9 @@ export function MusicSettings({
             )}
           </section>
         )}
-        {category === 'sources' && <MusicSourcesSettings />}
+        {category === 'sources' && (
+          <MusicSourcesSettings script={script} showConnection={guideTarget === 'mcp'} />
+        )}
         {category === 'downloads' && (
           <section>
             <h2>下载</h2>
@@ -353,14 +363,18 @@ export function MusicSettings({
             <h2>模型与推荐</h2>
             <div className="settings-buttons">
               <span>{models.providers.find((p) => p.id === models.active)?.label}</span>
-              <Button size="small" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+              <Button
+                size="small"
+                aria-expanded={editing || guideTarget === 'model'}
+                onClick={() => editModel(!(editing || guideTarget === 'model'))}
+              >
                 模型设置
               </Button>
             </div>
-            {editing && (
+            {(editing || guideTarget === 'model') && (
               <ModelSettings
                 info={models}
-                close={() => setEditing(false)}
+                close={() => editModel(false)}
                 save={async (...args) => {
                   await window.music.configureModel(...args)
                   await refresh()

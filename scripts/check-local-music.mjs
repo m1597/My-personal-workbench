@@ -88,6 +88,7 @@ const duplicate = path.join(songs, 'other.mp3')
 let app = await launch()
 try {
   const page = await app.firstWindow()
+  await page.getByRole('button', { name: '跳过', exact: true }).click()
   await expect(page.getByRole('tab', { name: '本地曲库' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('button', { name: '播放潮汐', exact: true })).toBeVisible()
   await choose(app, [songs])

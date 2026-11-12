@@ -29,6 +29,7 @@ let app = await launch()
 try {
   assert.ok(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio')))
   let page = await app.firstWindow()
+  await page.getByRole('button', { name: '跳过', exact: true }).click()
   const resize = (width) =>
     app.evaluate(
       ({ BaseWindow }, width) =>

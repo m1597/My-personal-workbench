@@ -40,6 +40,7 @@ export function ModelSettings({
         inlinePopup
         listbox={{ className: 'component-popup' }}
         id="model-provider"
+        data-guide-anchor="model"
         value={chosen.label}
         selectedOptions={[id]}
         onOptionSelect={(_, data) => {

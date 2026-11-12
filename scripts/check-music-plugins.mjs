@@ -41,11 +41,46 @@ try {
   const guide = () => page.getByRole('complementary', { name: 'Music 使用引导' })
   await expect(guide()).toBeVisible()
   await page.evaluate(() => delete document.documentElement.dataset.backdrop)
-  await guide().getByText('连接方法').click()
-  await expect(guide().locator('code')).toContainText('music-source-mcp.mjs')
-  await page.screenshot({ path: path.join(root, 'guide.png') })
-  await guide().getByText('查看音乐源').click()
-  await expect(page.getByRole('button', { name: '音源目录' })).toBeVisible()
+  const steps = ['sources', 'mcp', 'model', 'recommend', 'plugin']
+  const next = () => guide().getByRole('button', { name: '下一步' }).click()
+  async function checkStep(id, size) {
+    const target = page.locator('[data-guide-active="true"]')
+    await expect(target).toHaveAttribute('data-guide-anchor', id)
+    await expect(target).toBeInViewport({ ratio: 0.99 })
+    await expect(guide()).toBeInViewport({ ratio: 0.99 })
+    await expect
+      .poll(async () => {
+        const a = await target.boundingBox()
+        const b = await guide().boundingBox()
+        return (
+          !!a &&
+          !!b &&
+          (a.y + a.height <= b.y ||
+            b.y + b.height <= a.y ||
+            a.x + a.width <= b.x ||
+            b.x + b.width <= a.x)
+        )
+      })
+      .toBe(true)
+    await expect(
+      page.getByRole('tab', { name: id === 'recommend' ? '每日推荐' : '设置', exact: true }),
+    ).toHaveAttribute('aria-selected', 'true')
+    if (id === 'mcp') {
+      const command = page.locator('.music-mcp-connection code')
+      await expect(command).toContainText('music-source-mcp.mjs')
+      await expect(command).toBeInViewport({ ratio: 0.99 })
+    }
+    await page.screenshot({
+      animations: 'disabled',
+      path: path.join(root, 'guide-' + size + '-' + id + '.png'),
+    })
+  }
+  for (const [i, id] of steps.entries()) {
+    if (i) await next()
+    await checkStep(id, 'regular')
+  }
+  await guide().getByRole('button', { name: '完成' }).click()
+  await expect(page.getByRole('tab', { name: '本地曲库' })).toHaveAttribute('aria-selected', 'true')
   const settings = async () => {
     await page.getByRole('tab', { name: '设置', exact: true }).click()
     await selectMusicSettings(page, '插件')
@@ -58,19 +93,18 @@ try {
   assert.ok(catalog.every((x) => !x.installed && x.bytes > 0))
   await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '重新查看使用引导' }).click()
-  await guide().getByText('下一步').click()
-  await guide().getByText('配置模型 API').click()
-  await expect(page.getByRole('heading', { name: '模型与推荐' })).toBeVisible()
-  await settings()
-  await page.getByRole('button', { name: '重新查看使用引导' }).click()
-  await guide().getByText('下一步').click()
-  await guide().getByText('打开每日推荐').click()
-  await expect(page.getByRole('tab', { name: '每日推荐' })).toHaveAttribute('aria-selected', 'true')
-  await settings()
-  await page.getByRole('button', { name: '重新查看使用引导' }).click()
-  await guide().getByText('下一步').click()
-  await guide().getByText('下一步').click()
-  await guide().getByText('浏览插件').click()
+  await app.evaluate(({ BaseWindow }) => {
+    const window = BaseWindow.getAllWindows()[0]
+    window.setMinimumSize(360, 320)
+    window.setContentSize(420, 480)
+  })
+  await next()
+  await guide().getByRole('button', { name: '上一步' }).click()
+  for (const [i, id] of steps.entries()) {
+    if (i) await next()
+    await checkStep(id, 'small')
+  }
+  await guide().getByRole('button', { name: '完成' }).click()
   await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setSize(940, 650))
   await expect(page.getByRole('navigation', { name: '设置分类' })).toBeVisible()
   await page.screenshot({ path: path.join(root, 'catalog.png') })
@@ -114,7 +148,7 @@ try {
   await guide().getByText('跳过').click()
   await expect(guide()).toHaveCount(0)
   console.log(
-    'PASS 三卡首次引导、真实跳转、重开与跳过；默认未安装、坏包拒绝、按需安装、跨重启与卸载禁用。',
+    'PASS 五步随控件引导、真实跳转、双尺寸避让、重开与跳过；默认未安装、坏包拒绝、按需安装、跨重启与卸载禁用。',
     root,
   )
 } finally {

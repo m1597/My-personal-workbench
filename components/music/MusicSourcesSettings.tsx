@@ -19,7 +19,13 @@ export type SourceInventory = {
   active: string | null
 }
 
-export function MusicSourcesSettings() {
+export function MusicSourcesSettings({
+  script,
+  showConnection,
+}: {
+  script: string
+  showConnection: boolean
+}) {
   const host = window.music
   const [data, setData] = useState<SourceInventory>()
   const [online, setOnline] = useState(false)
@@ -134,6 +140,7 @@ export function MusicSourcesSettings() {
         </Button>
         <Button
           size="small"
+          data-guide-anchor="sources"
           aria-expanded={catalogOpen}
           onClick={() => setCatalogOpen(!catalogOpen)}
         >
@@ -219,6 +226,10 @@ export function MusicSourcesSettings() {
           </div>
         </fieldset>
       )}
+      <details className="music-mcp-connection" open={showConnection}>
+        <summary data-guide-anchor="mcp">MCP 连接方法</summary>
+        <code>node "{script}"</code>
+      </details>
       {status && <span role="status">{status}</span>}
     </section>
   )

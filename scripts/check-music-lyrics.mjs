@@ -57,6 +57,7 @@ const app = await electron.launch({
 })
 try {
   const page = await app.firstWindow()
+  await page.getByRole('button', { name: '跳过', exact: true }).click()
   const button = (name) => page.getByRole('button', { name, exact: true })
   await expect(button('桌面歌词')).toHaveAttribute('aria-pressed', 'false')
   for (const title of ['A', 'B']) {

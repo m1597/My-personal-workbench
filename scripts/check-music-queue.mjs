@@ -27,6 +27,7 @@ const app = await electron.launch({
 })
 try {
   const page = await app.firstWindow()
+  await page.getByRole('button', { name: '跳过', exact: true }).click()
   const button = (name) => page.getByRole('button', { name, exact: true })
   const enqueue = async (title, action) => {
     await page.locator('.library-name strong', { hasText: title }).click({ button: 'right' })

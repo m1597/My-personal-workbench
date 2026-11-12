@@ -57,6 +57,7 @@ export function RecommendationComposer({
       </TabList>
       <div className="music-input">
         <Input
+          data-guide-anchor="recommend"
           aria-label={mode === 'artist' ? '指定歌手' : '今天想听什么'}
           placeholder={mode === 'artist' ? '指定歌手（可选）' : '指定风格（可选）'}
           maxLength={1000}

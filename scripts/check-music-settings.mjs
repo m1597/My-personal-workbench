@@ -49,6 +49,7 @@ try {
     return app.windows().find((p) => p.url().includes('/music/index.html'))
   }
   let player = await open()
+  await player.getByRole('button', { name: '跳过', exact: true }).click()
   await player.waitForSelector('.music-shell', { timeout: 5000 })
   const loaded = await player.evaluate(() => window.music.state())
   expect(loaded.localTracks.map((row) => row.title)).toEqual(['A', 'B', 'C'])

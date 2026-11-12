@@ -1,6 +1,6 @@
 import { TrackMenu } from './TrackMenu'
 import { PluginPage, PluginSettings, type PluginRow } from './MusicPlugins'
-import { MusicGuide } from './MusicGuide'
+import { guideSteps, MusicGuide } from './MusicGuide'
 import { observeListening } from './listening'
 import type { SourceInventory } from './MusicSourcesSettings'
 import {
@@ -184,7 +184,23 @@ function shuffleQueue(ids: string[], first?: string) {
 function Music() {
   const [plugins, setPlugins] = useState<PluginRow[]>([])
   const [pluginId, setPluginId] = useState('')
-  const [guide, setGuide] = useState(false)
+  const [guide, setGuide] = useState<number | null>(null)
+  const guideOrigin = useRef({ tab: 'library', category: 'library' as SettingsCategory })
+  function visitGuide(step: number) {
+    const page = guideSteps[step].page
+    if (page === 'audition') setTab(page)
+    else {
+      setSettingsCategory(page)
+      setTab('settings')
+    }
+    setGuide(step)
+  }
+  function closeGuide() {
+    setGuide(null)
+    setSettingsCategory(guideOrigin.current.category)
+    setTab(guideOrigin.current.tab)
+  }
+  const startFirstGuide = useEffectEvent(() => visitGuide(0))
   const [script, setScript] = useState('')
   const reloadPlugins = async () => setPlugins(await window.musicPlugins.list())
   useEffect(() => {
@@ -201,7 +217,7 @@ function Music() {
         if (!alive) return
         setScript(info.script)
         if (!info.seen) {
-          setGuide(true)
+          startFirstGuide()
           await window.musicPlugins.markGuide()
         }
       })
@@ -595,7 +611,7 @@ function Music() {
         aria-label="音乐页面"
         selectedValue={tab}
         onTabSelect={(_, data) => {
-          setGuide(false)
+          setGuide(null)
           setTab(String(data.value))
         }}
       >
@@ -605,12 +621,17 @@ function Music() {
         <Tab value="settings">设置</Tab>
         {plugins.some((row) => row.installed) && <Tab value="plugins">扩展</Tab>}
       </TabList>
-      {guide && (
+      {guide !== null && state && (guideSteps[guide].page !== 'plugins' || plugins.length > 0) && (
         <MusicGuide
-          script={script}
-          close={() => setGuide(false)}
-          go={openSettings}
-          recommend={() => setTab('audition')}
+          key={
+            guideSteps[guide].target === 'plugin'
+              ? (plugins.find((row) => !row.installed)?.id ?? 'installed')
+              : guide
+          }
+          step={guide}
+          close={closeGuide}
+          change={visitGuide}
+          allInstalled={plugins.every((row) => row.installed)}
         />
       )}
       <main key={tab} className="music-scroll">
@@ -675,15 +696,24 @@ function Music() {
                 <PluginSettings
                   rows={plugins}
                   reload={reloadPlugins}
-                  guide={() => setGuide(true)}
+                  guide={() => {
+                    guideOrigin.current = { tab, category: settingsCategory }
+                    visitGuide(0)
+                  }}
                   open={(id) => {
+                    setGuide(null)
                     setPluginId(id)
                     setTab('plugins')
                   }}
                 />
               }
               category={settingsCategory}
-              selectCategory={setSettingsCategory}
+              selectCategory={(category) => {
+                setGuide(null)
+                setSettingsCategory(category)
+              }}
+              script={script}
+              guideTarget={guide === null ? undefined : guideSteps[guide].target}
               models={state.models}
               prefs={state.prefs}
               job={state.importJob}

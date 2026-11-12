@@ -61,6 +61,7 @@ const app = await electron.launch({
 })
 try {
   const page = await app.firstWindow()
+  await page.getByRole('button', { name: '跳过', exact: true }).click()
   await app.evaluate(({ BaseWindow }) =>
     BaseWindow.getAllWindows()
       .find((w) => w.getTitle() === 'Music')

@@ -90,7 +90,9 @@ export function PluginSettings({
           <div className="settings-buttons">
             {row.installed ? (
               <>
-                <Button onClick={() => open(row.id)}>打开</Button>
+                <Button data-guide-anchor="installed-plugin" onClick={() => open(row.id)}>
+                  打开
+                </Button>
                 <Button disabled={!!busy} onClick={() => void run(row, 'remove')}>
                   卸载
                 </Button>
@@ -98,6 +100,7 @@ export function PluginSettings({
             ) : (
               <>
                 <Button
+                  data-guide-anchor="plugin"
                   appearance="primary"
                   disabled={!!busy}
                   onClick={() => void run(row, 'file')}

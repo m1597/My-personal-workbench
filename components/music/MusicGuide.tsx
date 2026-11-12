@@ -1,86 +1,114 @@
-import { Button } from '@fluentui/react-components'
-import { useState } from 'react'
-import type { SettingsCategory } from './MusicSettings'
+import { Button, Popover, PopoverSurface } from '@fluentui/react-components'
+import { useLayoutEffect, useState } from 'react'
+
+export const guideSteps = [
+  {
+    page: 'sources',
+    target: 'sources',
+    title: '导入音乐源',
+    text: '从目录选择音源，也可以导入本地文件或链接。',
+  },
+  {
+    page: 'sources',
+    target: 'mcp',
+    title: '连接你的 Agent',
+    text: '在 MCP 客户端添加 stdio 服务，使用「MCP 连接方法」中的启动命令。连接后可查看和切换音源。',
+  },
+  {
+    page: 'model',
+    target: 'model',
+    title: '设置模型 API',
+    text: '选择服务商，填写模型 ID 和 API Key 后保存。也可以选择离线示例，继续体验推荐。',
+  },
+  {
+    page: 'audition',
+    target: 'recommend',
+    title: '写下今天想听什么',
+    text: '例如「适合雨天散步的民谣」。输入偏好后，点生成按钮查看推荐。',
+  },
+  {
+    page: 'plugins',
+    target: 'plugin',
+    title: '从本地安装插件',
+    text: '在需要的插件下选择对应的 .fitbayplugin 文件。安装后可从「扩展」打开。',
+  },
+] as const
+
 export function MusicGuide({
-  script,
+  step,
+  change,
   close,
-  go,
-  recommend,
+  allInstalled,
 }: {
-  script: string
+  step: number
+  change: (next: number) => void
   close: () => void
-  go: (next: SettingsCategory) => void
-  recommend: () => void
+  allInstalled: boolean
 }) {
-  const [step, setStep] = useState(0)
-  const [connection, setConnection] = useState(false)
-  const titles = ['让 Agent 管理音乐源', '按你的听歌需求推荐', '按需安装音乐插件']
-  function visit(action: () => void) {
-    close()
-    action()
-  }
+  const item = guideSteps[step]
+  const name = item.target === 'plugin' && allInstalled ? 'installed-plugin' : item.target
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const target = document.querySelector<HTMLElement>(`[data-guide-anchor="${name}"]`)
+    if (!target) return
+    target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
+    target.dataset.guideActive = 'true'
+    setAnchor(target)
+    return () => {
+      delete target.dataset.guideActive
+    }
+  }, [name])
+  if (!anchor) return null
+  const last = step === guideSteps.length - 1
   return (
-    <aside className="music-guide" aria-label="Music 使用引导">
-      <strong>{titles[step]}</strong>
-      <p>
-        {
-          [
-            '打开 Music 后，电脑上的 Agent 可通过 MCP 查看已导入音源、检查能力和切换当前源。',
-            '例如「找几首适合雨天散步的民谣」。先配置自己的模型 API 密钥，再到每日推荐生成歌单。',
-            '波形试听、标签与封面整理、智能歌单可独立安装。安装后从「扩展」打开。',
-          ][step]
-        }
-      </p>
-      {step === 0 && connection && (
-        <div>
-          在本机 MCP 客户端添加 stdio 服务，使用以下命令启动。
-          <code>node "{script}"</code>
-        </div>
-      )}
-      <div className="guide-actions">
-        {step === 0 && (
-          <>
-            <Button size="small" onClick={() => visit(() => go('sources'))}>
-              查看音乐源
-            </Button>
-            <Button size="small" onClick={() => setConnection(!connection)}>
-              连接方法
-            </Button>
-          </>
-        )}
-        {step === 1 && (
-          <>
-            <Button size="small" onClick={() => visit(() => go('model'))}>
-              配置模型 API
-            </Button>
-            <Button size="small" onClick={() => visit(recommend)}>
-              打开每日推荐
-            </Button>
-          </>
-        )}
-        {step === 2 && (
-          <Button size="small" onClick={() => visit(() => go('plugins'))}>
-            浏览插件
-          </Button>
-        )}
-        {step > 0 && (
-          <Button size="small" appearance="subtle" onClick={() => setStep(step - 1)}>
-            上一步
-          </Button>
-        )}
-        <Button
-          size="small"
-          appearance="primary"
-          onClick={() => (step === 2 ? close() : setStep(step + 1))}
-        >
-          {step === 2 ? '完成' : '下一步'}
-        </Button>
-        {step < 2 && (
+    <Popover
+      open
+      inline
+      positioning={{
+        target: anchor,
+        position: name === 'model' || name === 'mcp' ? 'above' : 'below',
+        align: 'start',
+        strategy: 'fixed',
+        offset: 10,
+        overflowBoundaryPadding: 10,
+        fallbackPositions: ['above-start', 'after', 'before'],
+      }}
+    >
+      <PopoverSurface
+        className="music-guide"
+        role="complementary"
+        aria-label="Music 使用引导"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') close()
+        }}
+      >
+        <header>
+          <strong>{item.title}</strong>
+          <small>
+            {step + 1} / {guideSteps.length}
+          </small>
+        </header>
+        <p>
+          {name === 'installed-plugin' ? '所有插件都已安装。点「打开」进入对应的扩展。' : item.text}
+        </p>
+        <div className="guide-actions">
           <Button size="small" appearance="subtle" onClick={close}>
             跳过
           </Button>
-        )}
-      </div>
-    </aside>
+          {step > 0 && (
+            <Button size="small" onClick={() => change(step - 1)}>
+              上一步
+            </Button>
+          )}
+          <Button
+            size="small"
+            appearance="primary"
+            onClick={() => (last ? close() : change(step + 1))}
+          >
+            {last ? '完成' : '下一步'}
+          </Button>
+        </div>
+      </PopoverSurface>
+    </Popover>
   )
 }
