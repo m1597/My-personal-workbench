@@ -1,6 +1,7 @@
 # workspace-components Specification
 
 ## Purpose
+
 日常工作区只展示可运行组件，恢复布局时清理退役占位标签并保留可用组件。已有用户仍可在原工作台中恢复 Music 的排列和活动标签。
 
 ## Requirements

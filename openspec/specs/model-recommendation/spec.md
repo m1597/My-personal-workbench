@@ -1,6 +1,7 @@
 # model-recommendation Specification
 
 ## Purpose
+
 音乐组件提供可选择的模型服务，独立保护各服务的密钥并校验返回的曲单。遇到凭据、网络或数据错误时保留之前生成的推荐记录。
 
 ## Requirements
