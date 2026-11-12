@@ -46,6 +46,12 @@ const batch = store.saveSuggestions(
   '待处理',
 )
 const rows = store.db.prepare('SELECT id,title FROM items WHERE batch=? ORDER BY rowid').all(batch)
+const suggestion = { title: '允许保存', artist: '艺人', reason: '旧版摘要身份' }
+const oldBatch = store.saveSuggestions('旧在线推荐', [suggestion], '模型推荐')
+const oldItem = store.db.prepare('SELECT id FROM items WHERE batch=?').get(oldBatch).id
+const oldAudio = path.join(root, 'old-audio.part')
+await fs.copyFile(path.resolve('tests/fixtures/local-music/tone.mp3'), oldAudio)
+store.cacheOnline(oldItem, oldAudio, { ...suggestion, album: '旧版', duration: 4 }, '.mp3')
 store.db.close()
 const db = new DatabaseSync(path.join(musicRoot, 'music.sqlite'))
 const app = await electron.launch({
@@ -111,7 +117,7 @@ try {
           ])
         } else if (url.href === 'https://1.1.1.1/audio') {
           globalThis.downloadCalls++
-          response = fs.createReadStream(file)
+          response = fs.createReadStream(globalThis.testAudioFile ?? file)
         } else throw Error('未预期的网络请求')
         const req = new EventEmitter()
         req.end = () =>
@@ -209,6 +215,86 @@ try {
   assert.equal(readSource().permissionsVersion, undefined)
   assert.equal((await state()).items.find((r) => r.id === allowed.id).status, '待重试')
   assert.equal(await app.evaluate(() => globalThis.downloadCalls), beforeLegacy + 1)
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, sourceFile)
+  const pagedSource = `// @name 分页夹具
+    lx.on('request',({action,info})=>{
+      if(action==='musicUrl') return 'https://1.1.1.1/audio'
+      if(info.page!==1 || info.limit!==20 || info.offset!==0) throw Error('推荐扩大了搜索范围')
+      const [name,singer]=info.keyword.split(' ')
+      const row={id:name,name,singer}
+      if(name==='禁止落盘')return [{...row,singer:'同名歌的另一艺人',allowPermanentSave:false}]
+      if(name==='允许保存')return {items:[row],total:30,hasMore:true}
+      if(name==='试听片段')return {list:[{...row,trial:true}],hasMore:true}
+      if(name==='明令禁止')return {songs:[{...row,allowPermanentSave:false}],total:11}
+      if(name==='无匹配')return {items:[...Array.from({length:20},(_,i)=>({...row,id:i,name:'其他曲目'})),row],total:21}
+      return []
+    })
+    lx.send('inited',{sources:{wy:{actions:['musicUrl','search'],qualitys:['320k'],allowPermanentSave:true}}})`
+  await fs.writeFile(sourceFile, pagedSource)
+  await page.evaluate(() => window.music.lxImport())
+  for (const name of ['禁止落盘', '允许保存', '试听片段', '明令禁止', '无匹配'])
+    await run(rows.find((r) => r.title === name).id)
+  const cases = (await state()).items.filter((r) => r.batch === batch)
+  assert.deepEqual(
+    Object.fromEntries(
+      cases
+        .filter((r) => ['禁止落盘', '允许保存', '试听片段', '明令禁止', '无匹配'].includes(r.title))
+        .map((r) => [r.title, r.diagnosis || r.status]),
+    ),
+    {
+      禁止落盘: 'missing',
+      允许保存: '已入库',
+      试听片段: 'preview',
+      明令禁止: 'denied',
+      无匹配: 'missing',
+    },
+  )
+  const legacyIdentity = JSON.stringify(['song', '允许保存', '艺人'])
+  db.prepare('INSERT OR IGNORE INTO recording_feedback VALUES(?)').run(legacyIdentity)
+  db.prepare('INSERT OR IGNORE INTO dismissed_items VALUES(?)').run(oldItem)
+  db.prepare("DELETE FROM state WHERE key='feedback-digests-v1'").run()
+  const upgraded = new MusicStore(musicRoot)
+  assert.equal(
+    db.prepare('SELECT 1 FROM recording_feedback WHERE identity=?').get(legacyIdentity),
+    undefined,
+  )
+  await page.evaluate((id) => window.music.dismissRecommendation(id), oldItem)
+  const postUpgrade = upgraded.saveSuggestions('升级后的同名推荐', [suggestion], '待处理')
+  const next = upgraded.db.prepare('SELECT id FROM items WHERE batch=?').get(postUpgrade)?.id
+  assert.ok(next, '有录音摘要时不能提前排除歌名和艺人相同的其他版本')
+  upgraded.db.close()
+  const beforeCopy = await app.evaluate(() => globalThis.downloadCalls)
+  await run(next)
+  assert.equal(db.prepare('SELECT status FROM items WHERE id=?').get(next).status, '已跳过')
+  assert.equal(
+    await app.evaluate(() => globalThis.downloadCalls),
+    beforeCopy,
+    '已知摘要相同的本地副本直接跳过',
+  )
+  await fs.writeFile(
+    sourceFile,
+    pagedSource.replace('id:name,name,singer', 'id:name+"-发行版",name,singer'),
+  )
+  await page.evaluate(() => window.music.lxImport())
+  await run(next)
+  assert.equal(db.prepare('SELECT status FROM items WHERE id=?').get(next).status, '已跳过')
+  assert.equal(
+    await app.evaluate(() => globalThis.downloadCalls),
+    beforeCopy + 1,
+    '新来源 ID 的内容相同也须过滤',
+  )
+  assert.equal(
+    (await state()).items.some((r) => r.id === next),
+    false,
+  )
+  await app.evaluate((_e, file) => {
+    globalThis.testAudioFile = file
+  }, path.resolve('tests/fixtures/local-music/tone.flac'))
+  await run(next)
+  assert.equal((await state()).items.find((r) => r.id === next).status, '已入库')
+  assert.equal((await state()).items.find((r) => r.id === next).notInterested, false)
   console.log('PASS 内置目录逐曲许可、同版不同本地副本、文件换曲与旧源迁移 ' + root)
 } finally {
   db.close()

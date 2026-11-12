@@ -31,6 +31,9 @@ const songKey = (title, artist) =>
     ...[title, artist].map((v) => v.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase()),
   ])
 const recordingKey = (platform, id) => JSON.stringify(['recording', platform, id])
+function legacyDigest(track) {
+  return /^online-[a-f0-9]{64}$/.test(track) ? track.slice(7) : null
+}
 const cutoff = 24 * 60 * 60 * 1000
 export class MusicStore {
   constructor(root) {
@@ -57,6 +60,7 @@ export class MusicStore {
     for (const { id } of this.db.prepare('SELECT id FROM items').all())
       this.removeCache(id, '.part')
     this.library = new LocalLibrary(this)
+    this.migrateFeedbackDigests()
     this.db.exec(
       "UPDATE items SET status='待重试' WHERE id IN (SELECT item FROM recommended_items) AND status IN ('正在匹配','正在保存','待处理','待选录音')",
     )
@@ -135,6 +139,39 @@ export class MusicStore {
       .all()
       .map(({ artist, count }) => artist.slice(0, 100) + ' · ' + count + ' 首')
   }
+  migrateFeedbackDigests() {
+    if (this.get('feedback-digests-v1')) return
+    this.db.exec('BEGIN')
+    try {
+      const marked = this.db
+        .prepare(`SELECT i.title,i.artist,i.track,EXISTS(SELECT 1 FROM recommended_items r JOIN recording_copies c ON c.local=r.local WHERE r.item=i.id AND c.sourceId IS NOT NULL AND c.platform IS NOT NULL) AS knownCopy
+        FROM dismissed_items d JOIN items i ON i.id=d.item`)
+        .all()
+      const unresolved = new Set(
+        marked
+          .filter(
+            (r) =>
+              !r.knownCopy && !legacyDigest(r.track) && !catalogue.some((t) => t.id === r.track),
+          )
+          .map((r) => songKey(r.title, r.artist)),
+      )
+      for (const row of marked) {
+        const digest = legacyDigest(row.track)
+        if (!digest) continue
+        this.db
+          .prepare('INSERT OR IGNORE INTO recording_feedback VALUES(?)')
+          .run(recordingKey('content', digest))
+        const oldKey = songKey(row.title, row.artist)
+        if (!unresolved.has(oldKey))
+          this.db.prepare('DELETE FROM recording_feedback WHERE identity=?').run(oldKey)
+      }
+      this.set('feedback-digests-v1', 1)
+      this.db.exec('COMMIT')
+    } catch (e) {
+      this.db.exec('ROLLBACK')
+      throw e
+    }
+  }
   feedbackIds() {
     return new Set(
       this.db
@@ -179,6 +216,8 @@ export class MusicStore {
           : []
         if (copies.length)
           for (const copy of copies) blocked.run(recordingKey(copy.platform, copy.sourceId))
+        else if (legacyDigest(row.track))
+          blocked.run(recordingKey('content', legacyDigest(row.track)))
         else if (catalogue.some((t) => t.id === row.track))
           blocked.run(recordingKey('offline', row.track))
         else blocked.run(songKey(row.title, row.artist))
@@ -200,9 +239,13 @@ export class MusicStore {
     )
     const localIds = new Set(
       this.db
-        .prepare('SELECT local,platform,sourceId FROM recording_copies')
+        .prepare('SELECT local,platform,sourceId,digest FROM recording_copies')
         .all()
-        .filter((r) => feedback.has(recordingKey(r.platform, r.sourceId)))
+        .filter(
+          (r) =>
+            feedback.has(recordingKey(r.platform, r.sourceId)) ||
+            feedback.has(recordingKey('content', r.digest)),
+        )
         .map((r) => r.local),
     )
     const batches = this.db.prepare('SELECT * FROM batches ORDER BY rowid DESC').all()
@@ -216,6 +259,7 @@ export class MusicStore {
         notInterested:
           dismissed.has(row.id) ||
           localIds.has(row.localId) ||
+          feedback.has(recordingKey('content', legacyDigest(row.track))) ||
           feedback.has(songKey(row.title, row.artist)) ||
           feedback.has(recordingKey('offline', row.track)),
         status: row.daily && row.status === '已入库' && !row.localAvailable ? '待重试' : row.status,

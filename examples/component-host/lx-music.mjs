@@ -46,7 +46,8 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
   let response
   try {
     response = await sourceRequest(
-      `https://music.163.com/api/search/get?type=1&limit=${limit}&offset=${offset}&s=` + encodeURIComponent(keyword),
+      `https://music.163.com/api/search/get?type=1&limit=${limit}&offset=${offset}&s=` +
+        encodeURIComponent(keyword),
       { signal },
     )
   } catch {
@@ -85,6 +86,11 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
       }
     })
 }
+function searchRows(page) {
+  const rows = Array.isArray(page) ? page : (page?.items ?? page?.list ?? page?.songs)
+  if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
+  return rows
+}
 async function downloadResults(source, track, signal) {
   const results = []
   const seen = new Set()
@@ -93,8 +99,7 @@ async function downloadResults(source, track, signal) {
   for (let page = 1; page <= 50 && results.length < 50; page++) {
     const data = await versions(source, track, signal, 50, page, offset)
     signal.throwIfAborted()
-    const rows = Array.isArray(data) ? data : (data?.items ?? data?.list ?? data?.songs)
-    if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
+    const rows = searchRows(data)
     if (!rows.length) break
     const signature = createHash('sha256').update(JSON.stringify(rows)).digest('hex')
     if (pages.has(signature)) break
@@ -190,6 +195,11 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
         throw new TransferError('音频传输中断，请稍后重试')
       throw error
     }
+    if (version) version.digest = hash.digest('hex')
+    if (dailyId && store.ignoresRecording('content', version.digest)) {
+      store.status(dailyId, '已跳过')
+      return ''
+    }
     const { format, common } = await parseFile(temp, { duration: true, skipCovers: true })
     if (!(Number.isFinite(format.duration) && format.duration > 0)) throw Error('音频时长无效')
     const name = (info.singer + ' - ' + info.name)
@@ -229,7 +239,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       album: text(common.album) || text(info.albumName),
       duration: format.duration,
     }
-    if (version) version.digest = hash.digest('hex')
+
     if (auditionId) store.cacheOnline(auditionId, temp, metadata, extension(format))
     else publishToLibrary(temp, metadata, store, version, dailyId)
     return filename
@@ -273,7 +283,9 @@ async function verifiedCopy(store, version, signal) {
   }
 }
 function markSaved(store, id, local) {
-  store.db.prepare("UPDATE recommended_items SET local=?,error='',diagnosis='' WHERE item=?").run(local, id)
+  store.db
+    .prepare("UPDATE recommended_items SET local=?,error='',diagnosis='' WHERE item=?")
+    .run(local, id)
   store.status(id, '已入库')
 }
 export function registerLx(bind, getStore, dialog) {
@@ -491,18 +503,19 @@ export function registerLx(bind, getStore, dialog) {
         pick = saved.rows.get(selected)
       } else {
         store.status(id, '正在匹配')
-        const hits = await versions(src, item, signal)
+        const pageSize = 20
+        const hits = searchRows(await versions(src, item, signal, pageSize))
         signal.throwIfAborted()
-        if (!Array.isArray(hits)) throw Error('音乐源返回的结果无效')
         const candidates = new Map()
         let suppressed = false
         const reasons = new Set()
         const normalize = (v) => v.trim().normalize('NFKC').toLowerCase()
         const same = (a, b) => normalize(a) === normalize(b)
         const title = normalize(item.title)
-        for (const row of hits.slice(0, 30)) {
+        for (const row of hits.slice(0, pageSize)) {
           if (!row || !text(row.name) || !text(row.singer) || JSON.stringify(row).length > 16384)
             continue
+          if (!same(row.singer, item.artist)) continue
           const name = normalize(row.name)
           if (
             name !== title &&
@@ -525,7 +538,7 @@ export function registerLx(bind, getStore, dialog) {
             store.status(id, '已跳过')
             return
           }
-          if (!reasons.size) throw new RecordingError('missing', '没有找到与歌名匹配的录音')
+          if (!reasons.size) throw new RecordingError('missing', '没有找到歌名和艺人都匹配的录音')
           const message = [...reasons].map((k) => explanations[k]).join('、')
           throw new RecordingError(
             reasons.size === 1 ? [...reasons][0] : 'mixed',
@@ -551,6 +564,10 @@ export function registerLx(bind, getStore, dialog) {
       const cached = await verifiedCopy(store, version, signal)
       if (cached) {
         signal.throwIfAborted()
+        if (store.ignoresRecording('content', cached.digest)) {
+          store.status(id, '已跳过')
+          return
+        }
         markSaved(store, id, cached.id)
       } else {
         if (!prefs.recommendDir) throw Error('请在设置中选择推荐下载目录')
