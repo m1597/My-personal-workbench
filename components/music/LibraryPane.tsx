@@ -1,6 +1,6 @@
 import { TrackMenu } from './TrackMenu'
 import { InfrequentTracks } from './InfrequentTracks'
-import { LibraryTools, RecentHistory } from './LibraryTools'
+import { RecentHistory } from './LibraryTools'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
@@ -36,7 +36,6 @@ import {
   FolderSearch,
   Heart,
   History,
-  Archive,
 } from 'lucide-react'
 type FolderEntry = { id: string; name: string }
 type FolderNode = FolderEntry & { children: Map<string, FolderNode> }
@@ -309,14 +308,6 @@ export function LibraryPane({
         >
           我的收藏
         </Button>
-        <Button
-          appearance="subtle"
-          aria-pressed={collection === 'library-tools'}
-          icon={<Archive size={16} />}
-          onClick={() => choose('library-tools')}
-        >
-          曲库管理
-        </Button>
         <h3>文件夹</h3>
         {folderRows(folders)}
         <div className="playlist-heading">
@@ -392,8 +383,6 @@ export function LibraryPane({
       </aside>
       {collection === 'recent' ? (
         <RecentHistory tracks={tracks} play={play} />
-      ) : collection === 'library-tools' ? (
-        <LibraryTools refresh={refresh} />
       ) : collection === 'infrequent' ? (
         <InfrequentTracks
           rows={rows}

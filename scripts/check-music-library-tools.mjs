@@ -1,3 +1,4 @@
+import { selectMusicSettings } from './music-settings-fixture.mjs'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -104,7 +105,10 @@ try {
   for (const label of ['今天', '昨天', '更早'])
     await expect(ui.page.getByRole('heading', { name: label })).toBeVisible()
   await ui.page.screenshot({ path: path.join(root, 'history.png') })
-  await ui.button('曲库管理').click()
+  await expect(ui.button('曲库管理')).toHaveCount(0)
+  await ui.page.getByRole('tab', { name: '设置' }).click()
+  await selectMusicSettings(ui.page, '本地曲库')
+  await expect(ui.page.getByRole('heading', { name: '曲库管理' })).toBeVisible()
   await ui.button('导出备份').click()
   await expect(ui.page.getByRole('status').filter({ hasText: '曲库资料已导出' })).toBeVisible()
   const raw = await readFile(backup, 'utf8')
@@ -125,7 +129,10 @@ store.db
 store.db.close()
 ui = await launch(second)
 try {
-  await ui.button('曲库管理').click()
+  await expect(ui.button('曲库管理')).toHaveCount(0)
+  await ui.page.getByRole('tab', { name: '设置' }).click()
+  await selectMusicSettings(ui.page, '本地曲库')
+  await expect(ui.page.getByRole('heading', { name: '曲库管理' })).toBeVisible()
   await ui.button('选择备份').click()
   await expect(ui.page.getByText(/3 首歌曲 · 6 个歌单 · 1 首收藏 · 3 条播放记录/)).toBeVisible()
   assert.equal((await ui.page.evaluate(() => window.music.state())).localTracks.length, 0)
@@ -177,6 +184,7 @@ try {
   )
   const history = await ui.page.evaluate(() => window.music.recentHistory())
   assert.deepEqual(history.toReversed(), exported.history)
+  await ui.page.getByRole('tab', { name: '本地曲库' }).click()
   await ui.button('最近播放').click()
   await ui.page.getByRole('region', { name: '最近播放' }).getByRole('button').first().click()
   await expect

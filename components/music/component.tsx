@@ -413,7 +413,7 @@ function Music() {
   const playlist = state?.playlists.find((p) => p.id === requestedCollection)
   const collection =
     requestedCollection === 'infrequent' ||
-    ['recent', 'library-tools', 'favorites'].includes(requestedCollection) ||
+    ['recent', 'favorites'].includes(requestedCollection) ||
     playlist ||
     (requestedCollection !== 'all' &&
       state?.localTracks.some((track) => track.folders.some((f) => f.id === requestedCollection)))
