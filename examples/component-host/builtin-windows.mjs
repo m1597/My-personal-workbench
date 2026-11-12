@@ -89,6 +89,7 @@ export function builtinWindows(host) {
     if (point) positionAtRelease(window, point, host.background)
     const loaded = window.loadFile(host.workbenchFile, {
       query: {
+        fixturePanels: '1',
         builtin: id,
         ...(host.supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {}),
       },

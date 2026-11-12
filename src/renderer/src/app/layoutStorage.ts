@@ -1,5 +1,5 @@
 import type { DockviewApi, SerializedDockview } from 'dockview-react'
-import { minimumPanelSize, modules } from './moduleRegistry'
+import { minimumPanelSize, modules, retiredPanelIds, fixtureWorkspace } from './moduleRegistry'
 import { createDefaultLayout } from './workspace'
 
 export const layoutStorageKey = 'workbench.layout'
@@ -19,9 +19,7 @@ function validLayout(value: unknown): value is SerializedDockview {
   const ids = Object.keys(panels)
   if (
     !ids.every(
-      (id) =>
-        ['component-example', 'component-music'].includes(id) ||
-        modules.some((module) => module.id === id),
+      (id) => ['component-example', 'component-music'].includes(id) || retiredPanelIds.includes(id),
     )
   )
     return false
@@ -101,6 +99,27 @@ export function applyLayout(api: DockviewApi, layout: SerializedDockview, gap: n
   api.fromJSON(layout, { reuseExistingPanels: true })
 }
 
+function retirePlaceholders(layout: SerializedDockview) {
+  if (fixtureWorkspace) return
+  let firstGroup: string | undefined
+  const previousActive = layout.activeGroup
+  const keep = (node: SerializedDockview['grid']['root']): boolean => {
+    if (Array.isArray(node.data)) {
+      node.data = node.data.filter(keep)
+      return node.data.length > 0
+    }
+    const group = node.data
+    group.views = group.views.filter((id) => !retiredPanelIds.includes(id))
+    if (group.views.length) firstGroup ??= group.id
+    if (!group.views.length && layout.activeGroup === group.id) delete layout.activeGroup
+    if (group.activeView && !group.views.includes(group.activeView))
+      group.activeView = group.views[0]
+    return group.views.length > 0
+  }
+  keep(layout.grid.root)
+  if (previousActive && !layout.activeGroup && firstGroup) layout.activeGroup = firstGroup
+  for (const id of retiredPanelIds) delete layout.panels[id]
+}
 export function restoreLayout(api: DockviewApi, gap: number) {
   try {
     const raw = localStorage.getItem(layoutStorageKey)
@@ -117,6 +136,9 @@ export function restoreLayout(api: DockviewApi, gap: number) {
         if (panel?.minimumWidth === 160 && panel.minimumHeight === 110)
           Object.assign(panel, minimumPanelSize[id])
       }
+      retirePlaceholders(saved.layout)
+      const savedMusic = saved.layout.panels['component-music']
+      if (savedMusic) savedMusic.title = 'Music'
       applyLayout(api, saved.layout, gap)
       const slot = api.getPanel('component-example')
       if (slot && !window.componentHost?.sampleEnabled) api.removePanel(slot)

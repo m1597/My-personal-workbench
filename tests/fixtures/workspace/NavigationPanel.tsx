@@ -1,10 +1,13 @@
 import { useContext } from 'react'
 import { Input } from '@fluentui/react-components'
 import { Search, ChevronRight, PanelsTopLeft, Circle } from 'lucide-react'
-import { WorkspaceContext } from '../app/WorkspaceContext'
-import { modules, icons } from '../app/moduleRegistry'
-import { useNavigationQuery, setNavigationQuery } from '../app/builtinSession'
-import { openModule } from '../app/workspace'
+import { WorkspaceContext } from '../../../src/renderer/src/app/WorkspaceContext'
+import { modules, icons } from '../../../src/renderer/src/app/moduleRegistry'
+import {
+  useNavigationQuery,
+  setNavigationQuery,
+} from '../../../src/renderer/src/app/builtinSession'
+import { openModule } from '../../../src/renderer/src/app/workspace'
 export function NavigationPanel() {
   const workspace = useContext(WorkspaceContext)
   const query = useNavigationQuery()

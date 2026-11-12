@@ -1,7 +1,7 @@
 import { useContext, useState, useEffect } from 'react'
 import { SlidersHorizontal, LayoutGrid, GripVertical, Move, Plus } from 'lucide-react'
-import { WorkspaceContext } from '../app/WorkspaceContext'
-import { modules } from '../app/moduleRegistry'
+import { WorkspaceContext } from '../../../src/renderer/src/app/WorkspaceContext'
+import { modules } from '../../../src/renderer/src/app/moduleRegistry'
 export function Inspector() {
   const { api, active, dimensions: external } = useContext(WorkspaceContext)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })

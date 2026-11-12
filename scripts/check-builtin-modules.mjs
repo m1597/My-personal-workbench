@@ -1,30 +1,27 @@
+import executable from 'electron'
 import { _electron as electron, expect } from '@playwright/test'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { mkdir, mkdtemp, symlink, copyFile } from 'node:fs/promises'
+import { mkdir, mkdtemp } from 'node:fs/promises'
 import path from 'node:path'
 
 await mkdir('tmp', { recursive: true })
 const evidence = await mkdtemp(path.resolve('tmp/builtin-windows-'))
 const profile = path.join(evidence, 'local/desktop-profile')
-await mkdir(path.join(evidence, 'scripts'))
-for (const dir of ['dist', 'out', 'node_modules'])
-  await symlink(path.resolve(dir), path.join(evidence, dir), 'junction')
-await copyFile('scripts/open-workbench.cmd', path.join(evidence, 'scripts/open-workbench.cmd'))
-const run = promisify(execFile)
-const launchIntent = (id) =>
-  run('cmd.exe', ['/d', '/c', 'scripts\\open-workbench.cmd', '--' + id], {
-    cwd: evidence,
-    windowsHide: true,
-    timeout: 15000,
-  })
 const args = [
   path.resolve('dist/component-prototype/host'),
   '--user-data-dir=' + profile,
   '--workbench=' + path.resolve('out/renderer/index.html'),
   '--component=' + path.resolve('dist/component-prototype/component'),
 ]
-const env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
+const env = { ...process.env, FITBAY_TEST_PANELS: '1', WORKBENCH_TEST_BACKGROUND: '1' }
+const run = promisify(execFile)
+const launchIntent = (id) =>
+  run(executable, [...args, '--mode=' + id], {
+    env,
+    windowsHide: true,
+    timeout: 15000,
+  })
 const app = await electron.launch({ args: [...args, '--mode=workbench'], env })
 try {
   let shell = await app.firstWindow()

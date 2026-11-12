@@ -1,12 +1,12 @@
 # FitBay
 
-本地优先的个人创作工作台。目前实现四个可拖拽、停靠、分组、缩放、关闭重开的占位模块，以及最大化与布局恢复。
+本地优先的个人创作工作台。目前实现真实组件的拖拽、停靠、分组、缩放、关闭重开、最大化与布局恢复。
 
-技术栈：Electron + React + TypeScript + Vite，Dockview 布局。视觉为微软 Fluent 磨砂玻璃，固定深色；中文优先本机 HarmonyOS Sans SC，回退微软雅黑 UI。记住上次布局；首次启动使用默认四模块，全部关闭的空工作区也会保留。
+技术栈：Electron + React + TypeScript + Vite，Dockview 布局。视觉为微软 Fluent 磨砂玻璃，固定深色；中文优先本机 HarmonyOS Sans SC，回退微软雅黑 UI。记住上次布局；首次启动使用空工作区，全部关闭的空工作区也会保留。
 
 ## 组件产品方向（已确认公共宿主方案 B）
 
-工作台与音乐/资产等组件分别安装，组件可独立启动，也可接入工作台停靠与分离。方案见 [组件框架设计](docs/组件框架设计.md)。已有独立部署的示例宿主原型，尚未集成到正式安装包或开放第三方接入；第一方音乐试听进入一期，见 [一期任务](openspec/changes/add-music-recommendation-audition/tasks.md)。
+工作台与音乐/资产等组件分别安装，组件可独立启动，也可接入工作台停靠与分离。方案见 [组件框架设计](docs/组件框架设计.md)。已有独立部署的示例宿主原型，尚未集成到正式安装包或开放第三方接入；第一方Music进入一期，见 [一期任务](openspec/changes/add-music-recommendation-audition/tasks.md)。
 
 ## 开始开发
 
@@ -56,7 +56,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 这是后台真实 Electron 渲染的工作台预览；原生 Acrylic 随 Windows 设置和桌面背景变化。
 
-SQLite 和媒体播放当前用于第一方音乐试听组件。Git 只备份已提交源码与文档，私人素材、Electron 设置和被忽略数据需要单独备份。
+SQLite 和媒体播放当前用于第一方Music组件。Git 只备份已提交源码与文档，私人素材、Electron 设置和被忽略数据需要单独备份。
 
 ## Windows 安装包
 
@@ -73,14 +73,13 @@ SQLite 和媒体播放当前用于第一方音乐试听组件。Git 只备份已
 本机桌面的“FitBay”快捷方式直接打开日常工作台。双击原有的“打开个人工作台.cmd”可按数字键选择入口：
 
 - **1 日常工作台**（5 秒后默认）。沿用 `local/desktop-profile` 和已保存布局。
-- **3 到 6** 分别打开模块 1 到 4。也可传 `--module-1` 至 `--module-4`。已有实例会被激活。拖模块标签到整个工作台外可分离，每个独立窗口都可用系统标题栏拖回面板中央或四边。四窗可同时使用。
 
-- **7 音乐试听**。可传 `--music` 独立启动，也可从工作台的「窗口 → 音乐试听」打开或激活音乐标签。默认显示「本地曲库」。点「添加文件夹」或「添加文件」索引音乐，搜索后点歌曲左侧的播放键。切到「推荐试听」可继续使用离线试听单。
+- **7 Music**。可传 `--music` 独立启动，也可从工作台的「窗口 → Music」打开或激活音乐标签。默认显示「本地曲库」。点「添加文件夹」或「添加文件」索引音乐，搜索后点歌曲左侧的播放键。切到「推荐试听」可继续使用离线试听单。
 
 手动验收从项目目录运行 `scripts\open-workbench.cmd --manual`，菜单相同，布局写入 `tmp/manual-builtin-windows/profile`。每次打开验收菜单都使用这个参数。
 
 桌面 CMD 转调项目的 `scripts/open-workbench.cmd`。工作台界面更新后运行 `npm run build`；示例或宿主更新后运行 `npm run build:prototype`。各入口使用最新的 `out/renderer`。运行 `scripts/open-workbench.cmd --check` 检查启动文件。关闭旧窗口后重开即可加载新版。
 
-音乐试听现支持在 FitBay 内导入洛雪兼容 JS 源，从本地歌曲查找版本并下载入库。见[洛雪音乐源](docs/组件开发.md#洛雪音乐源)。
+Music现支持在 FitBay 内导入洛雪兼容 JS 源，从本地歌曲查找版本并下载入库。见[洛雪音乐源](docs/组件开发.md#洛雪音乐源)。
 
 推荐试听默认使用 DeepSeek，模型设置也支持 OpenAI、Claude 和 Gemini。详见[模型推荐](docs/组件开发.md#模型推荐)。

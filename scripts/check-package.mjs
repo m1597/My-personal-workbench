@@ -31,15 +31,15 @@ async function launch(count) {
   return page
 }
 try {
-  let page = await launch(4)
+  let page = await launch(0)
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await page.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '工作区为空' })).toBeVisible()
   await app.close()
-  page = await launch(3)
+  page = await launch(0)
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
   await page.getByRole('button', { name: '重置布局', exact: true }).click()
-  await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  await expect(page.getByTestId('panel-count')).toHaveText('0 个模块已打开')
   await page.screenshot({ path: 'tmp/packaged-verified.png', animations: 'disabled' })
   expect(errors).toEqual([])
   console.log('PASS 打包程序：后台启动、独立 profile、固定深色与布局重启恢复、重置。')

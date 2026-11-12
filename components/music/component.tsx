@@ -328,7 +328,7 @@ function Music() {
           <AudioLines size={21} />
         </div>
         <div className="music-heading">
-          <h1>音乐试听</h1>
+          <h1>Music</h1>
           <small>{tab === 'library' ? '本地音乐' : (provider?.label ?? 'DeepSeek')}</small>
         </div>
         <Button

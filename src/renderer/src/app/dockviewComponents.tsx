@@ -1,12 +1,13 @@
+import { fixtureWorkspace } from './moduleRegistry'
 import { useState, useEffect, useContext } from 'react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelProps } from 'dockview-react'
 import { Minimize2, Maximize2, PanelsTopLeft } from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { createDefaultLayout } from './workspace'
-import { NavigationPanel } from '../modules/NavigationPanel'
-import { CanvasPanel } from '../modules/CanvasPanel'
-import { Inspector } from '../modules/Inspector'
-import { BottomPanel } from '../modules/BottomPanel'
+import { NavigationPanel } from '../../../../tests/fixtures/workspace/NavigationPanel'
+import { CanvasPanel } from '../../../../tests/fixtures/workspace/CanvasPanel'
+import { Inspector } from '../../../../tests/fixtures/workspace/Inspector'
+import { BottomPanel } from '../../../../tests/fixtures/workspace/BottomPanel'
 import { ComponentSlot } from './componentPrototype'
 
 function ModulePanel({ api }: IDockviewPanelProps) {
@@ -55,6 +56,14 @@ export function HeaderActions({ api, containerApi }: IDockviewHeaderActionsProps
 
 export function EmptyWorkspace() {
   const { api } = useContext(WorkspaceContext)
+  if (!fixtureWorkspace)
+    return (
+      <div className="empty-workspace">
+        <PanelsTopLeft size={40} strokeWidth={1} />
+        <h2>工作区为空</h2>
+        <p>{window.musicDock ? '从「窗口 → Music」打开音乐组件。' : '从桌面工作台打开 Music。'}</p>
+      </div>
+    )
   return (
     <div className="empty-workspace">
       <PanelsTopLeft size={40} strokeWidth={1} />

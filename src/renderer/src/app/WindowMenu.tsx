@@ -45,7 +45,7 @@ export function WindowMenu() {
                   setMusicError((await window.musicDock?.open())?.error ?? '')
                 }}
               >
-                音乐试听
+                Music
               </MenuItem>
             )}
             <MenuDivider />

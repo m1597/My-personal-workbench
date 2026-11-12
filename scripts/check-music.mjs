@@ -13,7 +13,7 @@ const args = [
   '--user-data-dir=' + profile,
   '--workbench=' + path.resolve('out/renderer/index.html'),
 ]
-const env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
+const env = { ...process.env, FITBAY_TEST_PANELS: '1', WORKBENCH_TEST_BACKGROUND: '1' }
 const launch = (mode) => electron.launch({ args: [...args, '--mode=' + mode], env })
 async function page(app, fragment) {
   await expect.poll(() => app.windows().some((p) => p.url().includes(fragment))).toBe(true)
@@ -120,14 +120,14 @@ try {
     ['within', 0.5, 0.5],
   ]) {
     await music.getByText('分离窗口', { exact: true }).click()
-    await expect(shell.getByRole('tab', { name: '音乐试听', exact: true })).toHaveCount(0)
+    await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toHaveCount(0)
     const group = shell
       .locator('.dv-groupview')
       .filter({ has: shell.getByRole('tab', { name: '模块 2', exact: true }) })
     const box = await group.boundingBox()
     const info = await app.evaluate(
       ({ BaseWindow, BrowserWindow, screen }, { box, u, v }) => {
-        const source = BaseWindow.getAllWindows().find((w) => w.getTitle().includes('音乐试听'))
+        const source = BaseWindow.getAllWindows().find((w) => w.getTitle().includes('Music'))
         const dest = BrowserWindow.getAllWindows()[0].getContentBounds()
         const x = Math.round(dest.x + box.x + u * box.width - source.getBounds().width / 2)
         const y = Math.round(dest.y + box.y + v * box.height - 16)
@@ -171,7 +171,7 @@ try {
     await expect(music.getByText('分离窗口', { exact: true })).toBeVisible()
     const docked = shell
       .locator('.dv-groupview')
-      .filter({ has: shell.getByRole('tab', { name: '音乐试听', exact: true }) })
+      .filter({ has: shell.getByRole('tab', { name: 'Music', exact: true }) })
     const position = await docked.boundingBox(),
       base = await group.boundingBox()
     if (direction === 'within') expect(position).toEqual(base)
@@ -180,20 +180,20 @@ try {
     if (direction === 'above') expect(position.y).toBeLessThan(base.y)
     if (direction === 'below') expect(position.y).toBeGreaterThan(base.y)
   }
-  await shell.getByRole('button', { name: 'Close 音乐试听', exact: true }).click()
+  await shell.getByRole('button', { name: 'Close Music', exact: true }).click()
   await expect
     .poll(() => app.windows().filter((p) => p.url().includes('/music/index.html')).length)
     .toBe(0)
   const windowMenu = shell.getByRole('button', { name: '窗口', exact: true })
-  const musicItem = shell.getByRole('menuitem', { name: '音乐试听', exact: true })
-  await expect(shell.getByRole('button', { name: /^(音乐试听|示例组件)$/ })).toHaveCount(0)
+  const musicItem = shell.getByRole('menuitem', { name: 'Music', exact: true })
+  await expect(shell.getByRole('button', { name: /^(Music|示例组件)$/ })).toHaveCount(0)
   await windowMenu.click()
   await expect(shell.getByRole('menuitem')).toHaveText([
     '模块 1',
     '模块 2',
     '模块 3',
     '模块 4',
-    '音乐试听',
+    'Music',
     '重置布局',
   ])
   // Off-screen capture cannot composite the Windows acrylic background.
@@ -208,7 +208,7 @@ try {
   await shell.getByRole('tab', { name: '模块 2', exact: true }).click()
   await windowMenu.click()
   await musicItem.click()
-  await expect(shell.getByRole('tab', { name: '音乐试听', exact: true })).toHaveAttribute(
+  await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toHaveAttribute(
     'aria-selected',
     'true',
   )
@@ -227,7 +227,7 @@ try {
 app = await launch('workbench')
 try {
   const shell = await page(app, '/out/renderer/index.html')
-  await expect(shell.getByRole('tab', { name: '音乐试听', exact: true })).toBeVisible()
+  await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
   const music = await page(app, '/music/index.html')
   expect(await music.locator('audio').evaluate((a) => a.paused)).toBe(true)
   await shell.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
@@ -255,7 +255,7 @@ try {
   await expect(shell.getByRole('tab')).toHaveCount(4)
   await expect(shell.getByRole('tab', { name: '模块 4', exact: true })).toHaveCount(0)
   await expect(shell.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(0)
-  await expect(shell.getByRole('tab', { name: '音乐试听', exact: true })).toBeVisible()
+  await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
   await expect
     .poll(() =>
       shell.evaluate(() => {

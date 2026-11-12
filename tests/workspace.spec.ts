@@ -18,6 +18,7 @@ test.beforeEach(async ({}, testInfo) => {
     args: ['.', `--user-data-dir=${profilePath}`],
     env: {
       ...process.env,
+      FITBAY_TEST_PANELS: '1',
       WORKBENCH_TEST_BACKGROUND: '1',
       ELECTRON_RENDERER_URL: process.env.WORKBENCH_TEST_RENDERER_URL ?? '',
     },

@@ -72,7 +72,7 @@ export function componentView({
     if (!standalone || standalone.isDestroyed()) {
       standalone = new BaseWindow({
         ...options(660, 620),
-        title: music ? '音乐试听 · 独立窗口' : '示例组件 · 独立窗口',
+        title: music ? 'Music' : '示例组件 · 独立窗口',
       })
       watchNativeDock(standalone, {
         target: (point) => {

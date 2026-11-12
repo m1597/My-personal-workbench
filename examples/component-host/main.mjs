@@ -25,6 +25,7 @@ const componentRoot = argument('component')
 const workbenchFile = argument('workbench')
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
 const background = process.env.WORKBENCH_TEST_BACKGROUND === '1'
+const fixturePanels = process.env.FITBAY_TEST_PANELS === '1' && background
 let shell, dropZone
 let quitting = false
 function options(width, height) {
@@ -84,7 +85,10 @@ async function createWorkbench() {
     title: 'FitBay',
     webPreferences: {
       preload: path.join(here, 'workbench-preload.cjs'),
-      additionalArguments: componentRoot ? ['--enable-sample-component'] : [],
+      additionalArguments: [
+        ...(componentRoot ? ['--enable-sample-component'] : []),
+        ...(fixturePanels ? ['--fixture-panels'] : []),
+      ],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -101,7 +105,12 @@ async function createWorkbench() {
     shell = undefined
     dropZone = undefined
   })
-  await shell.loadFile(file, { query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {} })
+  await shell.loadFile(file, {
+    query: {
+      ...(supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {}),
+      ...(fixturePanels ? { fixturePanels: '1' } : {}),
+    },
+  })
   shell.webContents.on('did-start-loading', () => {
     for (const item of components) item.reloading()
   })
@@ -145,12 +154,14 @@ const builtins = builtinWindows({
 })
 const requestedMode = argument('mode')
 const intent =
-  requestedMode === 'music' || requestedMode === 'workbench' || isBuiltin(requestedMode)
+  requestedMode === 'music' ||
+  requestedMode === 'workbench' ||
+  (fixturePanels && isBuiltin(requestedMode))
     ? requestedMode
     : 'component'
 let requests = Promise.resolve()
 async function openIntent(request) {
-  if (isBuiltin(request)) return builtins.open(request)
+  if (fixturePanels && isBuiltin(request)) return builtins.open(request)
   if (request === 'workbench') {
     if (!shell || shell.isDestroyed()) {
       await sample.discover()
@@ -174,7 +185,7 @@ else {
       data.intent === 'music' ||
       data.intent === 'workbench' ||
       data.intent === 'component' ||
-      isBuiltin(data.intent)
+      (fixturePanels && isBuiltin(data.intent))
     )
       requests = requests.then(() => openIntent(data.intent)).catch(console.error)
   })
@@ -188,7 +199,7 @@ else {
   requests = app
     .whenReady()
     .then(async () => {
-      builtins.listen()
+      if (fixturePanels) builtins.listen()
       Menu.setApplicationMenu(null)
       nativeTheme.themeSource = 'dark'
       ipcMain.on('prototype:drop-zone', (event, regions) => {

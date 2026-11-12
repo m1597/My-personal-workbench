@@ -17,7 +17,7 @@ for (const scale of [1.25, 1.5]) {
     const page = await app.firstWindow()
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
-    await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+    await expect(page.getByTestId('panel-count')).toHaveText('0 个模块已打开')
     await expect(page).toHaveTitle('FitBay')
     await expect(page.locator('.app-header button').first()).toHaveAccessibleName('窗口')
     await expect(page.locator('.app-header')).not.toContainText(/个人工作台|我的工作空间|FitBay/)
@@ -62,7 +62,7 @@ for (const scale of [1.25, 1.5]) {
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true)
-      for (let i = 1; i <= 4; i++) await expect(page.getByTestId(`module-${i}`)).toBeVisible()
+      await expect(page.getByRole('heading', { name: '工作区为空' })).toBeVisible()
       const capture = async (suffix) => {
         // Fluent motion may start after React commits; wait for its real final frame.
         await page.evaluate(async () => {

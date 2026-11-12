@@ -93,7 +93,9 @@ export function useComponentPrototype(
         const before = api.toJSON()
         const source = existing?.group
         const index = existing ? existing.group.panels.indexOf(existing) : undefined
-        const target = hit?.id ? api.getGroup(hit.id) : (source ?? api.getPanel('module-2')?.group)
+        const target = hit?.id
+          ? api.getGroup(hit.id)
+          : (source ?? api.getPanel('module-2')?.group ?? api.activeGroup)
         const relocate =
           existing && hit && target && (target !== source || hit.direction !== 'within')
         const originalActive = api.activePanel?.id
@@ -160,7 +162,7 @@ export function useComponentPrototype(
       }
     }
     const offSample = host.sampleEnabled && bind(host, 'component-example', '示例组件')
-    const offMusic = window.musicDock && bind(window.musicDock, 'component-music', '音乐试听')
+    const offMusic = window.musicDock && bind(window.musicDock, 'component-music', 'Music')
     let dragging = ''
     let pointer: number | undefined
     const cancel = () => {

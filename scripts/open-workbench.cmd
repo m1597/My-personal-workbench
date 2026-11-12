@@ -15,25 +15,14 @@ set "ELECTRON_RENDERER_URL="
 set "WORKBENCH_TEST_BACKGROUND=0"
 if /i "%~1"=="--check" goto check_component
 if /i "%~1"=="--workbench" goto workbench
-for %%M in (1 2 3 4) do if /i "%~1"=="--module-%%M" (
-  set "mode=module-%%M"
-  goto check_component
-)
 if /i "%~1"=="--music" goto music
-choice /c 134567 /n /t 5 /d 1 /m "1 工作台，3 模块1，4 模块2，5 模块3，6 模块4，7 音乐试听（默认 1）："
+choice /c 17 /n /t 5 /d 1 /m "1 工作台，7 Music（默认 1）："
 if errorlevel 255 goto failed
-if errorlevel 6 goto music
-for %%M in (5 4 3 2) do if errorlevel %%M (
-  set /a "module_number=%%M-1"
-  goto builtin
-)
+if errorlevel 2 goto music
 if not errorlevel 1 goto failed
 goto workbench
 :music
 set "mode=music"
-goto check_component
-:builtin
-set "mode=module-%module_number%"
 goto check_component
 :workbench
 set "mode=workbench"
@@ -49,7 +38,7 @@ start "" "node_modules\electron\dist\electron.exe" "%prototype%\host" "--mode=%m
 popd
 exit /b 0
 :missing_component
-echo 组件宿主或音乐试听缺少构建文件。请在项目目录运行 npm run build:prototype。
+echo 组件宿主或Music缺少构建文件。请在项目目录运行 npm run build:prototype。
 goto failed
 :missing_runtime
 echo Electron is missing. Run npm ci in the project folder, then try again.

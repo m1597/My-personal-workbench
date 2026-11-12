@@ -8,6 +8,7 @@ function createWindow() {
   const backgroundTest =
     process.env.WORKBENCH_TEST_BACKGROUND === '1' &&
     (!app.isPackaged || process.argv.some((arg) => arg.startsWith('--user-data-dir=')))
+  const fixturePanels = backgroundTest && process.env.FITBAY_TEST_PANELS === '1'
   const testX = backgroundTest
     ? Math.min(...screen.getAllDisplays().map((display) => display.bounds.x)) - 2000
     : undefined
@@ -40,10 +41,14 @@ function createWindow() {
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     const url = new URL(process.env.ELECTRON_RENDERER_URL)
     if (supportsAcrylic) url.searchParams.set('nativeBackdrop', 'acrylic')
+    if (fixturePanels) url.searchParams.set('fixturePanels', '1')
     void window.loadURL(url.toString())
   } else {
     void window.loadFile(fileURLToPath(new URL('../renderer/index.html', import.meta.url)), {
-      query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {},
+      query: {
+        ...(supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {}),
+        ...(fixturePanels ? { fixturePanels: '1' } : {}),
+      },
     })
   }
 }

@@ -16,7 +16,7 @@ const app = await electron.launch({
     '--component=' + path.join(root, 'component'),
     '--workbench=' + path.join(root, 'workbench/index.html'),
   ],
-  env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+  env: { ...process.env, FITBAY_TEST_PANELS: '1', WORKBENCH_TEST_BACKGROUND: '1' },
 })
 try {
   const shell = await app.firstWindow()
@@ -39,7 +39,7 @@ try {
     executable,
     [path.join(root, 'host'), '--user-data-dir=' + profile, '--mode=component'],
     {
-      env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+      env: { ...process.env, FITBAY_TEST_PANELS: '1', WORKBENCH_TEST_BACKGROUND: '1' },
       windowsHide: true,
       timeout: 10000,
     },

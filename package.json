@@ -32,7 +32,7 @@
     "check:music": "node scripts/check-music-storage.mjs && node scripts/check-music.mjs && node scripts/check-local-music.mjs",
     "check:models": "node scripts/check-music-models.mjs",
     "check:lx": "node scripts/check-lx-music.mjs",
-    "check:prototype": "node scripts/check-component-prototype.mjs && node scripts/check-builtin-modules.mjs && node scripts/check-dock-transitions.mjs"
+    "check:prototype": "node scripts/check-workspace-migration.mjs && node scripts/check-component-prototype.mjs && node scripts/check-builtin-modules.mjs && node scripts/check-dock-transitions.mjs"
   },
   "dependencies": {
     "@fluentui/react-components": "9.75.1",

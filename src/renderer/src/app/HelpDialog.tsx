@@ -33,7 +33,6 @@ export function HelpDialog() {
             让工作区适合你的习惯
           </DialogTitle>
           <DialogContent>
-            <p>四个模块都是占位面板，你可以先体验布局。</p>
             <dl>
               <dt>移动面板</dt>
               <dd>拖住模块标签，放到高亮区域。</dd>
@@ -42,7 +41,7 @@ export function HelpDialog() {
               <dt>调整大小</dt>
               <dd>拖动面板之间的分隔线。</dd>
               <dt>重新打开</dt>
-              <dd>点击顶部「窗口」菜单或模块图标。</dd>
+              <dd>点击顶部「窗口」菜单。</dd>
               <dt>还原布局</dt>
               <dd>点击右上角「重置布局」。</dd>
             </dl>

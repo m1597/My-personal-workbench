@@ -1,15 +1,7 @@
-import { PanelLeft, SquareDashed, PanelRight, PanelBottom } from 'lucide-react'
-export const icons = [PanelLeft, SquareDashed, PanelRight, PanelBottom]
-export const modules = [
-  { id: 'module-1', title: '模块 1', description: '模块导航' },
-  { id: 'module-2', title: '模块 2', description: '主工作区' },
-  { id: 'module-3', title: '模块 3', description: '辅助面板' },
-  { id: 'module-4', title: '模块 4', description: '底部面板' },
-] as const
-
-export const minimumPanelSize = {
-  'module-1': { minimumWidth: 160, minimumHeight: 110 },
-  'module-2': { minimumWidth: 220, minimumHeight: 150 },
-  'module-3': { minimumWidth: 180, minimumHeight: 110 },
-  'module-4': { minimumWidth: 160, minimumHeight: 110 },
-} satisfies Record<(typeof modules)[number]['id'], { minimumWidth: number; minimumHeight: number }>
+import { fixturePanels } from '../../../../tests/fixtures/workspace/panels'
+export { icons, minimumPanelSize } from '../../../../tests/fixtures/workspace/panels'
+export const fixtureWorkspace = new URLSearchParams(location.search).get('fixturePanels') === '1'
+export const modules: readonly (typeof fixturePanels)[number][] = fixtureWorkspace
+  ? fixturePanels
+  : []
+export const retiredPanelIds = fixturePanels.map((panel) => panel.id as string)

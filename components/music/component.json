@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "protocol": "0.1",
   "hostApi": "0.1",
-  "name": "音乐试听",
+  "name": "Music",
   "uiEntry": "index.html",
   "capabilities": ["view.transfer"],
   "modes": ["standalone", "docked"]

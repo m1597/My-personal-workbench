@@ -20,7 +20,7 @@ async function launch(component, workbench = true, mode = 'standalone', reusePro
       `--mode=${mode}`,
       ...(workbench ? [`--workbench=${path.join(root, 'workbench/index.html')}`] : []),
     ],
-    env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+    env: { ...process.env, FITBAY_TEST_PANELS: '1', WORKBENCH_TEST_BACKGROUND: '1' },
   })
   app.on('window', (page) => page.on('pageerror', (error) => errors.push(error.message)))
   return app
@@ -137,7 +137,11 @@ try {
   await promisify(execFile)(
     executable,
     [path.join(root, 'host'), `--user-data-dir=${profile}`, '--mode=workbench'],
-    { env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }, windowsHide: true, timeout: 15000 },
+    {
+      env: { ...process.env, FITBAY_TEST_PANELS: '1', WORKBENCH_TEST_BACKGROUND: '1' },
+      windowsHide: true,
+      timeout: 15000,
+    },
   )
   const dockShell = await findPage(app, '/workbench/index.html')
   const ordinaryPanel = dockShell.locator('.dv-groupview').first()
@@ -579,7 +583,11 @@ try {
   await promisify(execFile)(
     executable,
     [path.join(root, 'host'), `--user-data-dir=${restartProfile}`, '--mode=component'],
-    { env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }, windowsHide: true, timeout: 15000 },
+    {
+      env: { ...process.env, FITBAY_TEST_PANELS: '1', WORKBENCH_TEST_BACKGROUND: '1' },
+      windowsHide: true,
+      timeout: 15000,
+    },
   )
   await expect(componentTab).toHaveAttribute('aria-selected', 'true')
   await expect.poll(viewVisible).toBe(true)
