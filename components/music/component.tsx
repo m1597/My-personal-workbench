@@ -91,7 +91,7 @@ declare global {
       configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
       lxInfo(): Promise<string>
       lxImport(link?: string): Promise<void>
-      lxCancel(): Promise<void>
+      lxCancel(scope?: 'import'): Promise<void>
       lxSearch(query: string | { title: string; artist: string }): Promise<Versions>
       lxPreview(id: string, key: string, quality: string): Promise<string>
       lxDownload(key: string, quality: string): Promise<string>

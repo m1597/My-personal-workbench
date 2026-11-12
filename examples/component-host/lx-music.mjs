@@ -221,17 +221,19 @@ function markSaved(store, id, local) {
 }
 export function registerLx(bind, getStore, dialog) {
   let active = null
+  let activeScope
   const matches = new Map()
   const source = () => {
     const saved = getStore().get('lx-source')
     return saved ? JSON.parse(saved) : null
   }
   const exclusive =
-    (fn) =>
+    (fn, scope) =>
     async (...args) => {
       if (active && !active.signal.aborted) throw Error('请等待当前音乐源操作完成')
       const task = new AbortController()
       active = task
+      activeScope = scope
       try {
         return await fn(task.signal, ...args)
       } finally {
@@ -260,7 +262,7 @@ export function registerLx(bind, getStore, dialog) {
       signal.throwIfAborted()
       getStore().set('lx-source', JSON.stringify(next))
       matches.clear()
-    }),
+    }, 'import'),
   )
   bind(
     'lxSearch',
@@ -482,7 +484,9 @@ export function registerLx(bind, getStore, dialog) {
       album: text(v.albumName),
     }))
   })
-  bind('lxCancel', () => active?.abort())
+  bind('lxCancel', (scope) => {
+    if (scope === undefined || (scope === 'import' && activeScope === 'import')) active?.abort()
+  })
   let generation = 0
   let processing = Promise.resolve()
   return {

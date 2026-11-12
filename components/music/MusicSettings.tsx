@@ -101,6 +101,7 @@ export function MusicSettings({
   refresh: () => Promise<void>
 }) {
   const [source, setSource] = useState('')
+  const [importing, setImporting] = useState(false)
   const [online, setOnline] = useState(false)
   const [link, setLink] = useState('')
   const [editing, setEditing] = useState(false)
@@ -121,6 +122,7 @@ export function MusicSettings({
       })
     return () => {
       alive = false
+      void window.music.lxCancel('import').catch(() => {})
     }
   }, [])
   useEffect(() => {
@@ -154,13 +156,19 @@ export function MusicSettings({
       setBusy(false)
     }
   }
-  function importSource(url?: string) {
-    return update(async () => {
-      await window.music.lxImport(url)
-      setSource(await window.music.lxInfo())
-      setOnline(false)
-      setLink('')
-    }, '')
+  async function importSource(url?: string) {
+    if (busy || importing) return
+    setImporting(true)
+    try {
+      await update(async () => {
+        await window.music.lxImport(url)
+        setSource(await window.music.lxInfo())
+        setOnline(false)
+        setLink('')
+      }, '')
+    } finally {
+      setImporting(false)
+    }
   }
   return (
     <div className="music-settings">
@@ -212,6 +220,16 @@ export function MusicSettings({
           >
             在线导入
           </Button>
+          {importing && (
+            <Button
+              size="small"
+              onClick={() =>
+                void window.music.lxCancel('import').catch((e) => setStatus(String(e)))
+              }
+            >
+              取消音源导入
+            </Button>
+          )}
         </div>
         {online && (
           <form

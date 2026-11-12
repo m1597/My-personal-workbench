@@ -114,6 +114,44 @@ try {
   })
   await page.screenshot({ path: path.join(root, 'import.png') })
   if (!live) {
+    for (const leave of [false, true]) {
+      await app.evaluate(() => {
+        const https = process.getBuiltinModule('node:https')
+        const { EventEmitter } = process.getBuiltinModule('node:events')
+        const original = https.request
+        globalThis.slowImportStatus = 'waiting'
+        https.request = (url, options) => {
+          https.request = original
+          if (url.href !== 'https://1.1.1.1/slow-source.js') throw Error('测试地址不匹配')
+          const request = new EventEmitter()
+          request.end = () => {
+            globalThis.slowImportStatus = 'reading'
+            options.signal.addEventListener(
+              'abort',
+              () => {
+                globalThis.slowImportStatus = 'cancelled'
+                request.emit('error', options.signal.reason)
+              },
+              { once: true },
+            )
+          }
+          return request
+        }
+      })
+      await page.getByLabel('音乐源链接').fill('https://1.1.1.1/slow-source.js')
+      await page.getByRole('button', { name: '导入链接' }).click()
+      await expect.poll(() => app.evaluate(() => globalThis.slowImportStatus)).toBe('reading')
+      const cancel = page.getByRole('button', { name: '取消音源导入' })
+      await expect(cancel).toBeVisible()
+      if (leave) await page.getByRole('tab', { name: '本地曲库' }).click()
+      else await cancel.click()
+      await expect.poll(() => app.evaluate(() => globalThis.slowImportStatus)).toBe('cancelled')
+      if (leave) {
+        await page.getByRole('tab', { name: '设置' }).click()
+        await page.getByRole('button', { name: '在线导入' }).click()
+      } else await expect(page.getByText('操作已取消', { exact: true })).toBeVisible()
+      expect(await page.evaluate(() => window.music.lxInfo())).toBe(savedName)
+    }
     const code = (await fs.readFile(sourceFile, 'utf8')).replace(/@name [^\n]+/, '@name 在线测试源')
     await app.evaluate((_electron, code) => {
       const https = process.getBuiltinModule('node:https')
