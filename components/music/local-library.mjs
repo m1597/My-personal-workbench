@@ -39,6 +39,19 @@ export class LocalLibrary {
           .some((col) => col.name === 'listed')
       )
         this.db.exec('ALTER TABLE local_tracks ADD COLUMN listed INTEGER NOT NULL DEFAULT 1')
+      if (
+        !this.db
+          .prepare('PRAGMA table_info(recommended_items)')
+          .all()
+          .some((c) => c.name === 'diagnosis')
+      ) {
+        this.db.exec("ALTER TABLE recommended_items ADD COLUMN diagnosis TEXT NOT NULL DEFAULT ''")
+        this.db
+          .prepare(
+            "UPDATE recommended_items SET error='请重新核对该录音的保存许可',diagnosis='unknown' WHERE error=?",
+          )
+          .run('音乐源未允许永久保存此录音，或仅提供试听')
+      }
       const legacyColumns = new Set(
         this.db
           .prepare('PRAGMA table_info(recording_versions)')

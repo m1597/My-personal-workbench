@@ -30,7 +30,16 @@ const code =
   "// @name 授权夹具\nlx.on('request',()=> 'https://1.1.1.1/audio');lx.send('inited',{sources:{wy:{actions:['musicUrl'],qualitys:['320k'],allowPermanentSave:true}}})"
 const sourceFile = path.join(root, 'source.js')
 await fs.writeFile(sourceFile, code)
-const titles = ['禁止落盘', '允许保存', '拒绝下载', '试听片段', '逐曲试听权限', '明令禁止']
+const titles = [
+  '禁止落盘',
+  '允许保存',
+  '拒绝下载',
+  '试听片段',
+  '逐曲试听权限',
+  '明令禁止',
+  '无匹配',
+  '网络失败',
+]
 const batch = store.saveSuggestions(
   '测试',
   titles.map((title) => ({ title, artist: '艺人', reason: '测试' })),
@@ -70,6 +79,11 @@ try {
         let response
         if (url.hostname === 'music.163.com') {
           const title = url.searchParams.get('s').split(' ')[0]
+          if (title === '网络失败') {
+            const req = new EventEmitter()
+            req.end = () => done(Object.assign(Readable.from([]), { statusCode: 503, headers: {} }))
+            return req
+          }
           const rights =
             {
               禁止落盘: { allowPermanentSave: false },
@@ -85,7 +99,7 @@ try {
                   songs: [
                     {
                       id: title,
-                      name: title,
+                      name: title === '无匹配' ? '完全不同的歌曲' : title,
                       artists: [{ name: '艺人' }],
                       album: { name: '专辑' },
                       ...rights,
@@ -115,6 +129,13 @@ try {
   const deniedWereSaved = initial.items
     .filter((r) => r.title !== '允许保存' && r.status === '已入库')
     .map((r) => r.title)
+  for (const [title, diagnosis] of Object.entries({
+    禁止落盘: 'denied',
+    试听片段: 'preview',
+    无匹配: 'missing',
+    网络失败: 'network',
+  }))
+    assert.equal(initial.items.find((r) => r.title === title).diagnosis, diagnosis)
   const allowed = rows.find((r) => r.title === '允许保存')
   const automatic = initial.items.find((r) => r.id === allowed.id).localId
   assert.ok(automatic)
@@ -180,7 +201,7 @@ try {
   await run(allowed.id)
   assert.match(
     (await state()).items.find((r) => r.id === allowed.id).downloadError,
-    /未允许永久保存/,
+    /未声明永久保存许可/,
   )
   db.exec('DROP TRIGGER no_reparse')
   reset.run(JSON.stringify({ ...src, code: 'invalid lx source!' }))

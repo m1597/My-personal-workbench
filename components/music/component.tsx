@@ -55,6 +55,7 @@ type Item = {
   status: string
   daily: string | null
   localId: string | null
+  diagnosis: string
   downloadError: string
   audioDuration: number | null
   online: boolean
@@ -610,6 +611,8 @@ function Music() {
                                 id={r.id}
                                 status={r.status}
                                 message={r.downloadError}
+                                diagnosis={r.diagnosis}
+                                openSources={() => setTab('settings')}
                                 refresh={refresh}
                               />
                             )}

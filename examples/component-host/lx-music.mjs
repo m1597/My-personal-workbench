@@ -13,6 +13,24 @@ import { getMusicPreferences } from './music-preferences.mjs'
 import { publish } from './music/store.mjs'
 
 class TransferError extends Error {}
+class RecordingError extends Error {
+  constructor(kind, message) {
+    super(message)
+    this.kind = kind
+  }
+}
+function permission(source, row) {
+  const rights = [row.allowPermanentSave, row.permanentDownload, row.meta?.allowPermanentSave]
+  if (source.permanentSave === false || rights.includes(false) || row.downloadable === false)
+    return 'denied'
+  if (row.trial || row.isPreview || row.freeTrialInfo) return 'preview'
+  return source.permanentSave || rights.includes(true) ? 'granted' : 'unknown'
+}
+const explanations = {
+  denied: '明确禁止永久保存',
+  preview: '仅供试听',
+  unknown: '未声明永久保存许可',
+}
 const text = (v) => (typeof v === 'string' ? v.trim().slice(0, 256) : '')
 const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
 async function fetchSource(link, signal) {
@@ -75,10 +93,21 @@ async function versions(source, row, signal) {
       { action: 'search', source: source.platform, info: { keyword, limit: 20 } },
       signal,
     )
-  const response = await sourceRequest(
-    'https://music.163.com/api/search/get?type=1&limit=20&s=' + encodeURIComponent(keyword),
-    { signal },
-  )
+  let response
+  try {
+    response = await sourceRequest(
+      'https://music.163.com/api/search/get?type=1&limit=20&s=' + encodeURIComponent(keyword),
+      { signal },
+    )
+  } catch (e) {
+    signal.throwIfAborted()
+    throw new RecordingError('network', '无法连接在线目录，请检查网络后重试')
+  }
+  if (response.statusCode !== 200)
+    throw new RecordingError(
+      'network',
+      '在线目录请求失败（HTTP ' + response.statusCode + '），请重试',
+    )
   const songs = response.body?.result?.songs
   if (!Array.isArray(songs)) throw Error('在线目录暂时不可用')
   const grants = response.body.result.privileges ?? response.body.privileges
@@ -267,7 +296,7 @@ async function verifiedCopy(store, version, signal) {
   }
 }
 function markSaved(store, id, local) {
-  store.db.prepare("UPDATE recommended_items SET local=?,error='' WHERE item=?").run(local, id)
+  store.db.prepare("UPDATE recommended_items SET local=?,error='',diagnosis='' WHERE item=?").run(local, id)
   store.status(id, '已入库')
 }
 export function registerLx(bind, getStore, dialog) {
@@ -444,7 +473,7 @@ export function registerLx(bind, getStore, dialog) {
     const { signal } = task
     try {
       const src = await currentSource(signal)
-      if (!src) throw Error('请在下载音乐页导入可下载的音乐源')
+      if (!src) throw new RecordingError('source', '尚未导入音乐源')
       const prefs = getMusicPreferences(store)
       const quality = src.quality.includes(prefs.quality)
         ? prefs.quality
@@ -468,36 +497,33 @@ export function registerLx(bind, getStore, dialog) {
         signal.throwIfAborted()
         if (!Array.isArray(hits)) throw Error('音乐源返回的结果无效')
         const candidates = new Map()
-        let denied = false
+        const reasons = new Set()
+        const normalize = (v) => v.trim().normalize('NFKC').toLowerCase()
+        const same = (a, b) => normalize(a) === normalize(b)
+        const title = normalize(item.title)
         for (const row of hits.slice(0, 30)) {
           if (!row || !text(row.name) || !text(row.singer) || JSON.stringify(row).length > 16384)
             continue
-          const rights = [
-            row.allowPermanentSave,
-            row.permanentDownload,
-            row.meta?.allowPermanentSave,
-          ]
+          const name = normalize(row.name)
           if (
-            row.trial ||
-            row.isPreview ||
-            row.freeTrialInfo ||
-            rights.includes(false) ||
-            src.permanentSave === false ||
-            row.downloadable === false ||
-            (!src.permanentSave && !rights.includes(true))
-          ) {
-            denied = true
-            continue
-          }
-          const key = versionInfo(src, row, quality)?.key
-          if (key) candidates.set(key, row)
-        }
-        if (!candidates.size)
-          throw Error(
-            denied ? '音乐源未允许永久保存此录音，或仅提供试听' : '未找到可保存的完整录音',
+            name !== title &&
+            !(name.startsWith(title) && /^[\s(（\[【-]/u.test(name.slice(title.length)))
           )
-        const same = (a, b) =>
-          a.trim().normalize('NFKC').toLowerCase() === b.trim().normalize('NFKC').toLowerCase()
+            continue
+          const key = versionInfo(src, row, quality)?.key
+          if (!key) continue
+          const right = permission(src, row)
+          if (right === 'granted') candidates.set(key, row)
+          else reasons.add(right)
+        }
+        if (!candidates.size) {
+          if (!reasons.size) throw new RecordingError('missing', '没有找到与歌名匹配的录音')
+          const message = [...reasons].map((k) => explanations[k]).join('、')
+          throw new RecordingError(
+            reasons.size === 1 ? [...reasons][0] : 'mixed',
+            '匹配录音：' + message,
+          )
+        }
         const exact = [...candidates.values()].filter(
           (row) => same(row.name, item.title) && same(row.singer, item.artist),
         )
@@ -521,8 +547,12 @@ export function registerLx(bind, getStore, dialog) {
       choices.delete(id)
     } catch (e) {
       store.db
-        .prepare('UPDATE recommended_items SET error=? WHERE item=?')
-        .run(String(e.code ? '保存失败，请检查目录与网络' : e.message).slice(0, 200), id)
+        .prepare('UPDATE recommended_items SET error=?,diagnosis=? WHERE item=?')
+        .run(
+          String(e.code ? '保存失败，请检查目录与网络' : e.message).slice(0, 200),
+          e.kind ?? (e instanceof TransferError ? 'network' : 'other'),
+          id,
+        )
       store.status(id, '待重试')
     } finally {
       running.delete(id)

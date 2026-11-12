@@ -97,11 +97,15 @@ export function RecordingActions({
   id,
   status,
   message,
+  diagnosis,
+  openSources,
   refresh,
 }: {
   id: string
   status: string
   message: string
+  diagnosis: string
+  openSources(): void
   refresh(): Promise<void>
 }) {
   const [choices, setChoices] = useState<Choice[]>()
@@ -147,6 +151,11 @@ export function RecordingActions({
       {status === '待重试' && (
         <>
           <small>{message}</small>
+          {['denied', 'preview', 'unknown', 'mixed', 'missing', 'source'].includes(diagnosis) && (
+            <Button size="small" onClick={openSources}>
+              更换音乐源
+            </Button>
+          )}
           <Button size="small" disabled={busy} onClick={() => void choose()}>
             重试
           </Button>

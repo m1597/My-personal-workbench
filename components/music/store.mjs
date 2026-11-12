@@ -131,7 +131,7 @@ export class MusicStore {
     const batches = this.db.prepare('SELECT * FROM batches ORDER BY rowid DESC').all()
     const items = this.db
       .prepare(
-        'SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,t.available AS localAvailable FROM items i LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local ORDER BY i.rowid',
+        'SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.diagnosis AS diagnosis,t.available AS localAvailable FROM items i LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local ORDER BY i.rowid',
       )
       .all()
       .map((row) => ({

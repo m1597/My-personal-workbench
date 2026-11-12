@@ -183,9 +183,7 @@ try {
   await page.getByRole('button', { name: '生成推荐' }).click()
   await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(3)
   assert.equal((await calls()).length, before + 1)
-  await expect(
-    page.getByText('音乐源未允许永久保存此录音，或仅提供试听', { exact: true }),
-  ).toBeVisible()
+  await expect(page.getByText('匹配录音：明确禁止永久保存', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '选择录音版本' }).click()
   await page.getByRole('button', { name: /样例歌曲2 · 测试艺人 · 现场/ }).click()
   await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4)
@@ -263,7 +261,7 @@ try {
     mixed,
   )
   assert.equal(rightsRows.find((r) => r.title.endsWith('1')).status, '已入库')
-  assert.match(rightsRows.find((r) => r.title.endsWith('0')).downloadError, /未允许永久保存/)
+  assert.match(rightsRows.find((r) => r.title.endsWith('0')).downloadError, /未声明永久保存许可/)
   assert.equal(await app.evaluate(() => globalThis.transfers), transfers)
   await page.reload()
   await page.getByRole('tab', { name: '每日推荐' }).click()
