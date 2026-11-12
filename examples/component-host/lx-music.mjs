@@ -497,7 +497,8 @@ export function registerLx(bind, getStore, dialog) {
     const store = getStore()
     if (!store.db.prepare('SELECT item FROM recommended_items WHERE item=?').get(id))
       throw Error('无效推荐记录')
-    if (running.has(id)) return
+    if (running.has(id) || store.db.prepare('SELECT 1 FROM dismissed_items WHERE item=?').get(id))
+      return
     const task = new AbortController()
     running.set(id, task)
     const { signal } = task
@@ -527,6 +528,7 @@ export function registerLx(bind, getStore, dialog) {
         signal.throwIfAborted()
         if (!Array.isArray(hits)) throw Error('音乐源返回的结果无效')
         const candidates = new Map()
+        let suppressed = false
         const reasons = new Set()
         const normalize = (v) => v.trim().normalize('NFKC').toLowerCase()
         const same = (a, b) => normalize(a) === normalize(b)
@@ -540,13 +542,22 @@ export function registerLx(bind, getStore, dialog) {
             !(name.startsWith(title) && /^[\s(（\[【-]/u.test(name.slice(title.length)))
           )
             continue
-          const key = versionInfo(src, row, quality)?.key
-          if (!key) continue
+          const version = versionInfo(src, row, quality)
+          if (!version) continue
+          const key = version.key
+          if (store.ignoresRecording(version.platform, version.sourceId)) {
+            suppressed = true
+            continue
+          }
           const right = permission(src, row)
           if (right === 'granted') candidates.set(key, row)
           else reasons.add(right)
         }
         if (!candidates.size) {
+          if (suppressed && !reasons.size) {
+            store.status(id, '已跳过')
+            return
+          }
           if (!reasons.size) throw new RecordingError('missing', '没有找到与歌名匹配的录音')
           const message = [...reasons].map((k) => explanations[k]).join('、')
           throw new RecordingError(
@@ -564,7 +575,12 @@ export function registerLx(bind, getStore, dialog) {
         }
         pick = exact[0]
       }
-      const version = versionInfo(src, pick, quality).key
+      const identity = versionInfo(src, pick, quality)
+      if (store.ignoresRecording(identity.platform, identity.sourceId)) {
+        store.status(id, '已跳过')
+        return
+      }
+      const version = identity.key
       const cached = await verifiedCopy(store, version, signal)
       if (cached) {
         signal.throwIfAborted()
@@ -576,6 +592,7 @@ export function registerLx(bind, getStore, dialog) {
       }
       choices.delete(id)
     } catch (e) {
+      if (store.db.prepare('SELECT 1 FROM dismissed_items WHERE item=?').get(id)) return
       store.db
         .prepare('UPDATE recommended_items SET error=?,diagnosis=? WHERE item=?')
         .run(
@@ -588,6 +605,13 @@ export function registerLx(bind, getStore, dialog) {
       running.delete(id)
     }
   }
+  bind('dismissRecommendation', (id) => {
+    const store = getStore()
+    for (const item of store.dismiss(id)) {
+      running.get(item)?.abort()
+      choices.delete(item)
+    }
+  })
   bind('prepareRecommendation', (id, key) => {
     if (typeof id !== 'string' || (key !== undefined && typeof key !== 'string'))
       throw Error('无效录音')

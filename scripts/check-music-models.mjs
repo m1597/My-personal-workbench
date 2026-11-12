@@ -269,6 +269,72 @@ try {
     delete document.documentElement.dataset.backdrop
   })
   await page.screenshot({ path: path.join(root, 'daily.png') })
+  const history = await page.evaluate(() => window.music.state())
+  const tasteBefore = await fs.readFile(docfile, 'utf8')
+  const filesBefore = await fs.readdir(output)
+  const unresolved = page
+    .locator('.music-list ol li')
+    .filter({ has: page.getByText('样例歌曲3', { exact: true }) })
+  await unresolved.getByText('样例歌曲3', { exact: true }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '不感兴趣', exact: true }).click()
+  await unresolved.getByText('样例歌曲3', { exact: true }).click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '已标记不感兴趣' })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await page.getByRole('tab', { name: '本地曲库' }).click()
+  const nav = page.getByRole('button', { name: '曲库导航' })
+  if (await nav.isVisible()) await nav.click()
+  await page.getByRole('button', { name: '歌曲推荐', exact: true }).click()
+  const localId = rightsRows.find((r) => r.title === '样例歌曲1').localId
+  const localTrack = history.localTracks.find((t) => t.id === localId)
+  const listIndex = history.localTracks
+    .filter((t) => list.tracks.includes(t.id))
+    .findIndex((t) => t.id === localId)
+  const libraryRow = page.locator('.library-row').nth(listIndex)
+  await libraryRow.getByText(localTrack.title, { exact: true }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '不感兴趣', exact: true }).click()
+  const afterFeedback = await page.evaluate(() => window.music.state())
+  assert.ok(afterFeedback.localTracks.find((t) => t.id === localId).notInterested)
+  assert.deepEqual(afterFeedback.playlists, history.playlists)
+  assert.deepEqual(await fs.readdir(output), filesBefore)
+  assert.equal(await fs.readFile(docfile, 'utf8'), tasteBefore)
+  await page.reload()
+  const retry = await page.evaluate(() => window.music.generate('风格测试', 'style'))
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async (b) =>
+          (await window.music.state()).items
+            .filter((r) => r.batch === b && !['正在匹配', '正在保存', '待处理'].includes(r.status))
+            .map((r) => r.title)
+            .sort(),
+        retry,
+      ),
+    )
+    .toEqual(['样例歌曲0', '样例歌曲2', '样例歌曲4'])
+  // Same performer and title with a new platform recording ID remains eligible.
+  await fs.writeFile(
+    source,
+    restricted.replace('id:name,name,singer', 'id:name+"-second-take",name,singer'),
+  )
+  await page.evaluate(() => window.music.lxImport())
+  const variant = await page.evaluate(() => window.music.generate('版本测试', 'style'))
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async (b) =>
+          (await window.music.state()).items.find((r) => r.batch === b && r.title === '样例歌曲1')
+            ?.status,
+        variant,
+      ),
+    )
+    .toBe('已入库')
+  const song = await page.evaluate(
+    async (b) =>
+      (await window.music.state()).items.find((r) => r.batch === b && r.title === '样例歌曲1'),
+    variant,
+  )
+  assert.notEqual(song.localId, localId)
+  assert.equal(song.notInterested, false)
   console.log(
     'PASS 四家服务协议、无授权禁发、审美增量和重试、自动下载复用、歧义、试听和系统歌单。' + root,
   )
@@ -279,9 +345,10 @@ const reopened = await launch()
 try {
   const p = await reopened.firstWindow()
   assert.equal((await p.evaluate(() => window.music.getTasteStatus())).consented, false)
+  assert.ok((await p.evaluate(() => window.music.state())).localTracks.some((t) => t.notInterested))
   assert.equal(
     (await p.evaluate(() => window.music.state())).playlists.find((s) => s.system).tracks.length,
-    4,
+    5,
   )
 } finally {
   await reopened.close()

@@ -31,6 +31,7 @@ const names = [
   'generate',
   'getTasteStatus',
   'setTasteConsent',
+  'dismissRecommendation',
   'prepareRecommendation',
   'recommendationChoices',
   'stopGeneration',

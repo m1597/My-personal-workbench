@@ -1,3 +1,4 @@
+import { TrackMenu } from './TrackMenu'
 import {
   MusicSettings,
   type MusicPreferences,
@@ -58,6 +59,7 @@ type Item = {
   daily: string | null
   localId: string | null
   diagnosis: string
+  notInterested: boolean
   downloadError: string
   audioDuration: number | null
   online: boolean
@@ -611,139 +613,147 @@ function Music() {
                     {rows.map((r) => {
                       const version = r.candidates.find((t) => t.id === r.track)
                       return (
-                        <li key={r.id} data-active={(r.localId ?? r.id) === active?.id}>
-                          <div className="music-track-icon">
-                            {playable(r) ? (
-                              <Button
-                                appearance="subtle"
-                                icon={
-                                  (r.localId ?? r.id) === current.current && !paused ? (
-                                    <Pause size={16} />
-                                  ) : (
-                                    <Play size={16} />
-                                  )
-                                }
-                                aria-label={
-                                  ((r.localId ?? r.id) === current.current && !paused
-                                    ? '暂停'
-                                    : '试听') + r.title
-                                }
-                                onClick={() => void act(() => startTrack(r.localId ?? r.id))}
-                              />
-                            ) : (
-                              <Disc3 size={18} />
-                            )}
-                          </div>
-                          <div className="music-track">
-                            <div>
-                              <strong>{r.title}</strong>
-                              <span>{r.artist}</span>
+                        <TrackMenu
+                          key={r.id}
+                          queueable={playable(r)}
+                          onQueue={(next) => onQueue(r.localId ?? r.id, next)}
+                          onDismiss={() => void act(() => host.dismissRecommendation(r.id))}
+                          dismissed={r.notInterested}
+                        >
+                          <li data-active={(r.localId ?? r.id) === active?.id}>
+                            <div className="music-track-icon">
+                              {playable(r) ? (
+                                <Button
+                                  appearance="subtle"
+                                  icon={
+                                    (r.localId ?? r.id) === current.current && !paused ? (
+                                      <Pause size={16} />
+                                    ) : (
+                                      <Play size={16} />
+                                    )
+                                  }
+                                  aria-label={
+                                    ((r.localId ?? r.id) === current.current && !paused
+                                      ? '暂停'
+                                      : '试听') + r.title
+                                  }
+                                  onClick={() => void act(() => startTrack(r.localId ?? r.id))}
+                                />
+                              ) : (
+                                <Disc3 size={18} />
+                              )}
                             </div>
-                            <p>{r.reason}</p>
-                            {r.status !== '模型推荐' && (
-                              <small>
-                                {r.status}
-                                {version ? ' · ' + version.album + ' · ' + version.version : ''}
-                              </small>
-                            )}
-                            {r.daily && (
-                              <RecordingActions
-                                id={r.id}
-                                status={r.status}
-                                message={r.downloadError}
-                                diagnosis={r.diagnosis}
-                                openSources={openMusicSources}
-                                refresh={refresh}
-                              />
-                            )}
-                            {r.online && !playable(r) && (
-                              <Button
-                                size="small"
-                                disabled={resolving}
-                                onClick={() => void act(() => audition(r))}
-                              >
-                                试听在线录音
-                              </Button>
-                            )}
-                            {online?.row.id === r.id && (
-                              <section className="music-versions" aria-label="选择试听版本">
-                                {online.result.items.map((v) => (
-                                  <Button
-                                    key={v.key}
-                                    size="small"
-                                    disabled={resolving}
-                                    onClick={() =>
-                                      void act(() =>
-                                        audition(
-                                          r,
-                                          v.key,
-                                          online.result.quality.includes('320k')
-                                            ? '320k'
-                                            : online.result.quality[0],
-                                          online.queueIds,
-                                        ),
-                                      )
-                                    }
-                                  >
-                                    {[v.title, v.artist, v.album].filter(Boolean).join(' · ')} ·
-                                    试听
-                                  </Button>
-                                ))}
+                            <div className="music-track">
+                              <div>
+                                <strong>{r.title}</strong>
+                                <span>{r.artist}</span>
+                              </div>
+                              <p>{r.reason}</p>
+                              {r.status !== '模型推荐' && (
+                                <small>
+                                  {r.status}
+                                  {version ? ' · ' + version.album + ' · ' + version.version : ''}
+                                </small>
+                              )}
+                              {r.daily && !r.notInterested && (
+                                <RecordingActions
+                                  id={r.id}
+                                  status={r.status}
+                                  message={r.downloadError}
+                                  diagnosis={r.diagnosis}
+                                  openSources={openMusicSources}
+                                  refresh={refresh}
+                                />
+                              )}
+                              {r.online && !playable(r) && (
                                 <Button
                                   size="small"
-                                  onClick={() => {
-                                    if (resolving) void host.lxCancel()
-                                    setOnline(undefined)
-                                  }}
+                                  disabled={resolving}
+                                  onClick={() => void act(() => audition(r))}
+                                >
+                                  试听在线录音
+                                </Button>
+                              )}
+                              {online?.row.id === r.id && (
+                                <section className="music-versions" aria-label="选择试听版本">
+                                  {online.result.items.map((v) => (
+                                    <Button
+                                      key={v.key}
+                                      size="small"
+                                      disabled={resolving}
+                                      onClick={() =>
+                                        void act(() =>
+                                          audition(
+                                            r,
+                                            v.key,
+                                            online.result.quality.includes('320k')
+                                              ? '320k'
+                                              : online.result.quality[0],
+                                            online.queueIds,
+                                          ),
+                                        )
+                                      }
+                                    >
+                                      {[v.title, v.artist, v.album].filter(Boolean).join(' · ')} ·
+                                      试听
+                                    </Button>
+                                  ))}
+                                  <Button
+                                    size="small"
+                                    onClick={() => {
+                                      if (resolving) void host.lxCancel()
+                                      setOnline(undefined)
+                                    }}
+                                  >
+                                    取消
+                                  </Button>
+                                </section>
+                              )}
+                              {r.status === '待选版本' && (
+                                <div className="music-versions">
+                                  {r.candidates.map((t) => (
+                                    <Button
+                                      key={t.id}
+                                      size="small"
+                                      onClick={() => void act(() => host.choose(r.id, t.id))}
+                                    >
+                                      {t.album} · {t.version}
+                                    </Button>
+                                  ))}
+                                </div>
+                              )}
+                              {['等候', '下载中'].includes(r.status) && (
+                                <Button
+                                  size="small"
+                                  onClick={() => void act(() => host.cancel(r.id))}
                                 >
                                   取消
                                 </Button>
-                              </section>
-                            )}
-                            {r.status === '待选版本' && (
-                              <div className="music-versions">
-                                {r.candidates.map((t) => (
-                                  <Button
-                                    key={t.id}
-                                    size="small"
-                                    onClick={() => void act(() => host.choose(r.id, t.id))}
-                                  >
-                                    {t.album} · {t.version}
-                                  </Button>
-                                ))}
-                              </div>
-                            )}
-                            {['等候', '下载中'].includes(r.status) && (
-                              <Button
-                                size="small"
-                                onClick={() => void act(() => host.cancel(r.id))}
-                              >
-                                取消
-                              </Button>
-                            )}
-                            {!r.online &&
-                              ['已过期', '文件缺失', '已取消', '中断', '下载失败'].includes(
-                                r.status,
-                              ) && (
-                                <Button
-                                  size="small"
-                                  onClick={() => void act(() => host.retry(r.id))}
-                                >
-                                  重新获取
-                                </Button>
                               )}
-                          </div>
-                          {!r.daily && playable(r) && (
-                            <Checkbox
-                              aria-label="保留"
-                              title={'保留' + r.title}
-                              checked={!!r.checked}
-                              onChange={(_, v) =>
-                                void act(() => host.checked(r.id, v.checked === true))
-                              }
-                            />
-                          )}
-                        </li>
+                              {!r.online &&
+                                ['已过期', '文件缺失', '已取消', '中断', '下载失败'].includes(
+                                  r.status,
+                                ) && (
+                                  <Button
+                                    size="small"
+                                    onClick={() => void act(() => host.retry(r.id))}
+                                  >
+                                    重新获取
+                                  </Button>
+                                )}
+                            </div>
+                            {!r.daily && playable(r) && (
+                              <Checkbox
+                                aria-label="保留"
+                                title={'保留' + r.title}
+                                checked={!!r.checked}
+                                onChange={(_, v) =>
+                                  void act(() => host.checked(r.id, v.checked === true))
+                                }
+                              />
+                            )}
+                          </li>
+                        </TrackMenu>
                       )
                     })}
                   </ol>
@@ -751,7 +761,7 @@ function Music() {
               ) : (
                 <div className="music-empty">
                   <ListMusic size={24} />
-                  <p>推荐结果会按日期保存在这里</p>
+                  <p>{chosenBatch ? '本次没有可显示的推荐' : '推荐结果会按日期保存在这里'}</p>
                 </div>
               )}
             </section>

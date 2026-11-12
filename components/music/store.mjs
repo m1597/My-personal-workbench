@@ -25,6 +25,12 @@ export function publish(temp, dest) {
     .func('int __stdcall MoveFileW(str16, str16)')
   if (!moveFile(temp, dest)) throw Error('无法发布录音，请检查空间、目录权限与文件占用')
 }
+const songKey = (title, artist) =>
+  JSON.stringify([
+    'song',
+    ...[title, artist].map((v) => v.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase()),
+  ])
+const recordingKey = (platform, id) => JSON.stringify(['recording', platform, id])
 const cutoff = 24 * 60 * 60 * 1000
 export class MusicStore {
   constructor(root) {
@@ -33,6 +39,8 @@ export class MusicStore {
     mkdirSync(this.cache, { recursive: true })
     this.db = new DatabaseSync(path.join(root, 'music.sqlite'))
     this.db.exec(`CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS recording_feedback(identity TEXT PRIMARY KEY);
+    CREATE TABLE IF NOT EXISTS dismissed_items(item TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY,day TEXT,preference TEXT);
     CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY,batch TEXT,title TEXT,artist TEXT,reason TEXT,track TEXT,status TEXT,checked INTEGER DEFAULT 0,used INTEGER,digest TEXT);
     CREATE TABLE IF NOT EXISTS library(track TEXT PRIMARY KEY,file TEXT,digest TEXT,album TEXT,version TEXT);
@@ -127,21 +135,100 @@ export class MusicStore {
       .all()
       .map(({ artist, count }) => artist.slice(0, 100) + ' · ' + count + ' 首')
   }
+  feedbackIds() {
+    return new Set(
+      this.db
+        .prepare('SELECT identity FROM recording_feedback')
+        .all()
+        .map((r) => r.identity),
+    )
+  }
+  ignoresRecording(platform, id) {
+    return !!this.db
+      .prepare('SELECT 1 FROM recording_feedback WHERE identity=?')
+      .get(recordingKey(platform, id))
+  }
+  dismiss(id) {
+    if (typeof id !== 'string') throw Error('无效推荐记录')
+    const byLocal = id.startsWith('local-')
+    const matches = byLocal
+      ? this.db
+          .prepare(
+            'SELECT i.*,r.local FROM items i JOIN recommended_items r ON r.item=i.id JOIN local_tracks t ON t.id=r.local WHERE r.local=?',
+          )
+          .all(id)
+      : this.db
+          .prepare(
+            'SELECT i.*,r.local FROM items i LEFT JOIN recommended_items r ON r.item=i.id WHERE i.id=?',
+          )
+          .all(id)
+    if (!matches.length) throw Error('该歌曲没有推荐记录')
+    const blocked = this.db.prepare('INSERT OR IGNORE INTO recording_feedback VALUES(?)')
+    this.db.exec('BEGIN')
+    try {
+      for (const row of matches) {
+        this.db.prepare('INSERT OR IGNORE INTO dismissed_items VALUES(?)').run(row.id)
+        if (['待处理', '正在匹配', '正在保存', '待选录音', '待重试'].includes(row.status))
+          this.status(row.id, '已标记不感兴趣')
+        const copies = row.local
+          ? this.db
+              .prepare(
+                'SELECT platform,sourceId FROM recording_copies WHERE local=? AND platform IS NOT NULL AND sourceId IS NOT NULL',
+              )
+              .all(row.local)
+          : []
+        if (copies.length)
+          for (const copy of copies) blocked.run(recordingKey(copy.platform, copy.sourceId))
+        else if (catalogue.some((t) => t.id === row.track))
+          blocked.run(recordingKey('offline', row.track))
+        else blocked.run(songKey(row.title, row.artist))
+      }
+      this.db.exec('COMMIT')
+    } catch (e) {
+      this.db.exec('ROLLBACK')
+      throw e
+    }
+    return matches.map((r) => r.id)
+  }
   snapshot() {
+    const feedback = this.feedbackIds()
+    const dismissed = new Set(
+      this.db
+        .prepare('SELECT item FROM dismissed_items')
+        .all()
+        .map((r) => r.item),
+    )
+    const localIds = new Set(
+      this.db
+        .prepare('SELECT local,platform,sourceId FROM recording_copies')
+        .all()
+        .filter((r) => feedback.has(recordingKey(r.platform, r.sourceId)))
+        .map((r) => r.local),
+    )
     const batches = this.db.prepare('SELECT * FROM batches ORDER BY rowid DESC').all()
     const items = this.db
       .prepare(
-        'SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.diagnosis AS diagnosis,t.available AS localAvailable FROM items i LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local ORDER BY i.rowid',
+        `SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.diagnosis AS diagnosis,t.available AS localAvailable FROM items i LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local WHERE i.status != '已跳过' ORDER BY i.rowid`,
       )
       .all()
       .map((row) => ({
         ...row,
+        notInterested:
+          dismissed.has(row.id) ||
+          localIds.has(row.localId) ||
+          feedback.has(songKey(row.title, row.artist)) ||
+          feedback.has(recordingKey('offline', row.track)),
         status: row.daily && row.status === '已入库' && !row.localAvailable ? '待重试' : row.status,
         online: row.status === '模型推荐' || row.track?.startsWith('online-') || false,
-        candidates: catalogue.filter((t) => t.title === row.title && t.artist === row.artist),
+        candidates: catalogue.filter(
+          (t) =>
+            t.title === row.title &&
+            t.artist === row.artist &&
+            !feedback.has(recordingKey('offline', t.id)),
+        ),
       }))
     return {
-      localTracks: this.library.list(),
+      localTracks: this.library.list().map((t) => ({ ...t, notInterested: localIds.has(t.id) })),
       playlists: this.library.playlists(),
       importJob: this.library.job,
       queue: JSON.parse(this.get('play-queue') || '[]'),
@@ -159,11 +246,20 @@ export class MusicStore {
     return this.saveSuggestions(preference, offlineSuggestions(preference, summary), '待匹配')
   }
   saveSuggestions(preference, rows, status) {
+    const feedback = this.feedbackIds()
+    const accepted = rows.filter((row) => {
+      if (feedback.has(songKey(row.title, row.artist))) return false
+      if (status !== '待匹配') return true
+      const candidates = catalogue.filter((t) => t.title === row.title && t.artist === row.artist)
+      return (
+        !candidates.length || candidates.some((t) => !feedback.has(recordingKey('offline', t.id)))
+      )
+    })
     const batch = randomUUID()
     this.db.exec('BEGIN')
     try {
       this.db.prepare('INSERT INTO batches VALUES(?,?,?)').run(batch, day(), preference)
-      for (const row of rows)
+      for (const row of accepted)
         this.db
           .prepare(
             'INSERT INTO items(id,batch,title,artist,reason,status,used) VALUES(?,?,?,?,?,?,?)',
@@ -184,7 +280,12 @@ export class MusicStore {
     for (const row of this.db
       .prepare("SELECT * FROM items WHERE batch=? AND status='待匹配'")
       .all(batch)) {
-      const hits = catalogue.filter((t) => t.title === row.title && t.artist === row.artist)
+      const hits = catalogue.filter(
+        (t) =>
+          t.title === row.title &&
+          t.artist === row.artist &&
+          !this.ignoresRecording('offline', t.id),
+      )
       if (hits.length === 1) this.choose(row.id, hits[0].id)
       else this.status(row.id, hits.length ? '待选版本' : '目录无此录音')
     }
