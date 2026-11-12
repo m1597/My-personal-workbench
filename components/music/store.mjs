@@ -144,8 +144,10 @@ export class MusicStore {
     this.db.exec('BEGIN')
     try {
       const marked = this.db
-        .prepare(`SELECT i.title,i.artist,i.track,EXISTS(SELECT 1 FROM recommended_items r JOIN recording_copies c ON c.local=r.local WHERE r.item=i.id AND c.sourceId IS NOT NULL AND c.platform IS NOT NULL) AS knownCopy
-        FROM dismissed_items d JOIN items i ON i.id=d.item`)
+        .prepare(
+          `SELECT i.title,i.artist,i.track,EXISTS(SELECT 1 FROM recommended_items r JOIN recording_copies c ON c.local=r.local WHERE r.item=i.id AND c.sourceId IS NOT NULL AND c.platform IS NOT NULL) AS knownCopy
+        FROM dismissed_items d JOIN items i ON i.id=d.item`,
+        )
         .all()
       const unresolved = new Set(
         marked
@@ -230,6 +232,8 @@ export class MusicStore {
     return matches.map((r) => r.id)
   }
   snapshot() {
+    const today = day()
+    this.expireRecommendations(today)
     const feedback = this.feedbackIds()
     const dismissed = new Set(
       this.db
@@ -248,12 +252,14 @@ export class MusicStore {
         )
         .map((r) => r.local),
     )
-    const batches = this.db.prepare('SELECT * FROM batches ORDER BY rowid DESC').all()
+    const batches = this.db
+      .prepare('SELECT * FROM batches WHERE day=? ORDER BY rowid DESC')
+      .all(today)
     const items = this.db
       .prepare(
-        `SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.diagnosis AS diagnosis,t.available AS localAvailable FROM items i LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local WHERE i.status != '已跳过' ORDER BY i.rowid`,
+        `SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.diagnosis AS diagnosis,t.available AS localAvailable FROM items i JOIN batches b ON b.id=i.batch LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local WHERE b.day=? AND i.status != '已跳过' ORDER BY b.rowid DESC,i.rowid`,
       )
-      .all()
+      .all(today)
       .map((row) => ({
         ...row,
         notInterested:
@@ -284,6 +290,71 @@ export class MusicStore {
       current: this.get('current'),
       position: Number(this.get('position')),
       hasLibrary: !!this.get('root'),
+    }
+  }
+  expireRecommendations(today = day()) {
+    if (this.lastExpiryDay === today) return
+    const stale = this.db
+      .prepare(
+        `SELECT i.id,t.id AS local,l.file AS savedFile
+      FROM items i JOIN batches b ON b.id=i.batch
+      LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local
+      LEFT JOIN library l ON l.track=i.track
+      WHERE b.day < ?`,
+      )
+      .all(today)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const replacements = new Map()
+      for (const { id, local, savedFile } of stale) {
+        this.jobs.get(id)?.abort()
+        if (this.active === id) this.release()
+        let localId = local
+        if (!localId && savedFile)
+          localId = this.db
+            .prepare('SELECT id FROM local_tracks WHERE file=? COLLATE NOCASE')
+            .get(path.join(this.get('root'), savedFile))?.id
+        replacements.set(id, localId)
+        if (/^[a-f0-9-]{36}$/.test(id)) {
+          for (const ext of ['.wav', '.m4a', '.mp3', '.flac']) this.removeCache(id, ext)
+        }
+        if (local) {
+          // Keep the link used by the local recommendation playlist and explicit feedback.
+          this.db
+            .prepare("UPDATE items SET batch=NULL,reason='',digest=NULL,checked=0 WHERE id=?")
+            .run(id)
+        } else {
+          this.db.prepare('DELETE FROM recommended_items WHERE item=?').run(id)
+          this.db.prepare('DELETE FROM dismissed_items WHERE item=?').run(id)
+          this.db.prepare('DELETE FROM items WHERE id=?').run(id)
+        }
+      }
+      if (replacements.size) {
+        const current = this.get('current')
+        if (replacements.has(current))
+          this.checkpoint(
+            replacements.get(current) || '',
+            replacements.get(current) ? Number(this.get('position')) : 0,
+          )
+        const queue = JSON.parse(this.get('play-queue') || '[]')
+        this.set(
+          'play-queue',
+          JSON.stringify(
+            queue.map((id) => (replacements.has(id) ? replacements.get(id) : id)).filter(Boolean),
+          ),
+        )
+      }
+      this.db.prepare('DELETE FROM batches WHERE day < ?').run(today)
+      if (stale.length)
+        this.db.exec(`DELETE FROM online_recordings WHERE
+        NOT EXISTS(SELECT 1 FROM items WHERE items.track=online_recordings.track) AND
+        NOT EXISTS(SELECT 1 FROM library WHERE library.track=online_recordings.track) AND
+        NOT EXISTS(SELECT 1 FROM saves WHERE saves.track=online_recordings.track)`)
+      this.db.exec('COMMIT')
+      this.lastExpiryDay = today
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
     }
   }
   generate(preference, summary) {
@@ -433,11 +504,22 @@ export class MusicStore {
     return data
   }
   checkpoint(id, position) {
+    // A renderer can still report progress for a recommendation that expired during playback.
+    if (id && !id.startsWith('local-')) {
+      const row = this.db
+        .prepare(
+          'SELECT i.batch,r.local FROM items i LEFT JOIN recommended_items r ON r.item=i.id WHERE i.id=?',
+        )
+        .get(id)
+      if (!row || (!row.batch && !row.local)) return
+      if (!row.batch) id = row.local
+    }
     this.db
       .prepare("INSERT OR REPLACE INTO state VALUES ('current',?),('position',?)")
       .run(id, String(position))
   }
   cleanup(now) {
+    this.expireRecommendations()
     for (const r of this.db
       .prepare(
         "SELECT * FROM items WHERE digest IS NOT NULL OR status IN ('已取消','中断','下载失败')",

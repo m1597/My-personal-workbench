@@ -111,6 +111,51 @@ try {
       Array(5).fill({ title: 'a', artist: 'b', reason: 'c', url: 'https://example.invalid' }),
     ),
   )
+  const oldDaily = store.saveSuggestions(
+    '跨日验收',
+    [
+      { title: '保留录音', artist: '测试艺人', reason: '首次推荐' },
+      { title: '错过录音', artist: '测试艺人', reason: '首次推荐' },
+    ],
+    '待处理',
+  )
+  const [saved, missed] = store.db
+    .prepare('SELECT id FROM items WHERE batch=? ORDER BY rowid')
+    .all(oldDaily)
+  const permanentFile = path.join(target, 'retained.mp3')
+  fs.copyFileSync('tests/fixtures/local-music/tone.mp3', permanentFile)
+  store.library.upsert({
+    file: permanentFile,
+    title: '保留录音',
+    artist: '测试艺人',
+    album: '',
+    duration: 1,
+  })
+  const localId = store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(permanentFile).id
+  store.db.prepare('UPDATE recommended_items SET local=? WHERE item=?').run(localId, saved.id)
+  store.db.prepare("UPDATE batches SET day='2000-01-01' WHERE id=?").run(oldDaily)
+  store.set('play-queue', JSON.stringify([missed.id, saved.id]))
+  store.checkpoint(saved.id, 0.5)
+  fs.writeFileSync(store.file(missed.id, '.mp3'), 'temporary')
+  const feedback = store.feedbackIds()
+  restart()
+  const later = store.snapshot()
+  assert.ok(!later.batches.some((b) => b.id === oldDaily))
+  assert.ok(!later.items.some((r) => [missed.id, saved.id].includes(r.id)))
+  assert.throws(() => store.item(missed.id))
+  assert.deepEqual(later.queue, [localId])
+  assert.equal(later.current, localId)
+  assert.equal(later.position, 0.5)
+  store.checkpoint(missed.id, 1)
+  assert.equal(store.get('current'), localId)
+  assert.equal(Number(store.get('position')), 0.5)
+  store.checkpoint(saved.id, 0.8)
+  assert.equal(store.get('current'), localId)
+  assert.equal(Number(store.get('position')), 0.8)
+  assert.ok(later.playlists.some((p) => p.name === '歌曲推荐' && p.tracks.includes(localId)))
+  assert.ok(fs.existsSync(permanentFile) && !fs.existsSync(store.file(missed.id, '.mp3')))
+  assert.deepEqual(store.feedbackIds(), feedback)
+  console.log('PASS 跨日过期清理、已保存歌单及队列迁移、未下载条目无负反馈')
   console.log(
     'PASS 并发、取消、失效选择、同版本本地命中、缺失重取、目标卷 ENOSPC 注入、重复入库、复制后中断恢复。缓存卷 ' +
       path.parse(root).root +

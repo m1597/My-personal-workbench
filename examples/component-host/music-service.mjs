@@ -273,7 +273,12 @@ export function musicService(
       if (viewEpoch !== epoch) throw Error('窗口已关闭')
       store.release()
       store.active = id
-      grant = { url: 'fitbay-audio://track/' + randomUUID(), id, file, audition: true }
+      grant = {
+        url: 'fitbay-audio://track/' + randomUUID(),
+        id,
+        file,
+        audition: true,
+      }
       return grant.url
     }
     const row = store.library.row(text(id))
@@ -344,7 +349,10 @@ export function musicService(
   bind('state', () => ({
     ...store.snapshot(),
     models: modelInfo(store),
-    prefs: { ...getMusicPreferences(store), shortcutFailures: shortcuts.failures() },
+    prefs: {
+      ...getMusicPreferences(store),
+      shortcutFailures: shortcuts.failures(),
+    },
   }))
   bind('setMusicQuality', (quality) => setMusicQuality(store, quality))
   bind('setMusicOutput', (volume, muted) => setMusicOutput(store, volume, muted))

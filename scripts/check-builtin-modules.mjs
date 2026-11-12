@@ -77,7 +77,7 @@ try {
     await dragOut(id)
     await expect((await pageFor(id)).getByTestId(id)).toBeVisible()
   }
-  await expect(shell.getByTestId('panel-count')).toHaveText('0 个模块已打开')
+  await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(0)
   expect(app.windows()).toHaveLength(5)
   await launchIntent('module-1')
   await expect(nav.getByRole('textbox', { name: '搜索模块' })).toHaveValue('模块 4')
@@ -91,7 +91,7 @@ try {
   await launchIntent('workbench')
   await expect.poll(() => app.windows().length).toBe(5)
   shell = app.windows().find((p) => !new URL(p.url() || 'about:blank').searchParams.has('builtin'))
-  await expect(shell.getByTestId('panel-count')).toHaveText('0 个模块已打开')
+  await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(0)
   console.log('PASS 四窗同时分离、重复入口与关闭/重开空工作台')
 
   const groupFor = (id) =>
@@ -235,7 +235,7 @@ try {
     timeout: 8000,
   })
   expect(app.windows()).toHaveLength(1)
-  await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(4)
   console.log('PASS 独立检查器尺寸、关闭单窗、重载布局；证据目录 ' + evidence)
 } finally {
   await app.close()

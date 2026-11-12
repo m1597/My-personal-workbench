@@ -121,7 +121,7 @@ try {
       titleOffset: (label.top + label.bottom - rect.top - rect.bottom) / 2,
     }
   })
-  assert.ok(geometry.height <= 33 && geometry.height >= 30, JSON.stringify(geometry))
+  assert.ok(Math.abs(geometry.height - 38) <= 1, JSON.stringify(geometry))
   assert.ok(Math.abs(geometry.topInset - 4) <= 0.5, JSON.stringify(geometry))
   assert.ok(Math.abs(geometry.titleOffset) <= 1, JSON.stringify(geometry))
   assert.ok(

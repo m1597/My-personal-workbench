@@ -46,8 +46,7 @@ input:not(.fui-Input__input):focus-visible {
 }
 button,
 kbd,
-.app-header,
-.statusbar {
+.app-header {
   user-select: none;
 }
 svg {
@@ -112,27 +111,6 @@ svg {
   flex: 1;
   min-height: 0;
   padding: var(--space-8) var(--space-12) var(--space-12);
-}
-.statusbar {
-  display: flex;
-  gap: var(--space-13);
-  align-items: center;
-  height: 28px;
-  flex-shrink: 0;
-  padding: 0 var(--space-15);
-  color: var(--text-muted);
-  font-size: var(--font-size-caption);
-  border-top: 1px solid var(--stroke);
-}
-.statusbar > span {
-  display: flex;
-  gap: var(--space-6);
-  align-items: center;
-}
-.status-separator {
-  height: 10px;
-  width: 1px;
-  background: var(--line);
 }
 .dockview-theme-workbench {
   height: 100%;

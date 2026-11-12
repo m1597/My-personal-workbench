@@ -12,15 +12,7 @@ import {
 } from './MusicSettings'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import {
-  Button,
-  Checkbox,
-  Dropdown,
-  Option,
-  Slider,
-  Tab,
-  TabList,
-} from '@fluentui/react-components'
+import { Button, Checkbox, Slider, Tab, TabList } from '@fluentui/react-components'
 import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import {
   AudioLines,
@@ -66,6 +58,7 @@ type Item = {
   status: string
   daily: string | null
   localId: string | null
+  localAvailable: number | null
   diagnosis: string
   notInterested: boolean
   downloadError: string
@@ -232,7 +225,6 @@ function Music() {
     }
   }, [])
   const [state, setState] = useState<State>(),
-    [batch, setBatch] = useState(''),
     [paused, setPaused] = useState(true),
     [time, setTime] = useState(0),
     [error, setError] = useState(''),
@@ -292,7 +284,6 @@ function Music() {
       .state()
       .then((s) => {
         setState(s)
-        setBatch(s.items.find((i) => i.id === s.current)?.batch ?? s.batches[0]?.id ?? '')
       })
       .catch((e) => setError(String(e)))
     const mode = (v: Mode) => {
@@ -331,7 +322,36 @@ function Music() {
       return () => clearInterval(t)
     }
   }, [working])
-  const rows = state?.items.filter((i) => i.batch === batch) ?? []
+  useEffect(() => {
+    if (tab !== 'audition') return
+    let alive = true
+    let timer: ReturnType<typeof setTimeout>
+    function update() {
+      clearTimeout(timer)
+      void host
+        .state()
+        .then((next) => {
+          if (alive) setState(next)
+        })
+        .catch((e) => {
+          if (alive) setError(String(e))
+        })
+      const midnight = new Date()
+      midnight.setHours(24, 0, 0, 0)
+      timer = setTimeout(update, Math.max(1, midnight.getTime() - Date.now()))
+    }
+    update()
+    window.addEventListener('focus', update)
+    return () => {
+      alive = false
+      clearTimeout(timer)
+      window.removeEventListener('focus', update)
+    }
+  }, [tab])
+  const rows = state?.items ?? []
+  async function forBatches(items: Item[], action: (batch: string) => Promise<unknown>) {
+    for (const id of new Set(items.map((item) => item.batch))) await action(id)
+  }
   const playlist = state?.playlists.find((p) => p.id === requestedCollection)
   const collection =
     requestedCollection === 'infrequent' ||
@@ -500,7 +520,6 @@ function Music() {
   const active =
     state?.localTracks.find((i) => i.id === now) ?? state?.items.find((i) => i.id === now)
   const localMode = active ? 'duration' in active : tab === 'library'
-  const chosenBatch = state?.batches.find((b) => b.id === batch)
   const elapsed = current.current ? time : (state?.position ?? 0)
   const [lyricsOpen, setLyricsOpen] = useState(false)
   const [lyrics, setLyrics] = useState<{
@@ -575,7 +594,6 @@ function Music() {
         )
         if (exact.length !== 1) {
           setTab('audition')
-          setBatch(row.batch)
           setOnline({ row, result, queueIds })
           return
         }
@@ -777,51 +795,70 @@ function Music() {
                 openSettings={() => openSettings('model')}
                 initialDraft={state.draft}
                 refresh={refresh}
-                generated={setBatch}
               />
             )}
             <section className="music-list">
               <div className="music-section-head">
-                <h2>推荐记录</h2>
-                {chosenBatch && (
-                  <Dropdown
-                    inlinePopup
-                    size="small"
-                    aria-label="推荐记录"
-                    listbox={{ className: 'component-popup' }}
-                    value={chosenBatch.day + ' · ' + chosenBatch.preference}
-                    selectedOptions={[batch]}
-                    onOptionSelect={(_, d) => d.optionValue && setBatch(d.optionValue)}
-                  >
-                    {state?.batches.map((b) => (
-                      <Option key={b.id} value={b.id}>
-                        {b.day + ' · ' + b.preference}
-                      </Option>
-                    ))}
-                  </Dropdown>
-                )}
+                <h2>今日推荐</h2>
               </div>
               {rows.length > 0 ? (
                 <>
                   <div className="music-tools">
-                    <small>{rows.length} 首曲目</small>
+                    <small>
+                      {rows.length} 首候选 · 已入库{' '}
+                      {
+                        new Set(
+                          rows
+                            .filter((r) => r.status === '已入库' && r.localId && r.localAvailable)
+                            .map((r) => r.localId),
+                        ).size
+                      }{' '}
+                      首
+                    </small>
                     {rows.some((r) => r.status === '待匹配') && (
-                      <Button size="small" onClick={() => void act(() => host.match(batch))}>
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          void act(() =>
+                            forBatches(
+                              rows.filter((r) => r.status === '待匹配'),
+                              host.match,
+                            ),
+                          )
+                        }
+                      >
                         匹配目录
                       </Button>
                     )}
                     {rows.some((row) => ['等候', '下载中'].includes(row.status)) && (
-                      <Button size="small" onClick={() => void act(() => host.cancelBatch(batch))}>
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          void act(() =>
+                            forBatches(
+                              rows.filter((r) => ['等候', '下载中'].includes(r.status)),
+                              host.cancelBatch,
+                            ),
+                          )
+                        }
+                      >
                         取消本批下载
                       </Button>
                     )}
-                    {!rows.some((r) => r.daily) && (
+                    {rows.some((r) => !r.daily) && (
                       <Button
                         size="small"
                         appearance="subtle"
                         disabled={!selected.length}
                         icon={<FolderPlus size={15} />}
-                        onClick={() => void act(() => host.keep(batch))}
+                        onClick={() =>
+                          void act(() =>
+                            forBatches(
+                              selected.filter((r) => !r.daily),
+                              host.keep,
+                            ),
+                          )
+                        }
                       >
                         保留所选（{selected.length}）
                       </Button>
@@ -979,7 +1016,7 @@ function Music() {
               ) : (
                 <div className="music-empty">
                   <ListMusic size={24} />
-                  <p>{chosenBatch ? '本次没有可显示的推荐' : '推荐结果会按日期保存在这里'}</p>
+                  <p>{state?.batches.length ? '今天没有可显示的推荐' : '今天的推荐会显示在这里'}</p>
                 </div>
               )}
             </section>

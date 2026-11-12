@@ -25,7 +25,7 @@ async function launch(count = 4) {
   })
   page = await app.firstWindow()
   page.on('pageerror', (error) => errors.push(error.message))
-  await expect(page.getByTestId('panel-count')).toHaveText(`${count} 个模块已打开`)
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(count)
   expect(
     await app.evaluate(({ BrowserWindow, screen }) => {
       const window = BrowserWindow.getAllWindows()[0]
@@ -267,7 +267,7 @@ test('命名快照可显式更新，默认布局独立于重启实时布局', as
   await restart(0)
   await layouts()
   await page.getByRole('button', { name: '还原默认布局' }).click()
-  await expect(page.getByTestId('panel-count')).toHaveText('3 个模块已打开')
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(3)
   await layouts()
   await page.getByLabel('已保存的布局').selectOption('空白')
   await page.getByRole('button', { name: '切换布局' }).click()

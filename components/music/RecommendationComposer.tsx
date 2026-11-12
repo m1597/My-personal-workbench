@@ -5,16 +5,9 @@ type Props = {
   models: ModelInfo
   initialDraft: string
   refresh(): Promise<void>
-  generated(batch: string): void
   openSettings(): void
 }
-export function RecommendationComposer({
-  models,
-  initialDraft,
-  refresh,
-  generated,
-  openSettings,
-}: Props) {
+export function RecommendationComposer({ models, initialDraft, refresh, openSettings }: Props) {
   const [mode, setMode] = useState<'artist' | 'style'>('style')
   const [artist, setArtist] = useState('')
   const [style, setStyle] = useState(initialDraft)
@@ -30,12 +23,10 @@ export function RecommendationComposer({
     setBusy(true)
     setError('')
     try {
-      generated(
-        await window.music.generate(
-          mode === 'artist' ? artist : style,
-          mode,
-          mode === 'artist' && similar,
-        ),
+      await window.music.generate(
+        mode === 'artist' ? artist : style,
+        mode,
+        mode === 'artist' && similar,
       )
       await refresh()
     } catch (e) {

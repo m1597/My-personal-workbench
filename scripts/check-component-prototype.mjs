@@ -550,7 +550,7 @@ try {
   await shell.getByRole('button', { name: '窗口', exact: true }).click()
   await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
   await shell.getByRole('button', { name: '还原默认布局', exact: true }).click()
-  await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(4)
   console.log('PASS 20 次同视图停靠/分离，中文/队列/计数/会话保持；权限、遮挡与崩溃隔离')
 } finally {
   await app.close()
@@ -619,7 +619,7 @@ for (const kind of ['missing', 'incompatible']) {
     const result = await shell.evaluate(() => window.componentHost.open())
     expect(result.ok).toBe(false)
     expect(result.error).toContain(kind === 'missing' ? 'NOT_INSTALLED' : 'INCOMPATIBLE')
-    await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+    await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(4)
     if (kind === 'missing') {
       await cp(samplePath, fixture, { recursive: true })
       await shell.getByRole('tab', { name: '模块 1', exact: true }).click()
@@ -653,7 +653,7 @@ for (const kind of ['missing', 'incompatible']) {
       const standalone = await findPage(app, '/missing/index.html')
       await expect(standalone.locator('#mode')).toHaveText('独立窗口')
       await shell.reload()
-      await expect(shell.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+      await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(4)
       expect(await savedPanels()).toEqual(modules)
       await expect(shell.locator('.dv-active-group .dv-active-tab')).toContainText('模块 1')
       await restoreStandaloneSlot(shell)

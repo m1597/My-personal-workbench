@@ -73,14 +73,6 @@ export default function App() {
             />
           </main>
           <MusicPlayerBar />
-          <footer className="statusbar">
-            <span>
-              <span className="accent-dot" />
-              就绪
-            </span>
-            <span className="status-separator" />
-            <span data-testid="panel-count">{workspace.visible.length} 个模块已打开</span>
-          </footer>
         </div>
       </WorkspaceContext.Provider>
     </ComponentTheme>

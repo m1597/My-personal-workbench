@@ -37,7 +37,7 @@ test.beforeEach(async ({}, testInfo) => {
   await app.context().tracing.start({ screenshots: false, snapshots: true })
   errors = []
   page.on('pageerror', (error) => errors.push(error.message))
-  await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(4)
 })
 
 test.afterEach(async ({}, testInfo) => {
@@ -75,7 +75,7 @@ test('旧外观偏好不会覆盖固定深色或重置布局', async () => {
     )
   })
   await page.reload()
-  await expect(page.getByTestId('panel-count')).toHaveText('3 个模块已打开')
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(3)
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
   await expect(page.getByRole('button', { name: /切换到浅色|软件设置/ })).toHaveCount(0)
@@ -159,10 +159,10 @@ test('拖拽模块合并标签，再拖到边缘分屏', async () => {
 
 test('关闭重开、最大化还原、空工作区恢复', async () => {
   await page.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
-  await expect(page.getByTestId('panel-count')).toHaveText('3 个模块已打开')
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(3)
   await page.getByRole('button', { name: '窗口', exact: true }).click()
   await page.getByRole('menuitem', { name: '模块 4', exact: true }).click()
-  await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(4)
   await page.getByRole('button', { name: '窗口', exact: true }).click()
   await page.getByRole('menuitem', { name: '布局', exact: true }).click()
   await page.getByRole('button', { name: '还原默认布局', exact: true }).click()
@@ -175,12 +175,12 @@ test('关闭重开、最大化还原、空工作区恢复', async () => {
   await group.getByRole('button', { name: '还原面板', exact: true }).click()
   for (let i = 1; i <= 4; i++)
     await page.getByRole('button', { name: `Close 模块 ${i}`, exact: true }).click()
-  await expect(page.getByTestId('panel-count')).toHaveText('0 个模块已打开')
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(0)
   const restore = page.getByRole('button', { name: '恢复默认布局', exact: true })
   await expect(restore).toHaveCSS('background-color', 'rgb(128, 186, 255)')
   await restore.click()
   await expect(page.locator('.module-row').first()).toHaveCSS('justify-content', 'flex-start')
-  await expect(page.getByTestId('panel-count')).toHaveText('4 个模块已打开')
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(4)
   await page.mouse.move(0, 0)
   await page.screenshot({
     animations: 'disabled',

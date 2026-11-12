@@ -75,9 +75,6 @@
 .inspector-section:last-of-type {
   border-bottom: 0;
 }
-.statusbar {
-  border-top: 0;
-}
 .bottom-panel {
   container-type: size;
   container-name: bottom-module;
@@ -115,6 +112,12 @@
   .dv-tabs-and-actions-container:has(.dv-tab[data-tab-panel-id="component-music"]) {
   --dv-tabs-and-actions-container-height: 32px;
   padding-block: 0;
+}
+.dockview-theme-workbench
+  .dv-tabs-and-actions-container:has(.dv-tab[data-tab-panel-id="component-music"]):not(
+    :has(.dv-tab ~ .dv-tab)
+  ) {
+  --dv-tabs-and-actions-container-height: 38px;
 }
 .dockview-theme-workbench .dv-tab[data-tab-panel-id="component-music"] {
   margin-block-start: var(--space-4);

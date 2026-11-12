@@ -15,7 +15,7 @@ async function launch(count) {
   })
   const page = await app.firstWindow()
   page.on('pageerror', (error) => errors.push(error.message))
-  await expect(page.getByTestId('panel-count')).toHaveText(`${count} 个模块已打开`)
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(count)
   const state = await app.evaluate(({ app, BrowserWindow, screen }) => {
     const window = BrowserWindow.getAllWindows()[0]
     const bounds = window.getBounds()
@@ -41,7 +41,7 @@ try {
   await page.getByRole('button', { name: '窗口', exact: true }).click()
   await page.getByRole('menuitem', { name: '布局', exact: true }).click()
   await page.getByRole('button', { name: '还原默认布局', exact: true }).click()
-  await expect(page.getByTestId('panel-count')).toHaveText('0 个模块已打开')
+  await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(0)
   await page.screenshot({ path: 'tmp/packaged-verified.png', animations: 'disabled' })
   expect(errors).toEqual([])
   console.log('PASS 打包程序：后台启动、独立 profile、固定深色与布局重启恢复、重置。')

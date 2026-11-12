@@ -110,13 +110,13 @@ try {
   } else if (scenario === 'workbench') {
     await assert.rejects(access(m), { code: 'ENOENT' })
     const shell = await find('/workbench/index.html')
-    await expect(shell.getByTestId('panel-count')).toHaveText('0 个模块已打开')
+    await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(0)
     await shell.getByRole('button', { name: '窗口', exact: true }).click()
     await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
     await expect(
       shell.getByRole('alert').filter({ hasText: '请先安装 FitBay Music' }),
     ).toBeVisible()
-    await expect(shell.getByTestId('panel-count')).toHaveText('0 个模块已打开')
+    await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(0)
     console.log('PASS 仅安装工作台，空工作区可独立启动')
   } else if (scenario === 'music') {
     await assert.rejects(access(w), { code: 'ENOENT' })
