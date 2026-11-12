@@ -338,6 +338,18 @@ li[data-active="true"] .music-track-icon,
 .download-search .fui-Combobox {
   min-width: 0;
 }
+@media (max-width: 600px) {
+  .download-search {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .download-search label[for="download-library"],
+  .download-search > button {
+    grid-column: 1 / -1;
+  }
+  .download-search .fui-Input {
+    min-width: 0;
+  }
+}
 .lx-line,
 .lx-panel li {
   display: flex;
