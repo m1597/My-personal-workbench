@@ -73,7 +73,9 @@ function edition(title) {
   return { base: name, kind: '', detail: '' }
 }
 export function recordingPreference(text) {
-  const description = fold(text).replace(/《[^》]*》/gu, '')
+  const description = fold(text)
+    .replace(/《[^》]*》/gu, '')
+    .replace(/原唱(?:的)?(?:署名|标注|信息)/gu, '')
   const live =
     /(?:现场(?:版|录音)?|現場版|ライブ版|\blive(?:\s+(?:version|recording|at|in|from)|版|$))/iu
   const original =

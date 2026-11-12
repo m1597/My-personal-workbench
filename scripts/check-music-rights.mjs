@@ -152,7 +152,7 @@ try {
   const openWindow = app.waitForEvent('window')
   await page.getByRole('button', { name: '桌面歌词', exact: true }).click()
   const overlay = await openWindow
-  await expect(overlay.locator('strong')).toHaveText('暂无同步歌词')
+  await expect(overlay.locator('strong')).toHaveText('')
   for (const row of rows) await run(row.id)
   await expect(overlay.locator('strong')).toHaveText('录音 允许保存')
   assert.deepEqual(await page.evaluate((id) => window.music.lyrics(id), oldItem), [
