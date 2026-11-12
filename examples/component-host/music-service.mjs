@@ -442,8 +442,8 @@ export function musicService(
         let saved = []
         let deferred = []
         let requiredArtist = mode === 'artist' && !similar ? preference.trim() : ''
-        const frequency = (row) =>
-          saved.filter(
+        const frequency = (row, tracks = saved) =>
+          tracks.filter(
             (r) => artistMatches(row.artist, r.artist) || artistMatches(r.artist, row.artist),
           ).length
         const preferDifferentArtist = (row) =>
@@ -507,27 +507,37 @@ export function musicService(
           const priorDeferred = new Set(deferred)
           const candidates = [...deferred, ...fresh]
           deferred = []
-          async function attempt(row) {
-            store.saveSuggestions(label, [row], '待处理', batch)
-            await lx.batch(batch, signal, sourceHealth)
-            signal.throwIfAborted()
-            saved = savedRows.all(batch)
+          async function attempt(queue, allowRepeat) {
+            while (queue.length && saved.length < targetCount) {
+              signal.throwIfAborted()
+              const group = []
+              const slots = Math.min(3, targetCount - saved.length)
+              while (group.length < slots && queue.length) {
+                const represented = [...saved, ...group]
+                if (mode !== 'artist')
+                  queue.sort((a, b) => frequency(a, represented) - frequency(b, represented))
+                const index = queue.findIndex(
+                  (row) =>
+                    allowRepeat || !preferDifferentArtist(row) || !frequency(row, represented),
+                )
+                if (index < 0) break
+                group.push(queue.splice(index, 1)[0])
+              }
+              if (!group.length) break
+              store.saveSuggestions(label, group, '待处理', batch)
+              await lx.batch(batch, signal, sourceHealth)
+              signal.throwIfAborted()
+              saved = savedRows.all(batch)
+            }
           }
-          while (candidates.length && saved.length < targetCount) {
-            if (mode !== 'artist') candidates.sort((a, b) => frequency(a) - frequency(b))
-            const next = candidates.shift()
-            if (preferDifferentArtist(next) && frequency(next) > 0) deferred.push(next)
-            else await attempt(next)
-          }
+          await attempt(candidates, false)
+          deferred = candidates
           // Try fresh artists from another model/catalog round before using same-artist reserves.
           // Once that search yields no new playable artist, release the preceding round's reserves.
           if (saved.length === previouslySaved && priorDeferred.size) {
             const reserves = deferred.filter((row) => priorDeferred.has(row))
             deferred = deferred.filter((row) => !priorDeferred.has(row))
-            while (reserves.length && saved.length < targetCount) {
-              reserves.sort((a, b) => frequency(a) - frequency(b))
-              await attempt(reserves.shift())
-            }
+            await attempt(reserves, true)
           }
           stalled = saved.length > previouslySaved ? 0 : stalled + 1
           if (stalled >= 6)
