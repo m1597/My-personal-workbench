@@ -70,8 +70,10 @@ export async function dragMusicIn(app, shell, box, direction = 'within', u = 0.5
 
   await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
 }
-export async function dragMusicOut(app) {
-  const shell = app.windows().find((p) => p.url().includes('/renderer/index.html'))
+export async function dragMusicOut(
+  app,
+  shell = app.windows().find((p) => p.url().includes('/renderer/index.html')),
+) {
   const tab = shell.getByRole('tab', { name: 'Music', exact: true })
   const box = await tab.boundingBox()
   await shell.mouse.move(box.x + 20, box.y + box.height / 2)
