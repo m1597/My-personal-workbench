@@ -45,7 +45,8 @@ export function PlaybackQueue({
         {upcoming.length ? (
           <ol>
             {upcoming.map((id) => {
-              const row = songs.get(id)!
+              const row = songs.get(id)
+              if (!row) return null
               return (
                 <li key={id}>
                   {row.title} · {row.artist}
