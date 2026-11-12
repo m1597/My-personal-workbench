@@ -77,11 +77,7 @@ type Item = {
   checked: number
   candidates: Track[]
 }
-import {
-  RecommendationComposer,
-  RecordingActions,
-  useRecordingSources,
-} from './RecommendationComposer'
+import { RecommendationComposer } from './RecommendationComposer'
 import type { ModelInfo } from './ModelSettings'
 import { DownloadPane } from './LxPanel'
 import type { LibraryToolsAPI } from './LibraryTools'
@@ -261,13 +257,9 @@ function Music() {
     setTab('settings')
     requestAnimationFrame(() => document.querySelector('.music-scroll')?.scrollTo(0, 0))
   }
-  function openMusicSources() {
-    openSettings('sources')
-  }
   const [tab, setTab] = useState('library'),
     [requestedCollection, setCollection] = useState('all'),
     [search, setSearch] = useState('')
-  const sourceConfiguration = useRecordingSources(tab === 'audition')
   const [online, setOnline] = useState<{
     row: Item
     result: Versions
@@ -379,19 +371,25 @@ function Music() {
       window.removeEventListener('focus', update)
     }
   }, [tab])
-  const batchRows = (state?.items ?? []).filter(
-    (row) => row.batch === state?.batches[0]?.id && row.status !== '已在曲库',
-  )
-  const priority = (row: Item) =>
-    row.daily && row.status === '已入库' && row.localAvailable
-      ? 0
-      : row.status === '待选录音'
-        ? 1
-        : 2
-  const rows = batchRows.sort((a, b) => priority(a) - priority(b)).slice(0, batch?.targetCount ?? 5)
-  const downloaded = [
-    ...new Set(rows.flatMap((r) => (priority(r) === 0 && r.localId ? [r.localId] : []))),
-  ]
+  const batchRows = (state?.items ?? []).filter((row) => row.batch === batch?.id)
+  const savedDaily = (row: Item) => row.status === '已入库' && !!row.localAvailable && !!row.localId
+  const legacyDaily = !batch?.targetCount && batchRows.some((row) => row.daily)
+  const details =
+    batch?.details ??
+    (legacyDaily
+      ? batchRows
+          .filter((row) => row.daily && !savedDaily(row))
+          .map((row) => {
+            const messages = [row.downloadSummary, row.downloadError].filter(Boolean)
+            const reason = [...new Set(messages)].join(' · ') || row.status
+            return `${row.title} · ${row.artist}：${reason}`
+          })
+          .join('\n')
+      : '')
+  const rows = batchRows
+    .filter((row) => (row.daily ? savedDaily(row) : row.status !== '已在曲库'))
+    .slice(0, batch?.targetCount ?? 5)
+  const downloaded = [...new Set(rows.flatMap((r) => (r.daily && r.localId ? [r.localId] : [])))]
   async function forBatches(items: Item[], action: (batch: string) => Promise<unknown>) {
     for (const id of new Set(items.map((item) => item.batch))) await action(id)
   }
@@ -858,22 +856,26 @@ function Music() {
               <div className="music-section-head">
                 <h2>本次推荐</h2>
               </div>
-              {batch?.targetCount && (
+              {(batch?.targetCount || legacyDaily) && (
                 <div className="music-batch-status">
-                  <p role="status">
-                    已下载 {rows.length}/{batch.targetCount}
-                    {batch.state === 'completed' && rows.length < batch.targetCount
-                      ? '，部分已下载歌曲已移除或暂不可用'
-                      : running && rows.length >= batch.targetCount
-                        ? '，正在完成本批'
-                        : running && batch.message?.startsWith('正在补推')
-                          ? '，正在补推'
-                          : batch.message && `，${batch.message}`}
-                  </p>
-                  {batch.details && (
+                  {batch?.targetCount ? (
+                    <p role="status">
+                      已下载 {rows.length}/{batch.targetCount}
+                      {batch.state === 'completed' && rows.length < batch.targetCount
+                        ? '，部分已下载歌曲已移除或暂不可用'
+                        : running && rows.length >= batch.targetCount
+                          ? '，正在完成本批'
+                          : running && batch.message?.startsWith('正在补推')
+                            ? '，正在补推'
+                            : batch.message && `，${batch.message}`}
+                    </p>
+                  ) : (
+                    <p role="status">已下载 {downloaded.length} 首</p>
+                  )}
+                  {details && (
                     <details className="music-failure-details">
                       <summary>查看详情</summary>
-                      <p>{batch.details}</p>
+                      <p>{details}</p>
                     </details>
                   )}
                 </div>
@@ -881,7 +883,7 @@ function Music() {
               {rows.length > 0 ? (
                 <>
                   <div className="music-tools">
-                    {!batch?.targetCount && (
+                    {!batch?.targetCount && !legacyDaily && (
                       <small>
                         本次 {rows.length} 首 · 已下载 {downloaded.length}/{rows.length}
                       </small>
@@ -993,22 +995,6 @@ function Music() {
                                   {r.status}
                                   {version ? ' · ' + version.album + ' · ' + version.version : ''}
                                 </small>
-                              )}
-                              {r.daily && !r.notInterested && (
-                                <RecordingActions
-                                  id={r.id}
-                                  status={r.status}
-                                  message={r.downloadError}
-                                  summary={r.downloadSummary}
-                                  diagnosis={r.diagnosis}
-                                  sourceChanged={
-                                    !!sourceConfiguration &&
-                                    !!r.attemptSources &&
-                                    r.attemptSources !== sourceConfiguration
-                                  }
-                                  openSources={openMusicSources}
-                                  refresh={refresh}
-                                />
                               )}
                               {r.online && !playable(r) && (
                                 <Button
