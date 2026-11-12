@@ -1,0 +1,111 @@
+.wave-plugin {
+  display: grid;
+  gap: var(--space-12);
+  align-content: start;
+  width: min(100%, 900px);
+  margin-inline: auto;
+  color: var(--text);
+}
+.wave-plugin h2,
+.wave-plugin h3,
+.wave-plugin p {
+  margin: 0;
+}
+.wave-plugin p,
+.wave-plugin small,
+.wave-scale {
+  color: var(--text-secondary);
+}
+.wave-plugin .fui-Dropdown {
+  min-width: 0;
+  width: min(100%, 500px);
+}
+.wave-plot {
+  height: clamp(90px, 18vh, 170px);
+  overflow: hidden;
+  isolation: isolate;
+  position: relative;
+  background: var(--control);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-6);
+  color: var(--accent);
+  touch-action: none;
+}
+.wave-plot:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.wave-plot svg,
+.wave-plot input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+.wave-plot input {
+  opacity: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+.wave-plot span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+}
+.wave-selection,
+.wave-cursor,
+.wave-pin {
+  pointer-events: none;
+  position: absolute;
+  inset-block: 0;
+}
+.wave-selection {
+  background: var(--accent-soft);
+  border-inline: 1px solid var(--accent);
+}
+.wave-cursor {
+  border-left: 2px solid var(--text);
+}
+.wave-pin {
+  top: 0;
+  height: 8px;
+  border-left: 2px solid var(--accent);
+}
+.wave-scale,
+.wave-actions,
+.wave-plugin li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.wave-scale,
+.wave-plugin li {
+  justify-content: space-between;
+}
+.wave-scale {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-caption);
+}
+.wave-actions {
+  flex-wrap: wrap;
+}
+.wave-actions .fui-Input {
+  min-width: 0;
+  max-width: 100%;
+}
+.wave-plugin h3 {
+  margin-top: var(--space-12);
+  font-size: var(--font-size-heading);
+}
+.wave-plugin ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wave-plugin li {
+  border-bottom: 1px solid var(--stroke);
+  padding-block: var(--space-4);
+}
