@@ -1,0 +1,66 @@
+.smart-playlists {
+  display: grid;
+  gap: var(--space-12);
+  align-content: start;
+  color: var(--text);
+  width: min(100%, 840px);
+  margin-inline: auto;
+}
+.smart-heading,
+.smart-actions,
+.smart-playlists li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+.smart-heading h2,
+.smart-playlists h3,
+.smart-playlists p {
+  margin: 0;
+}
+.smart-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(165px, 100%), 1fr));
+  gap: var(--space-12);
+}
+.smart-fields label {
+  display: grid;
+  gap: var(--space-4);
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+}
+.smart-playlists .fui-Dropdown,
+.smart-playlists .fui-Input {
+  min-width: 0;
+}
+.smart-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.smart-playlists h3 {
+  margin-top: var(--space-12);
+  font-size: var(--font-size-heading);
+}
+.smart-playlists h3 span,
+.smart-playlists small,
+.smart-playlists p {
+  color: var(--text-secondary);
+}
+.smart-playlists ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.smart-playlists li {
+  padding: var(--space-8) 0;
+  border-bottom: 1px solid var(--stroke);
+}
+.smart-playlists li div {
+  display: grid;
+  min-width: 0;
+}
+.smart-playlists li strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
