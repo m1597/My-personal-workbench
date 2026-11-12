@@ -256,6 +256,7 @@ function Music() {
   const [state, setState] = useState<State>(),
     [paused, setPaused] = useState(true),
     [time, setTime] = useState(0),
+    [loadedId, setLoadedId] = useState(''),
     [error, setError] = useState(''),
     [docked, setDocked] = useState(false)
   const [presentation, setPresentation] = useState<Presentation>('full')
@@ -446,7 +447,7 @@ function Music() {
       )
       .map((row) => row.id) ?? []
   const queue = state?.queue.length ? state.queue : legacyQueue
-  const now = current.current || state?.current || ''
+  const now = loadedId || state?.current || ''
   const available = new Set([
     ...(state?.localTracks ?? []).filter((t) => t.available).map((t) => t.id),
     ...(state?.items ?? []).filter(playable).map((t) => t.id),
@@ -530,6 +531,7 @@ function Music() {
       el.pause()
       if (url.current) URL.revokeObjectURL(url.current)
       current.current = id
+      setLoadedId(id)
       url.current = stream ? '' : src
       const resume =
         id === state?.current &&
@@ -538,6 +540,7 @@ function Music() {
           : 0
       el.src = src
       el.currentTime = resume
+      setTime(resume)
       await host.playQueue(id, ids, resume)
       await el.play()
     }
@@ -561,6 +564,7 @@ function Music() {
       el.pause()
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
       current.current = ''
+      setLoadedId('')
       el.removeAttribute('src')
       el.load()
     }
@@ -1228,6 +1232,7 @@ function Music() {
             if (src.startsWith('fitbay-audio:')) {
               const id = current.current
               current.current = ''
+              setLoadedId('')
               void (
                 e.currentTarget.error?.code === 4 || e.currentTarget.readyState === 0
                   ? host.mediaFailed(id, src)

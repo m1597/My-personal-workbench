@@ -18,19 +18,28 @@ const profile = path.join(root, 'profile')
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
 const a = path.join(root, 'A.wav'),
   b = path.join(root, 'B.wav')
+const silent = path.join(root, 'No Lyrics.wav')
 for (const [title, file] of [
   ['A', a],
   ['B', b],
+  ['No Lyrics', silent],
   ['C', path.join(root, 'C.wav')],
   ['D', path.join(root, 'D.wav')],
 ]) {
   await writeFile(file, recording('fitbay-tone-1'))
-  store.library.upsert({ title, file, artist: '测试', album: '', duration: 20 })
+  store.library.upsert({
+    title,
+    file,
+    artist: '测试',
+    album: '',
+    duration: 20,
+  })
 }
 await saveLyrics(
   store.db,
   a,
-  async () => '[offset:500]\n[00:00.50]第一句\n[00:04.50][00:09.50]第二句',
+  async () =>
+    '[offset:500]\n[00:00.50]第一句\n[00:00.50]First line\n[00:04.50][00:09.50]第二句\n[00:04.50]Second line',
 )
 assert.deepEqual(await localLines(a), [
   [0, '第一句'],
@@ -38,6 +47,19 @@ assert.deepEqual(await localLines(a), [
   [9, '第二句'],
 ])
 assert.equal(await ownedLyrics(store.db, a), lyricPath(a))
+const tagged = path.join(root, 'Tagged.wav')
+for (const [tags, expected] of [
+  ['[ar:测试 (Test)]\n[ti:测试歌曲 (《某作品》主题曲)]', true],
+  ['[ar:另一位歌手]\n[ti:测试歌曲]', false],
+  ['[ti:另一首歌]', false],
+  ['[ti:测试歌曲 (Live)]', false],
+]) {
+  await writeFile(lyricPath(tagged), tags + '\n[00:00]原词\n[00:00]Translation')
+  assert.deepEqual(
+    await localLines(tagged, { title: '测试歌曲', artist: '测试' }),
+    expected ? [[0, '原词']] : [],
+  )
+}
 const localLyric = 'Inside the hollow we begain'
 await writeFile(lyricPath(b), '[00:00]' + localLyric)
 await saveLyrics(store.db, b, async () => {
@@ -48,22 +70,24 @@ await saveLyrics(store.db, path.join(root, 'C.wav'), async () => '[00:01]下载�
 await writeFile(path.join(root, 'D.flac'), await readFile('tests/fixtures/local-music/tone.flac'))
 await saveLyrics(store.db, path.join(root, 'D.wav'), async () => '[00:01]共有歌词')
 store.db.close()
-const app = await electron.launch({
-  args: [
-    path.resolve('dist/component-prototype/host'),
-    '--mode=music',
-    '--mute-audio',
-    '--workbench=' + path.resolve('out/renderer/index.html'),
-    '--user-data-dir=' + profile,
-  ],
-  env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
-})
+const launch = () =>
+  electron.launch({
+    args: [
+      path.resolve('dist/component-prototype/host'),
+      '--mode=music',
+      '--mute-audio',
+      '--workbench=' + path.resolve('out/renderer/index.html'),
+      '--user-data-dir=' + profile,
+    ],
+    env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+  })
+let app = await launch()
 try {
-  const page = await app.firstWindow()
+  let page = await app.firstWindow()
   await page.getByRole('button', { name: '跳过', exact: true }).click()
   const button = (name) => page.getByRole('button', { name, exact: true })
   await expect(button('桌面歌词')).toHaveAttribute('aria-pressed', 'false')
-  for (const title of ['A', 'B']) {
+  for (const title of ['B', 'A', 'No Lyrics']) {
     await page.locator('.library-name strong', { hasText: title }).click({ button: 'right' })
     await page.getByRole('menuitem', { name: '加入队列', exact: true }).click()
   }
@@ -71,6 +95,13 @@ try {
   const opened = app.waitForEvent('window')
   await button('桌面歌词').click()
   const overlay = await opened
+  await expect(overlay.locator('strong')).toHaveText(localLyric)
+  await expect(overlay.locator('body')).toHaveCSS('background-image', 'none')
+  await expect(overlay.locator('body')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(overlay.locator('button')).toHaveCSS('opacity', '0')
+  await overlay.locator('strong').hover()
+  await expect(overlay.locator('button')).toHaveCSS('opacity', '1')
+  await button('下一首').click()
   await expect(overlay.locator('strong')).toHaveText('第一句')
   await overlay.getByRole('button', { name: '锁定' }).click()
   await expect(overlay.locator('body')).toHaveClass('locked')
@@ -82,14 +113,16 @@ try {
   await expect(overlay.locator('strong')).toHaveText('第二句')
   await overlay.screenshot({ path: path.join(root, 'desktop-lyrics.png') })
   await button('下一首').click()
-  await expect(overlay.locator('strong')).toHaveText(localLyric)
+  await expect(overlay.locator('strong')).toBeEmpty()
+  await button('上一首').click()
+  await expect(overlay.locator('strong')).toHaveText('第一句')
   await overlay.getByRole('button', { name: '解锁' }).click()
   await expect(overlay.locator('body')).toHaveCSS('-webkit-app-region', 'drag')
   const overlayGeometry = () =>
     app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()
         .find((win) => win.webContents.getTitle() === '桌面歌词')
-        .getBounds(),
+        .getContentBounds(),
     )
   const first = await overlayGeometry()
   // Simulate the Windows move loop on the test HWND without moving the system pointer.
@@ -132,7 +165,7 @@ try {
   const openingAgain = app.waitForEvent('window')
   await button('桌面歌词').click()
   const reopened = await openingAgain
-  await expect(reopened.locator('strong')).toHaveText(localLyric)
+  await expect(reopened.locator('strong')).toHaveText('第一句')
   const offsetFromCenter = await reopened.locator('strong').evaluate((el) => {
     const rect = el.getBoundingClientRect()
     return Math.abs(rect.x + rect.width / 2 - window.innerWidth / 2)
@@ -141,7 +174,55 @@ try {
   const restored = await overlayGeometry()
   console.log({ first, moved, restored })
   assert.deepEqual(restored, moved)
-  await reopened.screenshot({ path: path.join(root, 'desktop-lyrics-reopened.png') })
+  await reopened.screenshot({
+    path: path.join(root, 'desktop-lyrics-reopened.png'),
+  })
+  const area = await app.evaluate(({ screen }) => {
+    // Exercise removal/reconfiguration without changing the user's display topology.
+    const primary = screen.getPrimaryDisplay()
+    screen.getDisplayMatching = () => primary
+    return primary.workArea
+  })
+  async function place(x, y, displayEvent) {
+    await app.evaluate(
+      ({ BrowserWindow, screen }, { x, y, displayEvent }) => {
+        const win = BrowserWindow.getAllWindows().find((w) => w.getTitle() === '桌面歌词')
+        win.setPosition(x, y)
+        if (displayEvent) screen.emit(displayEvent)
+        else win.emit('moved')
+      },
+      { x, y, displayEvent },
+    )
+    return overlayGeometry()
+  }
+  const corners = [
+    [area.x - 200, area.y - 120, area.x, area.y, ''],
+    [
+      area.x + area.width + 300,
+      area.y + area.height + 200,
+      area.x + area.width - restored.width,
+      area.y + area.height - restored.height,
+      'display-metrics-changed',
+    ],
+  ]
+  for (const [x, y, left, top, event] of corners) {
+    const rect = await place(x, y, event)
+    assert.deepEqual(rect, {
+      x: left,
+      y: top,
+      width: restored.width,
+      height: restored.height,
+    })
+  }
+  const clamped = await place(area.x - 2500, area.y - 1600, 'display-removed')
+  assert.deepEqual(clamped, { ...restored, x: area.x, y: area.y })
+  await app.close()
+  app = await launch()
+  page = await app.firstWindow()
+  const afterRestart = app.waitForEvent('window')
+  await button('桌面歌词').click()
+  await (await afterRestart).waitForLoadState()
+  await expect.poll(overlayGeometry).toEqual(clamped)
   await button('桌面歌词').click()
   await writeFile(lyricPath(a), '[00:00]用户修改')
   const db = new MusicStore(path.join(profile, 'fitbay-music'))
@@ -170,10 +251,19 @@ try {
     return app.evaluate(() => globalThis.lyricTrash)
   }
   const c = path.join(root, 'C.wav')
-  assert.deepEqual(await trash('C'), { files: [c, lyricPath(c)], detail: c + '\n' + lyricPath(c) })
-  assert.deepEqual(await trash('B'), { files: [c, lyricPath(c), b], detail: b })
+  assert.deepEqual(await trash('C'), {
+    files: [c, lyricPath(c)],
+    detail: c + '\n' + lyricPath(c),
+  })
+  assert.deepEqual(await trash('B'), {
+    files: [c, lyricPath(c), b],
+    detail: b,
+  })
   const shared = path.join(root, 'D.wav')
-  assert.deepEqual(await trash('D'), { files: [c, lyricPath(c), b, shared], detail: shared })
+  assert.deepEqual(await trash('D'), {
+    files: [c, lyricPath(c), b, shared],
+    detail: shared,
+  })
   console.log(
     'PASS 同步歌词、本地优先、文件归属、桌面歌词开关与锁定、暂停定位、切歌、仅移除索引。' + root,
   )

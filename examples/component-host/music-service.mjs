@@ -43,7 +43,7 @@ export function musicService(
       store.library.changed = queueTasteUpdate
     }
   }
-  const overlay = desktopLyrics()
+  const overlay = desktopLyrics(() => store)
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   let musicView
@@ -106,20 +106,25 @@ export function musicService(
   bind('lyricLine', (line) => overlay.update(typeof line === 'string' ? line.slice(0, 500) : ''))
   bind('lyrics', async (id) => {
     if (!text(id)) return []
-    if (grant?.id === id) return localLines(grant.file)
+    if (grant?.id === id) {
+      const track = grant.audition
+        ? store.metadata(store.item(id).track)
+        : store.library.row(grant.libraryId ?? id)
+      return localLines(grant.file, track)
+    }
     if (id.startsWith('local-')) {
       const track = store.library.row(id)
-      return track.awaitingLocation ? [] : localLines(track.file)
+      return track.awaitingLocation ? [] : localLines(track.file, track)
     }
     const library = store.db
       .prepare(
-        'SELECT t.file,t.awaitingLocation FROM recommended_items r JOIN local_tracks t ON t.id=r.local WHERE r.item=?',
+        'SELECT t.file,t.title,t.artist,t.awaitingLocation FROM recommended_items r JOIN local_tracks t ON t.id=r.local WHERE r.item=?',
       )
       .get(id)
-    if (library) return library.awaitingLocation ? [] : localLines(library.file)
+    if (library) return library.awaitingLocation ? [] : localLines(library.file, library)
     const item = store.item(id)
     if (!item.track || !['已入库', '就绪'].includes(item.status)) return []
-    return localLines(store.local(item.track) ?? store.file(id))
+    return localLines(store.local(item.track) ?? store.file(id), store.metadata(item.track))
   })
   bind('importLocal', (mode) => {
     if (!['folder', 'files'].includes(mode)) throw Error('导入方式无效')

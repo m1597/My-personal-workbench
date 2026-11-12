@@ -7,7 +7,10 @@ window.addEventListener('DOMContentLoaded', () => {
     lock.setAttribute('aria-label', lock.title)
     lock.setAttribute('aria-pressed', String(locked))
   })
+  ipcRenderer.on('lyric-controls', (_, visible) => {
+    document.body.toggleAttribute('data-pointer-inside', visible)
+  })
   ipcRenderer.on('lyric-line', (_, line) => {
-    document.querySelector('strong').textContent = line || '暂无同步歌词'
+    document.querySelector('strong').textContent = line
   })
 })
