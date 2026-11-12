@@ -1,3 +1,4 @@
+import { dragMusicIn, dragMusicOut } from './music-drag-fixture.mjs'
 import assert from 'node:assert/strict'
 import {
   mkdir,
@@ -177,8 +178,8 @@ try {
   }))
   await page.getByRole('searchbox').fill('没有结果')
   await page.getByRole('tab', { name: '推荐试听' }).click()
-  await page.getByRole('button', { name: '加入工作台' }).click()
-  await page.getByRole('button', { name: '分离窗口' }).click()
+  await dragMusicIn(app)
+  await dragMusicOut(app)
   assert.deepEqual(
     await page.evaluate(async () => ({
       src: document.querySelector('audio').currentSrc,

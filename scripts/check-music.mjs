@@ -1,3 +1,4 @@
+import { dragMusicIn, dragMusicOut } from './music-drag-fixture.mjs'
 import { _electron as electron, expect } from '@playwright/test'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import path from 'node:path'
@@ -55,17 +56,17 @@ try {
     window.originalAudio.addEventListener('loadstart', () => window.loads++)
   })
   const src = await music.locator('audio').evaluate((a) => a.currentSrc)
-  await music.getByText('加入工作台', { exact: true }).click()
+  await dragMusicIn(app)
   const shell = await page(app, '/out/renderer/index.html')
-  await expect(music.getByText('分离窗口', { exact: true })).toBeVisible()
+  await expect(music.locator('[data-surface="embedded"]')).toBeVisible()
   const dockTime = await clock()
   await promisify(execFile)(executable, [...args, '--mode=music'], {
     env,
     windowsHide: true,
     timeout: 10000,
   })
-  await music.getByText('分离窗口', { exact: true }).click()
-  await expect(music.getByText('加入工作台', { exact: true })).toBeVisible()
+  await dragMusicOut(app)
+  await expect(music.locator('[data-surface="window"]')).toBeVisible()
   await shell.evaluate(() => window.close())
   await expect.poll(clock).toBeGreaterThan(dockTime + 0.2)
   expect(
@@ -110,7 +111,7 @@ try {
   expect(await music.locator('audio').evaluate((a) => a.paused)).toBe(true)
   await music.getByRole('button', { name: /从 .* 秒继续/ }).click()
   await expect.poll(() => music.locator('audio').evaluate((a) => a.currentTime)).toBeGreaterThan(1)
-  await music.getByText('加入工作台', { exact: true }).click()
+  await dragMusicIn(app)
   const shell = await page(app, '/out/renderer/index.html')
   for (const [direction, u, v] of [
     ['left', 0.08, 0.5],
@@ -119,56 +120,14 @@ try {
     ['below', 0.5, 0.92],
     ['within', 0.5, 0.5],
   ]) {
-    await music.getByText('分离窗口', { exact: true }).click()
+    await dragMusicOut(app)
     await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toHaveCount(0)
     const group = shell
       .locator('.dv-groupview')
       .filter({ has: shell.getByRole('tab', { name: '模块 2', exact: true }) })
     const box = await group.boundingBox()
-    const info = await app.evaluate(
-      ({ BaseWindow, BrowserWindow, screen }, { box, u, v }) => {
-        const source = BaseWindow.getAllWindows().find((w) => w.getTitle().includes('Music'))
-        const dest = BrowserWindow.getAllWindows()[0].getContentBounds()
-        const x = Math.round(dest.x + box.x + u * box.width - source.getBounds().width / 2)
-        const y = Math.round(dest.y + box.y + v * box.height - 16)
-        source.setPosition(x, y - 600)
-        screen.getCursorScreenPoint = () => {
-          const b = source.getBounds()
-          return { x: Math.round(b.x + b.width / 2), y: b.y + 16 }
-        }
-        return {
-          x,
-          y,
-          id: source.id,
-          hwnd: source.getNativeWindowHandle().readBigUInt64LE().toString(),
-        }
-      },
-      { box, u, v },
-    )
-    const message = (value) =>
-      promisify(execFile)(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-WindowStyle',
-          'Hidden',
-          '-File',
-          path.resolve('scripts/native-dock-probe.ps1'),
-          info.hwnd,
-          String(value),
-        ],
-        { windowsHide: true, timeout: 10000 },
-      )
-    await message(0x231)
-    await message(0x216)
-    await app.evaluate(({ BaseWindow }, i) => BaseWindow.fromId(i.id).setPosition(i.x, i.y), info)
-    await expect(shell.locator('.component-drop-preview')).toHaveAttribute(
-      'data-direction',
-      direction,
-    )
-    await message(0x232)
-    await expect(music.getByText('分离窗口', { exact: true })).toBeVisible()
+    await dragMusicIn(app, shell, box, direction, u, v)
+    await expect(music.locator('[data-surface="embedded"]')).toBeVisible()
     const docked = shell
       .locator('.dv-groupview')
       .filter({ has: shell.getByRole('tab', { name: 'Music', exact: true }) })
@@ -203,7 +162,7 @@ try {
   await shell.screenshot({ path: path.join(evidence, 'window-menu.png'), animations: 'disabled' })
   await musicItem.click()
   const reopened = await page(app, '/music/index.html')
-  await expect(reopened.getByText('分离窗口', { exact: true })).toBeVisible()
+  await expect(reopened.locator('[data-surface="embedded"]')).toBeVisible()
   expect(await reopened.locator('audio').evaluate((a) => a.paused)).toBe(true)
   await shell.getByRole('tab', { name: '模块 2', exact: true }).click()
   await windowMenu.click()

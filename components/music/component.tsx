@@ -20,8 +20,6 @@ import {
   SkipBack,
   Shuffle,
   ListOrdered,
-  PanelLeft,
-  ArrowUpRight,
   ChevronDown,
   FolderPlus,
   Square,
@@ -323,27 +321,17 @@ function Music() {
   }
   return (
     <ComponentTheme surface={docked ? 'embedded' : 'window'} className="music-shell">
-      <header className="music-header">
-        <div className="music-mark">
-          <AudioLines size={21} />
-        </div>
-        <div className="music-heading">
-          <h1>Music</h1>
-          <small>{tab === 'library' ? '本地音乐' : (provider?.label ?? 'DeepSeek')}</small>
-        </div>
-        <Button
-          appearance="subtle"
-          icon={docked ? <ArrowUpRight size={16} /> : <PanelLeft size={16} />}
-          onClick={() =>
-            void act(async () => {
-              const r = await window.musicWindow.transfer(docked ? 'detach' : 'attach')
-              if (!r.ok) throw Error(r.error)
-            })
-          }
-        >
-          {docked ? '分离窗口' : '加入工作台'}
-        </Button>
-      </header>
+      {!docked && (
+        <header className="music-header">
+          <div className="music-mark">
+            <AudioLines size={21} />
+          </div>
+          <div className="music-heading">
+            <h1>Music</h1>
+            <small>{tab === 'library' ? '本地音乐' : (provider?.label ?? 'DeepSeek')}</small>
+          </div>
+        </header>
+      )}
       <TabList
         className="music-tabs"
         aria-label="音乐页面"

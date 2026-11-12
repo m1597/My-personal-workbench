@@ -1,3 +1,4 @@
+import { dragMusicIn, dragMusicOut } from './music-drag-fixture.mjs'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import path from 'node:path'
@@ -78,15 +79,15 @@ try {
   await expect.poll(nativeVisible).toBe(true)
   assert.deepEqual(await shell.locator('.dv-tab').allTextContents(), layoutBefore)
   const player = app.windows().find((p) => p.url().includes('/music/index.html'))
-  await expect(player.getByRole('heading', { name: 'Music', exact: true })).toBeVisible()
-  await player.getByRole('button', { name: '分离窗口' }).click()
+  await expect(player.getByRole('heading', { name: 'Music', exact: true })).toHaveCount(0)
+  await dragMusicOut(app)
   await expect(empty).toBeVisible()
   assert.ok(
     await app.evaluate(({ BaseWindow }) =>
       BaseWindow.getAllWindows().some((w) => w.getTitle() === 'Music'),
     ),
   )
-  await player.getByRole('button', { name: '加入工作台' }).click()
+  await dragMusicIn(app)
   await shell.getByRole('button', { name: 'Close Music', exact: true }).click()
   const restore = async (layout) => {
     await shell.evaluate(

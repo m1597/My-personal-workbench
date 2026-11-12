@@ -409,3 +409,7 @@ li[data-active="true"] .music-track-icon,
   color: var(--text-secondary);
   opacity: 1;
 }
+
+.music-shell[data-surface="embedded"] {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
