@@ -14,6 +14,7 @@ type Installed = CatalogEntry & {
   permanentSave: boolean | null
 }
 export type SourceInventory = {
+  configuration: string
   catalog: CatalogEntry[]
   installed: Installed[]
   active: string | null

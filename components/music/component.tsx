@@ -61,13 +61,19 @@ type Item = {
   localAvailable: number | null
   diagnosis: string
   notInterested: boolean
+  attemptSources: string
+  downloadSummary: string
   downloadError: string
   audioDuration: number | null
   online: boolean
   checked: number
   candidates: Track[]
 }
-import { RecommendationComposer, RecordingActions } from './RecommendationComposer'
+import {
+  RecommendationComposer,
+  RecordingActions,
+  useRecordingSources,
+} from './RecommendationComposer'
 import type { ModelInfo } from './ModelSettings'
 import { DownloadPane } from './LxPanel'
 import type { LibraryToolsAPI } from './LibraryTools'
@@ -242,6 +248,7 @@ function Music() {
   const [tab, setTab] = useState('library'),
     [requestedCollection, setCollection] = useState('all'),
     [search, setSearch] = useState('')
+  const sourceConfiguration = useRecordingSources(tab === 'audition')
   const [online, setOnline] = useState<{
     row: Item
     result: Versions
@@ -924,7 +931,7 @@ function Music() {
                                 <span>{r.artist}</span>
                               </div>
                               <p>{r.reason}</p>
-                              {r.status !== '模型推荐' && (
+                              {r.status !== '模型推荐' && !(r.daily && r.status === '待重试') && (
                                 <small>
                                   {r.status}
                                   {version ? ' · ' + version.album + ' · ' + version.version : ''}
@@ -935,7 +942,13 @@ function Music() {
                                   id={r.id}
                                   status={r.status}
                                   message={r.downloadError}
+                                  summary={r.downloadSummary}
                                   diagnosis={r.diagnosis}
+                                  sourceChanged={
+                                    !!sourceConfiguration &&
+                                    !!r.attemptSources &&
+                                    r.attemptSources !== sourceConfiguration
+                                  }
                                   openSources={openMusicSources}
                                   refresh={refresh}
                                 />

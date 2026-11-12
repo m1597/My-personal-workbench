@@ -60,6 +60,15 @@ export class LocalLibrary {
           .some((c) => c.name === 'summary')
       )
         this.db.exec("ALTER TABLE recommended_items ADD COLUMN summary TEXT NOT NULL DEFAULT ''")
+      if (
+        !this.db
+          .prepare('PRAGMA table_info(recommended_items)')
+          .all()
+          .some((c) => c.name === 'attemptSources')
+      )
+        this.db.exec(
+          "ALTER TABLE recommended_items ADD COLUMN attemptSources TEXT NOT NULL DEFAULT ''",
+        )
       this.db.exec(
         'CREATE TABLE IF NOT EXISTS restored_recommendations(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE)',
       )

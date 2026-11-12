@@ -293,6 +293,18 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     }
   }
   return {
+    configuration(code = JSON.parse(get('lx-source') || 'null')?.code) {
+      const active = code ? fingerprint(code) : ''
+      const sources = new Set(
+        db
+          .prepare('SELECT digest FROM music_sources')
+          .all()
+          .map((row) => row.digest),
+      )
+      // Older profiles can have an active source that has not entered the catalog yet.
+      if (active) sources.add(active)
+      return fingerprint(JSON.stringify([active, [...sources].sort()]))
+    },
     discoverySources(current) {
       const others = db
         .prepare('SELECT payload FROM music_sources ORDER BY rowid')

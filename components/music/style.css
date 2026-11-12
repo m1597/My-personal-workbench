@@ -177,6 +177,20 @@ li[data-active="true"] .music-track-icon,
   flex-wrap: wrap;
   margin-top: var(--space-4);
 }
+.music-failure-summary,
+.music-failure-details {
+  flex-basis: 100%;
+}
+.music-failure-details {
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+}
+.music-failure-details summary {
+  cursor: pointer;
+}
+.music-failure-details p {
+  white-space: pre-line;
+}
 .music-empty {
   display: grid;
   justify-items: center;

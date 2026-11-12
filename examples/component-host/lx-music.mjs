@@ -446,10 +446,20 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
     }
   let bank
-  const catalog = () => (bank ??= sourceCatalog(getStore().db))
+  const catalog = () => {
+    if (!bank) {
+      const { db } = getStore()
+      bank = sourceCatalog(db)
+      // Adopt a baseline for failures from releases that did not save the attempted sources.
+      db.prepare(
+        "UPDATE recommended_items SET attemptSources=? WHERE attemptSources='' AND diagnosis!='' AND item IN (SELECT id FROM items WHERE status='待重试')",
+      ).run(bank.configuration())
+    }
+    return bank
+  }
   bind('lxSources', async () => {
     await catalog().upgrade()
-    return catalog().list()
+    return { ...catalog().list(), configuration: catalog().configuration() }
   })
   bind(
     'lxRefreshCatalog',
@@ -741,6 +751,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       store.status(id, '已在曲库')
     }
     if (hasLocalCopy()) return markDuplicate()
+    const bank = catalog()
+    let attemptSources = bank.configuration()
     const task = new AbortController()
     running.set(id, task)
     const signal = batchSignal ? AbortSignal.any([batchSignal, task.signal]) : task.signal
@@ -751,8 +763,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       const prefs = getMusicPreferences(store)
       const cache = new Map()
       const choicesForItem = new Map()
-      const bank = catalog()
       await bank.upgrade()
+      attemptSources = bank.configuration(activeSource.code)
       const installed = bank.discoverySources(activeSource)
       const saved = selected && choices.get(id)?.rows.get(selected)
       if (
@@ -908,8 +920,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         }),
       )
       store.db
-        .prepare('UPDATE recommended_items SET error=?,diagnosis=?,summary=? WHERE item=?')
-        .run(issue.detail, issue.kind, issue.summary, id)
+        .prepare(
+          'UPDATE recommended_items SET error=?,diagnosis=?,summary=?,attemptSources=? WHERE item=?',
+        )
+        .run(issue.detail, issue.kind, issue.summary, attemptSources, id)
       store.status(id, '待重试')
     } finally {
       running.delete(id)
