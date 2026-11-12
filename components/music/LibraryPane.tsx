@@ -69,6 +69,7 @@ export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 type Props = {
   favorite: (id: string, value: boolean) => Promise<unknown>
+  addFavorites: (ids: string[]) => Promise<number | null>
   rows: LocalTrack[]
   tracks: LocalTrack[]
   playlists: Playlist[]
@@ -99,6 +100,7 @@ type Props = {
 }
 export function LibraryPane({
   favorite,
+  addFavorites,
   tracks,
   playlists,
   collection,
@@ -130,11 +132,27 @@ export function LibraryPane({
   const [limit, setLimit] = useState(100)
   const [selection, setSelection] = useState<Set<string> | null>(null)
   const [batchBusy, setBatchBusy] = useState(false)
+  const [favoriteResult, setFavoriteResult] = useState<{ selection: Set<string>; text: string }>()
   const selectedIds = useMemo(
     () => (selection ? rows.filter((t) => selection.has(t.id)).map((t) => t.id) : []),
     [selection, rows],
   )
   const userPlaylists = playlists.filter((list) => !list.system)
+  const batchFavorite = async () => {
+    if (batchBusy || !selection || !selectedIds.length) return
+    setBatchBusy(true)
+    setFavoriteResult(undefined)
+    try {
+      const added = await addFavorites(selectedIds)
+      if (added !== null)
+        setFavoriteResult({
+          selection,
+          text: `新增收藏 ${added} 首，原已收藏 ${selectedIds.length - added} 首`,
+        })
+    } finally {
+      setBatchBusy(false)
+    }
+  }
   const batchMembership = async (id: string, added: boolean) => {
     if (batchBusy || !selectedIds.length) return
     setBatchBusy(true)
@@ -219,6 +237,7 @@ export function LibraryPane({
         <Button
           appearance="subtle"
           aria-pressed={collection === 'all'}
+          size="small"
           icon={<Music2 size={16} />}
           onClick={() => choose('all')}
         >
@@ -227,6 +246,7 @@ export function LibraryPane({
         <Button
           appearance="subtle"
           aria-pressed={collection === 'infrequent'}
+          size="small"
           icon={<ListMusic size={16} />}
           onClick={() => choose('infrequent')}
         >
@@ -235,6 +255,7 @@ export function LibraryPane({
         <Button
           appearance="subtle"
           aria-pressed={collection === 'recent'}
+          size="small"
           icon={<History size={16} />}
           onClick={() => choose('recent')}
         >
@@ -243,6 +264,7 @@ export function LibraryPane({
         <Button
           appearance="subtle"
           aria-pressed={collection === 'favorites'}
+          size="small"
           icon={<Heart size={16} />}
           onClick={() => choose('favorites')}
         >
@@ -257,7 +279,7 @@ export function LibraryPane({
                 size="small"
                 title={node.name}
                 aria-pressed={collection === node.id}
-                icon={<Folder size={15} />}
+                icon={<Folder size={16} />}
                 onClick={() => choose(node.id)}
               >
                 {node.name}
@@ -315,7 +337,7 @@ export function LibraryPane({
               appearance="subtle"
               size="small"
               aria-pressed={collection === list.id}
-              icon={<ListMusic size={15} />}
+              icon={<ListMusic size={16} />}
               onClick={() => choose(list.id)}
             >
               {list.name}
@@ -422,6 +444,14 @@ export function LibraryPane({
                   </MenuList>
                 </MenuPopover>
               </Menu>
+              <Button
+                size="small"
+                disabled={batchBusy || !selectedIds.length}
+                icon={<Heart size={15} />}
+                onClick={() => void batchFavorite()}
+              >
+                加入收藏
+              </Button>
               {currentFolder && (
                 <Button
                   size="small"
@@ -447,6 +477,9 @@ export function LibraryPane({
                 >
                   从当前歌单移除
                 </Button>
+              )}
+              {favoriteResult?.selection === selection && (
+                <small role="status">{favoriteResult.text}</small>
               )}
             </section>
           )}

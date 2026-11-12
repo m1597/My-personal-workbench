@@ -134,11 +134,33 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
         busy = false
       }
     }
-  bind('setFavorite', (id, on) => {
-    if (typeof id !== 'string' || typeof on !== 'boolean') throw Error('收藏操作无效')
-    getStore().library.row(id)
-    getStore().db.prepare('UPDATE local_tracks SET favorite=? WHERE id=?').run(Number(on), id)
-    getStore().library.changed?.()
+  bind('setFavorite', (tracks, on) => {
+    const ids = [...new Set(Array.isArray(tracks) ? tracks : [tracks])]
+    if (!ids.length || ids.some((id) => typeof id !== 'string') || typeof on !== 'boolean')
+      throw Error('收藏操作无效')
+    const { db, library } = getStore()
+    const data = JSON.stringify(ids)
+    db.exec('BEGIN IMMEDIATE')
+    let changed
+    try {
+      const { count } = db
+        .prepare(
+          'SELECT COUNT(*) AS count FROM local_tracks WHERE id IN (SELECT value FROM json_each(?))',
+        )
+        .get(data)
+      if (count !== ids.length) throw Error('歌曲已移除')
+      changed = db
+        .prepare(
+          'UPDATE local_tracks SET favorite=? WHERE favorite<>? AND id IN (SELECT value FROM json_each(?))',
+        )
+        .run(Number(on), Number(on), data).changes
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
+    }
+    if (changed) library.changed?.()
+    return changed
   })
   bind('recentHistory', async (before) => {
     if (

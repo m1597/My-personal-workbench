@@ -28,7 +28,7 @@ type Move = {
 }
 export type LibraryToolsAPI = {
   recentHistory(cursor?: HistoryRow): Promise<HistoryRow[]>
-  setFavorite(id: string, on: boolean): Promise<void>
+  setFavorite(ids: string | string[], on: boolean): Promise<number>
   exportLibrary(): Promise<boolean>
   previewRestore(): Promise<Restore | null>
   applyRestore(token: string): Promise<void>

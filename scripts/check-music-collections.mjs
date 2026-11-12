@@ -60,6 +60,7 @@ try {
   await button('全部歌曲').click()
   await button('多选').click()
   await expect(button('加入歌单')).toBeDisabled()
+  await expect(button('加入收藏')).toBeDisabled()
   await expect(button('从当前歌单移除')).toHaveCount(0)
   await page.getByRole('checkbox', { name: '选择晨间' }).check()
   await expect(page.getByRole('checkbox', { name: '全选当前列表' })).toBeChecked({
@@ -76,12 +77,49 @@ try {
   await button('多选').click()
   await page.getByRole('checkbox', { name: '全选当前列表' }).check()
   await expect(page.getByText('已选 3 首')).toBeVisible()
+  const favoriteIds = await page.evaluate(async () => {
+    const ids = (await window.music.state()).localTracks.map((t) => t.id)
+    await window.music.setFavorite(ids[0], true)
+    return ids
+  })
+  await button('加入收藏').click()
+  await expect(page.getByText('新增收藏 2 首，原已收藏 1 首')).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: '全选当前列表' })).toBeChecked()
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }],
+  })
+  const navItems = page.locator('.library-sidebar button[aria-pressed]')
+  const heights = await navItems.evaluateAll((buttons) => buttons.map((b) => b.offsetHeight))
+  assert.ok(
+    heights.every((height) => height === heights[0] && height <= 30),
+    heights,
+  )
+  await page.screenshot({
+    path: path.join(evidence, 'batch-favorites.png'),
+    animations: 'disabled',
+  })
+  await button('加入收藏').click()
+  await expect(page.getByText('新增收藏 0 首，原已收藏 3 首')).toBeVisible()
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })
   await button('加入歌单').click()
   await page.screenshot({ path: path.join(evidence, 'batch-playlist.png'), animations: 'disabled' })
   await page.getByRole('menuitem', { name: '通勤' }).click()
+  await button('我的收藏').click()
+  await expect(page.locator('.library-row')).toHaveCount(3)
+  await page.evaluate(async (ids) => {
+    try {
+      await window.music.setFavorite([ids[0], 'missing-track'], false)
+      throw Error('收藏操作应拒绝失效歌曲')
+    } catch (e) {
+      if (!String(e).includes('歌曲已移除')) throw e
+    }
+    if ((await window.music.state()).localTracks.filter((t) => t.favorite).length !== 3)
+      throw Error('失效的歌曲应中止整批收藏操作')
+    await window.music.setFavorite(ids, false)
+  }, favoriteIds)
   await button('通勤').click()
   await expect(page.locator('.library-row')).toHaveCount(3)
   await button('多选').click()

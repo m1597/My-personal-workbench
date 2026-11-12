@@ -759,6 +759,13 @@ function Music() {
         {tab === 'library' ? (
           <LibraryPane
             favorite={(id, on) => act(() => host.setFavorite(id, on))}
+            addFavorites={async (ids) => {
+              let added = 0
+              const ok = await act(async () => {
+                added = await host.setFavorite(ids, true)
+              })
+              return ok ? added : null
+            }}
             rows={localRows}
             total={categoryRows.length}
             tracks={state?.localTracks ?? []}
