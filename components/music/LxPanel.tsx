@@ -179,6 +179,7 @@ export function DownloadPane({
               ))}
             </Dropdown>
           </label>
+          <small>{result.items.length} 个版本</small>
           <ul>
             {result.items.map((item) => (
               <li key={item.key}>

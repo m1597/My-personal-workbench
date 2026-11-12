@@ -61,6 +61,9 @@ if (live) {
  lx.on('request',async ({action,info})=>{
   if(action==='search'){
    await new Promise(done=>setTimeout(done,600))
+   if(info.limit !== 50) throw Error('下载查询上限错误')
+   if(info.keyword === '只搜艺人') return [{name:info.keyword,singer:'测试艺人',id:'single'}]
+   if(info.page > 1) return {items:Array.from({length:30},(_,i)=>({name:'分页录音'+i,singer:'测试艺人',id:'p'+i})),hasMore:false}
    return [
      {name:info.keyword,singer:'测试艺人',albumName:'测试专辑',id:'test'},
      {name:'可下载版本',singer:'测试艺人',albumName:'音频夹具',id:'audio'},
@@ -179,6 +182,7 @@ try {
     await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('只搜艺人')
     await find.click()
     await expect(pane.getByText('只搜艺人', { exact: true })).toBeVisible()
+    await expect(pane.getByText('1 个版本', { exact: true })).toBeVisible()
     await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('')
     await pane.getByRole('textbox', { name: '歌名', exact: true }).fill('手动歌名')
     await find.click()
@@ -188,6 +192,7 @@ try {
     await pane.getByRole('button', { name: '取消', exact: true }).click()
     await find.click()
     await expect(pane.getByText('手动歌名 手动艺人', { exact: true })).toBeVisible()
+    await expect(pane.getByRole('listitem')).toHaveCount(50)
   }
   await pane.getByRole('combobox', { name: '从曲库选择' }).click()
   await pane.getByRole('option', { name: row.title + ' · ' + row.artist }).click()

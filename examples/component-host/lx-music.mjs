@@ -85,18 +85,18 @@ export async function inspectSource(code, signal) {
   }
   throw Error('此源缺少可用的搜索平台、取址操作或音质')
 }
-async function versions(source, row, signal) {
+async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
   const keyword = [row.title, row.artist === '未知艺人' ? '' : row.artist].filter(Boolean).join(' ')
   if (source.search)
     return runSource(
       source.code,
-      { action: 'search', source: source.platform, info: { keyword, limit: 20 } },
+      { action: 'search', source: source.platform, info: { keyword, limit, page, offset } },
       signal,
     )
   let response
   try {
     response = await sourceRequest(
-      'https://music.163.com/api/search/get?type=1&limit=20&s=' + encodeURIComponent(keyword),
+      `https://music.163.com/api/search/get?type=1&limit=${limit}&offset=${offset}&s=` + encodeURIComponent(keyword),
       { signal },
     )
   } catch (e) {
@@ -134,6 +134,33 @@ async function versions(source, row, signal) {
         downloadable: flags.some((f) => f.downloadable === false || f.dl === 0) ? false : undefined,
       }
     })
+}
+async function downloadResults(source, track, signal) {
+  const results = []
+  const seen = new Set()
+  const pages = new Set()
+  let offset = 0
+  for (let page = 1; page <= 50 && results.length < 50; page++) {
+    const data = await versions(source, track, signal, 50, page, offset)
+    signal.throwIfAborted()
+    const rows = Array.isArray(data) ? data : (data?.items ?? data?.list ?? data?.songs)
+    if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
+    if (!rows.length) break
+    const signature = createHash('sha256').update(JSON.stringify(rows)).digest('hex')
+    if (pages.has(signature)) break
+    pages.add(signature)
+    for (const row of rows) {
+      if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
+      const identity = JSON.stringify([row.source ?? source.platform, row.id ?? row.songmid ?? row])
+      if (seen.has(identity)) continue
+      seen.add(identity)
+      results.push(row)
+      if (results.length === 50) break
+    }
+    offset += rows.length
+    if (data.hasMore === false || (Number.isFinite(data.total) && offset >= data.total)) break
+  }
+  return results
 }
 function extension(format) {
   if (format.container === 'FLAC') return '.flac'
@@ -374,11 +401,14 @@ export function registerLx(bind, getStore, dialog) {
       }
       if (!track) throw Error('无效曲目')
       matches.clear()
-      const rows = await versions(src, track, signal)
+      const audition = typeof id === 'string' && !id.startsWith('local-')
+      const rows = audition
+        ? await versions(src, track, signal)
+        : await downloadResults(src, track, signal)
       signal.throwIfAborted()
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
       const items = []
-      for (const row of rows.slice(0, 30)) {
+      for (const row of audition ? rows.slice(0, 20) : rows) {
         if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
         const key = randomUUID()
         matches.set(key, {
