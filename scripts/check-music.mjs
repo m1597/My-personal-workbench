@@ -17,6 +17,7 @@ const args = [
 ]
 const env = { ...process.env, FITBAY_TEST_PANELS: '1', WORKBENCH_TEST_BACKGROUND: '1' }
 const launch = (mode) => electron.launch({ args: [...args, '--mode=' + mode], env })
+const output = (p) => p.locator('audio').evaluate((a) => [a.volume, a.muted])
 async function page(app, fragment) {
   await expect.poll(() => app.windows().some((p) => p.url().includes(fragment))).toBe(true)
   return app.windows().find((p) => p.url().includes(fragment))
@@ -51,6 +52,15 @@ try {
   })
   expect(decoded).toBe(true)
   await music.getByRole('button', { name: '试听潮汐' }).click()
+  const level = music.getByRole('slider', { name: '音量' })
+  await level.press('End')
+  await level.press('ArrowLeft')
+  await expect.poll(() => output(music)).toEqual([0.99, false])
+  await level.press('Home')
+  await expect.poll(() => output(music)).toEqual([0.99, true])
+  await music.getByRole('button', { name: '静音', exact: true }).click()
+  await expect.poll(() => output(music)).toEqual([0.99, false])
+  await music.getByRole('button', { name: '静音', exact: true }).click()
   const clock = () => music.locator('audio').evaluate((a) => a.currentTime)
   await expect.poll(clock).toBeGreaterThan(0.3)
   await music.evaluate(() => {
@@ -62,6 +72,7 @@ try {
   await dragMusicIn(app)
   const shell = await page(app, '/out/renderer/index.html')
   await expect(music.locator('[data-surface="embedded"]')).toBeVisible()
+  expect(await output(music)).toEqual([0.99, true])
   const layouts = async () => {
     await shell.getByRole('button', { name: '窗口', exact: true }).click()
     await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
@@ -82,6 +93,7 @@ try {
   await musicTab.click()
   await dragMusicOut(app)
   await expect(music.locator('[data-surface="window"]')).toBeVisible()
+  expect(await output(music)).toEqual([0.99, true])
   const detachedTime = await clock()
   await layouts()
   await shell.getByRole('button', { name: '切换布局' }).click()
@@ -121,6 +133,7 @@ try {
   expect(await music.locator('audio').evaluate((a) => a.currentSrc)).toBe(src)
   await music.getByRole('button', { name: '下一首' }).click()
   await expect.poll(() => music.locator('audio').evaluate((a) => a.currentSrc)).not.toBe(src)
+  expect(await output(music)).toEqual([0.99, true])
   const library = path.join(evidence, 'library')
   await mkdir(library)
   await app.evaluate(({ dialog }, dir) => {
@@ -149,6 +162,9 @@ app = await launch('music')
 try {
   const music = await page(app, '/music/index.html')
   await expect(music.getByRole('button', { name: /从 .* 秒继续/ })).toBeVisible()
+  await expect.poll(() => output(music)).toEqual([0.99, true])
+  await music.getByRole('button', { name: '静音', exact: true }).click()
+  await expect.poll(() => output(music)).toEqual([0.99, false])
   expect(await music.locator('audio').evaluate((a) => a.paused)).toBe(true)
   await music.getByRole('button', { name: /从 .* 秒继续/ }).click()
   await expect.poll(() => music.locator('audio').evaluate((a) => a.currentTime)).toBeGreaterThan(1)

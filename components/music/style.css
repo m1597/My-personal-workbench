@@ -202,6 +202,11 @@ li[data-active="true"] .music-track-icon,
   flex: 1;
   min-width: 0;
 }
+.music-volume {
+  display: flex;
+  align-items: center;
+  width: clamp(76px, 18vw, 144px);
+}
 .music-player p:empty {
   display: none;
 }

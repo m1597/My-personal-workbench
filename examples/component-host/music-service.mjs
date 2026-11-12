@@ -1,6 +1,6 @@
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
-import { getMusicPreferences, setMusicQuality } from './music-preferences.mjs'
+import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
 import { openAudio, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
@@ -264,6 +264,7 @@ export function musicService(profile, isSender) {
     prefs: { ...getMusicPreferences(store), shortcutFailures: shortcuts.failures() },
   }))
   bind('setMusicQuality', (quality) => setMusicQuality(store, quality))
+  bind('setMusicOutput', (volume, muted) => setMusicOutput(store, volume, muted))
   bind('setMusicShortcut', (action, key) => shortcuts.setCustom(store, action, key))
   bind('setMusicMediaKeys', (enabled) => shortcuts.setMedia(store, enabled))
   bind('chooseMusicDirectory', async (kind) => {

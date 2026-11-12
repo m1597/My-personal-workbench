@@ -40,6 +40,7 @@ import {
   type ImportJob,
 } from './LibraryPane'
 import { PlaybackQueue } from './PlaybackQueue'
+import { VolumeControls } from './VolumeControls'
 import './style.css'
 type Batch = { id: string; day: string; preference: string }
 type Track = {
@@ -91,6 +92,7 @@ declare global {
   interface Window {
     music: {
       setMusicQuality(quality: string): Promise<void>
+      setMusicOutput(volume: number, muted: boolean): Promise<void>
       setMusicShortcut(action: TransportAction, key: string): Promise<void>
       setMusicMediaKeys(enabled: boolean): Promise<void>
       chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
@@ -854,6 +856,7 @@ function Music() {
             }}
           />
           <span>{clock(duration)}</span>
+          {state && <VolumeControls initial={state.prefs} audio={audio} onError={setError} />}
         </div>
         <audio
           ref={audio}

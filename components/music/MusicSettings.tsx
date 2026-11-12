@@ -24,6 +24,8 @@ export type TasteStatus = {
 }
 export type TransportAction = 'toggle' | 'previous' | 'next'
 export type MusicPreferences = {
+  volume: number
+  muted: boolean
   manualDir: string
   recommendDir: string
   quality: string
