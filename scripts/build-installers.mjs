@@ -1,10 +1,9 @@
 import { build, Platform, Arch } from 'electron-builder'
 import nsis from 'app-builder-lib/out/targets/nsis/nsisUtil.js'
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
-import { createReadStream } from 'node:fs'
-import { createHash } from 'node:crypto'
+import { cp, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { prepareProduct } from './prepare-package.mjs'
+import { deliverInstallers } from './build-offline-setup.mjs'
 
 // The pinned builder calls SetOutPath (which creates /D) before any customInit hook.
 // Use a build-private copy of its stock template, including its separate uninstaller build.
@@ -44,12 +43,11 @@ async function writeInstallerInclude(output, appOutDir) {
   await writeFile(output, `\ufeff${lines.join('\r\n')}\r\n`)
 }
 
-const dest = path.resolve('dist/installers')
-await mkdir(dest, { recursive: true })
 const files = []
+const { version } = JSON.parse(await readFile('package.json', 'utf8'))
 for (const product of ['workbench', 'music']) {
   const music = product === 'music'
-  const { app, modules, version } = await prepareProduct(product)
+  const { app, modules } = await prepareProduct(product)
   const title = music ? 'FitBay Music' : 'FitBay'
   const shortcut = music ? title : 'FitBay 工作台'
   const filename = `FitBay-${music ? 'Music' : 'Workbench'}-Setup-${version}-x64.exe`
@@ -86,16 +84,6 @@ for (const product of ['workbench', 'music']) {
       },
     },
   })
-  await cp(path.join(output, filename), path.join(dest, filename))
-  files.push(filename)
+  files.push(path.join(output, filename))
 }
-for (const id of ['wave', 'tags', 'rules'])
-  await rm(path.join(dest, 'plugins', id + '.fitbayplugin'), { force: true })
-const sums = []
-for (const file of files) {
-  const hash = createHash('sha256')
-  for await (const chunk of createReadStream(path.join(dest, file))) hash.update(chunk)
-  sums.push(`${hash.digest('hex')}  ${file}`)
-}
-await writeFile(path.join(dest, 'SHA256SUMS.txt'), `${sums.join('\n')}\n`)
-console.log(`两个独立安装程序：${dest}`)
+await deliverInstallers(files[0], files[1], version)
