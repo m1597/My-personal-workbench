@@ -15,6 +15,7 @@ test('工作台设置即时生效，重启保留六项偏好和旧布局', async
       if (stage === 0) {
         await page.getByRole('button', { name: 'Close 模块 4' }).click()
         await page.getByRole('button', { name: '工作台设置' }).click()
+        await expect(page.getByRole('slider')).toHaveCount(3)
         const original = await page
           .getByRole('slider')
           .evaluateAll((elements) => elements.map((el) => (el as HTMLInputElement).value))
