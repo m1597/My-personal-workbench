@@ -84,6 +84,10 @@ export class LocalLibrary {
               WHERE NOT EXISTS (SELECT 1 FROM recommended_items r WHERE r.local=s.track)
           ) AS members WHERE NOT EXISTS (SELECT 1 FROM removed_recommendation_members x WHERE x.track=members.track);
       `)
+      if (!trackColumns.some((column) => column.name === 'hiddenFromRecent'))
+        this.db.exec(
+          'ALTER TABLE local_tracks ADD COLUMN hiddenFromRecent INTEGER NOT NULL DEFAULT 0',
+        )
       if (!trackColumns.some((column) => column.name === 'observedAt')) {
         this.db.exec(`ALTER TABLE local_tracks ADD COLUMN observedAt INTEGER;
           ALTER TABLE local_tracks ADD COLUMN lastHeardAt INTEGER;
@@ -158,7 +162,13 @@ export class LocalLibrary {
   heard(id, time = Date.now()) {
     this.db.exec('BEGIN')
     try {
-      if (this.db.prepare('UPDATE local_tracks SET lastHeardAt=? WHERE id=?').run(time, id).changes)
+      if (
+        this.db
+          .prepare(
+            'UPDATE local_tracks SET lastHeardAt=MAX(COALESCE(lastHeardAt,?),?),hiddenFromRecent=0 WHERE id=?',
+          )
+          .run(time, time, id).changes
+      )
         this.db.prepare('INSERT INTO local_play_history VALUES(?,?,?)').run(randomUUID(), id, time)
       this.db.exec('COMMIT')
     } catch (err) {
@@ -195,7 +205,7 @@ export class LocalLibrary {
     )
     const rows = this.db
       .prepare(
-        `SELECT id,title,artist,album,duration,available,listed,file,observedAt,lastHeardAt,size,favorite,
+        `SELECT id,title,artist,album,duration,available,listed,file,observedAt,lastHeardAt,hiddenFromRecent,size,favorite,
         (SELECT COUNT(*) FROM local_play_history h WHERE h.track=local_tracks.id) AS playCount,
         COALESCE((SELECT CASE MAX(v.automatic) WHEN 1 THEN 'daily' WHEN 0 THEN 'download' END FROM recording_copies v WHERE v.local=local_tracks.id),importedOrigin) AS origin,
         (SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
@@ -357,12 +367,24 @@ export class LocalLibrary {
     if (row.awaitingLocation) return false
     const size = await audioFileSize(row.file)
     const ok = !row.unplayable && size !== null
-    if (size === null && row.recommendationMember && (await confirmedMissing(row.file)))
-      this.db
-        .prepare(
-          'INSERT OR IGNORE INTO removed_recommendation_members SELECT id FROM local_tracks WHERE id=? AND file=? AND awaitingLocation=0',
-        )
-        .run(row.id, row.file)
+    if (
+      size === null &&
+      (row.recommendationMember || (row.lastHeardAt != null && !row.hiddenFromRecent)) &&
+      (await confirmedMissing(row.file))
+    ) {
+      if (row.recommendationMember)
+        this.db
+          .prepare(
+            'INSERT OR IGNORE INTO removed_recommendation_members SELECT id FROM local_tracks WHERE id=? AND file=? AND awaitingLocation=0',
+          )
+          .run(row.id, row.file)
+      if (row.lastHeardAt != null)
+        this.db
+          .prepare(
+            'UPDATE local_tracks SET hiddenFromRecent=1 WHERE id=? AND file=? AND lastHeardAt=? AND awaitingLocation=0',
+          )
+          .run(row.id, row.file, row.lastHeardAt)
+    }
     if (Number(ok) !== row.available || size !== row.size)
       this.db
         .prepare('UPDATE local_tracks SET available=?,size=? WHERE id=? AND file=?')
@@ -373,7 +395,7 @@ export class LocalLibrary {
     this.refreshing ??= (async () => {
       const rows = this.db
         .prepare(
-          'SELECT id,file,available,unplayable,size,awaitingLocation, m.track AS recommendationMember FROM local_tracks LEFT JOIN recommendation_playlist_members m ON m.track=local_tracks.id',
+          'SELECT id,file,available,unplayable,size,awaitingLocation,lastHeardAt,hiddenFromRecent, m.track AS recommendationMember FROM local_tracks LEFT JOIN recommendation_playlist_members m ON m.track=local_tracks.id',
         )
         .all()
       for (let i = 0; i < rows.length; i += 16)

@@ -52,6 +52,7 @@ export type LocalTrack = {
   listed: number
   available: number
   observedAt: number
+  hiddenFromRecent?: number
   lastHeardAt: number | null
   size: number | null
   favorite: number

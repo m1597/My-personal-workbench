@@ -47,7 +47,7 @@ export function RecentHistory({
     [more, setMore] = useState(false),
     [error, setError] = useState(''),
     [loading, setLoading] = useState(false)
-  const count = tracks.reduce((n, t) => n + t.playCount, 0)
+  const count = tracks.reduce((n, t) => n + (t.listed && !t.hiddenFromRecent ? t.playCount : 0), 0)
   useEffect(() => {
     if (!count) {
       setRows([])
@@ -71,7 +71,7 @@ export function RecentHistory({
       active = false
     }
   }, [count])
-  const items = new Map(tracks.map((t) => [t.id, t]))
+  const items = new Map(tracks.filter((t) => t.listed && !t.hiddenFromRecent).map((t) => [t.id, t]))
   const queue = [...new Set(rows.map((r) => r.track).filter((id) => items.get(id)?.available))]
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -98,7 +98,7 @@ export function RecentHistory({
                   const t = items.get(r.track)
                   return (
                     t && (
-                      <li key={r.event}>
+                      <li key={r.track}>
                         <Button
                           appearance="subtle"
                           disabled={!t.available}

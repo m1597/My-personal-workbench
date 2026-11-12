@@ -102,8 +102,9 @@ let ui = await launch(first)
 let exported
 try {
   await ui.button('最近播放').click()
-  for (const label of ['今天', '昨天', '更早'])
+  for (const label of ['今天', '昨天'])
     await expect(ui.page.getByRole('heading', { name: label })).toBeVisible()
+  await expect(ui.page.getByRole('heading', { name: '更早', exact: true })).toHaveCount(0)
   await ui.page.screenshot({ path: path.join(root, 'history.png') })
   await expect(ui.button('曲库管理')).toHaveCount(0)
   await ui.page.getByRole('tab', { name: '设置' }).click()

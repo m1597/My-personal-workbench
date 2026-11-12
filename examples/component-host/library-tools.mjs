@@ -140,7 +140,7 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
     getStore().db.prepare('UPDATE local_tracks SET favorite=? WHERE id=?').run(Number(on), id)
     getStore().library.changed?.()
   })
-  bind('recentHistory', (before) => {
+  bind('recentHistory', async (before) => {
     if (
       before !== undefined &&
       (!Number.isSafeInteger(before?.playedAt) ||
@@ -148,9 +148,13 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
         before.event.length > 150)
     )
       throw Error('无效的历史游标')
+    if (!before) await getStore().library.refresh()
     return getStore()
       .db.prepare(
-        `SELECT event,track,playedAt FROM local_play_history WHERE (playedAt,event) < (?,?) ORDER BY playedAt DESC,event DESC LIMIT 201`,
+        `SELECT event,track,playedAt FROM (
+          SELECT h.event,h.track,h.playedAt,ROW_NUMBER() OVER (PARTITION BY h.track ORDER BY h.playedAt DESC,h.event DESC) AS position
+          FROM local_play_history h JOIN local_tracks t ON t.id=h.track WHERE t.listed=1 AND t.hiddenFromRecent=0
+        ) WHERE position=1 AND (playedAt,event) < (?,?) ORDER BY playedAt DESC,event DESC LIMIT 201`,
       )
       .all(before?.playedAt ?? Number.MAX_SAFE_INTEGER, before?.event ?? '')
   })
