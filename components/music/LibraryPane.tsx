@@ -133,22 +133,21 @@ export function LibraryPane({
   }>()
   const [editName, setEditName] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [actionFailed, setActionFailed] = useState(false)
+  const [failedAction, setFailedAction] = useState<typeof action>()
   const saving = useRef(false)
   const confirm = async (task: () => Promise<unknown>) => {
     if (saving.current) return
-    setActionFailed(false)
+    setFailedAction(undefined)
     saving.current = true
     setSubmitting(true)
     try {
       if (await task()) setAction(undefined)
-      else setActionFailed(true)
+      else setFailedAction(action)
     } finally {
       saving.current = false
       setSubmitting(false)
     }
   }
-  useEffect(() => setActionFailed(false), [action])
   const folders = useMemo(() => {
     const root = new Map<string, FolderNode>()
     for (const track of tracks) {
@@ -520,7 +519,7 @@ export function LibraryPane({
                 ) : (
                   <>删除「{action.name}」及其歌单内的引用。曲库和音乐文件保留。</>
                 )}
-                {actionFailed && error && <p role="alert">{error}</p>}
+                {failedAction === action && error && <p role="alert">{error}</p>}
               </DialogContent>
               <DialogActions fluid>
                 {action.kind === 'song' ? (
