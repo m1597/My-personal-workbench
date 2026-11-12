@@ -11,6 +11,7 @@ type Region = { id: string; x: number; y: number; width: number; height: number 
 type Target = Region & { direction: 'within' | 'left' | 'right' | 'above' | 'below' }
 type HostState = {
   mode: string
+  presentation?: 'full' | 'bar' | 'background'
   phase: string
   error: string
   sessionId: string
@@ -33,7 +34,7 @@ declare global {
       confirmedTransfer(id: number): boolean
       bounds(
         value: { x: number; y: number; width: number; height: number } | null,
-        id?: number,
+        id?: number | 'bar',
       ): void
       detach(release?: { x: number; y: number }): Promise<void>
       onActivate(callback: () => void): () => void
@@ -83,7 +84,9 @@ export function useComponentPrototype(
         const existing = api.getPanel(panelId)
         if (
           existing &&
-          ((wasDocked && state.mode === 'standalone') || state.phase === 'unavailable')
+          ((wasDocked && state.mode === 'standalone') ||
+            state.phase === 'unavailable' ||
+            (state.presentation && state.presentation !== 'full'))
         ) {
           api.removePanel(existing)
           return
@@ -150,7 +153,12 @@ export function useComponentPrototype(
       }
       const removed = api.onDidRemovePanel((panel) => {
         if (panelId === 'component-music' && switchingLayout(api)) return
-        if (panel.id === panelId && last?.mode === 'docked' && last.phase === 'ready')
+        if (
+          panel.id === panelId &&
+          last?.mode === 'docked' &&
+          last.phase === 'ready' &&
+          (!last.presentation || last.presentation === 'full')
+        )
           void (host.close ? host.close() : host.detach())
       })
       const offActivate = host.onActivate(() => {
@@ -279,6 +287,66 @@ export function useComponentPrototype(
       host.dropZone(null)
     }
   }, [api, gap, onDetached])
+}
+
+export function useMusicHostState() {
+  const [state, setState] = useState<HostState>()
+  useEffect(() => {
+    const host = window.musicDock
+    if (!host) return
+    let received = false
+    const unsubscribe = host.subscribe((next) => {
+      received = true
+      setState(next)
+    })
+    void host.status().then((next) => {
+      if (!received) setState(next)
+    })
+    return () => {
+      received = true
+      unsubscribe()
+    }
+  }, [])
+  return state
+}
+
+export function MusicPlayerBar() {
+  const state = useMusicHostState()
+  const visible =
+    state?.phase === 'ready' && state.mode === 'docked' && state.presentation === 'bar'
+  const slot = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!visible) return
+    let frame = 0
+    let previous = ''
+    const measure = () => {
+      const rect = slot.current?.getBoundingClientRect()
+      const covered =
+        document.querySelector('[role="dialog"], [data-component-drag]') ||
+        Array.from(document.querySelectorAll('[role="menu"], .component-drop-preview')).some(
+          (popup) => {
+            const bounds = popup.getBoundingClientRect()
+            return rect && bounds.bottom > rect.top && bounds.top < rect.bottom
+          },
+        )
+      const bounds =
+        rect && !covered ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+      const encoded = JSON.stringify(bounds)
+      if (previous !== encoded) {
+        previous = encoded
+        window.musicDock?.bounds(bounds, 'bar')
+      }
+      frame = requestAnimationFrame(measure)
+    }
+    measure()
+    return () => {
+      cancelAnimationFrame(frame)
+      window.musicDock?.bounds(null, 'bar')
+    }
+  }, [visible])
+  return visible ? (
+    <section aria-label="Music 播放栏" ref={slot} style={{ flex: '0 0 100px' }} />
+  ) : null
 }
 
 export function ComponentDropPreview() {

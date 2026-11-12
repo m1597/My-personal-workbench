@@ -42,7 +42,7 @@ try {
   })
   const open = async () => {
     await shell.getByRole('button', { name: '窗口', exact: true }).click()
-    await shell.getByRole('menuitem', { name: 'Music', exact: true }).click()
+    await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
     await expect
       .poll(() => app.windows().some((p) => p.url().includes('/music/index.html')))
       .toBe(true)

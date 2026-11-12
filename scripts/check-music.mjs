@@ -201,10 +201,10 @@ try {
     .poll(() => app.windows().filter((p) => p.url().includes('/music/index.html')).length)
     .toBe(0)
   const windowMenu = shell.getByRole('button', { name: '窗口', exact: true })
-  const musicItem = shell.getByRole('menuitem', { name: 'Music', exact: true })
+  const musicItem = shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true })
   await expect(shell.getByRole('button', { name: /^(Music|示例组件)$/ })).toHaveCount(0)
   await windowMenu.click()
-  await expect(shell.getByRole('menuitem')).toHaveText([
+  await expect(shell.locator('[role="menuitem"], [role="menuitemcheckbox"]')).toHaveText([
     '模块 1',
     '模块 2',
     '模块 3',
@@ -218,12 +218,18 @@ try {
   })
   await shell.screenshot({ path: path.join(evidence, 'window-menu.png'), animations: 'disabled' })
   await musicItem.click()
-  const reopened = await page(app, '/music/index.html')
+  let reopened = await page(app, '/music/index.html')
   await expect(reopened.locator('[data-surface="embedded"]')).toBeVisible()
   expect(await reopened.locator('audio').evaluate((a) => a.paused)).toBe(true)
   await shell.getByRole('tab', { name: '模块 2', exact: true }).click()
   await windowMenu.click()
+  await expect(musicItem).toBeChecked()
   await musicItem.click()
+  await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toHaveCount(0)
+  await windowMenu.click()
+  await expect(musicItem).not.toBeChecked()
+  await musicItem.click()
+  reopened = await page(app, '/music/index.html')
   await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toHaveAttribute(
     'aria-selected',
     'true',

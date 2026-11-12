@@ -25,6 +25,9 @@ import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/Co
 import {
   AudioLines,
   Disc3,
+  PanelBottomClose,
+  PanelTopOpen,
+  PanelTopClose,
   Play,
   Pause,
   SkipForward,
@@ -91,7 +94,8 @@ type State = {
   queue: string[]
   hasLibrary: boolean
 }
-type Mode = { mode: string }
+type Presentation = 'full' | 'bar' | 'background'
+type Mode = { mode: string; presentation: Presentation }
 declare global {
   interface Window {
     music: LibraryToolsAPI & {
@@ -164,6 +168,7 @@ declare global {
     musicWindow: {
       onTransport(fn: (action: TransportAction) => void): () => void
       status(): Promise<Mode>
+      present(mode: Presentation): Promise<void>
       transfer(action: string): Promise<{ ok: boolean; error?: string }>
       subscribe(fn: (v: Mode) => void): () => void
     }
@@ -232,6 +237,7 @@ function Music() {
     [time, setTime] = useState(0),
     [error, setError] = useState(''),
     [docked, setDocked] = useState(false)
+  const [presentation, setPresentation] = useState<Presentation>('full')
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>('library')
   function openSettings(category: SettingsCategory) {
     setSettingsCategory(category)
@@ -289,7 +295,10 @@ function Music() {
         setBatch(s.items.find((i) => i.id === s.current)?.batch ?? s.batches[0]?.id ?? '')
       })
       .catch((e) => setError(String(e)))
-    const mode = (v: Mode) => setDocked(v.mode === 'docked')
+    const mode = (v: Mode) => {
+      setDocked(v.mode === 'docked')
+      setPresentation(v.presentation)
+    }
     void window.musicWindow.status().then(mode)
     return window.musicWindow.subscribe(mode)
   }, [])
@@ -584,7 +593,10 @@ function Music() {
     }
   }
   return (
-    <ComponentTheme surface={docked ? 'embedded' : 'window'} className="music-shell">
+    <ComponentTheme
+      surface={docked ? 'embedded' : 'window'}
+      className={presentation === 'bar' ? 'music-shell music-bar-only' : 'music-shell'}
+    >
       {!docked && (
         <header className="music-header">
           <div className="music-mark">
@@ -606,21 +618,41 @@ function Music() {
           </div>
         </header>
       )}
-      <TabList
-        className="music-tabs"
-        aria-label="音乐页面"
-        selectedValue={tab}
-        onTabSelect={(_, data) => {
-          setGuide(null)
-          setTab(String(data.value))
-        }}
-      >
-        <Tab value="library">本地曲库</Tab>
-        <Tab value="download">下载音乐</Tab>
-        <Tab value="audition">每日推荐</Tab>
-        <Tab value="settings">设置</Tab>
-        {plugins.some((row) => row.installed) && <Tab value="plugins">扩展</Tab>}
-      </TabList>
+      <div className="music-navigation">
+        <TabList
+          className="music-tabs"
+          aria-label="音乐页面"
+          selectedValue={tab}
+          onTabSelect={(_, data) => {
+            setGuide(null)
+            setTab(String(data.value))
+          }}
+        >
+          <Tab value="library">本地曲库</Tab>
+          <Tab value="download">下载音乐</Tab>
+          <Tab value="audition">每日推荐</Tab>
+          <Tab value="settings">设置</Tab>
+          {plugins.some((row) => row.installed) && <Tab value="plugins">扩展</Tab>}
+        </TabList>
+        <div className="music-view-actions">
+          <Button
+            appearance="subtle"
+            size="small"
+            aria-label="只显示播放栏"
+            title="只显示播放栏"
+            icon={<PanelBottomClose size={17} />}
+            onClick={() => void act(() => window.musicWindow.present('bar'))}
+          />
+          <Button
+            appearance="subtle"
+            size="small"
+            aria-label="隐藏到后台"
+            title="隐藏到后台"
+            icon={<PanelTopClose size={17} />}
+            onClick={() => void act(() => window.musicWindow.present('background'))}
+          />
+        </div>
+      </div>
       {guide !== null && state && (guideSteps[guide].page !== 'plugins' || plugins.length > 0) && (
         <MusicGuide
           key={
@@ -956,6 +988,16 @@ function Music() {
       </main>
       <footer className="music-player">
         <div className="music-transport">
+          {presentation === 'bar' && (
+            <Button
+              appearance="subtle"
+              size="small"
+              aria-label="展开 Music"
+              title="展开 Music"
+              icon={<PanelTopOpen size={17} />}
+              onClick={() => void act(() => window.musicWindow.present('full'))}
+            />
+          )}
           <div className="music-disc">
             <Disc3 size={23} />
           </div>

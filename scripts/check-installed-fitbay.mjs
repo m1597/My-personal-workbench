@@ -112,7 +112,7 @@ try {
     const shell = await find('/workbench/index.html')
     await expect(shell.getByTestId('panel-count')).toHaveText('0 个模块已打开')
     await shell.getByRole('button', { name: '窗口', exact: true }).click()
-    await shell.getByRole('menuitem', { name: 'Music', exact: true }).click()
+    await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
     await expect(
       shell.getByRole('alert').filter({ hasText: '请先安装 FitBay Music' }),
     ).toBeVisible()
@@ -169,7 +169,7 @@ try {
     } else {
       shell = await find('/workbench/index.html')
       await shell.getByRole('button', { name: '窗口', exact: true }).click()
-      await shell.getByRole('menuitem', { name: 'Music', exact: true }).click()
+      await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
       player = await find('/music/index.html')
       await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
       await listen(player)

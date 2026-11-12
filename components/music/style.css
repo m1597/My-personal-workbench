@@ -624,3 +624,41 @@ li[data-active="true"] .music-track-icon,
 .music-queue li {
   margin-block: var(--space-4);
 }
+
+.music-navigation,
+.music-view-actions {
+  display: flex;
+  align-items: center;
+}
+.music-navigation {
+  min-width: 0;
+  border-bottom: 1px solid var(--stroke);
+}
+.music-navigation > [role="tablist"] {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+  overflow-x: auto;
+}
+.music-view-actions {
+  padding-inline: var(--space-4);
+}
+.music-shell.music-bar-only {
+  display: flex;
+  flex-direction: column;
+}
+.music-bar-only > :is(.music-header, .music-navigation, .music-scroll, .music-guide) {
+  display: none;
+}
+.music-bar-only .music-player {
+  flex: 1;
+  align-content: center;
+  padding-block: var(--space-4);
+}
+.music-bar-only .music-seek {
+  display: flex;
+}
+:root:has(.music-bar-only) .music-queue {
+  max-height: calc(100dvh - var(--space-12));
+  overflow-y: auto;
+}

@@ -6,7 +6,7 @@ import { components, HeaderActions, EmptyWorkspace } from './dockviewComponents'
 import { ComponentTheme } from './ComponentTheme'
 import { WindowMenu } from './WindowMenu'
 import { restoreLayout } from './layoutStorage'
-import { ComponentDropPreview, useComponentPrototype } from './componentPrototype'
+import { ComponentDropPreview, MusicPlayerBar, useComponentPrototype } from './componentPrototype'
 
 export default function App() {
   const [theme] = useState(() => ({
@@ -72,6 +72,7 @@ export default function App() {
               watermarkComponent={EmptyWorkspace}
             />
           </main>
+          <MusicPlayerBar />
           <footer className="statusbar">
             <span>
               <span className="accent-dot" />

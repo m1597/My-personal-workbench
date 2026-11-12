@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('musicWindow', {
     return () => ipcRenderer.removeListener('music:transport', cb)
   },
   status: () => ipcRenderer.invoke('music-sample:hello', { protocol: '0.1' }),
+  present: (mode) => ipcRenderer.invoke('music-sample:presentation', mode),
   transfer: (action) => ipcRenderer.invoke('music-sample:transfer', action),
   subscribe: (fn) => {
     const cb = (_, v) => fn(v)

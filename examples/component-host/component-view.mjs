@@ -23,6 +23,9 @@ export function componentView({
 }) {
   let standalone, view, parent
   let mode = 'standalone'
+  let presentation = 'full'
+  let fullWindowBounds
+  let fullWindowMaximized = false
   let phase = 'stopped'
   let error = ''
   let entry
@@ -34,7 +37,16 @@ export function componentView({
 
   let dragOver = null
   let placement = null
-  const snapshot = () => ({ mode, phase, error, sessionId, dragOver, placement, transfer })
+  const snapshot = () => ({
+    mode,
+    presentation,
+    phase,
+    error,
+    sessionId,
+    dragOver,
+    placement,
+    transfer,
+  })
   function broadcast() {
     if (shell() && !shell().isDestroyed())
       shell().webContents.send(music ? 'music-prototype:state' : 'prototype:state', snapshot())
@@ -57,14 +69,45 @@ export function componentView({
       broadcast()
     }
   }
-  function stopDockedMusic() {
-    if (!music || mode !== 'docked') return
-    view?.webContents.close()
-    standalone?.close()
-    view = undefined
-    parent = undefined
+  function stopMusic() {
+    if (!music) return
+    clearTimeout(transferTimer)
     phase = 'stopped'
     mode = 'standalone'
+    presentation = 'full'
+    fullWindowBounds = undefined
+    fullWindowMaximized = false
+    const window = standalone
+    standalone = undefined
+    parent = undefined
+    view?.webContents.close()
+    view = undefined
+    window?.close()
+    broadcast()
+  }
+  function setPresentation(next) {
+    if (!music || phase !== 'ready' || next === presentation) return
+    presentation = next
+    view.setVisible(false)
+    if (mode === 'standalone' && standalone) {
+      if (next === 'background') standalone.hide()
+      else {
+        if (next === 'bar') {
+          fullWindowMaximized = standalone.isMaximized()
+          fullWindowBounds = standalone.getNormalBounds()
+          if (fullWindowMaximized) standalone.unmaximize()
+          standalone.setContentSize(Math.max(560, standalone.getContentSize()[0]), 100)
+        } else if (fullWindowBounds) {
+          standalone.setBounds(fullWindowBounds)
+          if (fullWindowMaximized) standalone.maximize()
+          fullWindowBounds = undefined
+        }
+        view.setVisible(true)
+        show(standalone)
+      }
+    }
+    broadcast()
+    if (next === 'full' && mode === 'docked') shell()?.webContents.send('music-prototype:activate')
   }
   function detach(point) {
     clearTimeout(transferTimer)
@@ -76,7 +119,9 @@ export function componentView({
       })
       watchNativeDock(standalone, {
         target: (point) => {
-          return mode === 'standalone' && phase === 'ready' ? dockTarget(point, standalone) : null
+          return presentation === 'full' && mode === 'standalone' && phase === 'ready'
+            ? dockTarget(point, standalone)
+            : null
         },
         commit: (hit) => void attach(hit),
         preview,
@@ -87,7 +132,11 @@ export function componentView({
           view.setBounds({ x: 0, y: 0, width, height })
         }
       })
+      const owner = standalone
       standalone.on('closed', () => {
+        if (standalone !== owner) return
+        presentation = 'full'
+        fullWindowBounds = undefined
         standalone = undefined
         if (!isQuitting() && mode === 'standalone') {
           view?.webContents.close()
@@ -239,7 +288,9 @@ export function componentView({
       placement = hit
       transfer++
       phase = 'attaching'
+      const attachingView = view
       await openWorkbench()
+      if (view !== attachingView || phase === 'stopped') return { ok: false }
       // The shell may already have acknowledged its bounds while loadFile was pending.
       if (mode === 'docked' && phase === 'ready') return { ok: true }
       broadcast()
@@ -268,6 +319,7 @@ export function componentView({
       ipcMain.handle(music ? 'music-sample:transfer' : 'sample:transfer', (event, action) => {
         if (!isSample(event) || !['attach', 'detach'].includes(action))
           return { ok: false, error: 'DENIED' }
+        setPresentation('full')
         if (action === 'attach') return attach()
         detach()
         return { ok: true }
@@ -278,6 +330,10 @@ export function componentView({
       })
       ipcMain.handle(music ? 'music-prototype:restore' : 'prototype:restore', async (event) => {
         if (!isShell(event)) throw new Error('DENIED')
+        if (presentation !== 'full') {
+          broadcast()
+          return
+        }
         if (phase === 'stopped') await openComponent(shell())
         else if (music && phase === 'ready' && mode === 'standalone') {
           // The saved slot can be an inactive tab. Its renderer will report bounds
@@ -287,10 +343,15 @@ export function componentView({
         }
       })
       if (music)
+        ipcMain.handle('music-sample:presentation', (event, next) => {
+          if (!isSample(event) || !['full', 'bar', 'background'].includes(next))
+            throw Error('DENIED')
+          setPresentation(next)
+        })
+      if (music)
         ipcMain.handle('music-prototype:close', (event) => {
           if (!isShell(event)) throw Error('DENIED')
-          stopDockedMusic()
-          broadcast()
+          stopMusic()
         })
       ipcMain.handle(music ? 'music-prototype:open' : 'prototype:open', (event) => {
         if (!isShell(event)) throw new Error('DENIED')
@@ -311,6 +372,7 @@ export function componentView({
       )
       ipcMain.on(music ? 'music-prototype:bounds' : 'prototype:bounds', (event, bounds, id) => {
         if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return
+        if (presentation === 'background' || (presentation === 'bar') !== (id === 'bar')) return
         if (phase === 'attaching' && id !== transfer) return
         if (bounds === null) {
           if (parent === shell()) view.setVisible(false)
@@ -354,7 +416,7 @@ export function componentView({
       if (phase === 'attaching') cancelAttach('目标工作台已关闭')
       else if (parent === shell()) {
         if (!music) detach()
-        else stopDockedMusic()
+        else stopMusic()
       }
     },
     reloading() {
@@ -366,6 +428,7 @@ export function componentView({
     },
     async open() {
       if (!(await openComponent())) return false
+      setPresentation('full')
       const window = parent ?? shell()
       if (mode === 'docked')
         shell().webContents.send(music ? 'music-prototype:activate' : 'prototype:activate')

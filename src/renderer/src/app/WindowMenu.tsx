@@ -8,15 +8,17 @@ import {
   MenuItem,
   MenuDivider,
 } from '@fluentui/react-components'
-import { ChevronDown, Check, Plus, PanelsTopLeft, Music } from 'lucide-react'
+import { ChevronDown, Check, Plus, PanelsTopLeft } from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { modules } from './moduleRegistry'
 import { openModule } from './workspace'
 
 import { LayoutDialog } from './LayoutDialog'
-import { showMusicSlot } from './componentPrototype'
+import { useMusicHostState } from './componentPrototype'
 
 export function WindowMenu() {
+  const music = useMusicHostState()
+  const running = music?.phase === 'ready' || music?.phase === 'attaching'
   const workspace = useContext(WorkspaceContext)
   const [musicError, setMusicError] = useState('')
   const [layoutsOpen, setLayoutsOpen] = useState(false)
@@ -49,13 +51,17 @@ export function WindowMenu() {
             ))}
             {window.musicDock && (
               <MenuItem
-                icon={<Music size={16} />}
+                role="menuitemcheckbox"
+                aria-checked={running}
+                icon={running ? <Check size={16} /> : <Plus size={16} />}
                 onClick={async () => {
                   const host = window.musicDock
-                  const state = await host?.status()
-                  if (workspace.api && state?.mode === 'docked' && state.phase === 'ready')
-                    showMusicSlot(workspace.api)
-                  setMusicError((await window.musicDock?.open())?.error ?? '')
+                  if (!host) return
+                  const state = await host.status()
+                  if (state.phase === 'ready' || state.phase === 'attaching') {
+                    await host.close?.()
+                    setMusicError('')
+                  } else setMusicError((await host.open()).error ?? '')
                 }}
               >
                 Music
