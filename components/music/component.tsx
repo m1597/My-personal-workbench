@@ -1071,6 +1071,11 @@ function Music() {
             appearance="subtle"
             aria-label="桌面歌词"
             title="桌面歌词"
+            icon={
+              <span className="music-lyric-glyph" aria-hidden="true">
+                词
+              </span>
+            }
             aria-pressed={lyricsOpen}
             onClick={() =>
               void act(async () => {
@@ -1078,9 +1083,7 @@ function Music() {
                 setLyricsOpen(!lyricsOpen)
               })
             }
-          >
-            词
-          </Button>
+          />
           <PlaybackQueue
             active={active}
             tracks={state?.localTracks}

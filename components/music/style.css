@@ -192,6 +192,10 @@ li[data-active="true"] .music-track-icon,
 .music-player .music-heading {
   flex: 1;
 }
+.music-lyric-glyph {
+  font-size: var(--font-size-caption);
+  line-height: 1;
+}
 .music-seek {
   margin-top: var(--space-4);
   font-size: var(--font-size-caption);
