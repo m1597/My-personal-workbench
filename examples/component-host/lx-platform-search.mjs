@@ -101,11 +101,11 @@ export async function platformSearch(
     }
   } catch {
     signal.throwIfAborted()
-    throw Error(name + '目录连接失败，请稍后重试')
+    throw new CatalogUnavailable(name + '目录连接失败，请稍后重试')
   }
   const b = response.body
   if (response.statusCode !== 200)
-    throw Error(name + '目录请求失败（HTTP ' + response.statusCode + '）')
+    throw new CatalogUnavailable(name + '目录请求失败（HTTP ' + response.statusCode + '）')
   if (platform === 'tx' && Number.isInteger(b?.req?.code) && b.req.code !== 0)
     throw new CatalogUnavailable(name + '目录暂时无法返回搜索结果（业务码 ' + b.req.code + '）')
   const data = platform === 'tx' ? b?.req?.data : b?.data
@@ -114,7 +114,7 @@ export async function platformSearch(
     !Array.isArray(songs) ||
     (platform === 'tx' ? b.code !== 0 || b.req.code !== 0 : b.error_code !== 0)
   )
-    throw Error(name + '目录暂时无法返回搜索结果')
+    throw new CatalogUnavailable(name + '目录暂时无法返回搜索结果')
   const items =
     platform === 'tx'
       ? songs.map(qqSong)

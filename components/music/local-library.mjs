@@ -53,6 +53,13 @@ export class LocalLibrary {
           .run('音乐源未允许永久保存此录音，或仅提供试听')
       }
       const trackColumns = this.db.prepare('PRAGMA table_info(local_tracks)').all()
+      if (
+        !this.db
+          .prepare('PRAGMA table_info(recommended_items)')
+          .all()
+          .some((c) => c.name === 'summary')
+      )
+        this.db.exec("ALTER TABLE recommended_items ADD COLUMN summary TEXT NOT NULL DEFAULT ''")
       this.db.exec(
         'CREATE TABLE IF NOT EXISTS restored_recommendations(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE)',
       )

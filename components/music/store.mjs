@@ -260,7 +260,7 @@ export class MusicStore {
       .all(today)
     const items = this.db
       .prepare(
-        `SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.diagnosis AS diagnosis,t.available AS localAvailable FROM items i JOIN batches b ON b.id=i.batch LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local WHERE b.day=? AND i.status != '已跳过' ORDER BY b.rowid DESC,i.rowid`,
+        `SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.summary AS downloadSummary,r.diagnosis AS diagnosis,t.available AS localAvailable FROM items i JOIN batches b ON b.id=i.batch LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local WHERE b.day=? AND i.status != '已跳过' ORDER BY b.rowid DESC,i.rowid`,
       )
       .all(today)
       .map((row) => ({

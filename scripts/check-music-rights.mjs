@@ -388,8 +388,8 @@ lx.on('request',({source,action})=>{
   await run(testId)
   const isolated = (await state()).items.find((r) => r.id === testId)
   assert.equal(isolated.status, '待重试')
-  assert.match(isolated.downloadError, /tx 匹配录音：未声明永久保存许可/)
-  assert.match(isolated.downloadError, /wy 匹配录音：未声明永久保存许可/)
+  assert.match(isolated.downloadError, /QQ 音乐[^\n]*未声明永久保存许可/)
+  assert.match(isolated.downloadError, /网易云音乐[^\n]*未声明永久保存许可/)
   assert.equal(await app.evaluate(() => globalThis.downloadCalls), previousDownloads)
   const imported = new MusicStore(musicRoot)
   imported.library.upsert({

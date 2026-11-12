@@ -1,6 +1,7 @@
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
 import { titleMatch, artistMatches, inLibrary } from './music-discovery.mjs'
 import { CatalogUnavailable, platformSearch } from './lx-platform-search.mjs'
+import { describeFailure } from './music-download-diagnosis.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
 import { saveLyrics } from './music-lyrics.mjs'
 import path from 'node:path'
@@ -19,11 +20,21 @@ import { publish } from './music/store.mjs'
 
 class SourceDownloadError extends Error {}
 class TransferError extends SourceDownloadError {}
+class InvalidAudio extends SourceDownloadError {
+  kind = 'unusable'
+}
 class RecordingError extends Error {
   constructor(kind, message) {
     super(message)
     this.kind = kind
   }
+}
+function failureKind(error) {
+  if (error.kind) return error.kind
+  if (error instanceof CatalogUnavailable) return 'network'
+  if (error instanceof SourceDownloadError) return 'download'
+  if (error instanceof SourceRequestError) return 'source-request'
+  return error.code ? 'storage' : 'other'
 }
 function permission(source, row) {
   const rights = [row.allowPermanentSave, row.permanentDownload, row.meta?.allowPermanentSave]
@@ -75,7 +86,7 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
       '在线目录请求失败（HTTP ' + response.statusCode + '），请重试',
     )
   const songs = response.body?.result?.songs
-  if (!Array.isArray(songs)) throw Error('在线目录暂时不可用')
+  if (!Array.isArray(songs)) throw new RecordingError('network', '在线目录暂时不可用')
   const grants = response.body.result.privileges ?? response.body.privileges
   const privileges = new Map(Array.isArray(grants) ? grants.map((p) => [String(p.id), p]) : [])
   return songs
@@ -118,6 +129,8 @@ async function freeDownloadQualities(ids, signal) {
     signal.throwIfAborted()
     throw new RecordingError('network', '无法核实网易云录音下载权限')
   }
+  if (response.statusCode !== 200)
+    throw new RecordingError('network', '权限查询失败（HTTP ' + response.statusCode + '）')
   for (const grant of response.body?.privileges ?? []) {
     if (!ids.includes(String(grant.id))) continue
     const free = []
@@ -134,7 +147,7 @@ async function freeDownloadQualities(ids, signal) {
           free.push(quality)
       }
     }
-    result.set(String(grant.id), free)
+    if (free.length || grant.dl === 0) result.set(String(grant.id), free)
   }
   return result
 }
@@ -191,7 +204,7 @@ function extension(format) {
   if (format.container === 'MPEG' && /layer 3/i.test(format.codec ?? '')) return '.mp3'
   if (/M4A|isom|mp4/i.test(format.container ?? '') && /AAC|ALAC|MPEG-4/i.test(format.codec ?? ''))
     return '.m4a'
-  throw new SourceDownloadError('返回的文件不是支持的音频格式')
+  throw new InvalidAudio('返回的文件不是支持的音频格式')
 }
 export function publishToLibrary(temp, row, store, version, dailyId) {
   const file = row.file
@@ -255,7 +268,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       transform(chunk, _encoding, cb) {
         hash?.update(chunk)
         size += chunk.length
-        if (size > 512 * 1024 * 1024) cb(new SourceDownloadError('音频超过单曲大小限制'))
+        if (size > 512 * 1024 * 1024) cb(new InvalidAudio('音频超过单曲大小限制'))
         else cb(null, chunk)
       },
     })
@@ -281,17 +294,17 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       skipCovers: true,
     }).catch((error) => {
       if (error.syscall) throw error
-      throw new SourceDownloadError('返回的文件不是有效音频')
+      throw new InvalidAudio('返回的文件不是有效音频')
     })
     if (!(Number.isFinite(format.duration) && format.duration > 0))
-      throw new SourceDownloadError('音频时长无效')
+      throw new InvalidAudio('音频时长无效')
     if (
       dailyId &&
       Number.isFinite(info.durationSeconds) &&
       info.durationSeconds > 0 &&
       Math.abs(info.durationSeconds - format.duration) > Math.max(3, info.durationSeconds * 0.025)
     )
-      throw new SourceDownloadError('音频时长与所选完整录音不符')
+      throw new InvalidAudio('音频时长与所选完整录音不符')
     const name = (info.singer + ' - ' + info.name)
       .normalize()
       .replace(/[<>:"/\\|?*\p{Cc}]/gu, '_')
@@ -321,7 +334,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       file = path.join(dir, filename)
     }
     await verifyAudio(temp, signal).catch((error) => {
-      if (error instanceof AudioDecodeError) throw new SourceDownloadError(error.message)
+      if (error instanceof AudioDecodeError) throw new InvalidAudio(error.message)
       throw error
     })
     signal.throwIfAborted()
@@ -394,7 +407,7 @@ async function verifiedCopy(store, version, signal) {
 }
 function markSaved(store, id, local) {
   const update = store.db
-    .prepare("UPDATE recommended_items SET local=?,error='',diagnosis='' WHERE item=?")
+    .prepare("UPDATE recommended_items SET local=?,error='',diagnosis='',summary='' WHERE item=?")
     .run(local, id)
   if (!update.changes) throw Error('推荐已过期')
   store.status(id, '已入库')
@@ -731,13 +744,13 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     const task = new AbortController()
     running.set(id, task)
     const signal = batchSignal ? AbortSignal.any([batchSignal, task.signal]) : task.signal
+    const failures = []
     try {
       const activeSource = await currentSource(signal, true)
       if (!activeSource) throw new RecordingError('source', '尚未导入音乐源')
       const prefs = getMusicPreferences(store)
       const cache = new Map()
       const choicesForItem = new Map()
-      const failures = []
       const bank = catalog()
       await bank.upgrade()
       const installed = bank.discoverySources(activeSource)
@@ -786,7 +799,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             (q) => right === 'granted' || grant.includes(q),
           )
           const quality = [prefs.quality, '320k', ...qualities].find((q) => qualities.includes(q))
-          if (!quality) continue
+          if (!quality) {
+            reasons.add('quality')
+            continue
+          }
           const version = versionInfo(src, row, quality)
           if (!version) continue
           if (store.ignoresRecording(version.platform, version.sourceId)) {
@@ -800,10 +816,17 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             throw new RecordingError('missing', '没有找到歌名和艺人都匹配且音质可用的录音')
           if (reasons.size === 1 && reasons.has('ignored'))
             throw new RecordingError('ignored', '已标记不感兴趣')
-          throw new RecordingError(
+          const error = new RecordingError(
             reasons.size === 1 ? [...reasons][0] : 'mixed',
-            '匹配录音：' + [...reasons].map((k) => explanations[k] ?? '已标记不感兴趣').join('、'),
+            '匹配录音：' +
+              [...reasons]
+                .map(
+                  (k) => explanations[k] ?? (k === 'quality' ? '没有兼容音质' : '已标记不感兴趣'),
+                )
+                .join('、'),
           )
+          error.kinds = [...reasons]
+          throw error
         }
         const exact = [...candidates.values()].filter(
           ({ row }) => titleMatch(item, row) === 'exact',
@@ -836,7 +859,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           markSaved(store, id, cached.id)
           await saveRecordingLyrics(src, pick, cached.file, signal)
         } else {
-          if (!prefs.recommendDir) throw Error('请在设置中选择推荐下载目录')
+          if (!prefs.recommendDir) throw new RecordingError('storage', '请在设置中选择推荐下载目录')
           store.status(id, '正在保存')
           await fetchRecording(src, pick, quality, prefs.recommendDir, signal, undefined, id)
         }
@@ -865,22 +888,28 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         store.status(id, '已跳过')
         return
       }
-      if (failures.length === 1) throw failures[0].error
-      const detail = [
-        ...new Set(failures.map(({ src, error }) => src.platform + ' ' + error.message)),
-      ]
-      throw new RecordingError('mixed', detail.join('；') || '没有兼容的已安装音乐源')
+      throw failures[0]?.error ?? new RecordingError('source', '没有兼容的已安装音乐源')
     } catch (e) {
       if (store.db.prepare('SELECT 1 FROM dismissed_items WHERE item=?').get(id)) return
+      const attempts =
+        !signal.aborted && failures.some((f) => f.error === e) ? failures : [{ error: e }]
+      const issue = describeFailure(
+        attempts.map(({ src, error }) => {
+          return {
+            platform: src?.platform,
+            source: src?.name,
+            kinds: signal.aborted ? ['cancelled'] : (error.kinds ?? [failureKind(error)]),
+            message: signal.aborted
+              ? '操作已取消'
+              : error.code
+                ? '本地存储失败（' + error.code + '）'
+                : String(error.message).slice(0, 320),
+          }
+        }),
+      )
       store.db
-        .prepare('UPDATE recommended_items SET error=?,diagnosis=? WHERE item=?')
-        .run(
-          String(
-            signal.aborted ? '操作已取消' : e.code ? '保存失败，请检查目录与网络' : e.message,
-          ).slice(0, 1000),
-          e.kind ?? (e instanceof TransferError ? 'network' : 'other'),
-          id,
-        )
+        .prepare('UPDATE recommended_items SET error=?,diagnosis=?,summary=? WHERE item=?')
+        .run(issue.detail, issue.kind, issue.summary, id)
       store.status(id, '待重试')
     } finally {
       running.delete(id)
