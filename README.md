@@ -6,7 +6,7 @@
 
 ## 组件产品方向（已确认公共宿主方案 B）
 
-工作台与音乐/资产等组件分别安装，组件可独立启动，也可接入工作台停靠与分离。方案见 [组件框架设计](docs/组件框架设计.md)。已有独立部署的示例宿主原型，尚未集成到正式安装包或开放第三方接入；第一方Music进入一期，见 [一期任务](openspec/changes/add-music-recommendation-audition/tasks.md)。
+工作台与音乐/资产等组件分别安装，组件可独立启动，也可接入工作台停靠与分离。方案见 [组件框架设计](docs/组件框架设计.md)。工作台和第一方 Music 分别提供 Windows x64 安装器，第三方组件接入仍在规划中。
 
 ## 开始开发
 
@@ -60,13 +60,13 @@ SQLite 和媒体播放当前用于第一方Music组件。Git 只备份已提交�
 
 ## Windows 安装包
 
-`npm run dist:win` 生成 `dist/FitBay-Setup-0.1.0-x64.exe`。双击启动中文安装向导，可选择安装目录（例如 D:/Apps/PersonalWorkbench）；无需安装 Node/npm。当前包未签名，不包含自动更新，安装完成不会自动启动程序。构建结果不提交 Git。
+`npm run dist:win` 在 `dist/installers/` 生成两份 Windows x64 安装器。只用曲库时安装 `FitBay-Music-Setup-0.1.0-x64.exe`，从「FitBay Music」打开。需要工作台时安装 `FitBay-Workbench-Setup-0.1.0-x64.exe`，从「FitBay 工作台」打开。首次安装时为两者分别选独立的空目录。两者共存时，可在工作台的「窗口 → Music」打开音乐组件，拖出标签可分离。
 
-`npm run check:package` 使用独立 profile 在后台验证 dist/win-unpacked 内的真实打包程序；需先生成安装包。它不执行安装或卸载向导。更多边界见 [数据与交付](docs/数据与交付.md)。
+三个可选插件单独放在 `dist/installers/plugins/`。在 Music 的「设置 → 插件」点对应卡片的「选择插件文件」，选择 `wave.fitbayplugin`（波形）、`tags.fitbayplugin`（标签与封面）或 `rules.fitbayplugin`（智能歌单）。首次使用时三个插件都未安装。安装器与插件的校验值见 `dist/installers/SHA256SUMS.txt`。
 
 ## 独立组件原型
 
-已实现隔离的公共宿主与 Fluent React 示例，支持系统标题栏拖入预览吸附、Dockview 标签拖出分离。运行 `npm run build:prototype` 后执行 `npm run check:prototype`，自动使用独立 profile 在后台验证；不打开日常工作区。详见 [组件开发与验证](docs/组件开发.md)。目前是分目录部署，依赖项目 Electron 运行时，不是新的独立安装包；正式应用入口和布局存储保持原状。
+已实现隔离的公共宿主与 Fluent React 示例，支持系统标题栏拖入预览吸附、Dockview 标签拖出分离。运行 `npm run build:prototype` 后执行 `npm run check:prototype`，自动使用独立 profile 在后台验证；不打开日常工作区。详见 [组件开发与验证](docs/组件开发.md)。此开发入口使用项目的 Electron 运行时，Windows 安装版自带运行时。
 
 ## 桌面双击启动
 

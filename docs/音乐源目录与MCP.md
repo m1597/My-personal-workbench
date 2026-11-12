@@ -27,7 +27,7 @@
 }
 ```
 
-代理默认连接本仓库的 `local/desktop-profile`。验证专用宿主时由操作者在 args 末尾加上宿主已打开的绝对 profile 路径。标准输入输出只承载 MCP JSON-RPC。[stdio 规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
+源码入口默认连接本仓库的 `local/desktop-profile`。安装版请从 Music 的引导中复制当前机器的连接命令，脚本位于 Music 安装目录的 `resources/app/scripts/music-source-mcp.mjs`，默认连接 `%APPDATA%/FitBay/desktop-profile`。验证专用宿主时在 args 末尾加上宿主已打开的绝对 profile 路径。标准输入输出只承载 MCP JSON-RPC。[stdio 规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
 
 | 工具                  | 参数示例                               | 返回                                               |
 | --------------------- | -------------------------------------- | -------------------------------------------------- |

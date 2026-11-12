@@ -10,4 +10,4 @@
 
 - 多格式标签写入使用 `taglib-wasm@2.4.1`，发布于 2026 年 10 月，需 Node 24 或以上。JavaScript 包装层为 MIT，Wasm 遵循上游 NOTICE 的 LGPL-2.1-or-later；生成的引擎文件包含 LICENSE、NOTICE 和 COPYING.LGPL。本地可从上游重编译 Wasm 并重建插件。锁文件固定传递依赖 `@msgpack/msgpack@3.1.3`。[上游源码及许可](https://github.com/CharlesWiltgen/TagLib-Wasm)
 - `node scripts/check-music-tags.mjs` 使用 MP3、FLAC、WAV 与 M4A 测试录音核对实际文件、未选字段、未选文件以及过期预览。
-- 先运行 `npm run build:prototype`，再运行 `node scripts/check-music-tags.mjs --ui`，从实际引导、设置、安装本地包及打开插件入口核对写入。测试在独立 profile 全程静音，截图输出到本次临时目录。
+- 先运行 `npm run build:prototype`，再运行 `node scripts/check-music-tags.mjs --ui`，从实际引导、设置、选择插件文件及打开插件入口核对写入。测试在独立 profile 全程静音，截图输出到本次临时目录。
