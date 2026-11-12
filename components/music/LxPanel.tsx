@@ -139,9 +139,10 @@ export function LxPanel({
           }}
         >
           {tracks.length > 0 && (
-            <label>
+            <label htmlFor="download-library">
               从曲库选择
               <Combobox
+                id="download-library"
                 inlinePopup
                 aria-label="从曲库选择"
                 listbox={{ className: 'component-popup' }}
@@ -172,9 +173,10 @@ export function LxPanel({
               </Combobox>
             </label>
           )}
-          <label>
+          <label htmlFor="download-title">
             歌名
             <Input
+              id="download-title"
               aria-label="歌名"
               value={title}
               maxLength={256}
@@ -187,9 +189,10 @@ export function LxPanel({
               }}
             />
           </label>
-          <label>
+          <label htmlFor="download-artist">
             艺人
             <Input
+              id="download-artist"
               aria-label="艺人"
               value={artist}
               maxLength={256}
