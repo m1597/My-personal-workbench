@@ -27,6 +27,7 @@ const launch = () =>
   })
 let app = await launch()
 try {
+  assert.ok(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio')))
   let page = await app.firstWindow()
   const resize = (width) =>
     app.evaluate(

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { release } from 'node:os'
 
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
+if (process.env.WORKBENCH_TEST_BACKGROUND === '1') app.commandLine.appendSwitch('mute-audio')
 
 function createWindow() {
   const backgroundTest =

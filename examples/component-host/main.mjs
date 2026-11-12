@@ -25,6 +25,7 @@ const componentRoot = argument('component')
 const workbenchFile = argument('workbench')
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
 const background = process.env.WORKBENCH_TEST_BACKGROUND === '1'
+if (background) app.commandLine.appendSwitch('mute-audio')
 const fixturePanels = process.env.FITBAY_TEST_PANELS === '1' && background
 let shell, dropZone
 let quitting = false

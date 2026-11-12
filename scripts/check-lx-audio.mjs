@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { verifyAudio } from '../examples/component-host/lx-audio-check.mjs'
+app.commandLine.appendSwitch('mute-audio')
 void app.whenReady().then(async () => {
   app.on('window-all-closed', () => {})
   try {
