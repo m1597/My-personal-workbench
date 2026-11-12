@@ -2,6 +2,7 @@ import { desktopLyrics } from './desktop-lyrics.mjs'
 import { musicPlugins } from './music-plugins.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
 import { localLines, ownedLyrics } from './music-lyrics.mjs'
+import { inLibrary, artistMatches } from './music-discovery.mjs'
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
@@ -401,27 +402,70 @@ export function musicService(
       clearTimeout(updateTimer)
       const profile = await taste.refresh()
       signal.throwIfAborted()
-      const rows = await requestMusicModel(
-        store,
-        safeStorage,
-        'recommend',
-        {
-          preference,
-          mode,
-          similar: mode === 'artist' && similar,
-          ...(profile ? { profile } : {}),
-        },
-        signal,
-      )
-      signal.throwIfAborted()
-      const artistKey = (v) => v.normalize('NFKC').trim().toLocaleLowerCase()
-      const acceptable =
-        mode === 'artist' && !similar && preference.trim()
-          ? rows.filter((row) => artistKey(row.artist) === artistKey(preference))
-          : rows
-      if (!acceptable.length) throw Error('未找到该歌手的推荐歌曲，请检查歌手名或开启相似歌手')
-      const batch = store.saveSuggestions(label, acceptable, '待处理')
-      lx.batch(batch)
+      const seen = []
+      let batch
+      let slots = 5
+      let catalogChoices = []
+      for (let round = 0; round < 2 && slots > 0; round++) {
+        const rows = await requestMusicModel(
+          store,
+          safeStorage,
+          'recommend',
+          {
+            preference,
+            mode,
+            similar: mode === 'artist' && similar,
+            ...(profile ? { profile } : {}),
+            ...(catalogChoices.length ? { catalogChoices } : {}),
+            ...(seen.length
+              ? {
+                  excluded: seen.map(({ title, artist }) => ({
+                    title,
+                    artist,
+                  })),
+                }
+              : {}),
+          },
+          signal,
+        )
+        signal.throwIfAborted()
+        const local = store.db
+          .prepare(
+            'SELECT title,artist FROM local_tracks UNION SELECT i.title,i.artist FROM items i JOIN recommended_items r ON r.item=i.id JOIN local_tracks t ON t.id=r.local',
+          )
+          .all()
+        const accepted = []
+        for (const row of rows) {
+          if (
+            mode === 'artist' &&
+            !similar &&
+            preference.trim() &&
+            !artistMatches(preference, row.artist)
+          )
+            continue
+          if (inLibrary(row, seen)) continue
+          seen.push(row)
+          accepted.push({ ...row, collision: inLibrary(row, local) })
+          if (accepted.filter((r) => !r.collision).length >= slots) break
+        }
+        if (!accepted.length && batch) break
+        if (!accepted.length && !round) {
+          if (mode === 'artist' && !similar && preference.trim())
+            throw Error('未找到该歌手的推荐歌曲，请检查歌手名或开启相似歌手')
+          throw Error('模型没有提供可用歌曲')
+        }
+        batch = store.saveSuggestions(label, accepted, '待处理', batch)
+        await lx.batch(batch, signal)
+        signal.throwIfAborted()
+        const retained = store.db
+          .prepare(
+            "SELECT count(*) AS n FROM items WHERE batch=? AND status IN ('已入库','待选录音')",
+          )
+          .get(batch)
+        slots = 5 - retained.n
+        if (!store.get('lx-source') || !getMusicPreferences(store).recommendDir) break
+        if (!round && slots > 0) catalogChoices = await lx.discoveries(seen, local, signal)
+      }
       return batch
     })
   })

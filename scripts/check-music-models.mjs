@@ -4,6 +4,30 @@ import fs from 'node:fs/promises'
 import { MusicStore } from '../components/music/store.mjs'
 import { DatabaseSync } from 'node:sqlite'
 import { _electron as electron, expect } from '@playwright/test'
+import {
+  artistMatches,
+  titleMatch,
+  inLibrary,
+} from '../examples/component-host/music-discovery.mjs'
+assert.ok(artistMatches('mizuki', '瑞葵(mizuki) / SawanoHiroyuki[nZk]'))
+assert.ok(artistMatches('AC/DC', 'AC/DC & Guest'))
+assert.ok(artistMatches('Sakuzyo', '削除', [['削除', 'Sakuzyo']]))
+assert.ok(
+  inLibrary({ title: 'BOW AND ARROW', artist: '米津玄師' }, [
+    { title: 'BOW AND ARROW - 米津玄師', artist: '未知艺人' },
+  ]),
+)
+assert.ok(
+  inLibrary({ title: 'Song', artist: 'Artist' }, [{ title: 'Artist - Song', artist: 'Artist' }]),
+)
+assert.equal(
+  titleMatch({ title: 'Song', artist: 'Artist' }, { name: 'Song (Live)', singer: 'Artist' }),
+  'variant',
+)
+assert.equal(
+  titleMatch({ title: 'Song', artist: 'Artist' }, { name: 'Song', singer: 'Different Artist' }),
+  '',
+)
 await fs.mkdir('tmp', { recursive: true })
 const root = await fs.mkdtemp(path.resolve('tmp/music-models-')),
   profile = path.join(root, 'profile')
@@ -48,7 +72,12 @@ try {
           req.signal.addEventListener('abort', () => reject(req.signal.reason), { once: true }),
         )
       const songs = Array.from({ length: 5 }, (_, i) => ({
-        title: '样例歌曲' + i,
+        title:
+          (globalThis.cancelTracks
+            ? '取消歌曲'
+            : globalThis.rightsTracks
+              ? '权限歌曲'
+              : '样例歌曲') + i,
         artist: i === 0 ? 'AC/DC' : '测试艺人',
         reason: '适合雨天',
       }))
@@ -182,7 +211,7 @@ try {
   await page.getByLabel('今天想听什么').fill('')
   await page.getByRole('button', { name: '生成推荐' }).click()
   await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(3)
-  assert.equal((await calls()).length, before + 1)
+  assert.equal((await calls()).length, before + 2)
   await expect(page.getByText('匹配录音：明确禁止永久保存', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '选择录音版本' }).click()
   await page.getByRole('button', { name: /样例歌曲2 · 测试艺人 · 现场/ }).click()
@@ -202,8 +231,17 @@ try {
   await page.getByRole('tab', { name: '按歌手推荐' }).click()
   await page.getByLabel('指定歌手').fill('AC/DC')
   await page.getByRole('button', { name: '生成推荐' }).click()
-  await expect(page.locator('.music-list ol li')).toHaveCount(1)
-  await expect(page.locator('.music-list ol li').getByText('已入库')).toBeVisible()
+  const collision = page
+    .locator('.music-list li')
+    .filter({ hasText: '已在曲库' })
+    .filter({ hasText: 'AC/DC' })
+  await expect(collision.first()).toBeVisible()
+  const artistBatch = await page.evaluate(async () => {
+    const state = await window.music.state()
+    return state.items.filter((r) => r.batch === state.batches[0].id)
+  })
+  assert.equal(artistBatch.length, 1)
+  assert.equal(artistBatch[0].diagnosis, 'duplicate')
   assert.equal(await app.evaluate(() => globalThis.transfers), transfers)
   await page.evaluate(async (local) => {
     const p = await window.music.createPlaylist('不发送的私人歌单')
@@ -221,7 +259,13 @@ try {
     globalThis.failMode = ''
   })
   await page.evaluate(() => window.music.generate('AC/DC', 'artist', false))
-  const update = JSON.stringify((await calls()).at(-2).body)
+  const update = JSON.stringify(
+    (await calls()).findLast(
+      (call) =>
+        JSON.stringify(call.body).includes('主动加入自建歌单') &&
+        JSON.stringify(call.body).includes('私人专辑'),
+    ).body,
+  )
   assert.ok(
     update.includes('主动加入自建歌单') &&
       !update.includes('不发送的私人歌单') &&
@@ -231,7 +275,7 @@ try {
   await page.evaluate(() => window.music.setTasteConsent(false))
   const revoked = (await calls()).length
   await page.evaluate(() => window.music.generate('爵士', 'style'))
-  assert.equal((await calls()).length, revoked + 1)
+  assert.equal((await calls()).length, revoked + 2)
   assert.ok(!JSON.stringify((await calls()).at(-1).body).includes('偏爱氛围音乐与柔和节奏'))
   // A source that publishes ordinary playback URLs, without storage rights, requires an explicit track grant.
   let restricted = (await fs.readFile(source, 'utf8')).replace(
@@ -244,6 +288,15 @@ try {
   )
   await fs.writeFile(source, restricted)
   await page.evaluate(() => window.music.lxImport())
+  // Exercise per-track permission without the explicitly licensed alternative from the previous case.
+  const settingsDb = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'))
+  settingsDb
+    .prepare('DELETE FROM music_sources WHERE id!=?')
+    .run((await page.evaluate(() => window.music.lxSources())).active)
+  settingsDb.close()
+  await app.evaluate(() => {
+    globalThis.rightsTracks = true
+  })
   const mixed = await page.evaluate(() => window.music.generate('权限测试', 'style'))
   await expect
     .poll(() =>
@@ -262,7 +315,7 @@ try {
   )
   assert.equal(rightsRows.find((r) => r.title.endsWith('1')).status, '已入库')
   assert.match(rightsRows.find((r) => r.title.endsWith('0')).downloadError, /未声明永久保存许可/)
-  assert.equal(await app.evaluate(() => globalThis.transfers), transfers)
+  assert.equal(await app.evaluate(() => globalThis.transfers), transfers + 1)
   await page.reload()
   await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.evaluate(() => {
@@ -274,17 +327,17 @@ try {
   const filesBefore = await fs.readdir(output)
   const unresolved = page
     .locator('.music-list ol li')
-    .filter({ has: page.getByText('样例歌曲3', { exact: true }) })
-  await unresolved.getByText('样例歌曲3', { exact: true }).click({ button: 'right' })
+    .filter({ has: page.getByText('权限歌曲3', { exact: true }) })
+  await unresolved.getByText('权限歌曲3', { exact: true }).click({ button: 'right' })
   await page.getByRole('menuitem', { name: '不感兴趣', exact: true }).click()
-  await unresolved.getByText('样例歌曲3', { exact: true }).click({ button: 'right' })
+  await unresolved.getByText('权限歌曲3', { exact: true }).click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '已标记不感兴趣' })).toBeDisabled()
   await page.keyboard.press('Escape')
   await page.getByRole('tab', { name: '本地曲库' }).click()
   const nav = page.getByRole('button', { name: '曲库导航' })
   if (await nav.isVisible()) await nav.click()
   await page.getByRole('button', { name: '歌曲推荐', exact: true }).click()
-  const localId = rightsRows.find((r) => r.title === '样例歌曲1').localId
+  const localId = rightsRows.find((r) => r.title === '权限歌曲1').localId
   const localTrack = history.localTracks.find((t) => t.id === localId)
   const listIndex = history.playlists.find((p) => p.system).tracks.indexOf(localId)
   assert.ok(listIndex >= 0)
@@ -318,31 +371,50 @@ try {
         retry,
       ),
     )
-    .toEqual(['样例歌曲0', '样例歌曲2', '样例歌曲4'])
-  // Same performer and title with a new platform recording ID remains eligible.
+    .toEqual(['权限歌曲0', '权限歌曲1', '权限歌曲2', '权限歌曲4'])
+  // A resolver changing its track ID does not make an already-owned song a new discovery.
   await fs.writeFile(
     source,
     restricted.replace('id:name,name,singer', 'id:name+"-second-take",name,singer'),
   )
   await page.evaluate(() => window.music.lxImport())
   const variant = await page.evaluate(() => window.music.generate('版本测试', 'style'))
+  const song = await page.evaluate(
+    async (b) =>
+      (await window.music.state()).items.find((r) => r.batch === b && r.title === '权限歌曲1'),
+    variant,
+  )
+  assert.equal(song.status, '已在曲库')
+  assert.equal(await app.evaluate(() => globalThis.transfers), transfers + 1)
+  await fs.writeFile(
+    source,
+    `// @name 可取消源
+ lx.on('request',async()=>{await new Promise(done=>setTimeout(done,5000));return []});lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+  )
+  await page.evaluate(() => window.music.lxImport())
+  await app.evaluate(() => {
+    globalThis.cancelTracks = true
+  })
+  const cancelled = page.evaluate(() =>
+    window.music.generate('测试整批取消').catch((e) => e.message),
+  )
   await expect
     .poll(() =>
       page.evaluate(
-        async (b) =>
-          (await window.music.state()).items.find((r) => r.batch === b && r.title === '样例歌曲1')
-            ?.status,
-        variant,
+        async () =>
+          (await window.music.state()).items.filter(
+            (r) => r.title.startsWith('取消歌曲') && r.status === '待处理',
+          ).length,
       ),
     )
-    .toBe('已入库')
-  const song = await page.evaluate(
-    async (b) =>
-      (await window.music.state()).items.find((r) => r.batch === b && r.title === '样例歌曲1'),
-    variant,
+    .toBe(4)
+  await page.evaluate(() => window.music.stopGeneration())
+  assert.match(await cancelled, /取消/)
+  const pendingRows = await page.evaluate(async () =>
+    (await window.music.state()).items.filter((r) => r.title.startsWith('取消歌曲')),
   )
-  assert.notEqual(song.localId, localId)
-  assert.equal(song.notInterested, false)
+  assert.equal(pendingRows.length, 5)
+  assert.ok(pendingRows.every((r) => r.status === '待重试'))
   console.log(
     'PASS 四家服务协议、无授权禁发、审美增量和重试、自动下载复用、歧义、试听和系统歌单。' + root,
   )

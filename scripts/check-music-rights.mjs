@@ -86,7 +86,22 @@ try {
       globalThis.downloadCalls = 0
       https.request = (url, _opts, done) => {
         let response
-        if (url.hostname === 'music.163.com') {
+        if (url.pathname === '/api/v3/song/detail') {
+          response = Readable.from([
+            JSON.stringify({
+              privileges: [
+                {
+                  id: 900001,
+                  code: 0,
+                  st: 0,
+                  fee: 0,
+                  dl: 320000,
+                  chargeInfoList: [{ rate: 320000, chargeType: 0 }],
+                },
+              ],
+            }),
+          ])
+        } else if (url.hostname === 'music.163.com') {
           const title = url.searchParams.get('s').split(' ')[0]
           if (title === '网络失败') {
             const req = new EventEmitter()
@@ -107,7 +122,7 @@ try {
                 result: {
                   songs: [
                     {
-                      id: title,
+                      id: title === '许可隔离' ? '900001' : title,
                       name: title === '无匹配' ? '完全不同的歌曲' : title,
                       artists: [{ name: '艺人' }],
                       album: { name: '专辑' },
@@ -234,6 +249,9 @@ try {
   assert.equal(await app.evaluate(() => globalThis.downloadCalls), beforeLegacy + 1)
   const reset = db.prepare("UPDATE state SET value=? WHERE key='lx-source'")
   const withoutPermission = { ...src, code: src.code.replace(',allowPermanentSave:true', '') }
+  // Isolate the active source for unknown-permission and malformed-catalog cases.
+  // A still-installed alternate explicitly grants the same recording.
+  db.prepare('DELETE FROM music_sources WHERE id=?').run(oldActive)
   reset.run(JSON.stringify(withoutPermission))
   await run(allowed.id)
   const readSource = () =>
@@ -272,8 +290,12 @@ try {
       return []
     })
     lx.send('inited',{sources:{wy:{actions:['musicUrl','search'],qualitys:['320k'],allowPermanentSave:true}}})`
+  db.exec('DELETE FROM music_sources')
   await fs.writeFile(sourceFile, pagedSource)
   await page.evaluate(() => window.music.lxImport())
+  db.prepare('DELETE FROM music_sources WHERE id != ?').run(
+    (await page.evaluate(() => window.music.lxSources())).active,
+  )
   for (const name of ['禁止落盘', '允许保存', '试听片段', '明令禁止', '无匹配'])
     await run(rows.find((r) => r.title === name).id)
   const cases = (await state()).items.filter((r) => r.batch === batch)
@@ -338,6 +360,49 @@ try {
   const noLyricFile = pathFor((await state()).items.find((r) => r.id === next).localId)
   assert.deepEqual(await fs.readFile(noLyricFile), await fs.readFile(replacement))
   await assert.rejects(fs.access(lyricPath(noLyricFile)), { code: 'ENOENT' })
+  const scoped = new MusicStore(musicRoot)
+  const group = scoped.saveSuggestions(
+    '授权作用域',
+    [{ title: '许可隔离', artist: '艺人', reason: '测试' }],
+    '待处理',
+  )
+  const testId = scoped.db.prepare('SELECT id FROM items WHERE batch=?').get(group).id
+  scoped.db.close()
+  const scopedSource = (platforms) => `// @name 权限作用域
+lx.on('request',({source,action})=>{
+    if(action==='search')return [{name:'许可隔离',singer:'艺人',id:'900001'}];
+    if(source==='wy' && ${platforms.includes("wy:{actions:['musicUrl']")}) throw Error('本源无法取址');
+    return 'https://1.1.1.1/audio'
+  });lx.send('inited',{sources:{${platforms}}})`
+  const install = async (platforms) => {
+    await fs.writeFile(sourceFile, scopedSource(platforms))
+    await page.evaluate(() => window.music.lxImport())
+    return (await page.evaluate(() => window.music.lxSources())).active
+  }
+  const scripted = await install("wy:{actions:['search','musicUrl'],qualitys:['320k']}")
+  const official = await install(
+    "wy:{actions:['musicUrl'],qualitys:['320k']},tx:{actions:['search','musicUrl'],qualitys:['320k']}",
+  )
+  db.prepare('DELETE FROM music_sources WHERE id NOT IN (?,?)').run(scripted, official)
+  const previousDownloads = await app.evaluate(() => globalThis.downloadCalls)
+  await run(testId)
+  const isolated = (await state()).items.find((r) => r.id === testId)
+  assert.equal(isolated.status, '待重试')
+  assert.match(isolated.downloadError, /tx 匹配录音：未声明永久保存许可/)
+  assert.match(isolated.downloadError, /wy 匹配录音：未声明永久保存许可/)
+  assert.equal(await app.evaluate(() => globalThis.downloadCalls), previousDownloads)
+  const imported = new MusicStore(musicRoot)
+  imported.library.upsert({
+    title: '许可隔离',
+    artist: '艺人',
+    album: '本地导入',
+    duration: 4,
+    file: path.resolve('tests/fixtures/local-music/tone.wav'),
+  })
+  imported.db.close()
+  await run(testId)
+  assert.equal((await state()).items.find((r) => r.id === testId).status, '已在曲库')
+  assert.equal(await app.evaluate(() => globalThis.downloadCalls), previousDownloads)
   console.log('PASS 每日推荐下载匹配歌词、已验证副本补词且不重复下载、保留用户校订、缺词仍入库')
   console.log('PASS 内置目录逐曲许可、同版不同本地副本、文件换曲与旧源迁移 ' + root)
 } finally {

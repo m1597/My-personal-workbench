@@ -289,7 +289,7 @@ export class MusicStore {
   generate(preference, summary) {
     return this.saveSuggestions(preference, offlineSuggestions(preference, summary), '待匹配')
   }
-  saveSuggestions(preference, rows, status) {
+  saveSuggestions(preference, rows, status, existingBatch) {
     const feedback = this.feedbackIds()
     const accepted = rows.filter((row) => {
       if (feedback.has(songKey(row.title, row.artist))) return false
@@ -299,20 +299,37 @@ export class MusicStore {
         !candidates.length || candidates.some((t) => !feedback.has(recordingKey('offline', t.id)))
       )
     })
-    const batch = randomUUID()
+    const batch = existingBatch ?? randomUUID()
     this.db.exec('BEGIN')
     try {
-      this.db.prepare('INSERT INTO batches VALUES(?,?,?)').run(batch, day(), preference)
-      for (const row of accepted)
+      if (existingBatch) {
+        if (!this.db.prepare('SELECT 1 FROM batches WHERE id=? AND day=?').get(batch, day()))
+          throw Error('推荐已过期')
+      } else this.db.prepare('INSERT INTO batches VALUES(?,?,?)').run(batch, day(), preference)
+      for (const row of accepted) {
+        const id = randomUUID()
         this.db
           .prepare(
             'INSERT INTO items(id,batch,title,artist,reason,status,used) VALUES(?,?,?,?,?,?,?)',
           )
-          .run(randomUUID(), batch, row.title, row.artist, row.reason, status, Date.now())
-      if (status === '待处理')
-        this.db
-          .prepare('INSERT INTO recommended_items(item) SELECT id FROM items WHERE batch=?')
-          .run(batch)
+          .run(
+            id,
+            batch,
+            row.title,
+            row.artist,
+            row.reason,
+            row.collision ? '已在曲库' : status,
+            Date.now(),
+          )
+        if (status === '待处理')
+          this.db
+            .prepare('INSERT INTO recommended_items(item,error,diagnosis) VALUES(?,?,?)')
+            .run(
+              id,
+              row.collision ? '本地曲库已有这首歌，本次未重复下载' : '',
+              row.collision ? 'duplicate' : '',
+            )
+      }
       this.db.exec('COMMIT')
     } catch (e) {
       this.db.exec('ROLLBACK')

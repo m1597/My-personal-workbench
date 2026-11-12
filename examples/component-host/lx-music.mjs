@@ -1,4 +1,5 @@
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
+import { titleMatch, artistMatches, inLibrary } from './music-discovery.mjs'
 import { platformSearch } from './lx-platform-search.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
 import { saveLyrics } from './music-lyrics.mjs'
@@ -48,7 +49,11 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
   if (source.search)
     return runSource(
       source.code,
-      { action: 'search', source: source.platform, info: { keyword, limit, page, offset } },
+      {
+        action: 'search',
+        source: source.platform,
+        info: { keyword, limit, page, offset },
+      },
       signal,
     )
   if (source.platform === 'tx' || source.platform === 'kg')
@@ -81,7 +86,11 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
       return {
         name: s.name,
         singer: s.artists?.map((a) => a.name).join('/'),
+        artistAliases: s.artists?.map((a) =>
+          [a.name, ...(a.alias ?? []), a.trans].filter((v) => typeof v === 'string'),
+        ),
         albumName: s.album?.name,
+        durationSeconds: Number(s.duration) / 1000,
         id: String(s.id),
         songmid: String(s.id),
         source: 'wy',
@@ -95,6 +104,39 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
         downloadable: flags.some((f) => f.downloadable === false || f.dl === 0) ? false : undefined,
       }
     })
+}
+// A playback bitrate and a maximum catalog bitrate are not download entitlements.
+async function freeDownloadQualities(ids, signal) {
+  const result = new Map()
+  const query = encodeURIComponent(JSON.stringify(ids.map((id) => ({ id }))))
+  let response
+  try {
+    response = await sourceRequest('https://music.163.com/api/v3/song/detail?c=' + query, {
+      signal,
+    })
+  } catch {
+    signal.throwIfAborted()
+    throw new RecordingError('network', '无法核实网易云录音下载权限')
+  }
+  for (const grant of response.body?.privileges ?? []) {
+    if (!ids.includes(String(grant.id))) continue
+    const free = []
+    if (grant.code === 0 && grant.st === 0 && grant.fee === 0 && grant.dl > 0 && !grant.preSell) {
+      for (const [quality, rate] of [
+        ['128k', 128000],
+        ['320k', 320000],
+        ['flac', 999000],
+      ]) {
+        if (
+          grant.dl >= rate &&
+          grant.chargeInfoList?.some((r) => r.rate === rate && r.chargeType === 0)
+        )
+          free.push(quality)
+      }
+    }
+    result.set(String(grant.id), free)
+  }
+  return result
 }
 function searchRows(page) {
   const rows = Array.isArray(page) ? page : (page?.items ?? page?.list ?? page?.songs)
@@ -210,7 +252,9 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       },
     })
     try {
-      await pipeline(res, limit, createWriteStream(temp, { flags: 'wx' }), { signal })
+      await pipeline(res, limit, createWriteStream(temp, { flags: 'wx' }), {
+        signal,
+      })
     } catch (error) {
       signal.throwIfAborted()
       if (
@@ -224,14 +268,22 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       store.status(dailyId, '已跳过')
       return ''
     }
-    const { format, common } = await parseFile(temp, { duration: true, skipCovers: true }).catch(
-      (error) => {
-        if (error.syscall) throw error
-        throw new SourceDownloadError('返回的文件不是有效音频')
-      },
-    )
+    const { format, common } = await parseFile(temp, {
+      duration: true,
+      skipCovers: true,
+    }).catch((error) => {
+      if (error.syscall) throw error
+      throw new SourceDownloadError('返回的文件不是有效音频')
+    })
     if (!(Number.isFinite(format.duration) && format.duration > 0))
       throw new SourceDownloadError('音频时长无效')
+    if (
+      dailyId &&
+      Number.isFinite(info.durationSeconds) &&
+      info.durationSeconds > 0 &&
+      Math.abs(info.durationSeconds - format.duration) > Math.max(3, info.durationSeconds * 0.025)
+    )
+      throw new SourceDownloadError('音频时长与所选完整录音不符')
     const name = (info.singer + ' - ' + info.name)
       .normalize()
       .replace(/[<>:"/\\|?*\p{Cc}]/gu, '_')
@@ -295,12 +347,20 @@ function versionInfo(src, row, quality) {
   const key = createHash('sha256')
     .update(JSON.stringify([src.name, src.platform, String(id), quality]))
     .digest('hex')
-  return { key, source: src.name, platform: src.platform, sourceId: String(id), quality }
+  return {
+    key,
+    source: src.name,
+    platform: src.platform,
+    sourceId: String(id),
+    quality,
+  }
 }
 async function verifiedCopy(store, version, signal) {
   const copies = store.db
-    .prepare(`SELECT t.*,c.digest FROM recording_copies c JOIN local_tracks t ON t.id=c.local
-    WHERE c.version=? AND c.digest IS NOT NULL ORDER BY c.automatic DESC`)
+    .prepare(
+      `SELECT t.*,c.digest FROM recording_copies c JOIN local_tracks t ON t.id=c.local
+    WHERE c.version=? AND c.digest IS NOT NULL ORDER BY c.automatic DESC`,
+    )
     .all(version)
   for (const row of copies) {
     if (!(await store.library.verify(row))) continue
@@ -325,9 +385,10 @@ async function verifiedCopy(store, version, signal) {
   }
 }
 function markSaved(store, id, local) {
-  store.db
+  const update = store.db
     .prepare("UPDATE recommended_items SET local=?,error='',diagnosis='' WHERE item=?")
     .run(local, id)
+  if (!update.changes) throw Error('推荐已过期')
   store.status(id, '已入库')
 }
 export function registerLx(bind, getStore, dialog, lyricsSaved) {
@@ -568,7 +629,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       try {
         url = await runSource(
           src.code,
-          { action: 'musicUrl', source: src.platform, info: { type: quality, musicInfo: row } },
+          {
+            action: 'musicUrl',
+            source: src.platform,
+            info: { type: quality, musicInfo: row },
+          },
           signal,
         )
       } catch (error) {
@@ -590,7 +655,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         const filename = await saveRecording(
           url,
           dir,
-          { name: text(row.name), singer: text(row.singer), albumName: text(row.albumName) },
+          {
+            name: text(row.name),
+            singer: text(row.singer),
+            albumName: text(row.albumName),
+          },
           getStore(),
           signal,
           auditionId,
@@ -622,116 +691,185 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   )
   const choices = new Map()
   const running = new Map()
-  async function prepare(id, selected) {
+  async function prepare(id, selected, batchSignal) {
     const store = getStore()
-    if (!store.db.prepare('SELECT item FROM recommended_items WHERE item=?').get(id))
-      throw Error('无效推荐记录')
+    const recommendation = store.db
+      .prepare('SELECT local FROM recommended_items WHERE item=?')
+      .get(id)
+    if (!recommendation) throw Error('无效推荐记录')
     if (running.has(id) || store.db.prepare('SELECT 1 FROM dismissed_items WHERE item=?').get(id))
       return
+    const item = store.item(id)
+    function hasLocalCopy(recording) {
+      if (recommendation.local) return false
+      const local = store.db
+        .prepare("SELECT title,artist FROM local_tracks WHERE ? OR importedOrigin='local'")
+        .all(Number(!!batchSignal))
+      return (
+        inLibrary(item, local) ||
+        (recording && local.some((track) => titleMatch(track, recording) === 'exact'))
+      )
+    }
+    function markDuplicate() {
+      choices.delete(id)
+      store.db
+        .prepare(
+          "UPDATE recommended_items SET error='本地曲库已有这首歌，本次未重复下载',diagnosis='duplicate' WHERE item=?",
+        )
+        .run(id)
+      store.status(id, '已在曲库')
+    }
+    if (hasLocalCopy()) return markDuplicate()
     const task = new AbortController()
     running.set(id, task)
-    const { signal } = task
+    const signal = batchSignal ? AbortSignal.any([batchSignal, task.signal]) : task.signal
     try {
-      const src = await currentSource(signal)
-      if (!src) throw new RecordingError('source', '尚未导入音乐源')
+      const activeSource = await currentSource(signal, true)
+      if (!activeSource) throw new RecordingError('source', '尚未导入音乐源')
       const prefs = getMusicPreferences(store)
-      const quality = src.quality.includes(prefs.quality)
-        ? prefs.quality
-        : src.quality.includes('320k')
-          ? '320k'
-          : src.quality[0]
-      const item = store.item(id)
-      let pick
-      if (selected) {
-        const saved = choices.get(id)
-        if (
-          saved?.sourceCode !== src.code ||
-          saved.quality !== quality ||
-          !saved.rows.has(selected)
-        )
-          throw Error('候选已变更，请重试')
-        pick = saved.rows.get(selected)
-      } else {
-        store.status(id, '正在匹配')
-        const pageSize = 20
-        const hits = searchRows(await versions(src, item, signal, pageSize))
-        signal.throwIfAborted()
-        const candidates = new Map()
-        let suppressed = false
-        const reasons = new Set()
-        const normalize = (v) => v.trim().normalize('NFKC').toLowerCase()
-        const same = (a, b) => normalize(a) === normalize(b)
-        const title = normalize(item.title)
-        for (const row of hits.slice(0, pageSize)) {
-          if (!row || !text(row.name) || !text(row.singer) || JSON.stringify(row).length > 16384)
-            continue
-          if (!same(row.singer, item.artist)) continue
-          const name = normalize(row.name)
-          if (
-            name !== title &&
-            !(name.startsWith(title) && /^[\s(（\[【-]/u.test(name.slice(title.length)))
+      const cache = new Map()
+      const choicesForItem = new Map()
+      const failures = []
+      const bank = catalog()
+      await bank.upgrade()
+      const installed = bank.discoverySources(activeSource)
+      const saved = selected && choices.get(id)?.rows.get(selected)
+      if (
+        selected &&
+        (!saved ||
+          !installed.some(
+            (src) => src.code === saved.src.code && src.platform === saved.src.platform,
+          ))
+      )
+        throw Error('候选已变更，请重试')
+      store.status(id, '正在匹配')
+      const selectRecording = async (src) => {
+        const cacheKey = src.search ? src.code + src.platform : src.platform
+        if (!cache.has(cacheKey)) cache.set(cacheKey, versions(src, item, signal))
+        const hits = searchRows(await cache.get(cacheKey))
+        const relevant = hits
+          .slice(0, 20)
+          .filter(
+            (row) =>
+              row &&
+              (!row.source || row.source === src.platform) &&
+              text(row.name) &&
+              text(row.singer) &&
+              JSON.stringify(row).length <= 16384 &&
+              titleMatch(item, row),
           )
+        const officialWy = !src.search && src.platform === 'wy'
+        if (officialWy && !cache.has('wyRights')) {
+          const ids = relevant
+            .filter((r) => permission(src, r) === 'unknown' && /^\d+$/u.test(r.id))
+            .map((r) => r.id)
+          if (ids.length) cache.set('wyRights', await freeDownloadQualities(ids, signal))
+        }
+        const candidates = new Map()
+        const reasons = new Set()
+        for (const row of relevant) {
+          const grant = officialWy ? cache.get('wyRights')?.get(row.id) : undefined
+          const right = permission(src, row)
+          if (right !== 'granted' && !(right === 'unknown' && grant?.length)) {
+            reasons.add(right === 'unknown' && grant && !grant.length ? 'denied' : right)
             continue
+          }
+          const qualities = recordingQualities(src, row).filter(
+            (q) => right === 'granted' || grant.includes(q),
+          )
+          const quality = [prefs.quality, '320k', ...qualities].find((q) => qualities.includes(q))
+          if (!quality) continue
           const version = versionInfo(src, row, quality)
           if (!version) continue
-          const key = version.key
           if (store.ignoresRecording(version.platform, version.sourceId)) {
-            suppressed = true
+            reasons.add('ignored')
             continue
           }
-          const right = permission(src, row)
-          if (right === 'granted') candidates.set(key, row)
-          else reasons.add(right)
+          candidates.set(version.key, { src, row, quality })
         }
         if (!candidates.size) {
-          if (suppressed && !reasons.size) {
-            store.status(id, '已跳过')
-            return
-          }
-          if (!reasons.size) throw new RecordingError('missing', '没有找到歌名和艺人都匹配的录音')
-          const message = [...reasons].map((k) => explanations[k]).join('、')
+          if (!reasons.size)
+            throw new RecordingError('missing', '没有找到歌名和艺人都匹配且音质可用的录音')
+          if (reasons.size === 1 && reasons.has('ignored'))
+            throw new RecordingError('ignored', '已标记不感兴趣')
           throw new RecordingError(
             reasons.size === 1 ? [...reasons][0] : 'mixed',
-            '匹配录音：' + message,
+            '匹配录音：' + [...reasons].map((k) => explanations[k] ?? '已标记不感兴趣').join('、'),
           )
         }
         const exact = [...candidates.values()].filter(
-          (row) => same(row.name, item.title) && same(row.singer, item.artist),
+          ({ row }) => titleMatch(item, row) === 'exact',
         )
-        if (exact.length !== 1) {
-          choices.set(id, { sourceCode: src.code, quality, rows: candidates })
-          store.status(id, '待选录音')
-          return
-        }
-        pick = exact[0]
+        if (exact.length === 1) return exact[0]
+        for (const [key, entry] of candidates) choicesForItem.set(key, entry)
       }
-      const identity = versionInfo(src, pick, quality)
-      if (store.ignoresRecording(identity.platform, identity.sourceId)) {
-        store.status(id, '已跳过')
-        return
-      }
-      const version = identity.key
-      const cached = await verifiedCopy(store, version, signal)
-      if (cached) {
-        signal.throwIfAborted()
-        if (store.ignoresRecording('content', cached.digest)) {
+      async function save({ src, row: pick, quality }) {
+        const identity = versionInfo(src, pick, quality)
+        if (store.ignoresRecording(identity.platform, identity.sourceId)) {
           store.status(id, '已跳过')
           return
         }
-        markSaved(store, id, cached.id)
-        await saveRecordingLyrics(src, pick, cached.file, signal)
-      } else {
-        if (!prefs.recommendDir) throw Error('请在设置中选择推荐下载目录')
-        store.status(id, '正在保存')
-        await fetchRecording(src, pick, quality, prefs.recommendDir, signal, undefined, id)
+        const ownedId =
+          batchSignal &&
+          store.db
+            .prepare(
+              'SELECT 1 FROM recording_copies c JOIN local_tracks t ON t.id=c.local WHERE c.platform=? AND c.sourceId=?',
+            )
+            .get(identity.platform, identity.sourceId)
+        if (ownedId || hasLocalCopy(pick)) return markDuplicate()
+        const version = identity.key
+        const cached = await verifiedCopy(store, version, signal)
+        if (cached) {
+          signal.throwIfAborted()
+          if (store.ignoresRecording('content', cached.digest)) {
+            store.status(id, '已跳过')
+            return
+          }
+          markSaved(store, id, cached.id)
+          await saveRecordingLyrics(src, pick, cached.file, signal)
+        } else {
+          if (!prefs.recommendDir) throw Error('请在设置中选择推荐下载目录')
+          store.status(id, '正在保存')
+          await fetchRecording(src, pick, quality, prefs.recommendDir, signal, undefined, id)
+        }
       }
-      choices.delete(id)
+      for (const src of saved ? [saved.src] : installed) {
+        try {
+          const candidate = saved || (await selectRecording(src))
+          signal.throwIfAborted()
+          if (!candidate) continue
+          await save(candidate)
+          choices.delete(id)
+          return
+        } catch (error) {
+          signal.throwIfAborted()
+          if (error.code || (!prefs.recommendDir && error.message.includes('推荐下载目录')))
+            throw error
+          failures.push({ src, error })
+        }
+      }
+      if (choicesForItem.size) {
+        choices.set(id, { rows: choicesForItem })
+        store.status(id, '待选录音')
+        return
+      }
+      if (failures.length && failures.every(({ error }) => error.kind === 'ignored')) {
+        store.status(id, '已跳过')
+        return
+      }
+      if (failures.length === 1) throw failures[0].error
+      const detail = [
+        ...new Set(failures.map(({ src, error }) => src.platform + ' ' + error.message)),
+      ]
+      throw new RecordingError('mixed', detail.join('；') || '没有兼容的已安装音乐源')
     } catch (e) {
       if (store.db.prepare('SELECT 1 FROM dismissed_items WHERE item=?').get(id)) return
       store.db
         .prepare('UPDATE recommended_items SET error=?,diagnosis=? WHERE item=?')
         .run(
-          String(e.code ? '保存失败，请检查目录与网络' : e.message).slice(0, 200),
+          String(
+            signal.aborted ? '操作已取消' : e.code ? '保存失败，请检查目录与网络' : e.message,
+          ).slice(0, 1000),
           e.kind ?? (e instanceof TransferError ? 'network' : 'other'),
           id,
         )
@@ -756,16 +894,15 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     if (typeof id !== 'string') throw Error('无效录音')
     return [...(choices.get(id)?.rows ?? [])].map(([key, v]) => ({
       key,
-      title: text(v.name),
-      artist: text(v.singer),
-      album: text(v.albumName),
+      title: text(v.row.name),
+      artist: text(v.row.singer),
+      album: text(v.row.albumName),
     }))
   })
   bind('lxCancel', (scope) => {
     if (scope === undefined || (scope === 'import' && activeScope === 'import')) active?.abort()
   })
   let generation = 0
-  let processing = Promise.resolve()
   return {
     async sourceTool(name, args, signal) {
       const bank = catalog()
@@ -786,17 +923,60 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           throw Error('未知的音源操作')
       }
     },
-    batch(batch) {
-      const epoch = generation
-      const ids = getStore().db.prepare('SELECT id FROM items WHERE batch=?').all(batch)
-      processing = processing
-        .then(async () => {
-          for (const { id } of ids) {
-            if (epoch !== generation) break
-            await prepare(id)
+    async discoveries(seen, local, signal) {
+      const current = await currentSource(signal, true)
+      if (!current) return []
+      const bank = catalog()
+      await bank.upgrade()
+      const src = bank
+        .discoverySources(current)
+        .find((s) => s.platform === 'wy' && !s.search && s.permanentSave !== false)
+      if (!src) return []
+      const pool = []
+      for (const artist of [...new Set(seen.map((r) => r.artist))].slice(0, 5)) {
+        try {
+          const hits = searchRows(
+            await versions(src, { title: artist, artist: '' }, signal, 30),
+          ).filter(
+            (row) =>
+              artistMatches(artist, row.singer, row.artistAliases) &&
+              /^\d+$/u.test(row.id) &&
+              !['denied', 'preview'].includes(permission(src, row)) &&
+              !getStore().ignoresRecording(src.platform, row.id),
+          )
+          if (!hits.length) continue
+          const rights = await freeDownloadQualities(
+            hits.map((r) => r.id),
+            signal,
+          )
+          for (const row of hits.filter((r) => rights.get(r.id)?.length).slice(0, 10)) {
+            const item = { title: text(row.name), artist: text(row.singer) }
+            if (!inLibrary(item, local) && !inLibrary(item, seen) && !inLibrary(item, pool))
+              pool.push(item)
           }
-        })
-        .catch(() => {})
+        } catch {
+          signal.throwIfAborted()
+        }
+      }
+      return pool
+    },
+    async batch(batch, signal) {
+      const epoch = generation
+      const ids = getStore()
+        .db.prepare("SELECT id FROM items WHERE batch=? AND status='待处理'")
+        .all(batch)
+      try {
+        for (const { id } of ids) {
+          if (epoch !== generation) break
+          signal.throwIfAborted()
+          await prepare(id, undefined, signal)
+        }
+      } finally {
+        if (signal.aborted)
+          getStore()
+            .db.prepare("UPDATE items SET status='待重试' WHERE batch=? AND status='待处理'")
+            .run(batch)
+      }
     },
     close() {
       generation++

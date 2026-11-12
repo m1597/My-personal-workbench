@@ -29,6 +29,7 @@ function qqSong(s) {
     albumMid: s.album?.mid,
     albumName: s.album?.name,
     interval: interval(s.interval),
+    durationSeconds: Number(s.interval),
     typeUrl: {},
     ...types([f.size_128mp3, f.size_320mp3, f.size_flac, f.size_hires]),
   }
@@ -45,6 +46,7 @@ function kgSong(s) {
     albumId: s.AlbumID,
     hash: s.FileHash,
     interval: interval(s.Duration),
+    durationSeconds: Number(s.Duration),
     _interval: s.Duration,
     typeUrl: {},
     ...types(

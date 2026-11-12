@@ -293,6 +293,20 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     }
   }
   return {
+    discoverySources(current) {
+      const others = db
+        .prepare('SELECT payload FROM music_sources ORDER BY rowid')
+        .all()
+        .map(({ payload }) => JSON.parse(payload))
+        .filter((src) => src.code !== current.code)
+      return [current, ...others].flatMap((src) =>
+        Object.values(src.platforms ?? { [src.platform]: src }).map((platform) => ({
+          ...src,
+          ...platform,
+          permanentSave: platform.permanentSave,
+        })),
+      )
+    },
     alternatives(platform, quality, currentCode) {
       const result = []
       for (const { payload } of db

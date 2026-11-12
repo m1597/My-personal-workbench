@@ -9,10 +9,10 @@ export const catalogue = [...names, '夜航'].map((title, index) => ({
   genre: index % 2 ? '氛围' : '电子',
   frequency: [220, 262, 330, 392, 294][index],
 }))
-export function validateSuggestions(rows, { songPunctuation = false } = {}) {
+export function validateSuggestions(rows, { songPunctuation = false, partial = false } = {}) {
   if (
     !Array.isArray(rows) ||
-    rows.length !== 5 ||
+    (partial ? rows.length < 1 || rows.length > 5 : rows.length !== 5) ||
     !rows.every(
       (row) =>
         row &&
