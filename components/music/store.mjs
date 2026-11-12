@@ -285,7 +285,10 @@ export class MusicStore {
               label + (status === '正在匹配' ? '' : '《' + titles.join('》《') + '》'),
             )
         }
-        if (descriptions.length) batch.message = descriptions.join(' · ')
+        if (descriptions.length) {
+          if (batch.message.includes('补推')) descriptions.push(batch.message)
+          batch.message = descriptions.join(' · ')
+        }
       }
       batch.details = batch.targetCount
         ? diagnostics

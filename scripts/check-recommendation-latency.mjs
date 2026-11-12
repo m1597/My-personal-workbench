@@ -21,7 +21,7 @@ const sources = [
     if(action==='lyric')return '';
     const [name,singer]=info.keyword.split(' ');
     if(name.startsWith('故障'))throw Error('检索暂不可用');
-    if(name==='缺歌')return [];
+    if(name.startsWith('缺歌'))return [];
     if(name==='慢歌')return new Promise(()=>{});
     if(name==='后页歌曲' && info.page===1)return {items:[{id:name,name,singer:'丙',allowPermanentSave:false}],hasMore:true};
     if(name==='后页歌曲')return [{id:'许可版本',name,singer:'丙',allowPermanentSave:true}];
@@ -30,6 +30,10 @@ const sources = [
   [
     '无响应源',
     `if(action==='search' && info.keyword.startsWith('故障'))throw Error('检索暂不可用');
+    if(action==='lyric')return '';
+    if(action==='search' && info.keyword.startsWith('单源恢复'))return [];
+    if(action==='search' && info.keyword.startsWith('超时换源'))return [{id:'超时换源',name:'超时换源',singer:'甲',allowPermanentSave:true}];
+    if(action==='musicUrl' && info.musicInfo.name==='超时换源')return 'https://1.1.1.1/recording/'+encodeURIComponent('超时换源')+'?alternative=1';
     if(action==='search' && (info.keyword.startsWith('后页歌曲') || info.keyword.startsWith('缺歌')))return [];
     if(action==='search' && info.keyword.startsWith('同版歌曲'))
       return [{id:'同版歌曲',name:'同版歌曲',singer:'乙',allowPermanentSave:true}];
@@ -80,6 +84,11 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     '滚动二',
     '滚动三',
     '滚动四',
+    '慢传追加',
+    '补选一',
+    '补选二',
+    '超时换源',
+    '单源恢复',
   ].entries()) {
     recordings[name] = path.join(root, name + '.wav')
     await writeFixtureRecording(recordings[name], 718 + index * 151)
@@ -97,6 +106,9 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
         const { EventEmitter } = process.getBuiltinModule('node:events')
         globalThis.calls = []
         globalThis.searches = []
+        globalThis.timedTransfers = []
+        const timeout = AbortSignal.timeout.bind(AbortSignal)
+        AbortSignal.timeout = (ms) => timeout(globalThis.testDeadline && ms === 240000 ? 1200 : ms)
         const workers = process.getBuiltinModule('node:worker_threads')
         const Worker = workers.Worker
         workers.Worker = class extends Worker {
@@ -114,12 +126,33 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
           }
         }
         process.getBuiltinModule('node:module').syncBuiltinESMExports()
-        https.request = (url, _options, receive) => {
+        https.request = (url, options, receive) => {
           if (url.origin !== 'https://1.1.1.1' || !url.pathname.startsWith('/recording'))
             throw Error('夹具意外请求')
           const song = decodeURIComponent(url.pathname.split('/')[2] ?? '')
           globalThis.calls.push('transfer')
           const req = new EventEmitter()
+          if (globalThis.testDeadline && ['超时换源', '单源恢复'].includes(song)) {
+            const attempts = globalThis.timedTransfers
+            const alternative = url.searchParams.has('alternative')
+            const hang = !alternative && !attempts.some(([title]) => title === song)
+            attempts.push([song, alternative])
+            if (hang) {
+              const { PassThrough } = process.getBuiltinModule('node:stream')
+              const stream = Object.assign(new PassThrough(), {
+                statusCode: 200,
+                headers: {},
+                setTimeout() {},
+              })
+              req.end = () => receive(stream)
+              options.signal.addEventListener(
+                'abort',
+                () => stream.destroy(Error('fixture transfer deadline')),
+                { once: true },
+              )
+              return req
+            }
+          }
           req.end = () =>
             setTimeout(
               () =>
@@ -130,12 +163,24 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
                     setTimeout() {},
                   }),
                 ),
-              song === '滚动一' ? 4500 : 650,
+              song === '慢传追加' ? 8000 : song === '滚动一' ? 4500 : 650,
             )
           return req
         }
-        globalThis.fetch = async () => {
+        globalThis.fetch = async (_url, options) => {
           globalThis.calls.push('model')
+          if (
+            globalThis.holdRefill &&
+            globalThis.calls.filter((call) => call === 'model').length === 2
+          ) {
+            globalThis.waitingOnModel = true
+            await new Promise((_, reject) =>
+              options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+                once: true,
+              }),
+            )
+          }
+          if (globalThis.rounds?.length) globalThis.songs = globalThis.rounds.shift()
           await new Promise((resolve) => setTimeout(resolve, 450))
           return Response.json({
             choices: [
@@ -258,6 +303,31 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   await expect(page.getByRole('button', { name: '终止本次推荐' })).toBeEnabled()
   await expect(progress).toContainText('已下载 4/4，已达到目标首数', { timeout: 12000 })
   await app.evaluate(() => {
+    globalThis.calls = []
+    globalThis.rounds = [
+      [
+        ['慢传追加', '甲'],
+        ['缺歌一', '乙'],
+        ['缺歌二', '丙'],
+      ],
+      [
+        ['补选一', '丁'],
+        ['补选二', '戊'],
+      ],
+    ]
+  })
+  await page.getByLabel('推荐首数').fill('3')
+  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await expect(page.locator('.music-list li strong')).toHaveText(['补选一', '补选二'], {
+    timeout: 11000,
+  })
+  await expect(progress).toContainText('已下载 2/3，正在下载《慢传追加》')
+  await expect(progress).toContainText('已下载 3/3，已达到目标首数', { timeout: 14000 })
+  assert.equal(
+    await app.evaluate(() => globalThis.calls.filter((call) => call === 'model').length),
+    2,
+  )
+  await app.evaluate(() => {
     globalThis.songs = [
       ['故障甲', '甲'],
       ['故障乙', '乙'],
@@ -265,6 +335,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
       ['故障丁', '丁'],
     ]
   })
+  await page.getByLabel('推荐首数').fill('4')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(progress).toContainText('已下载 0/4，连续多首歌曲的所有匹配来源均无法访问')
   await page.getByText('查看详情', { exact: true }).click()
@@ -273,6 +344,36 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     globalThis.searches.filter(([, keyword]) => keyword.startsWith('故障丁')),
   )
   assert.deepEqual(skipped, [])
+  for (const song of ['超时换源', '单源恢复']) {
+    await app.evaluate((_, song) => {
+      globalThis.testDeadline = true
+      globalThis.songs = [[song, '甲']]
+    }, song)
+    await page.getByLabel('推荐首数').fill('1')
+    await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+    await expect(page.locator('.music-list li strong')).toHaveText([song], { timeout: 11000 })
+    await expect(progress).toContainText('已下载 1/1，已达到目标首数')
+  }
+  assert.deepEqual(await app.evaluate(() => globalThis.timedTransfers), [
+    ['超时换源', false],
+    ['超时换源', true],
+    ['单源恢复', false],
+    ['单源恢复', false],
+  ])
+  await app.evaluate(() => {
+    globalThis.calls = []
+    globalThis.songs = [['取消等待', '甲']]
+    globalThis.holdRefill = true
+  })
+  await page.getByLabel('推荐首数').fill('2')
+  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await expect.poll(() => app.evaluate(() => !!globalThis.waitingOnModel)).toBe(true)
+  await page.getByRole('button', { name: '终止本次推荐', exact: true }).click()
+  await expect(progress).toContainText('本次推荐已终止')
+  const finalCalls = await app.evaluate(() => globalThis.calls)
+  assert.equal(finalCalls.filter((call) => call === 'model').length, 2)
+  await new Promise((resolve) => setTimeout(resolve, 800))
+  assert.deepEqual(await app.evaluate(() => globalThis.calls), finalCalls)
   console.log(JSON.stringify({ firstMs, stopped, single }))
 } finally {
   await app.close()

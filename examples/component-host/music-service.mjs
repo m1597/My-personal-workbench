@@ -477,10 +477,10 @@ export function musicService(
         const pendingItem = store.db.prepare(
           "SELECT id FROM items WHERE batch=? AND title=? AND artist=? AND status='待处理' ORDER BY rowid DESC LIMIT 1",
         )
-        let saved = []
-        let deferred = []
+        const candidates = []
+        let reserves = new Set()
         let requiredArtist = mode === 'artist' && !similar ? preference.trim() : ''
-        const frequency = (row, tracks = saved) =>
+        const frequency = (row, tracks) =>
           tracks.filter(
             (r) => artistMatches(row.artist, r.artist) || artistMatches(r.artist, row.artist),
           ).length
@@ -488,9 +488,13 @@ export function musicService(
           mode !== 'artist' &&
           !requiredArtist &&
           !(mode === 'auto' && namesRequestedArtist(preference, row.artist))
-        let catalogChoices = []
         let repeated = 0
         let stalled = 0
+        let roundSaved = 0
+        let round = 0
+        let freshSelected = false
+        let refilling
+        let refillError
         const sourceHealth = {
           unreachable: 0,
           queries: new Map(),
@@ -498,10 +502,31 @@ export function musicService(
           catalogRecordings: new Map(),
           constraints: { version: recordingPreference(preference), artist: '' },
         }
-        while (saved.length < targetCount) {
-          signal.throwIfAborted()
-          update('running', seen.length ? '正在补推候选歌曲' : '正在生成候选歌曲')
-          const remaining = targetCount - saved.length
+        async function refill(represented, savedCount, work) {
+          stalled = round && savedCount <= roundSaved ? stalled + 1 : 0
+          if (stalled >= 6)
+            throw Error(
+              '连续 6 轮没有可入库的新录音，已停止继续调用模型。请查看匹配详情或更换音源、调整要求后重试',
+            )
+          roundSaved = savedCount
+          reserves = new Set(candidates)
+          freshSelected = false
+          let catalogChoices = []
+          if (round++) {
+            update('running', '正在为补推查找可保存的录音')
+            const wanted = (row) => !preferDifferentArtist(row) || !frequency(row, represented)
+            catalogChoices = (
+              await lx.discoveries(
+                seen.filter(wanted).slice(-20),
+                [...localRows.all(), ...history, ...seen],
+                work,
+                sourceHealth,
+              )
+            ).filter(wanted)
+          }
+          work.throwIfAborted()
+          update('running', round > 1 ? '正在补推候选歌曲' : '正在生成候选歌曲')
+          const remaining = targetCount - represented.length
           const excluded = [...(profile ? history.slice(-20) : []), ...seen.slice(-100)].map(
             ({ title, artist }) => ({ title, artist }),
           )
@@ -517,15 +542,15 @@ export function musicService(
               ...(profile ? { profile } : {}),
               ...(catalogChoices.length ? { catalogChoices } : {}),
               ...(excluded.length ? { excluded } : {}),
-              ...(mode !== 'artist' && saved.length
+              ...(mode !== 'artist' && represented.length
                 ? {
-                    recentArtists: [...new Set(saved.map((r) => r.artist))].slice(-30),
+                    recentArtists: [...new Set(represented.map((r) => r.artist))].slice(-30),
                   }
                 : {}),
             },
-            signal,
+            work,
           )
-          signal.throwIfAborted()
+          work.throwIfAborted()
           if (mode === 'auto' && !seen.length && !requiredArtist) {
             if (requestedArtist && namesRequestedArtist(preference, requestedArtist, true))
               requiredArtist = requestedArtist
@@ -542,63 +567,52 @@ export function musicService(
             if (requiredArtist && !artistMatches(requiredArtist, row.artist)) continue
             if (!inLibrary(row, local) && !inLibrary(row, history)) fresh.push(row)
           }
-          repeated = fresh.length || deferred.length ? 0 : repeated + 1
+          repeated = fresh.length || candidates.length ? 0 : repeated + 1
           if (repeated >= 3)
             throw Error('模型连续返回已排除的歌曲或不符合条件的艺人，未能提供更多新候选')
-          const previouslySaved = saved.length
-          const priorDeferred = new Set(deferred)
-          const candidates = [...deferred, ...fresh]
-          deferred = []
-          async function attempt(queue, allowRepeat) {
-            if (!queue.length) return
-            update('running', '正在匹配录音')
-            await lx.batch(batch, signal, sourceHealth, () => {
-              const represented = [...savedRows.all(batch), ...reservations.all(batch)]
-              if (represented.length >= targetCount) return
-              while (queue.length) {
-                if (mode !== 'artist')
-                  queue.sort((a, b) => frequency(a, represented) - frequency(b, represented))
-                const index = queue.findIndex(
-                  (row) =>
-                    allowRepeat || !preferDifferentArtist(row) || !frequency(row, represented),
-                )
-                if (index < 0) return
-                const row = queue.splice(index, 1)[0]
-                store.saveSuggestions(label, [row], '待处理', batch)
-                const entry = pendingItem.get(batch, row.title, row.artist)
-                if (entry) return entry.id
-              }
-            })
-            signal.throwIfAborted()
-            saved = savedRows.all(batch)
-          }
-          await attempt(candidates, false)
-          deferred = candidates
-          // Try fresh artists from another model/catalog round before using same-artist reserves.
-          // Once that search yields no new playable artist, release the preceding round's reserves.
-          if (saved.length === previouslySaved && priorDeferred.size) {
-            const reserves = deferred.filter((row) => priorDeferred.has(row))
-            deferred = deferred.filter((row) => !priorDeferred.has(row))
-            await attempt(reserves, true)
-          }
-          stalled = saved.length > previouslySaved ? 0 : stalled + 1
-          if (stalled >= 6)
-            throw Error(
-              '连续 6 轮没有可入库的新录音，已停止继续调用模型。请查看匹配详情或更换音源、调整要求后重试',
-            )
-          if (saved.length < targetCount) {
-            update('running', '正在为补推查找可保存的录音')
-            catalogChoices = await lx.discoveries(
-              seen.filter((row) => !preferDifferentArtist(row) || !frequency(row)).slice(-20),
-              [...local, ...history, ...seen],
-              signal,
-              sourceHealth,
-            )
-            catalogChoices = catalogChoices.filter(
-              (row) => !preferDifferentArtist(row) || !frequency(row),
-            )
-          }
+          candidates.push(...fresh)
+          update('running', '正在匹配录音')
         }
+        await lx.batch(batch, signal, sourceHealth, async (work) => {
+          while (!refillError) {
+            work.throwIfAborted()
+            const saved = savedRows.all(batch)
+            const active = reservations.all(batch)
+            const represented = [...saved, ...active]
+            if (represented.length >= targetCount || sourceHealth.unreachable >= 3) return
+            if (refilling) {
+              await refilling
+              continue
+            }
+            if (mode !== 'artist')
+              candidates.sort((a, b) => frequency(a, represented) - frequency(b, represented))
+            let index = candidates.findIndex(
+              (row) => !preferDifferentArtist(row) || !frequency(row, represented),
+            )
+            if (index < 0 && (!freshSelected || (!active.length && saved.length === roundSaved)))
+              index = candidates.findIndex((row) => reserves.has(row))
+            if (index >= 0) {
+              const row = candidates.splice(index, 1)[0]
+              store.saveSuggestions(label, [row], '待处理', batch)
+              const entry = pendingItem.get(batch, row.title, row.artist)
+              if (!entry) continue
+              if (!reserves.has(row)) freshSelected = true
+              return entry.id
+            }
+            // All idle workers share a single refill, while other workers keep their recordings.
+            refilling ??= refill(represented, saved.length, work)
+              .catch((error) => {
+                refillError = error
+                if (!work.aborted) update('running', '正在完成已开始处理的录音')
+              })
+              .finally(() => {
+                refilling = undefined
+              })
+            await refilling
+          }
+        })
+        signal.throwIfAborted()
+        if (refillError && savedRows.all(batch).length < targetCount) throw refillError
         update('completed', '已达到目标首数')
       } catch (error) {
         update(

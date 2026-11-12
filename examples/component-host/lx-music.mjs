@@ -29,6 +29,7 @@ import { publish } from './music/store.mjs'
 
 class SourceDownloadError extends Error {}
 class TransferError extends SourceDownloadError {}
+class TransferDeadline extends TransferError {}
 class InvalidAudio extends SourceDownloadError {
   kind = 'unusable'
 }
@@ -362,9 +363,10 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
   const temp = path.join(dir, '.fitbay-' + randomUUID() + '.part')
   try {
     const connection = new AbortController()
+    const deadline = AbortSignal.timeout(240000)
     const connectionTimer = dailyId && setTimeout(() => connection.abort(), 8000)
     const res = await openPublic(url, {
-      signal: AbortSignal.any([signal, connection.signal, AbortSignal.timeout(240000)]),
+      signal: AbortSignal.any([signal, connection.signal, deadline]),
     })
       .catch((error) => {
         signal.throwIfAborted()
@@ -394,6 +396,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       })
     } catch (error) {
       signal.throwIfAborted()
+      if (deadline.aborted) throw new TransferDeadline('完整录音未能在传输时限内下载')
       if (
         ['ECONNRESET', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE', 'ABORT_ERR'].includes(error.code)
       )
@@ -862,7 +865,17 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       throw new SourceDownloadError('音乐源未返回可用地址')
     return url
   }
-  async function fetchRecording(src, row, quality, dir, signal, auditionId, dailyId, preparedUrl) {
+  async function fetchRecording(
+    src,
+    row,
+    quality,
+    dir,
+    signal,
+    auditionId,
+    dailyId,
+    preparedUrl,
+    canRetry = true,
+  ) {
     for (let attempt = 0; ; attempt++) {
       const url =
         (!attempt && preparedUrl) || (await recordingAddress(src, row, quality, signal, dailyId))
@@ -897,7 +910,13 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         }
         return filename
       } catch (e) {
-        if (attempt > 0 || !(e instanceof TransferError)) throw e
+        if (
+          !canRetry ||
+          attempt > 0 ||
+          !(e instanceof TransferError) ||
+          (dailyId && e instanceof TransferDeadline)
+        )
+          throw e
         signal.throwIfAborted()
       }
     }
@@ -1158,7 +1177,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             'SELECT 1 FROM recording_copies c JOIN local_tracks t ON t.id=c.local WHERE c.platform=? AND c.sourceId=?',
           )
           .get(identity.platform, identity.sourceId)
-      async function save({ src, row: pick, quality, preparedUrl }) {
+      async function save({ src, row: pick, quality, preparedUrl }, canRetry = true) {
         const identity = versionInfo(src, pick, quality)
         if (store.ignoresRecording(identity.platform, identity.sourceId)) {
           store.status(id, '已跳过')
@@ -1187,6 +1206,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             undefined,
             id,
             preparedUrl,
+            canRetry,
           )
         }
       }
@@ -1223,6 +1243,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         return candidate
       }
       let sources = saved ? [saved.src] : installed
+      const timedOutUrls = new Set()
+      let deferredTransfer
       while (sources.length) {
         const expand = []
         for await (const { src, candidate, error: searchError } of availableSources(
@@ -1235,6 +1257,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             if (searchError) throw searchError
             signal.throwIfAborted()
             if (!candidate) continue
+            if (candidate.preparedUrl && timedOutUrls.has(candidate.preparedUrl))
+              throw new SourceDownloadError('此来源返回了同一条已超时的下载地址')
             await save(candidate)
             choices.delete(id)
             return
@@ -1252,12 +1276,28 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
               backOff(keyFor(src), error.message)
             if (health) store.status(id, '正在匹配')
             failures.push({ src, error })
+            if (error instanceof TransferDeadline && candidate) {
+              if (candidate.preparedUrl) timedOutUrls.add(candidate.preparedUrl)
+              deferredTransfer ??= candidate
+            }
             if (phase === 'shallow' && expandable(error) && src.permanentSave !== false)
               expand.push(src)
           }
         }
         sources = expand
         phase = 'deep'
+      }
+      if (deferredTransfer) {
+        try {
+          // Other eligible addresses have had their turn. Resolve once more in case the link changed.
+          await save({ ...deferredTransfer, preparedUrl: undefined }, false)
+          choices.delete(id)
+          return
+        } catch (error) {
+          signal.throwIfAborted()
+          if (error.code) throw error
+          failures.push({ src: deferredTransfer.src, error })
+        }
       }
       if (choicesForItem.size) {
         choices.set(id, { rows: choicesForItem })
@@ -1404,16 +1444,13 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       const epoch = generation
       const controller = new AbortController()
       const work = AbortSignal.any([signal, controller.signal])
-      let attempted = 0
       let fatal
-      let unreachable = 0
       const worker = async () => {
         try {
           while (epoch === generation) {
             work.throwIfAborted()
-            const id = reserveNext()
+            const id = await reserveNext(work)
             if (!id) break
-            attempted++
             const outcome = await prepare(
               id,
               undefined,
@@ -1424,7 +1461,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             work.throwIfAborted()
             if (sourceHealth) {
               choices.delete(id)
-              if (outcome === 'unreachable') unreachable++
+              sourceHealth.unreachable =
+                outcome === 'unreachable' ? sourceHealth.unreachable + 1 : 0
               const issue = getStore()
                 .db.prepare('SELECT diagnosis,summary FROM recommended_items WHERE item=?')
                 .get(id)
@@ -1439,12 +1477,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       try {
         await Promise.all(Array.from({ length: 3 }, worker))
         if (fatal) throw fatal
-        if (attempted) {
-          sourceHealth.unreachable =
-            unreachable === attempted ? sourceHealth.unreachable + unreachable : 0
-          if (sourceHealth.unreachable >= 3)
-            throw Error('连续多首歌曲的所有匹配来源均无法访问，请检查网络或音源状态')
-        }
+        if (sourceHealth.unreachable >= 3)
+          throw Error('连续多首歌曲的所有匹配来源均无法访问，请检查网络或音源状态')
       } finally {
         if (work.aborted)
           getStore()
