@@ -1,0 +1,9 @@
+{
+  "name": "fitbay-music-tags",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "taglib-wasm": "2.4.1"
+  }
+}

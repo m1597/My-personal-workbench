@@ -1,0 +1,67 @@
+.tag-editor {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+  container-type: inline-size;
+}
+.tag-editor h2,
+.tag-editor p {
+  margin: 0;
+}
+.tag-editor small,
+.tag-editor p {
+  color: var(--colorNeutralForeground2);
+}
+.tag-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tag-pick {
+  max-height: 32vh;
+  overflow: auto;
+  display: grid;
+  border-block: 1px solid var(--colorNeutralStroke2);
+}
+.tag-editor fieldset {
+  margin: 0;
+  min-width: 0;
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: 6px;
+  padding: 12px;
+}
+.tag-editor legend {
+  padding-inline: 4px;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.tag-columns {
+  display: grid;
+  grid-template-columns: 6em minmax(4em, 1fr) minmax(7em, 1.3fr);
+  gap: 8px;
+  align-items: center;
+  padding-block: 4px;
+}
+.tag-columns > span {
+  overflow-wrap: anywhere;
+}
+.tag-columns .fui-Input {
+  min-width: 0;
+}
+.tag-columns:first-of-type {
+  font-size: 0.85em;
+  color: var(--colorNeutralForeground2);
+}
+@container (max-width: 340px) {
+  .tag-columns {
+    grid-template-columns: 4.5em minmax(3em, 1fr) minmax(5em, 1.15fr);
+    gap: 3px;
+  }
+  .tag-editor fieldset {
+    padding: 5px;
+  }
+}
