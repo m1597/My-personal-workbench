@@ -1,3 +1,4 @@
+import { selectMusicSettings } from './music-settings-fixture.mjs'
 import { spawnSync } from 'node:child_process'
 import electronBin from 'electron'
 import assert from 'node:assert/strict'
@@ -103,6 +104,7 @@ try {
     await expect(tabs.nth(index)).toHaveAccessibleName(name)
   await expect(page.getByRole('button', { name: /音乐源|查找版本/ })).toHaveCount(0)
   await page.getByRole('tab', { name: '设置' }).click()
+  await selectMusicSettings(page, '音乐源')
   await choose(sourceFile)
   await page.getByRole('button', { name: '本地导入' }).click()
   await expect.poll(() => page.evaluate(() => window.music.lxInfo())).not.toBe('')

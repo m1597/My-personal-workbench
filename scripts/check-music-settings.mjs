@@ -1,3 +1,4 @@
+import { selectMusicSettings } from './music-settings-fixture.mjs'
 import { _electron as electron, expect } from '@playwright/test'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -51,6 +52,11 @@ try {
   expect(loaded.localTracks.map((row) => row.title)).toEqual(['A', 'B', 'C'])
   await player.getByRole('button', { name: '播放A', exact: true }).click({ timeout: 5000 })
   await player.getByRole('tab', { name: '设置', exact: true }).click()
+  await expect(player.locator('.music-settings h2')).toHaveText(['本地曲库'])
+  for (const name of ['音乐源', '下载', '模型与推荐', '全局快捷键']) {
+    await selectMusicSettings(player, name)
+    await expect(player.locator('.music-settings h2')).toHaveText([name])
+  }
   const prefs = () => player.evaluate(async () => (await window.music.state()).prefs)
   const combo = 'Ctrl+Alt+F22'
   await player.getByRole('textbox', { name: '播放 / 暂停', exact: true }).fill(combo)
@@ -105,6 +111,7 @@ try {
   await player.evaluate(() => {
     document.documentElement.style.backgroundColor = 'var(--base)'
   })
+  await selectMusicSettings(player, '下载')
   await player.getByRole('combobox', { name: '首选音质' }).click()
   await expect(player.getByRole('listbox')).toBeVisible()
   await player.screenshot({ path: path.join(evidence, 'quality-menu.png') })
@@ -121,6 +128,7 @@ try {
       return [p.manualDir, p.recommendDir, p.quality]
     })
     .toEqual([evidence, evidence, 'flac'])
+  await selectMusicSettings(player, '模型与推荐')
   await player.getByRole('button', { name: '模型设置' }).click()
   await player.getByRole('combobox', { name: '服务商' }).click()
   await expect(player.getByRole('listbox')).toBeVisible()
@@ -130,8 +138,26 @@ try {
     e.scrollTop = 0
   })
   await player.screenshot({ path: path.join(evidence, 'settings.png') })
+  await selectMusicSettings(player, '全局快捷键')
   await player.getByRole('textbox', { name: '上一首', exact: true }).scrollIntoViewIfNeeded()
   await player.screenshot({ path: path.join(evidence, 'shortcuts.png') })
+  await app.evaluate(({ BrowserWindow }) => {
+    const shell = BrowserWindow.getAllWindows()[0]
+    shell.setMinimumSize(380, 480)
+    shell.setContentSize(440, 620)
+  })
+  const categories = player.getByRole('navigation', { name: '设置分类', includeHidden: true })
+  await expect(categories).toBeHidden()
+  await player.getByRole('button', { name: '设置分类', exact: true }).click()
+  await expect(categories.getByRole('button')).toHaveCount(5)
+  await player.screenshot({
+    path: path.join(evidence, 'settings-narrow-menu.png'),
+    animations: 'disabled',
+  })
+  await categories.getByRole('button', { name: '下载', exact: true }).click()
+  await expect(categories).toBeHidden()
+  await expect(player.locator('.music-settings h2')).toHaveText(['下载'])
+  await expect(player.locator('.music-settings')).toBeInViewport()
   await shell.getByRole('button', { name: 'Close Music', exact: true }).click()
   await expect
     .poll(() => app.evaluate(({ globalShortcut }, k) => globalShortcut.isRegistered(k), combo))

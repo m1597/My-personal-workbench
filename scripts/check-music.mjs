@@ -1,3 +1,4 @@
+import { selectMusicSettings } from './music-settings-fixture.mjs'
 import { dragMusicIn, dragMusicOut } from './music-drag-fixture.mjs'
 import { _electron as electron, expect } from '@playwright/test'
 import { mkdir, mkdtemp } from 'node:fs/promises'
@@ -24,6 +25,7 @@ let app = await launch('music')
 try {
   const music = await page(app, '/music/index.html')
   await music.getByRole('tab', { name: '设置' }).click()
+  await selectMusicSettings(music, '模型与推荐')
   await music.getByRole('button', { name: '模型设置' }).click()
   await music.getByRole('combobox', { name: '服务商' }).click()
   await music.getByRole('option', { name: '离线示例' }).click()

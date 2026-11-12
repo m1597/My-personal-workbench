@@ -1,6 +1,7 @@
 import {
   MusicSettings,
   type MusicPreferences,
+  type SettingsCategory,
   type TransportAction,
   type TasteStatus,
 } from './MusicSettings'
@@ -160,6 +161,14 @@ function Music() {
     [time, setTime] = useState(0),
     [error, setError] = useState(''),
     [docked, setDocked] = useState(false)
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>('library')
+  function openSettings(category: SettingsCategory) {
+    setSettingsCategory(category)
+    setTab('settings')
+  }
+  function openMusicSources() {
+    openSettings('sources')
+  }
   const [tab, setTab] = useState('library'),
     [requestedCollection, setCollection] = useState('all'),
     [search, setSearch] = useState('')
@@ -475,7 +484,7 @@ function Music() {
         <Tab value="audition">每日推荐</Tab>
         <Tab value="settings">设置</Tab>
       </TabList>
-      <main className="music-scroll">
+      <main key={tab} className="music-scroll">
         {tab === 'library' ? (
           <LibraryPane
             rows={localRows}
@@ -526,6 +535,8 @@ function Music() {
         ) : tab === 'settings' ? (
           state && (
             <MusicSettings
+              category={settingsCategory}
+              selectCategory={setSettingsCategory}
               models={state.models}
               prefs={state.prefs}
               job={state.importJob}
@@ -543,7 +554,7 @@ function Music() {
             {state && (
               <RecommendationComposer
                 models={state.models}
-                openSettings={() => setTab('settings')}
+                openSettings={() => openSettings('model')}
                 initialDraft={state.draft}
                 refresh={refresh}
                 generated={setBatch}
@@ -641,7 +652,7 @@ function Music() {
                                 status={r.status}
                                 message={r.downloadError}
                                 diagnosis={r.diagnosis}
-                                openSources={() => setTab('settings')}
+                                openSources={openMusicSources}
                                 refresh={refresh}
                               />
                             )}
