@@ -767,6 +767,7 @@ function Music() {
             select={(id) => {
               setCollection(id)
               setSearch('')
+              if (id === 'system-recommendations') void act(() => host.refreshLocal())
             }}
             create={(name) =>
               act(async () => {

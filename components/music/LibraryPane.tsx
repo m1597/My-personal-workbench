@@ -457,7 +457,7 @@ export function LibraryPane({
                   </MenuList>
                 </MenuPopover>
               </Menu>
-              {userPlaylists.some((list) => list.id === collection) && (
+              {playlists.some((list) => list.id === collection) && (
                 <Button
                   size="small"
                   disabled={batchBusy || !selectedIds.length}
@@ -687,7 +687,7 @@ export function LibraryPane({
                     >
                       仅从 FitBay 移除
                     </Button>
-                    {playlists.some((list) => list.id === collection && !list.system) && (
+                    {playlists.some((list) => list.id === collection) && (
                       <Button
                         disabled={submitting}
                         onClick={() => void confirm(() => membership(collection, action.id, false))}

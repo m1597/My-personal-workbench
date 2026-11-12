@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { lstat, realpath, open } from 'node:fs/promises'
+import { lstat, realpath, open, readdir } from 'node:fs/promises'
 export const audioTypes = {
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
@@ -21,6 +21,34 @@ export async function audioFileSize(file) {
       : null
   } catch {
     return null
+  }
+}
+
+// ENOENT can also mean an unavailable drive or a dangling directory link.
+export async function confirmedMissing(file) {
+  if (!path.isAbsolute(file)) return false
+  let candidate = file
+  let missingName
+  for (;;) {
+    let info
+    try {
+      info = await lstat(candidate)
+    } catch (error) {
+      if (error.code !== 'ENOENT') return false
+      const parent = path.dirname(candidate)
+      if (parent === candidate) return false
+      missingName = path.basename(candidate).toLowerCase()
+      candidate = parent
+      continue
+    }
+    if (!missingName || !info.isDirectory()) return false
+    try {
+      if (pathKey(await realpath(candidate)) !== pathKey(candidate)) return false
+      const entries = await readdir(candidate)
+      return !entries.some((name) => name.toLowerCase() === missingName)
+    } catch {
+      return false
+    }
   }
 }
 

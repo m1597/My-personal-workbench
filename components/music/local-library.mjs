@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
-import { audioFileSize, pathKey } from './local-files.mjs'
+import { audioFileSize, confirmedMissing, pathKey } from './local-files.mjs'
 
 const folderKey = (dir) => createHash('sha256').update(pathKey(dir)).digest('hex')
 function playlistName(name) {
@@ -72,6 +72,18 @@ export class LocalLibrary {
       this.db.exec(
         'CREATE TABLE IF NOT EXISTS restored_recommendations(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE)',
       )
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS recommended_local_track ON recommended_items(local);
+        CREATE TABLE IF NOT EXISTS removed_recommendation_members(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE);
+        CREATE VIEW IF NOT EXISTS recommendation_playlist_members AS
+          SELECT track, source, position FROM (
+            SELECT r.local AS track, 0 AS source, MIN(r.rowid) AS position
+              FROM recommended_items r JOIN local_tracks t ON t.id=r.local GROUP BY r.local
+            UNION ALL
+            SELECT s.track, 1 AS source, s.rowid AS position FROM restored_recommendations s
+              WHERE NOT EXISTS (SELECT 1 FROM recommended_items r WHERE r.local=s.track)
+          ) AS members WHERE NOT EXISTS (SELECT 1 FROM removed_recommendation_members x WHERE x.track=members.track);
+      `)
       if (!trackColumns.some((column) => column.name === 'observedAt')) {
         this.db.exec(`ALTER TABLE local_tracks ADD COLUMN observedAt INTEGER;
           ALTER TABLE local_tracks ADD COLUMN lastHeardAt INTEGER;
@@ -218,22 +230,13 @@ export class LocalLibrary {
       .all()) {
       byId.get(row.playlist).tracks.push(row.track)
     }
-    const recommended = this.db
-      .prepare(
-        `SELECT r.local FROM recommended_items r JOIN local_tracks t ON r.local=t.id GROUP BY r.local ORDER BY MIN(r.rowid)`,
-      )
+    const systemTracks = this.db
+      .prepare('SELECT track FROM recommendation_playlist_members ORDER BY source, position')
       .all()
-    const systemTracks = [
-      ...new Set([
-        ...recommended.map((r) => r.local),
-        ...this.db
-          .prepare('SELECT track FROM restored_recommendations ORDER BY rowid')
-          .all()
-          .map((r) => r.track),
-      ]),
-    ]
+      .map((row) => row.track)
     return [
-      ...(systemTracks.length
+      ...(systemTracks.length ||
+      this.db.prepare('SELECT 1 FROM removed_recommendation_members LIMIT 1').get()
         ? [
             {
               id: 'system-recommendations',
@@ -305,7 +308,9 @@ export class LocalLibrary {
       typeof added !== 'boolean'
     )
       throw Error('歌单操作无效')
-    if (!this.db.prepare('SELECT 1 FROM playlists WHERE id=?').get(playlist))
+    const system = playlist === 'system-recommendations'
+    if (system && added) throw Error('歌曲推荐歌单只接受推荐入库的歌曲')
+    if (!system && !this.db.prepare('SELECT 1 FROM playlists WHERE id=?').get(playlist))
       throw Error('未找到歌单')
     const data = JSON.stringify(ids)
     this.db.exec('BEGIN IMMEDIATE')
@@ -318,7 +323,13 @@ export class LocalLibrary {
           .get(data)
       )
         throw Error('歌曲已移除')
-      if (added)
+      if (system)
+        this.db
+          .prepare(
+            'INSERT OR IGNORE INTO removed_recommendation_members SELECT track FROM recommendation_playlist_members WHERE track IN (SELECT value FROM json_each(?))',
+          )
+          .run(data)
+      else if (added)
         this.db
           .prepare(
             'INSERT OR IGNORE INTO playlist_tracks SELECT ?, value FROM json_each(?) ORDER BY key',
@@ -346,6 +357,12 @@ export class LocalLibrary {
     if (row.awaitingLocation) return false
     const size = await audioFileSize(row.file)
     const ok = !row.unplayable && size !== null
+    if (size === null && row.recommendationMember && (await confirmedMissing(row.file)))
+      this.db
+        .prepare(
+          'INSERT OR IGNORE INTO removed_recommendation_members SELECT id FROM local_tracks WHERE id=? AND file=? AND awaitingLocation=0',
+        )
+        .run(row.id, row.file)
     if (Number(ok) !== row.available || size !== row.size)
       this.db
         .prepare('UPDATE local_tracks SET available=?,size=? WHERE id=? AND file=?')
@@ -355,7 +372,9 @@ export class LocalLibrary {
   async refresh() {
     this.refreshing ??= (async () => {
       const rows = this.db
-        .prepare('SELECT id,file,available,unplayable,size,awaitingLocation FROM local_tracks')
+        .prepare(
+          'SELECT id,file,available,unplayable,size,awaitingLocation, m.track AS recommendationMember FROM local_tracks LEFT JOIN recommendation_playlist_members m ON m.track=local_tracks.id',
+        )
         .all()
       for (let i = 0; i < rows.length; i += 16)
         await Promise.all(rows.slice(i, i + 16).map((r) => this.verify(r)))
