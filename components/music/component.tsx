@@ -143,7 +143,7 @@ declare global {
       setTasteConsent(value: boolean): Promise<TasteStatus>
       prepareRecommendation(id: string, key?: string): Promise<void>
       recommendationChoices(id: string): Promise<Versions['items']>
-      generate(s: string, mode?: 'style' | 'artist', similar?: boolean): Promise<string>
+      generate(s: string, mode?: 'style' | 'artist', similar?: boolean): Promise<string | null>
       stopGeneration(): Promise<void>
       match(id: string): Promise<void>
       choose(id: string, track: string): Promise<void>

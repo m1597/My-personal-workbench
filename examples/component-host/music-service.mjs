@@ -358,15 +358,26 @@ export function musicService(
   bind('setMusicOutput', (volume, muted) => setMusicOutput(store, volume, muted))
   bind('setMusicShortcut', (action, key) => shortcuts.setCustom(store, action, key))
   bind('setMusicMediaKeys', (enabled) => shortcuts.setMedia(store, enabled))
-  bind('chooseMusicDirectory', async (kind) => {
+  async function chooseMusicDirectory(kind, signal) {
     if (!['manual', 'recommend'].includes(kind)) throw Error('无效的目录用途')
+    if (localDialog) throw Error('请先关闭当前文件选择窗口')
     const epoch = viewEpoch
-    const choice = await dialog.showOpenDialog({
-      title: kind === 'manual' ? '选择手动下载目录' : '选择推荐下载目录',
-      properties: ['openDirectory', 'createDirectory'],
-    })
-    if (!choice.canceled && choice.filePaths.length && viewEpoch === epoch)
+    localDialog = true
+    try {
+      const choice = await dialog.showOpenDialog({
+        title: kind === 'manual' ? '选择手动下载目录' : '选择推荐下载目录',
+        properties: ['openDirectory', 'createDirectory'],
+      })
+      if (choice.canceled || !choice.filePaths.length || viewEpoch !== epoch || signal?.aborted)
+        return false
       store.set('music-' + kind + '-dir', choice.filePaths[0])
+      return true
+    } finally {
+      localDialog = false
+    }
+  }
+  bind('chooseMusicDirectory', async (kind) => {
+    await chooseMusicDirectory(kind)
   })
   bind('configureModel', (id, model, key, forget) => {
     if (pending) throw Error('请先结束当前生成')
@@ -408,6 +419,9 @@ export function musicService(
         return store.generate('离线示例 · ' + label, [])
       }
       clearTimeout(updateTimer)
+      if (!store.get('music-recommend-dir') && !(await chooseMusicDirectory('recommend', signal)))
+        return null
+      signal.throwIfAborted()
       const profile = await taste.refresh()
       signal.throwIfAborted()
       const seen = []

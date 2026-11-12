@@ -41,7 +41,6 @@ fixtureStore.library.upsert({
 })
 const output = path.join(root, 'recommended')
 await fs.mkdir(output)
-fixtureStore.set('music-recommend-dir', output)
 fixtureStore.db.close()
 const launch = () =>
   electron.launch({
@@ -102,10 +101,38 @@ try {
     }, id)
     await page.reload()
     await page.getByRole('tab', { name: '每日推荐' }).click()
+    if (!index) {
+      await app.evaluate(({ dialog }, directory) => {
+        globalThis.folderRequests = []
+        dialog.showOpenDialog = async (options) => {
+          globalThis.folderRequests.push(options)
+          return globalThis.folderRequests.length === 1
+            ? { canceled: true, filePaths: [] }
+            : { canceled: false, filePaths: [directory] }
+        }
+      }, output)
+      await page.getByRole('button', { name: '生成推荐' }).click()
+      await expect.poll(() => app.evaluate(() => globalThis.folderRequests.length)).toBe(1)
+      await expect(page.getByRole('button', { name: '生成推荐' })).toBeEnabled()
+      await expect(page.getByLabel('今天想听什么')).toHaveValue('雨天的爵士乐')
+      assert.equal(await app.evaluate(() => globalThis.modelCalls.length), 0)
+      const cancelled = await page.evaluate(() => window.music.state())
+      assert.equal(cancelled.batches.length, 0)
+      assert.equal(cancelled.prefs.recommendDir, '')
+      assert.deepEqual(await fs.readdir(output), [])
+    }
     await page.getByRole('button', { name: '生成推荐' }).click()
     await expect
       .poll(() => page.evaluate(async () => (await window.music.state()).batches.length))
       .toBe(index + 1)
+    const requests = await app.evaluate(() => globalThis.folderRequests)
+    assert.equal(requests.length, 2)
+    assert.ok(
+      requests.every(
+        (r) => r.title === '选择推荐下载目录' && r.properties.includes('openDirectory'),
+      ),
+    )
+    assert.equal((await page.evaluate(() => window.music.state())).prefs.recommendDir, output)
     const call = await app.evaluate(() => globalThis.modelCalls.at(-1))
     assert.ok(
       call.url.startsWith(
@@ -424,6 +451,7 @@ try {
 const reopened = await launch()
 try {
   const p = await reopened.firstWindow()
+  assert.equal((await p.evaluate(() => window.music.state())).prefs.recommendDir, output)
   assert.equal((await p.evaluate(() => window.music.getTasteStatus())).consented, false)
   assert.ok((await p.evaluate(() => window.music.state())).localTracks.some((t) => t.notInterested))
   assert.equal(

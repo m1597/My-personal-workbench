@@ -37,7 +37,7 @@ try {
     })
   db = new DatabaseSync(path.join(directory, 'music.sqlite'))
   const set = db.prepare('INSERT OR REPLACE INTO state(key,value) VALUES(?,?)')
-  set.run('music-recommend-dir', output)
+  db.prepare("DELETE FROM state WHERE key='music-recommend-dir'").run()
   set.run('music-media-keys', 'off')
   set.run('music-muted', 'on')
   const old = new Set(
@@ -46,16 +46,18 @@ try {
       .all()
       .map((r) => r.id),
   )
-  app = await electron.launch({
-    args: [
-      path.resolve('dist/component-prototype/host'),
-      '--mode=music',
-      '--mute-audio',
-      '--user-data-dir=' + profile,
-      '--workbench=' + path.resolve('out/renderer/index.html'),
-    ],
-    env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
-  })
+  const launch = () =>
+    electron.launch({
+      args: [
+        path.resolve('dist/component-prototype/host'),
+        '--mode=music',
+        '--mute-audio',
+        '--user-data-dir=' + profile,
+        '--workbench=' + path.resolve('out/renderer/index.html'),
+      ],
+      env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+    })
+  app = await launch()
   assert.ok(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio')))
   const page = await app.firstWindow()
   const state = await page.evaluate(() => window.music.state())
@@ -68,6 +70,39 @@ try {
     process.argv[2] ||
     '结合我的审美，发现一些库里没有的旋律性作品。今天想听独立音乐人正式公开免费下载的日系、游戏或轻电子器乐，优先免费的原创录音。'
   await page.getByLabel('今天想听什么').fill(preference)
+  const native = process.env.FITBAY_NATIVE_FOLDER === '1'
+  await app.evaluate(
+    ({ dialog }, { output, native }) => {
+      let count = 0
+      globalThis.liveModelRequests = 0
+      const fetch = globalThis.fetch
+      globalThis.fetch = (...args) => {
+        globalThis.liveModelRequests++
+        return fetch(...args)
+      }
+      const show = dialog.showOpenDialog.bind(dialog)
+      dialog.showOpenDialog = (options) => {
+        if (options.title !== '选择推荐下载目录') throw Error('意外的原生对话框')
+        count++
+        if (native) return show({ ...options, defaultPath: output })
+        return Promise.resolve(
+          count === 1
+            ? { canceled: true, filePaths: [] }
+            : { canceled: false, filePaths: [output] },
+        )
+      }
+    },
+    { output, native },
+  )
+  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled({
+    timeout: 30000,
+  })
+  await expect(page.getByLabel('今天想听什么')).toHaveValue(preference)
+  assert.equal(await app.evaluate(() => globalThis.liveModelRequests), 0)
+  assert.equal((await page.evaluate(() => window.music.state())).prefs.recommendDir, '')
+  assert.equal(db.prepare('SELECT count(*) AS n FROM batches').get().n, old.size)
+  assert.deepEqual(await fs.readdir(output), [])
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(page.getByRole('button', { name: '取消生成' })).toBeHidden({
     timeout: 1200000,
@@ -122,7 +157,13 @@ try {
   }))
   assert.equal(playback.paused, false)
   assert.equal(playback.protocol, 'fitbay-audio:')
+  assert.equal(result.prefs.recommendDir, output)
+  await app.close()
+  app = await launch()
+  const restarted = await app.firstWindow()
+  assert.equal((await restarted.evaluate(() => window.music.state())).prefs.recommendDir, output)
   const evidence = {
+    folderChoice: { native, cancellationModelRequests: 0, restoredAfterRestart: true },
     model: state.models.active,
     taste: taste.status,
     baseline: baseline.length,
