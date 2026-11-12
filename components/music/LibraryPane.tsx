@@ -21,7 +21,7 @@ import {
   Play,
   Search,
   Trash2,
-  AudioLines,
+  Pause,
   FolderSearch,
 } from 'lucide-react'
 type FolderEntry = { id: string; name: string }
@@ -317,10 +317,8 @@ export function LibraryPane({
                     size="small"
                     appearance="subtle"
                     disabled={!t.available}
-                    aria-label={'播放' + t.title}
-                    icon={
-                      active === t.id && playing ? <AudioLines size={16} /> : <Play size={15} />
-                    }
+                    aria-label={(active === t.id && playing ? '暂停' : '播放') + t.title}
+                    icon={active === t.id && playing ? <Pause size={15} /> : <Play size={15} />}
                     onClick={() => play(t.id)}
                   />
                   <div className="library-name">

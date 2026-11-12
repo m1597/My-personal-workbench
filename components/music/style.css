@@ -447,8 +447,14 @@ li[data-active="true"] .music-track-icon,
   background: var(--accent-soft);
   color: var(--text);
 }
+.library-sidebar .fui-Button[aria-pressed] {
+  align-items: center;
+  font-size: var(--font-size-heading);
+  line-height: 1.5;
+  text-align: start;
+}
 .library-sidebar h3 {
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-heading);
   color: var(--text-secondary);
   margin: var(--space-12) 0 var(--space-4);
 }

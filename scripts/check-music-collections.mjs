@@ -65,6 +65,17 @@ try {
   await button('通勤').click()
   await expect(page.locator('.library-name strong')).toHaveText(['晨间', '雨夜'])
   await button('播放晨间').click()
+  const audio = page.locator('audio')
+  await expect.poll(() => audio.evaluate((el) => el.currentTime)).toBeGreaterThan(0.2)
+  await button('暂停晨间').click()
+  const pausedAt = await audio.evaluate((el) => el.currentTime)
+  await expect.poll(() => audio.evaluate((el) => el.paused)).toBe(true)
+  await button('播放晨间').click()
+  await expect.poll(() => audio.evaluate((el) => el.currentTime)).toBeGreaterThan(pausedAt)
+  for (const label of ['全部歌曲', '春天', '通勤']) {
+    await expect(button(label)).toHaveCSS('font-size', '16px')
+  }
+  await expect(page.getByRole('heading', { name: '我的歌单' })).toHaveCSS('font-size', '16px')
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).queue.length))
     .toBe(2)

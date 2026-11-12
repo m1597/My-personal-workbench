@@ -250,6 +250,11 @@ function Music() {
           .find((id) => available.has(id))
       : undefined
   function startTrack(id: string) {
+    if (current.current === id && audio.current) {
+      if (audio.current.paused) return audio.current.play()
+      audio.current.pause()
+      return Promise.resolve()
+    }
     if (shuffled) setShuffled(shuffleQueue(visibleQueue, id))
     return play(id, visibleQueue)
   }
@@ -579,12 +584,14 @@ function Music() {
                                 appearance="subtle"
                                 icon={
                                   r.id === current.current && !paused ? (
-                                    <AudioLines size={18} />
+                                    <Pause size={16} />
                                   ) : (
                                     <Play size={16} />
                                   )
                                 }
-                                aria-label={'试听' + r.title}
+                                aria-label={
+                                  (r.id === current.current && !paused ? '暂停' : '试听') + r.title
+                                }
                                 onClick={() => void act(() => startTrack(r.id))}
                               />
                             ) : (
