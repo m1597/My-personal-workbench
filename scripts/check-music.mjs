@@ -72,6 +72,11 @@ try {
   await dragMusicIn(app)
   const shell = await page(app, '/out/renderer/index.html')
   await expect(music.locator('[data-surface="embedded"]')).toBeVisible()
+  const sharedHeader = shell.locator('.dv-tabs-and-actions-container').filter({
+    has: shell.getByRole('tab', { name: 'Music', exact: true }),
+  })
+  await expect(sharedHeader.getByRole('tab', { name: '模块 2', exact: true })).toHaveCount(1)
+  expect(Math.abs((await sharedHeader.boundingBox()).height - 32)).toBeLessThanOrEqual(1)
   expect(await output(music)).toEqual([0.99, true])
   const layouts = async () => {
     await shell.getByRole('button', { name: '窗口', exact: true }).click()
