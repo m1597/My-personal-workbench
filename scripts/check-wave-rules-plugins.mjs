@@ -59,6 +59,10 @@ for (const ext of ['flac', 'm4a', 'mp3']) {
     file: path.resolve('tests/fixtures/local-music/tone.' + ext),
   })
 }
+// The file exists, but its restored index has not yet been associated by the user.
+const pendingFile = path.join(evidence, '05 手动下载.wav')
+const pendingId = store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(pendingFile).id
+store.db.prepare('UPDATE local_tracks SET awaitingLocation=1,available=0 WHERE id=?').run(pendingId)
 store.db.close()
 const launch = () =>
   electron.launch({
@@ -89,6 +93,16 @@ try {
     await button('安装本地包', entry(name)).click()
     await expect(button('打开', entry(name))).toBeVisible()
   }
+  const readPending = () =>
+    page.evaluate((id) => window.musicPlugins.call('wave', 'audio', id), pendingId)
+  await assert.rejects(readPending(), /重新定位/)
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, pendingFile)
+  await page.evaluate((id) => window.music.relocateLocal(id), pendingId)
+  await expect
+    .poll(async () => (await readPending().catch(() => null))?.peaks?.length ?? 0)
+    .toBeGreaterThan(0)
   await button('打开', entry(wave)).click()
   const plot = page.getByRole('slider', { name: '波形定位' })
   const wavePanel = page.getByRole('region', { name: wave, exact: true })

@@ -89,6 +89,7 @@ export function register(bind, getStore) {
   }
   bind('audio', async (id) => {
     const row = libraryRow(id)
+    if (!(await getStore().library.verify(row))) throw Error('文件不可用，请重新定位')
     last?.abort()
     const task = new AbortController()
     last = task
