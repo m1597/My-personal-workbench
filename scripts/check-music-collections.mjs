@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile, stat, rm } from 'node:fs/promises'
 import path from 'node:path'
 import assert from 'node:assert/strict'
 import { _electron as electron, expect } from '@playwright/test'
@@ -313,6 +313,40 @@ try {
   await assert.rejects(stat(file), { code: 'ENOENT' })
   await button('收藏').click()
   await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
+  const retryDir = path.join(root, '部分回收')
+  const retryFiles = ['A.wav', 'B.wav'].map((name) => path.join(retryDir, name))
+  await mkdir(retryDir)
+  await Promise.all(retryFiles.map((file) => writeFile(file, wave)))
+  await app.evaluate(({ dialog }, files) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: files })
+    let confirmations = 0
+    dialog.showMessageBox = async ({ detail }) => {
+      const expected = confirmations++ ? [files[1]] : files
+      if (detail !== expected.join('\n')) throw Error('重试清单与剩余文件不符')
+      return { response: 1 }
+    }
+  }, retryFiles)
+  await page.getByRole('tab', { name: '设置' }).click()
+  await button('添加文件').click()
+  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await button('部分回收').click()
+  await button('播放A').click()
+  await expect(button('暂停A')).toBeVisible()
+  await button('多选').click()
+  await page.getByRole('checkbox', { name: '全选当前列表' }).check()
+  await button('移除所选歌曲').click()
+  await rm(retryFiles[1])
+  await button('移至系统回收站').click()
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('文件已变化')
+  await assert.rejects(stat(retryFiles[0]), { code: 'ENOENT' })
+  await expect
+    .poll(() => page.locator('audio').evaluate((el) => el.paused && !el.hasAttribute('src')))
+    .toBe(true)
+  await writeFile(retryFiles[1], wave)
+  await button('移至系统回收站').click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(button('部分回收')).toHaveCount(0)
+  await assert.rejects(stat(retryFiles[1]), { code: 'ENOENT' })
   console.log(
     'PASS 单选、全选当前结果、批量加入和移除歌单、失效批次回滚、文件夹移除保留歌单播放、重命名、删除歌单、单歌移除范围、双击播放、回收站取消/失败/成功。截图 ' +
       evidence,

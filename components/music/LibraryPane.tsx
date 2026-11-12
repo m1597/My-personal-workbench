@@ -166,6 +166,11 @@ export function LibraryPane({
     id: string
     name: string
   }>()
+  const remainingIds = useMemo(() => {
+    if (!action?.ids) return undefined
+    const present = new Set(tracks.map((track) => track.id))
+    return action.ids.filter((id) => present.has(id))
+  }, [action, tracks])
   const [editName, setEditName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [failedAction, setFailedAction] = useState<typeof action>()
@@ -644,7 +649,11 @@ export function LibraryPane({
                     onChange={(_, v) => setEditName(v.value)}
                   />
                 ) : action.kind === 'song' || action.kind === 'batch' ? (
-                  <>从 FitBay 移除「{action.name}」会同步移除其歌单引用，原文件保留。</>
+                  <>
+                    从 FitBay 移除「
+                    {remainingIds ? `所选 ${remainingIds.length} 首歌曲` : action.name}
+                    」会同步移除其歌单引用，原文件保留。
+                  </>
                 ) : action.kind === 'folder' ? (
                   <>
                     移除「{action.name}
@@ -661,7 +670,7 @@ export function LibraryPane({
                     <Button
                       appearance="primary"
                       disabled={submitting}
-                      onClick={() => void confirm(() => remove(action.ids ?? action.id, false))}
+                      onClick={() => void confirm(() => remove(remainingIds ?? action.id, false))}
                     >
                       仅从 FitBay 移除
                     </Button>
@@ -675,7 +684,7 @@ export function LibraryPane({
                     )}
                     <Button
                       disabled={submitting}
-                      onClick={() => void confirm(() => remove(action.ids ?? action.id, true))}
+                      onClick={() => void confirm(() => remove(remainingIds ?? action.id, true))}
                     >
                       移至系统回收站
                     </Button>

@@ -803,7 +803,20 @@ function Music() {
               let removed = false
               const ok = await act(async () => {
                 if (trash) {
-                  if (!(await host.trashLocal(id))) return
+                  try {
+                    if (!(await host.trashLocal(id))) return
+                  } catch (error) {
+                    const playing = current.current
+                    if (Array.isArray(id) && id.includes(playing)) {
+                      const latest = await host.state()
+                      if (
+                        current.current === playing &&
+                        !latest.localTracks.some((row) => row.id === playing)
+                      )
+                        await end(false)
+                    }
+                    throw error
+                  }
                 } else await host.removeLocal(id)
                 removed = true
                 if (Array.isArray(id) ? id.includes(current.current) : id === current.current)
