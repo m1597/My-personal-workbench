@@ -10,6 +10,7 @@ import { componentView } from './component-view.mjs'
 import { musicService } from './music-service.mjs'
 
 protocol.registerSchemesAsPrivileged([
+  { scheme: 'fitbay-plugin', privileges: { standard: true, secure: true } },
   {
     scheme: 'fitbay-audio',
     privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },

@@ -162,7 +162,7 @@ try {
   const categories = player.getByRole('navigation', { name: '设置分类', includeHidden: true })
   await expect(categories).toBeHidden()
   await player.getByRole('button', { name: '设置分类', exact: true }).click()
-  await expect(categories.getByRole('button')).toHaveCount(5)
+  await expect(categories.getByRole('button')).toHaveCount(6)
   await player.screenshot({
     path: path.join(evidence, 'settings-narrow-menu.png'),
     animations: 'disabled',

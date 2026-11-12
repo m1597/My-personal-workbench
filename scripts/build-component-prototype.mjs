@@ -1,9 +1,13 @@
 import { build } from 'vite'
+import { buildMusicPlugins } from './build-music-plugins.mjs'
 import { cp, mkdir, writeFile } from 'node:fs/promises'
 const root = 'dist/component-prototype'
 for (const name of ['host', 'component', 'workbench'])
   await mkdir(`${root}/${name}`, { recursive: true })
-await cp('examples/component-host', `${root}/host`, { recursive: true })
+await cp('examples/component-host', `${root}/host`, {
+  recursive: true,
+  filter: (file) => !file.replaceAll('\\', '/').includes('component-host/plugins'),
+})
 await cp('src/renderer/public/fitbay.png', `${root}/host/fitbay.png`)
 await mkdir(`${root}/host/music`, { recursive: true })
 for (const f of [
@@ -44,6 +48,7 @@ for (const [source, output] of [
     await cp(`${source}/${file}`, `${root}/${output}/${file}`)
 }
 await cp('out/renderer', `${root}/workbench`, { recursive: true })
+await buildMusicPlugins(root)
 await writeFile(
   `${root}/host/package.json`,
   JSON.stringify(

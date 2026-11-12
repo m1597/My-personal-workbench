@@ -1,4 +1,5 @@
 import { desktopLyrics } from './desktop-lyrics.mjs'
+import { musicPlugins } from './music-plugins.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
 import { localLines, ownedLyrics } from './music-lyrics.mjs'
 import { MusicTaste } from './music-taste.mjs'
@@ -9,7 +10,7 @@ import { audioTypes, openAudio, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
-import { ipcMain, dialog, safeStorage, shell } from 'electron'
+import { ipcMain, dialog, safeStorage, shell, nativeImage } from 'electron'
 import { setTimeout as delay } from 'node:timers/promises'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
@@ -34,6 +35,7 @@ export function musicService(profile, isSender) {
     }
   }
   const overlay = desktopLyrics()
+  const plugins = musicPlugins(profile, () => store, dialog, nativeImage)
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   let musicView
@@ -53,6 +55,15 @@ export function musicService(profile, isSender) {
         throw e
       }
     })
+  bind('pluginList', () => plugins.list())
+  bind('pluginInstall', (id, method, url) => plugins.install(id, method, url))
+  bind('pluginRemove', (id) => plugins.remove(id))
+  bind('pluginCall', (id, action, args) => plugins.call(id, action, args))
+  bind('musicGuide', () => ({
+    seen: Boolean(store.get('music-guide-v1')),
+    script: path.resolve(import.meta.dirname, '../../../scripts/music-source-mcp.mjs'),
+  }))
+  bind('markMusicGuide', () => store.set('music-guide-v1', 1))
   const lx = registerLx(
     bind,
     () => store,
@@ -496,6 +507,7 @@ export function musicService(profile, isSender) {
     register(session) {
       if (!sessions.has(session)) {
         session.protocol.handle('fitbay-audio', (req) => localStream(req, grant, store?.library))
+        session.protocol.handle('fitbay-plugin', (req) => plugins.resource(req))
         sessions.add(session)
       }
     },

@@ -1,4 +1,6 @@
 import { TrackMenu } from './TrackMenu'
+import { PluginPage, PluginSettings, type PluginRow } from './MusicPlugins'
+import { MusicGuide } from './MusicGuide'
 import { observeListening } from './listening'
 import type { SourceInventory } from './MusicSourcesSettings'
 import {
@@ -175,6 +177,34 @@ function shuffleQueue(ids: string[], first?: string) {
   return result
 }
 function Music() {
+  const [plugins, setPlugins] = useState<PluginRow[]>([])
+  const [pluginId, setPluginId] = useState('')
+  const [guide, setGuide] = useState(false)
+  const [script, setScript] = useState('')
+  const reloadPlugins = async () => setPlugins(await window.musicPlugins.list())
+  useEffect(() => {
+    let alive = true
+    void window.musicPlugins
+      .list()
+      .then((rows) => {
+        if (alive) setPlugins(rows)
+      })
+      .catch((e) => alive && setError(String(e)))
+    void window.musicPlugins
+      .guide()
+      .then(async (info) => {
+        if (!alive) return
+        setScript(info.script)
+        if (!info.seen) {
+          setGuide(true)
+          await window.musicPlugins.markGuide()
+        }
+      })
+      .catch((e) => alive && setError(String(e)))
+    return () => {
+      alive = false
+    }
+  }, [])
   const [state, setState] = useState<State>(),
     [batch, setBatch] = useState(''),
     [paused, setPaused] = useState(true),
@@ -185,6 +215,7 @@ function Music() {
   function openSettings(category: SettingsCategory) {
     setSettingsCategory(category)
     setTab('settings')
+    requestAnimationFrame(() => document.querySelector('.music-scroll')?.scrollTo(0, 0))
   }
   function openMusicSources() {
     openSettings('sources')
@@ -547,7 +578,9 @@ function Music() {
                   ? '本地音乐'
                   : tab === 'settings'
                     ? '设置'
-                    : '每日推荐'}
+                    : tab === 'plugins'
+                      ? '扩展'
+                      : '每日推荐'}
             </small>
           </div>
         </header>
@@ -556,18 +589,30 @@ function Music() {
         className="music-tabs"
         aria-label="音乐页面"
         selectedValue={tab}
-        onTabSelect={(_, data) => setTab(String(data.value))}
+        onTabSelect={(_, data) => {
+          setGuide(false)
+          setTab(String(data.value))
+        }}
       >
         <Tab value="library">本地曲库</Tab>
         <Tab value="download">下载音乐</Tab>
         <Tab value="audition">每日推荐</Tab>
         <Tab value="settings">设置</Tab>
+        {plugins.some((row) => row.installed) && <Tab value="plugins">扩展</Tab>}
       </TabList>
+      {guide && (
+        <MusicGuide
+          script={script}
+          close={() => setGuide(false)}
+          go={openSettings}
+          recommend={() => setTab('audition')}
+        />
+      )}
       <main key={tab} className="music-scroll">
         {tab === 'library' ? (
           <LibraryPane
             refresh={refresh}
-            favorite={(id,on)=>act(()=>host.setFavorite(id,on))}
+            favorite={(id, on) => act(() => host.setFavorite(id, on))}
             rows={localRows}
             total={categoryRows.length}
             tracks={state?.localTracks ?? []}
@@ -621,6 +666,17 @@ function Music() {
         ) : tab === 'settings' ? (
           state && (
             <MusicSettings
+              plugins={
+                <PluginSettings
+                  rows={plugins}
+                  reload={reloadPlugins}
+                  guide={() => setGuide(true)}
+                  open={(id) => {
+                    setPluginId(id)
+                    setTab('plugins')
+                  }}
+                />
+              }
               category={settingsCategory}
               selectCategory={setSettingsCategory}
               models={state.models}
@@ -629,6 +685,17 @@ function Music() {
               refresh={refresh}
             />
           )
+        ) : tab === 'plugins' ? (
+          <PluginPage
+            rows={plugins}
+            selected={pluginId}
+            select={setPluginId}
+            tracks={state?.localTracks ?? []}
+            activeId={now || undefined}
+            play={(id) => void act(() => startTrack(id, [id]))}
+            audio={audio.current}
+            refresh={refresh}
+          />
         ) : tab === 'download' ? (
           <DownloadPane
             preferredQuality={state?.prefs.quality}
