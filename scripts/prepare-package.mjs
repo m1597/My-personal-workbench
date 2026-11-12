@@ -1,57 +1,131 @@
+import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-const root = process.cwd()
-const stage = path.resolve(root, '.cache/package-app')
-if (path.dirname(stage) !== path.resolve(root, '.cache')) throw new Error('打包暂存目录越界')
-const pkg = JSON.parse(await readFile('package.json', 'utf8'))
+const project = process.cwd()
+const prototype = path.resolve('dist/component-prototype')
 const lock = JSON.parse(await readFile('package-lock.json', 'utf8'))
-const notices = [
-  'Third-party notices for the bundled renderer. Electron/Chromium notices are also shipped beside the executable.',
+const pkg = JSON.parse(await readFile('package.json', 'utf8'))
+
+const commonHostFiles = [
+  'main.mjs',
+  'installed-products.mjs',
+  'component-view.mjs',
+  'builtin-windows.mjs',
+  'builtin-preload.cjs',
+  'workbench-preload.cjs',
+  'native-dock.mjs',
+  'fitbay.png',
 ]
-const upstreamLicenses = {
+const fallbackLicenses = {
   '@fluentui/react-icons': 'resources/licenses/fluentui-system-icons.txt',
   'embla-carousel': 'resources/licenses/embla-carousel.txt',
   'embla-carousel-autoplay': 'resources/licenses/embla-carousel.txt',
   'embla-carousel-fade': 'resources/licenses/embla-carousel.txt',
+  '@tokenizer/token': 'node_modules/@tokenizer/token/README.md',
 }
-for (const [location, info] of Object.entries(lock.packages)) {
-  if (!location || info.dev || info.link) continue
-  const folder = path.resolve(root, location)
-  if (!folder.startsWith(`${path.resolve(root, 'node_modules')}${path.sep}`))
-    throw new Error('依赖路径越界')
-  const metadata = JSON.parse(await readFile(path.join(folder, 'package.json'), 'utf8'))
-  const licenses = (await readdir(folder)).filter((name) =>
-    /^(licen[cs]e|copying|notice)(\.|$)/i.test(name),
-  )
-  const upstream = upstreamLicenses[metadata.name]
-  if (licenses.length === 0 && !upstream) throw new Error(`请核查并补齐许可证：${metadata.name}`)
-  notices.push(
-    `\n===== ${metadata.name}@${metadata.version} (${metadata.license ?? 'see license'}) =====`,
-  )
-  for (const file of licenses) notices.push(await readFile(path.join(folder, file), 'utf8'))
-  if (licenses.length === 0) notices.push(await readFile(upstream, 'utf8'))
+async function notices() {
+  const lines = [
+    'Third-party notices. Electron and Chromium notices are included beside the executable.',
+  ]
+  for (const [dir, info] of Object.entries(lock.packages)) {
+    if (!dir || info.dev || (!existsSync(dir) && info.optional)) continue
+    const metadata = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'))
+    const files = (await readdir(dir)).filter((f) => /^(licen[cs]e|copying|notice)(\.|$)/i.test(f))
+    const fallback = fallbackLicenses[metadata.name]
+    if (!files.length && !fallback) throw Error(`缺少依赖许可证：${metadata.name}`)
+    lines.push(`\n===== ${metadata.name}@${metadata.version} =====`)
+    for (const f of files) lines.push(await readFile(path.join(dir, f), 'utf8'))
+    if (!files.length) lines.push(await readFile(fallback, 'utf8'))
+  }
+  return `${lines.join('\n')}\n`
 }
-// Only this disposable, fixed staging directory is replaced. No user data copied.
-await rm(stage, { recursive: true, force: true })
-await mkdir(stage, { recursive: true })
-await cp('out', path.join(stage, 'out'), { recursive: true })
-await cp('LICENSE', path.join(stage, 'LICENSE'))
-await writeFile(path.join(stage, 'THIRD_PARTY_NOTICES.txt'), `${notices.join('\n')}\n`)
-await writeFile(
-  path.join(stage, 'package.json'),
-  `${JSON.stringify(
-    {
-      name: pkg.name,
-      version: pkg.version,
-      description: pkg.description,
-      type: pkg.type,
-      main: pkg.main,
-      author: 'MON.',
-      license: 'MIT',
-    },
-    null,
-    2,
-  )}\n`,
-)
-console.log(`打包暂存已准备：${stage}；只包含构建结果与许可证。`)
+// Retain npm's locked hoisted/nested layout, including the installed Windows native binary.
+async function stageModules(dest, roots) {
+  const seen = new Set()
+  async function add(parent, name, optional) {
+    let folder = parent
+    let dir
+    while (folder === project || folder.startsWith(project + path.sep)) {
+      const candidate = path.join(folder, 'node_modules', name)
+      if (existsSync(path.join(candidate, 'package.json'))) {
+        dir = candidate
+        break
+      }
+      folder = path.dirname(folder)
+    }
+    if (!dir && optional) return
+    if (!dir) throw Error(`缺少宿主运行依赖：${name}`)
+    if (seen.has(dir)) return
+    seen.add(dir)
+    const rel = path.relative(project, dir)
+    if (!lock.packages[rel.split(path.sep).join('/')]) throw Error(`运行依赖未锁定：${rel}`)
+    await cp(dir, path.join(dest, rel), {
+      recursive: true,
+      filter: (f) => f === dir || path.basename(f) !== 'node_modules',
+    })
+    const meta = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'))
+    for (const dep of Object.keys(meta.dependencies || {})) await add(dir, dep, false)
+    for (const dep of Object.keys(meta.optionalDependencies || {})) await add(dir, dep, true)
+  }
+  for (const name of roots) await add(project, name, false)
+}
+
+export async function prepareProduct(product) {
+  if (!['music', 'workbench'].includes(product)) throw Error('未知产品')
+  const music = product === 'music'
+  const stage = path.resolve('.cache', 'fitbay-package', product)
+  await rm(stage, { recursive: true, force: true })
+  const app = path.join(stage, 'app')
+  await mkdir(path.join(app, 'host'), { recursive: true })
+  if (music) {
+    const hostFiles = await readdir('examples/component-host', { withFileTypes: true })
+    for (const entry of hostFiles) {
+      if (entry.isFile() && entry.name !== 'sample-preload.cjs')
+        await cp(path.join(prototype, 'host', entry.name), path.join(app, 'host', entry.name))
+    }
+    for (const file of ['fitbay.png', 'plugin-catalog.json'])
+      await cp(path.join(prototype, 'host', file), path.join(app, 'host', file))
+    await mkdir(path.join(app, 'host/music'))
+    for (const file of [
+      'offline-source.mjs',
+      'store.mjs',
+      'local-files.mjs',
+      'library-worker.mjs',
+      'local-library.mjs',
+    ])
+      await cp(path.join(prototype, 'host/music', file), path.join(app, 'host/music', file))
+    await cp(path.join(prototype, 'music'), path.join(app, 'music'), { recursive: true })
+    await mkdir(path.join(app, 'scripts'))
+    await cp('scripts/music-source-mcp.mjs', path.join(app, 'scripts/music-source-mcp.mjs'))
+  } else {
+    for (const f of commonHostFiles)
+      await cp(path.join(prototype, 'host', f), path.join(app, 'host', f))
+    await cp('out/renderer', path.join(app, 'workbench'), { recursive: true })
+  }
+  await cp('LICENSE', path.join(app, 'LICENSE'))
+  await writeFile(path.join(app, 'THIRD_PARTY_NOTICES.txt'), await notices())
+  await writeFile(
+    path.join(app, 'package.json'),
+    `${JSON.stringify(
+      {
+        name: `fitbay-${product}`,
+        version: pkg.version,
+        type: 'module',
+        main: 'host/main.mjs',
+        fitbayProduct: product,
+        description: music ? 'FitBay 独立音乐组件' : 'FitBay 个人工作台',
+        author: 'MON.',
+        license: 'MIT',
+      },
+      null,
+      2,
+    )}\n`,
+  )
+  const modules = path.join(stage, 'runtime')
+  await stageModules(
+    modules,
+    music ? ['koffi', 'ipaddr.js', 'music-metadata', 'quickjs-emscripten'] : ['koffi'],
+  )
+  return { app, modules: path.join(modules, 'node_modules'), version: pkg.version }
+}

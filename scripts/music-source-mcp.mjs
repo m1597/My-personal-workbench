@@ -1,14 +1,19 @@
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import {
-  requestSourceTool,
-  sourceTools,
-  validCall,
-} from '../examples/component-host/music-source-pipe.mjs'
 
 // Configuration is supplied by the operator at launch, never by tools/call.
 const root = fileURLToPath(new URL('../', import.meta.url))
-const profile = process.argv[2] || path.join(root, 'local', 'desktop-profile')
+const installed =
+  JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).fitbayProduct === 'music'
+const { requestSourceTool, sourceTools, validCall } = await import(
+  installed ? '../host/music-source-pipe.mjs' : '../examples/component-host/music-source-pipe.mjs'
+)
+const profile =
+  process.argv[2] ||
+  (installed
+    ? path.join(process.env.APPDATA, 'FitBay', 'desktop-profile')
+    : path.join(root, 'local', 'desktop-profile'))
 if (!path.isAbsolute(profile) || process.argv.length > 3)
   throw Error('用法：node music-source-mcp.mjs [绝对 profile 路径]')
 const version = '2025-06-18'
