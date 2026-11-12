@@ -63,6 +63,8 @@ try {
     await shell.getByRole('button', { name: '窗口', exact: true }).click()
     await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
   }
+  const editorTab = shell.getByRole('tab', { name: '模块 2', exact: true })
+  await editorTab.click()
   await layouts()
   await shell.getByRole('textbox', { name: '新布局名称' }).fill('试听')
   await shell.getByRole('button', { name: '保存当前布局' }).click()
@@ -73,6 +75,28 @@ try {
   await layouts()
   await shell.getByRole('button', { name: '切换布局' }).click()
   await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
+  const musicTab = shell.getByRole('tab', { name: 'Music', exact: true })
+  await musicTab.click()
+  await dragMusicOut(app)
+  await expect(music.locator('[data-surface="window"]')).toBeVisible()
+  const detachedTime = await clock()
+  await layouts()
+  await shell.getByRole('button', { name: '切换布局' }).click()
+  await expect(music.locator('[data-surface="embedded"]')).toBeVisible()
+  await expect(editorTab).toHaveAttribute('aria-selected', 'true')
+  await expect(musicTab).toHaveCount(1)
+  expect(
+    await app.evaluate(
+      ({ BaseWindow }) =>
+        BaseWindow.getAllWindows().filter((w) => w.getTitle() === 'Music' && w.isVisible()).length,
+    ),
+  ).toBe(0)
+  await expect.poll(clock).toBeGreaterThan(detachedTime)
+  expect(
+    await music
+      .locator('audio')
+      .evaluate((a) => [a === window.originalAudio, a.paused, window.loads]),
+  ).toEqual([true, false, 0])
   const dockTime = await clock()
   await promisify(execFile)(executable, [...args, '--mode=music'], {
     env,

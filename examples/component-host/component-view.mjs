@@ -190,19 +190,22 @@ export function componentView({
       broadcast()
     })
     error = ''
-    if (restoreWindow) {
-      view.setVisible(false)
-      moveTo(restoreWindow)
-      mode = 'docked'
-      phase = 'ready'
-      broadcast()
-    } else if (showDetached) detach()
+    if (restoreWindow) restoreDockedView(restoreWindow)
+    else if (showDetached) detach()
     await view.webContents.loadFile(entry, {
       query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {},
     })
     if (music && view === loadingView && !loadingView.webContents.isDestroyed())
       loadingView.setBackgroundColor('#00000000')
     return true
+  }
+  function restoreDockedView(target) {
+    view.setVisible(false)
+    moveTo(target)
+    mode = 'docked'
+    phase = 'ready'
+    standalone?.hide()
+    broadcast()
   }
   function cancelAttach(reason) {
     clearTimeout(transferTimer)
@@ -268,6 +271,12 @@ export function componentView({
       ipcMain.handle(music ? 'music-prototype:restore' : 'prototype:restore', async (event) => {
         if (!isShell(event)) throw new Error('DENIED')
         if (phase === 'stopped') await openComponent(shell())
+        else if (music && phase === 'ready' && mode === 'standalone') {
+          // The saved slot can be an inactive tab. Its renderer will report bounds
+          // when visible; adopting the live player now preserves the active tab.
+          error = ''
+          restoreDockedView(shell())
+        }
       })
       if (music)
         ipcMain.handle('music-prototype:close', (event) => {
