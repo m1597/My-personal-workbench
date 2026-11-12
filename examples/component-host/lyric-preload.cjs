@@ -3,7 +3,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const lock = document.querySelector('button')
   lock.addEventListener('click', () => {
     const locked = document.body.classList.toggle('locked')
-    lock.textContent = locked ? '解锁' : '锁定'
+    lock.title = locked ? '解锁' : '锁定'
+    lock.setAttribute('aria-label', lock.title)
     lock.setAttribute('aria-pressed', String(locked))
   })
   ipcRenderer.on('lyric-line', (_, line) => {

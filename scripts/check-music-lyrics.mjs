@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import { mkdtemp, writeFile, readFile } from 'node:fs/promises'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
@@ -36,7 +38,8 @@ assert.deepEqual(await localLines(a), [
   [9, '第二句'],
 ])
 assert.equal(await ownedLyrics(store.db, a), lyricPath(a))
-await writeFile(lyricPath(b), '[00:00]自备歌词')
+const localLyric = 'Inside the hollow we begain'
+await writeFile(lyricPath(b), '[00:00]' + localLyric)
 await saveLyrics(store.db, b, async () => {
   throw Error('不应覆盖本地歌词')
 })
@@ -71,6 +74,7 @@ try {
   await expect(overlay.locator('strong')).toHaveText('第一句')
   await overlay.getByRole('button', { name: '锁定' }).click()
   await expect(overlay.locator('body')).toHaveClass('locked')
+  await expect(overlay.locator('body')).toHaveCSS('-webkit-app-region', 'no-drag')
   await button('暂停').click()
   await page.locator('audio').evaluate((el) => {
     el.currentTime = 6
@@ -78,9 +82,67 @@ try {
   await expect(overlay.locator('strong')).toHaveText('第二句')
   await overlay.screenshot({ path: path.join(root, 'desktop-lyrics.png') })
   await button('下一首').click()
-  await expect(overlay.locator('strong')).toHaveText('自备歌词')
+  await expect(overlay.locator('strong')).toHaveText(localLyric)
+  await overlay.getByRole('button', { name: '解锁' }).click()
+  await expect(overlay.locator('body')).toHaveCSS('-webkit-app-region', 'drag')
+  const overlayGeometry = () =>
+    app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .find((win) => win.webContents.getTitle() === '桌面歌词')
+        .getBounds(),
+    )
+  const first = await overlayGeometry()
+  // Simulate the Windows move loop on the test HWND without moving the system pointer.
+  const handle =
+    process.platform === 'win32' &&
+    (await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .find((w) => w.webContents.getTitle() === '桌面歌词')
+        .getNativeWindowHandle()
+        .readBigUInt64LE()
+        .toString(),
+    ))
+  const notifyMove = async (message) => {
+    if (handle)
+      await promisify(execFile)(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-File',
+          path.resolve('scripts/native-dock-probe.ps1'),
+          handle,
+          String(message),
+        ],
+        { windowsHide: true, timeout: 10000 },
+      )
+  }
+  await notifyMove(0x231)
+  await notifyMove(0x216)
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getTitle() === '桌面歌词')
+    const [x, y] = win.getPosition()
+    win.setPosition(x - 160, y + 120)
+  })
+  await notifyMove(0x232)
+  const moved = await overlayGeometry()
+  assert.notDeepEqual(moved, first)
   await button('桌面歌词').click()
   await expect.poll(() => overlay.isClosed()).toBe(true)
+  const openingAgain = app.waitForEvent('window')
+  await button('桌面歌词').click()
+  const reopened = await openingAgain
+  await expect(reopened.locator('strong')).toHaveText(localLyric)
+  const offsetFromCenter = await reopened.locator('strong').evaluate((el) => {
+    const rect = el.getBoundingClientRect()
+    return Math.abs(rect.x + rect.width / 2 - window.innerWidth / 2)
+  })
+  assert.ok(offsetFromCenter < 1)
+  const restored = await overlayGeometry()
+  console.log({ first, moved, restored })
+  assert.deepEqual(restored, moved)
+  await reopened.screenshot({ path: path.join(root, 'desktop-lyrics-reopened.png') })
+  await button('桌面歌词').click()
   await writeFile(lyricPath(a), '[00:00]用户修改')
   const db = new MusicStore(path.join(profile, 'fitbay-music'))
   assert.equal(await ownedLyrics(db.db, a), null)
