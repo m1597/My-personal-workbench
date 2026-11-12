@@ -43,7 +43,12 @@ export function musicService(
       store.library.changed = queueTasteUpdate
     }
   }
-  const overlay = desktopLyrics(() => store)
+  const overlay = desktopLyrics(
+    () => store,
+    (locked) => {
+      if (musicView && !musicView.isDestroyed()) musicView.send('music:lyric-locked', locked)
+    },
+  )
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   let musicView
@@ -103,6 +108,7 @@ export function musicService(
     }
   }
   bind('showLyrics', (on) => overlay.show(on === true))
+  bind('unlockLyrics', () => overlay.unlock())
   bind('lyricLine', (line) => overlay.update(typeof line === 'string' ? line.slice(0, 500) : ''))
   bind('lyrics', async (id) => {
     if (!text(id)) return []

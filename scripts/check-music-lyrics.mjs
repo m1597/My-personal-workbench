@@ -103,8 +103,37 @@ try {
   await expect(overlay.locator('button')).toHaveCSS('opacity', '1')
   await button('下一首').click()
   await expect(overlay.locator('strong')).toHaveText('第一句')
+  const handle =
+    process.platform === 'win32' &&
+    (await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .find((w) => w.webContents.getTitle() === '桌面歌词')
+        .getNativeWindowHandle()
+        .readBigUInt64LE()
+        .toString(),
+    ))
+  async function nativeProbe(...args) {
+    return promisify(execFile)(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-File',
+        path.resolve('scripts/native-dock-probe.ps1'),
+        handle,
+        ...args,
+      ],
+      { windowsHide: true, timeout: 10000 },
+    )
+  }
+  async function checkPassThrough(expected) {
+    if (!handle) return
+    const { stdout } = await nativeProbe('-ReadExtendedStyle')
+    assert.equal(Boolean(Number(stdout.trim()) & 0x20), expected, 'WS_EX_TRANSPARENT')
+  }
   await overlay.getByRole('button', { name: '锁定' }).click()
   await expect(overlay.locator('body')).toHaveClass('locked')
+  await checkPassThrough(true)
   await expect(overlay.locator('body')).toHaveCSS('-webkit-app-region', 'no-drag')
   await button('暂停').click()
   await page.locator('audio').evaluate((el) => {
@@ -116,8 +145,10 @@ try {
   await expect(overlay.locator('strong')).toBeEmpty()
   await button('上一首').click()
   await expect(overlay.locator('strong')).toHaveText('第一句')
-  await overlay.getByRole('button', { name: '解锁' }).click()
+  await expect(overlay.locator('button')).toBeHidden()
+  await button('解锁桌面歌词').click()
   await expect(overlay.locator('body')).toHaveCSS('-webkit-app-region', 'drag')
+  await checkPassThrough(false)
   const overlayGeometry = () =>
     app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()
@@ -126,29 +157,8 @@ try {
     )
   const first = await overlayGeometry()
   // Simulate the Windows move loop on the test HWND without moving the system pointer.
-  const handle =
-    process.platform === 'win32' &&
-    (await app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()
-        .find((w) => w.webContents.getTitle() === '桌面歌词')
-        .getNativeWindowHandle()
-        .readBigUInt64LE()
-        .toString(),
-    ))
   const notifyMove = async (message) => {
-    if (handle)
-      await promisify(execFile)(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-File',
-          path.resolve('scripts/native-dock-probe.ps1'),
-          handle,
-          String(message),
-        ],
-        { windowsHide: true, timeout: 10000 },
-      )
+    if (handle) await nativeProbe(String(message))
   }
   await notifyMove(0x231)
   await notifyMove(0x216)

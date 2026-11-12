@@ -4,6 +4,7 @@ const names = [
   'markMusicGuide',
   'lyrics',
   'showLyrics',
+  'unlockLyrics',
   'lyricLine',
   'lxSources',
   'lxRefreshCatalog',
@@ -73,6 +74,11 @@ bridge.onLyricsSaved = (listener) => {
   const notify = () => listener()
   ipcRenderer.on('music:lyrics-saved', notify)
   return () => ipcRenderer.removeListener('music:lyrics-saved', notify)
+}
+bridge.onLyricLocked = (listener) => {
+  const notify = (_, locked) => listener(locked)
+  ipcRenderer.on('music:lyric-locked', notify)
+  return () => ipcRenderer.removeListener('music:lyric-locked', notify)
 }
 bridge.onSourcesChanged = (listener) => {
   const notify = () => listener()

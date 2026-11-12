@@ -33,13 +33,24 @@ function restoredBounds(saved) {
   )
 }
 
-export function desktopLyrics(getStore) {
+export function desktopLyrics(getStore, onLockChanged) {
   let win
   let line = ''
+  let locked = false
+  function setLocked(value) {
+    if (!win || win.isDestroyed() || locked === value) return
+    win.setIgnoreMouseEvents(value)
+    locked = value
+    win.webContents.send('lyric-locked', value)
+    onLockChanged(value)
+  }
   const publish = () => {
     if (win && !win.isDestroyed()) win.webContents.send('lyric-line', line)
   }
   return {
+    unlock() {
+      setLocked(false)
+    },
     show(on) {
       if (!on) {
         win?.close()
@@ -65,6 +76,9 @@ export function desktopLyrics(getStore) {
           nodeIntegration: false,
           preload: fileURLToPath(new URL('./lyric-preload.cjs', import.meta.url)),
         },
+      })
+      win.webContents.ipc.on('lyric-lock', (event) => {
+        if (event.senderFrame === win.webContents.mainFrame) setLocked(true)
       })
 
       function constrain() {
@@ -113,6 +127,8 @@ export function desktopLyrics(getStore) {
         screen.off('display-removed', remember)
         win = undefined
         line = ''
+        if (locked) onLockChanged(false)
+        locked = false
       })
       win.once('ready-to-show', () => {
         win.setBounds(initial)

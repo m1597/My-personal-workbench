@@ -152,6 +152,8 @@ declare global {
       refreshLocal(): Promise<void>
       lyrics(id: string): Promise<[number, string][]>
       showLyrics(on: boolean): Promise<void>
+      unlockLyrics(): Promise<void>
+      onLyricLocked(listener: (locked: boolean) => void): () => void
       lyricLine(line: string): Promise<void>
       removeLocal(id: string | string[]): Promise<void>
       trashLocal(id: string | string[]): Promise<boolean>
@@ -579,6 +581,8 @@ function Music() {
   const localMode = active ? 'duration' in active : tab === 'library'
   const elapsed = current.current ? time : (state?.position ?? 0)
   const [lyricsOpen, setLyricsOpen] = useState(false)
+  const [lyricsLocked, setLyricsLocked] = useState(false)
+  useEffect(() => host.onLyricLocked(setLyricsLocked), [])
   const [lyrics, setLyrics] = useState<{
     id: string
     lines: [number, string][]
@@ -1148,8 +1152,8 @@ function Music() {
           <Button
             size="small"
             appearance="subtle"
-            aria-label="桌面歌词"
-            title="桌面歌词"
+            aria-label={lyricsLocked ? '解锁桌面歌词' : '桌面歌词'}
+            title={lyricsLocked ? '解锁桌面歌词，恢复拖动' : '桌面歌词'}
             icon={
               <span className="music-lyric-glyph" aria-hidden="true">
                 词
@@ -1158,11 +1162,17 @@ function Music() {
             aria-pressed={lyricsOpen}
             onClick={() =>
               void act(async () => {
+                if (lyricsLocked) {
+                  await host.unlockLyrics()
+                  return
+                }
                 await host.showLyrics(!lyricsOpen)
                 setLyricsOpen(!lyricsOpen)
               })
             }
-          />
+          >
+            {lyricsLocked && '解锁'}
+          </Button>
           <PlaybackQueue
             active={active}
             tracks={state?.localTracks}
