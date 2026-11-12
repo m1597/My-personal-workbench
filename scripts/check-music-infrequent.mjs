@@ -124,12 +124,20 @@ try {
     .first()
     .dblclick({ position: { x: 120, y: 15 } })
   await expect.poll(() => heard('旧录音')).not.toBeNull()
+  const firstListen = await heard('旧录音')
+  const audio = page.locator('audio')
+  await expect.poll(() => audio.evaluate((el) => el.ended)).toBe(true)
+  await audio.evaluate(async (el) => {
+    await el.play()
+    el.currentTime = el.duration - 0.25
+  })
+  await expect.poll(() => audio.evaluate((el) => el.ended)).toBe(true)
+  assert.equal(await heard('旧录音'), firstListen, '短歌重播跳尾不得复用上一遍的播放区间')
   await page.getByRole('searchbox').fill('长录音')
   await page
     .locator('.library-row')
     .first()
     .dblclick({ position: { x: 120, y: 15 } })
-  const audio = page.locator('audio')
   await audio.evaluate((el) => {
     el.currentTime = 0
     return el.play()

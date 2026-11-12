@@ -4,6 +4,7 @@ export function observeListening(audio: HTMLAudioElement, heard: (url: string) =
   let reported = false
   let position: number | undefined
   let started = 0
+  const intervals: [number, number][] = []
   const begin = () => {
     position = audio.currentTime
     started = performance.now()
@@ -15,7 +16,14 @@ export function observeListening(audio: HTMLAudioElement, heard: (url: string) =
     if (position === undefined || audio.seeking) return
     const elapsed = (performance.now() - started) / 1000
     const advance = audio.currentTime - position
-    if (advance > 0 && advance <= elapsed * audio.playbackRate + 0.1) seconds += advance
+    if (advance > 0 && advance <= elapsed * audio.playbackRate + 0.1) {
+      seconds += advance
+      if (audio.duration <= 30 && !reported) {
+        const last = intervals.at(-1)
+        if (last && last[1] === position) last[1] = audio.currentTime
+        else intervals.push([position, audio.currentTime])
+      }
+    }
     begin()
     if (!reported && seconds >= 30) report()
   }
@@ -31,17 +39,18 @@ export function observeListening(audio: HTMLAudioElement, heard: (url: string) =
     suspend()
     seconds = 0
     reported = false
+    intervals.length = 0
   }
   const ended = () => {
     stop()
-    if (
-      !reported &&
-      audio.duration <= 30 &&
-      audio.played.length === 1 &&
-      audio.played.start(0) < 0.01 &&
-      audio.played.end(0) >= audio.duration - 0.05
-    )
-      report()
+    if (!reported && audio.duration <= 30 && intervals.length) {
+      let covered = 0
+      for (const [from, to] of intervals.sort((a, b) => a[0] - b[0])) {
+        if (from > covered + 0.01) break
+        covered = Math.max(covered, to)
+      }
+      if (covered > 0 && covered >= audio.duration - 0.01) report()
+    }
     reset()
   }
   const handlers = {
