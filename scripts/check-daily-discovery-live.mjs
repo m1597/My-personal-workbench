@@ -104,7 +104,7 @@ try {
   assert.equal(db.prepare('SELECT count(*) AS n FROM batches').get().n, old.size)
   assert.deepEqual(await fs.readdir(output), [])
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.getByRole('button', { name: '取消生成' })).toBeHidden({
+  await expect(page.getByRole('button', { name: '终止本次推荐' })).toBeHidden({
     timeout: 1200000,
   })
   const alert = await page.getByRole('alert').allTextContents()

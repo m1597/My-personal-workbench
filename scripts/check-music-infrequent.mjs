@@ -79,8 +79,8 @@ try {
   await expect(rows.locator('strong')).toHaveText(['半年'])
   await select('未收听时间', '30 天')
   await expect(rows).toHaveCount(4)
-  await select('不常听排序', '文件最大')
-  await expect(rows.locator('strong')).toHaveText(['长录音', '半年', '整月', '旧录音'])
+  await expect(page.getByRole('combobox', { name: '不常听排序' })).toHaveCount(0)
+  await expect(rows.locator('strong')).toHaveText(['半年', '旧录音', '长录音', '整月'])
   for (const name of ['半年', '整月'])
     await page.getByRole('checkbox', { name: '选择' + name }).check()
   await expect(page.getByText('已选 2 首 · 218.8 KiB', { exact: true })).toBeVisible()
@@ -153,7 +153,7 @@ try {
   await button('不常听').click()
   await expect(rows).toHaveCount(0)
   console.log(
-    'PASS 旧库观察起点，三档筛选与排序，多选容量、回收取消、仅移除索引、短歌完整播完和累计播放 30 秒。截图 ' +
+    'PASS 旧库观察起点，三档时间筛选与最久未听优先，多选容量、回收取消、仅移除索引、短歌完整播完和累计播放 30 秒。截图 ' +
       evidence,
   )
 } finally {

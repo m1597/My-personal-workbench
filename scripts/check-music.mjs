@@ -38,7 +38,7 @@ try {
   await music.getByRole('option', { name: 'DeepSeek' }).click()
   await music.getByRole('button', { name: '取消', exact: true }).click()
   await music.getByRole('tab', { name: '每日推荐' }).click()
-  await expect(music.getByRole('spinbutton', { name: '推荐首数' })).toHaveValue('5')
+  await expect(music.getByRole('textbox', { name: '推荐首数' })).toHaveValue('5')
   await expect(music.locator('li')).toHaveCount(5)
   await music.getByText('匹配目录', { exact: true }).click()
   await music.getByRole('button', { name: '夜航变奏 · 变奏版' }).click()

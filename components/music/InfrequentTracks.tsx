@@ -34,15 +34,12 @@ const formatBytes = (n: number) => {
 }
 export function InfrequentTracks({ rows, days, changeDays, active, playing, play, remove }: Props) {
   const [selected, setSelected] = useState(new Set<string>())
-  const [sort, setSort] = useState('最久未听')
   const [action, setAction] = useState<'index' | 'trash'>()
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const sorted = [...rows].sort(
     (a, b) =>
-      (sort === '文件最大'
-        ? (b.size ?? -1) - (a.size ?? -1)
-        : (a.lastHeardAt ?? a.observedAt) - (b.lastHeardAt ?? b.observedAt)) ||
+      (a.lastHeardAt ?? a.observedAt) - (b.lastHeardAt ?? b.observedAt) ||
       a.title.localeCompare(b.title),
   )
   const chosen = sorted.filter((t) => selected.has(t.id))
@@ -101,22 +98,6 @@ export function InfrequentTracks({ rows, days, changeDays, active, playing, play
                 {d + ' 天'}
               </Option>
             ))}
-          </Dropdown>
-        </label>
-        <label htmlFor="infrequent-sort">
-          排序
-          <Dropdown
-            id="infrequent-sort"
-            inlinePopup
-            aria-label="不常听排序"
-            size="small"
-            value={sort}
-            selectedOptions={[sort]}
-            listbox={{ className: 'component-popup' }}
-            onOptionSelect={(_, d) => d.optionValue && setSort(d.optionValue)}
-          >
-            <Option>最久未听</Option>
-            <Option>文件最大</Option>
           </Dropdown>
         </label>
       </div>

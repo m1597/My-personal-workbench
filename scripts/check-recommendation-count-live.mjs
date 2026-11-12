@@ -156,7 +156,7 @@ try {
   })
   const generate = page.getByRole('button', { name: '生成推荐', exact: true })
   await generate.click()
-  await expect(page.getByRole('button', { name: '取消生成' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '终止本次推荐' })).toBeVisible()
   await expect(generate).toBeEnabled({ timeout: 30 * 60_000 })
   const state = await page.evaluate(() => window.music.state())
   evidence.rounds = await app.evaluate(() => globalThis.recommendationRounds)

@@ -20,6 +20,7 @@ export function RecommendationComposer({
   onGenerating,
 }: Props) {
   const [description, setDescription] = useState(initialDraft)
+  const [stopping, setStopping] = useState(false)
   const [submitting, setBusy] = useState(false)
   const [count, setCount] = useState('5')
   const target = Number(count)
@@ -65,25 +66,39 @@ export function RecommendationComposer({
           推荐首数
           <Input
             id="music-count"
-            type="number"
-            min={1}
-            step={1}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]+"
             aria-label="推荐首数"
             value={activeTarget ? String(activeTarget) : count}
             disabled={busy}
             onChange={(_, d) => setCount(d.value)}
           />
         </label>
-        <Button disabled={busy || !validCount} appearance="primary" onClick={() => void generate()}>
-          生成推荐
-        </Button>
+        {busy ? (
+          <Button
+            disabled={stopping}
+            onClick={async () => {
+              setStopping(true)
+              try {
+                await window.music.stopGeneration()
+                await refresh()
+              } catch (e) {
+                setError(String(e).split('Error: ').pop() || '终止失败')
+              } finally {
+                setStopping(false)
+              }
+            }}
+          >
+            {stopping ? '正在终止…' : '终止本次推荐'}
+          </Button>
+        ) : (
+          <Button disabled={!validCount} appearance="primary" onClick={() => void generate()}>
+            生成推荐
+          </Button>
+        )}
       </div>
       {!validCount && <small>请输入大于零的整数。</small>}
-      {busy && (
-        <Button size="small" onClick={() => void window.music.stopGeneration()}>
-          取消生成
-        </Button>
-      )}
       {error && <p role="alert">{error}</p>}
     </section>
   )

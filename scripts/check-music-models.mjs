@@ -240,7 +240,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       await expect.poll(() => app.evaluate(() => globalThis.modelCalls.length)).toBe(callCount + 1)
       await page.evaluate(() => window.music.stopGeneration())
     }
-    assert.match(await gen, mode === 'auth' ? /401/ : mode === 'invalid' ? /五首/ : /取消/)
+    assert.match(await gen, mode === 'auth' ? /401/ : mode === 'invalid' ? /五首/ : /终止|取消/)
   }
   await app.evaluate(() => {
     globalThis.failMode = ''
@@ -280,7 +280,18 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       if (url.href !== 'https://1.1.1.1/daily.mp3') return original(url, opts, done)
       const file = recordings[globalThis.transfers++]
       const req = new EventEmitter()
-      const deliver = () =>
+      const deliver = () => {
+        if (globalThis.slowTransfer === globalThis.transfers) {
+          const { PassThrough } = process.getBuiltinModule('node:stream')
+          const stream = Object.assign(new PassThrough(), {
+            statusCode: 200,
+            headers: {},
+            setTimeout() {},
+          })
+          done(stream)
+          stream.write(fs.readFileSync(file).subarray(0, 128))
+          return
+        }
         done(
           Object.assign(fs.createReadStream(file), {
             statusCode: 200,
@@ -288,6 +299,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
             setTimeout() {},
           }),
         )
+      }
       req.end = () => {
         if (globalThis.holdTransfer === globalThis.transfers) globalThis.releaseTransfer = deliver
         else deliver()
@@ -505,7 +517,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   await expect
     .poll(() => page.locator('audio').evaluate((el) => !el.paused && el.currentTime > 0))
     .toBe(true)
-  await expect(page.getByRole('button', { name: '取消生成' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '终止本次推荐' })).toBeVisible()
   await page.screenshot({
     path: path.join(root, '四首播放中.png'),
     style: ':root { background: var(--base) !important }',
@@ -628,44 +640,66 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   assert.deepEqual(await sample('听歌手甲本人的歌'), ['歌手甲', '歌手甲', '歌手甲'])
   assert.equal(await app.evaluate(() => globalThis.diversityCalls.length), 3)
   await app.evaluate(() => {
-    let rounds = 0
-    globalThis.fetch = async (_url, req) => {
-      if (!rounds++)
-        return Response.json({
-          candidates: [
-            {
-              content: {
-                parts: [
-                  {
-                    text: JSON.stringify({
-                      songs: [{ title: '取消时保留', artist: '测试歌手', reason: '测试' }],
-                    }),
-                  },
-                ],
-              },
+    globalThis.slowTransfer = globalThis.transfers + 2
+    globalThis.stopTestCalls = 0
+    globalThis.fetch = async () => {
+      const songs =
+        ++globalThis.stopTestCalls === 1
+          ? [
+              { title: '终止前保留', artist: '甲' },
+              { title: '传输中终止', artist: '乙' },
+            ]
+          : [{ title: '新批歌曲', artist: '丙' }]
+      return Response.json({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    songs: songs.map((row) => ({ ...row, reason: '测试' })),
+                  }),
+                },
+              ],
             },
-          ],
-        })
-      globalThis.modelWaiting = true
-      return new Promise((_, reject) =>
-        req.signal.addEventListener('abort', () => reject(req.signal.reason), { once: true }),
-      )
+          },
+        ],
+      })
     }
   })
-  const partialStop = page.evaluate(() => window.music.generate('取消保留', 'auto', false, 2))
-  await expect.poll(() => app.evaluate(() => Boolean(globalThis.modelWaiting))).toBe(true)
-  await page.evaluate(() => window.music.stopGeneration())
-  const kept = await page.evaluate(
-    async (id) => {
-      const s = await window.music.state()
-      return [
-        s.batches.find((b) => b.id === id).state,
-        s.items.filter((r) => r.batch === id).length,
-      ]
-    },
-    await partialStop,
-  )
-  assert.deepEqual(kept, ['cancelled', 1])
+  await page.getByRole('tab', { name: '每日推荐' }).click()
+  const target = page.getByRole('textbox', { name: '推荐首数' })
+  await target.fill('2')
+  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await expect(page.getByText(/已下载 1\/2/)).toBeVisible()
+  const partFiles = async () => (await fs.readdir(output)).filter((f) => f.endsWith('.part'))
+  await expect
+    .poll(async () => {
+      const files = await partFiles()
+      return files.length ? (await fs.stat(path.join(output, files[0]))).size : 0
+    })
+    .toBe(128)
+  await page.getByRole('button', { name: '终止本次推荐', exact: true }).click()
+  await expect(page.getByText('已下载 1/2，本次推荐已终止')).toBeVisible()
+  assert.deepEqual(await partFiles(), [])
+  const checkpoint = async () => ({
+    files: await fs.readdir(output),
+    operations: await app.evaluate(() => [globalThis.stopTestCalls, globalThis.transfers]),
+    songs: await page.locator('.music-list li strong').allTextContents(),
+  })
+  const stoppedState = await checkpoint()
+  assert.deepEqual(stoppedState.songs, ['终止前保留'])
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  assert.deepEqual(await checkpoint(), stoppedState)
+  await page.screenshot({
+    path: path.join(root, '终止本次推荐.png'),
+    style: ':root {background:var(--base) !important}',
+  })
+  await target.fill('1')
+  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await expect(page.getByText('已下载 1/1，已达到目标首数')).toBeVisible()
+  assert.deepEqual(await page.locator('.music-list li strong').allTextContents(), ['新批歌曲'])
+  console.log('PASS 传输写入128字节后从页面终止，保留1/2、清理临时文件、停止后无新写入，新批1/1')
   // Unique new model titles cannot keep a batch spending indefinitely if every source denies them.
   await fs.writeFile(
     source,
@@ -727,7 +761,7 @@ try {
   assert.ok((await p.evaluate(() => window.music.state())).localTracks.some((t) => t.notInterested))
   assert.equal(
     (await p.evaluate(() => window.music.state())).playlists.find((s) => s.system).tracks.length,
-    17,
+    18,
   )
 } finally {
   await reopened.close()

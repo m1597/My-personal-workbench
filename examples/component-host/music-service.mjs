@@ -22,6 +22,7 @@ export function musicService(
 ) {
   let store,
     pending,
+    generationFinished,
     taste,
     updateTimer,
     choosing,
@@ -387,8 +388,10 @@ export function musicService(
     if (pending) throw Error('请先结束当前生成')
     pending = new AbortController()
     try {
-      return await run(pending.signal)
+      generationFinished = run(pending.signal)
+      return await generationFinished
     } finally {
+      generationFinished = null
       pending = null
     }
   }
@@ -545,7 +548,7 @@ export function musicService(
         update(
           signal.aborted ? 'cancelled' : 'blocked',
           signal.aborted
-            ? '本次生成已取消'
+            ? '本次推荐已终止'
             : error.code
               ? '存储操作失败，请检查空间和目录权限后重试'
               : String(error.message),
@@ -554,7 +557,10 @@ export function musicService(
       return batch
     })
   })
-  bind('stopGeneration', () => pending?.abort())
+  bind('stopGeneration', async () => {
+    pending?.abort()
+    await generationFinished?.catch(() => {})
+  })
   bind('match', (batch) => store.match(text(batch)))
   bind('choose', (id, track) => store.choose(text(id), text(track)))
   bind('retry', (id) => {
