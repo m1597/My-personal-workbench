@@ -116,6 +116,9 @@
   --dv-tabs-and-actions-container-height: 32px;
   padding-block: 0;
 }
+.dockview-theme-workbench .dv-tab[data-tab-panel-id="component-music"] {
+  margin-block-start: var(--space-4);
+}
 .dv-tab[data-tab-panel-id="component-music"] .dv-default-tab,
 .dv-tab[data-tab-panel-id="component-music"] .dv-default-tab-content {
   display: inline-flex;
