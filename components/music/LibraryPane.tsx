@@ -69,7 +69,6 @@ export type ImportJob = {
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 type Props = {
-  refresh: () => Promise<void>
   favorite: (id: string, value: boolean) => Promise<unknown>
   rows: LocalTrack[]
   tracks: LocalTrack[]
@@ -99,7 +98,6 @@ type Props = {
   removeFolder: (id: string) => Promise<boolean>
 }
 export function LibraryPane({
-  refresh,
   favorite,
   tracks,
   playlists,

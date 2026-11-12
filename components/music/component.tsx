@@ -756,7 +756,6 @@ function Music() {
       <main key={tab} className="music-scroll">
         {tab === 'library' ? (
           <LibraryPane
-            refresh={refresh}
             favorite={(id, on) => act(() => host.setFavorite(id, on))}
             rows={localRows}
             total={categoryRows.length}
