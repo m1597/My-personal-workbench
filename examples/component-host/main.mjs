@@ -1,3 +1,4 @@
+import { startSourcePipe } from './music-source-pipe.mjs'
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
 import { shellExposed, snapTarget } from './native-dock.mjs'
@@ -131,6 +132,7 @@ const shared = {
   isQuitting: () => quitting,
 }
 const sample = componentView({ ...shared, componentRoot, music: false })
+let closeSourcePipe
 let musicRuntime
 const music = componentView({
   configureSession: (s) => musicRuntime.register(s),
@@ -192,6 +194,7 @@ else {
   })
   app.on('before-quit', () => {
     quitting = true
+    closeSourcePipe?.()
     for (const item of components) item.quit()
   })
   app.on('window-all-closed', () => {
@@ -227,6 +230,11 @@ else {
       })
       for (const item of components) item.listen()
       musicRuntime = musicService(profile, music.isSender)
+      closeSourcePipe = await startSourcePipe(profile, (...args) =>
+        musicRuntime.sourceTool(...args),
+      ).catch(() => {
+        console.warn('本地音源 MCP 未能连接')
+      })
       await openIntent(intent)
     })
     .catch((failure) => {

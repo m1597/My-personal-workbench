@@ -19,20 +19,23 @@ export function musicService(profile, isSender) {
     grant,
     localDialog = false,
     viewEpoch = 0
+  function ensureStore() {
+    if (!store) {
+      const root = path.join(profile, 'fitbay-music')
+      store = new MusicStore(root)
+      taste = new MusicTaste(store, root, (data, signal) =>
+        requestMusicModel(store, safeStorage, 'profile', data, signal),
+      )
+      store.library.changed = queueTasteUpdate
+    }
+  }
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   const bind = (name, fn) =>
     ipcMain.handle('music:' + name, async (event, ...args) => {
       if (!isSender(event)) throw Error('DENIED')
       try {
-        if (!store) {
-          const root = path.join(profile, 'fitbay-music')
-          store = new MusicStore(root)
-          taste = new MusicTaste(store, root, (data, signal) =>
-            requestMusicModel(store, safeStorage, 'profile', data, signal),
-          )
-          store.library.changed = queueTasteUpdate
-        }
+        ensureStore()
         shortcuts.activate(event.sender, store)
         return await fn(...args)
       } catch (e) {
@@ -403,6 +406,10 @@ export function musicService(profile, isSender) {
   }, 60000)
   timer.unref()
   return {
+    sourceTool(name, args, signal) {
+      ensureStore()
+      return lx.sourceTool(name, args, signal)
+    },
     register(session) {
       if (!sessions.has(session)) {
         session.protocol.handle('fitbay-audio', (req) => localStream(req, grant, store?.library))

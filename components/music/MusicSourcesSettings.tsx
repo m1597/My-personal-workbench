@@ -45,8 +45,8 @@ export function MusicSourcesSettings() {
       window.removeEventListener('focus', refresh)
       void host.lxCancel('import').catch(() => {})
     }
-  }, [host])
-  async function run(fn: () => Promise<string | void>) {
+  }, [])
+  async function run(fn: () => Promise<string> | Promise<void>) {
     setBusy(true)
     setStatus('')
     try {
