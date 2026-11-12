@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeTheme, screen } from 'electron'
+import { app, BrowserWindow, Menu, nativeTheme, systemPreferences, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { release } from 'node:os'
 
@@ -20,6 +20,12 @@ function createWindow() {
     minWidth: 900,
     minHeight: 640,
     title: 'FitBay',
+    ...(process.platform === 'win32'
+      ? {
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: { color: '#00000000', height: 32 },
+        }
+      : {}),
     icon: fileURLToPath(new URL('../renderer/fitbay.png', import.meta.url)),
     backgroundColor: supportsAcrylic ? '#00000000' : '#202227',
     ...(supportsAcrylic ? { backgroundMaterial: 'acrylic' as const } : {}),
@@ -32,6 +38,17 @@ function createWindow() {
       sandbox: true,
     },
   })
+  if (process.platform === 'win32') {
+    const updateSymbols = () =>
+      window.setTitleBarOverlay({
+        symbolColor: nativeTheme.shouldUseHighContrastColors
+          ? systemPreferences.getColor('window-text')
+          : '#e7e9ee',
+      })
+    updateSymbols()
+    nativeTheme.on('updated', updateSymbols)
+    window.once('closed', () => nativeTheme.off('updated', updateSymbols))
+  }
   window.once('ready-to-show', () => {
     if (backgroundTest) window.showInactive()
     else window.show()

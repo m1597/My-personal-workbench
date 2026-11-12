@@ -71,6 +71,10 @@ export default function App() {
           value={{ ...workspace, visible: [...workspace.visible, ...detached] }}
         >
           <div className="workbench">
+            <div className="workbench-caption">
+              <img src="./fitbay.png" alt="" draggable={false} />
+              FitBay
+            </div>
             <header className="app-header">
               <WindowMenu />
               <WorkbenchSettings value={preferences} onChange={setPreferences} />

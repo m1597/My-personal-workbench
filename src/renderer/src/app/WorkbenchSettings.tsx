@@ -12,6 +12,7 @@ import { Settings, X } from 'lucide-react'
 import {
   fonts,
   languages,
+  materialDefaults,
   sizes,
   preferenceKey,
   useTranslation,
@@ -128,6 +129,14 @@ export function WorkbenchSettings({
         </Field>
         <fieldset className="settings-material">
           <legend>{t('背景材质', 'Background material')}</legend>
+          <Button
+            size="small"
+            appearance="subtle"
+            className="reset-material"
+            onClick={() => change({ ...value, ...materialDefaults })}
+          >
+            {t('恢复默认', 'Restore defaults')}
+          </Button>
           {(
             [
               ['transparency', t('透明度', 'Transparency')],

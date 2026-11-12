@@ -2,7 +2,16 @@ import { installedProducts } from './installed-products.mjs'
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
 import { shellExposed, snapTarget } from './native-dock.mjs'
-import { app, BrowserWindow, ipcMain, protocol, screen, nativeTheme, Menu } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  protocol,
+  screen,
+  nativeTheme,
+  systemPreferences,
+  Menu,
+} from 'electron'
 import { realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -98,6 +107,12 @@ async function createWorkbench() {
     minWidth: 900,
     minHeight: 640,
     title: 'FitBay',
+    ...(process.platform === 'win32'
+      ? {
+          titleBarStyle: 'hidden',
+          titleBarOverlay: { color: '#00000000', height: 32 },
+        }
+      : {}),
     webPreferences: {
       preload: path.join(here, 'workbench-preload.cjs'),
       additionalArguments: [
@@ -110,6 +125,18 @@ async function createWorkbench() {
       backgroundThrottling: false,
     },
   })
+  if (process.platform === 'win32') {
+    const workbench = shell
+    const updateSymbols = () =>
+      workbench.setTitleBarOverlay({
+        symbolColor: nativeTheme.shouldUseHighContrastColors
+          ? systemPreferences.getColor('window-text')
+          : '#e7e9ee',
+      })
+    updateSymbols()
+    nativeTheme.on('updated', updateSymbols)
+    workbench.once('closed', () => nativeTheme.off('updated', updateSymbols))
+  }
   secure(shell.webContents)
   shell.webContents.on('did-start-loading', builtins.shellClosed)
   shell.on('close', () => {

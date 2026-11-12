@@ -13,10 +13,13 @@ export interface Preferences {
   size: (typeof sizes)[number]
 }
 export const preferenceKey = 'workbench.preferences.v1'
-const defaults: Preferences = {
+export const materialDefaults = {
   transparency: 40,
   frost: 50,
   brightness: 50,
+}
+const defaults: Preferences = {
+  ...materialDefaults,
   language: 'zh-CN',
   font: 'default',
   size: 'standard',

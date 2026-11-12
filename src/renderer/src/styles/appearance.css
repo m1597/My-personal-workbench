@@ -1,3 +1,7 @@
+/* Keep the native backdrop covered until the workbench paints its first frame. */
+:root[data-backdrop="acrylic"]:not(:has(#root > *)) {
+  background: var(--base);
+}
 /* A compact application shell, using the default glass material. */
 .workbench {
   background: var(--shell-surface);
@@ -184,7 +188,8 @@
 }
 .settings-material legend {
   float: left;
-  width: 100%;
+  width: auto;
+  align-self: center;
   color: var(--text-secondary);
   font-size: var(--font-size-control);
 }
@@ -201,29 +206,13 @@
 .material-control .fui-Slider {
   grid-column: 1 / -1;
 }
-/* Windows supplies the desktop Acrylic. These layers control its in-app tint,
-   diffuse veil and the actual blur used behind Fluent flyouts. */
+/* Windows supplies the desktop Acrylic. The renderer tints it and diffuses
+   its own grain and Fluent flyouts. */
 @media (prefers-reduced-transparency: no-preference) and (forced-colors: none) {
   :root[data-workbench-size] {
     --material-popup: blur(calc(var(--material-frost) * 56px));
-    --material-tint: color-mix(in srgb, #080b10, #536071 calc(var(--material-light) * 100%));
-    --shell-surface:
-      linear-gradient(
-        rgb(184 197 215 / calc(var(--material-frost) * 0.12)),
-        rgb(184 197 215 / calc(var(--material-frost) * 0.12))
-      ),
-      linear-gradient(
-        rgb(0 0 0 / max(0, calc(0.5 - var(--material-light)))),
-        rgb(0 0 0 / max(0, calc(0.5 - var(--material-light))))
-      ),
-      linear-gradient(
-        rgb(162 180 204 / max(0, calc((var(--material-light) - 0.5) * 0.5))),
-        rgb(162 180 204 / max(0, calc((var(--material-light) - 0.5) * 0.5)))
-      ),
-      color-mix(in srgb, var(--material-tint) calc(var(--material-opacity) * 100%), transparent);
+    --shell-surface: var(--workbench-material);
   }
-}
-@media (prefers-reduced-transparency: no-preference) and (forced-colors: none) {
   .workbench {
     position: relative;
     overflow: clip;
@@ -237,7 +226,38 @@
     pointer-events: none;
     z-index: -1;
     background-image: url("./acrylic-grain.png");
-    opacity: 0.085;
+    opacity: 0.025;
     filter: blur(calc(var(--material-frost) * 6px));
   }
+}
+
+.workbench-caption {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-7);
+  height: env(titlebar-area-height, 0px);
+  width: env(titlebar-area-width, 0px);
+  padding-inline-start: var(--space-12);
+  overflow: hidden;
+  user-select: none;
+  app-region: drag;
+  font-size: var(--font-size-control);
+  color: var(--text);
+}
+.workbench-caption img {
+  width: 16px;
+  height: 16px;
+}
+.settings-material {
+  grid-template-columns: 1fr auto;
+}
+.settings-material .material-control {
+  grid-column: 1 / -1;
+}
+.reset-material {
+  justify-self: end;
+}
+.workbench-menu.fui-MenuPopover {
+  app-region: no-drag;
 }
