@@ -160,7 +160,10 @@ try {
   evidence.rounds = await app.evaluate(() => globalThis.recommendationRounds)
   evidence.samples = await page.evaluate(() => window.recommendationSamples())
   evidence.alerts = await page.getByRole('alert').allTextContents()
-  await page.screenshot({ path: path.join(root, '每日推荐.png') })
+  await page.screenshot({
+    path: path.join(root, '每日推荐.png'),
+    style: ':root { background: var(--base) !important }',
+  })
   const batch = state.batches.find((b) => !oldBatches.has(b.id))
   assert.ok(batch, '未生成批次')
   evidence.run = { state: batch.state, target: batch.targetCount, message: batch.message }
