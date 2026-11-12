@@ -1,0 +1,5 @@
+[mcp_servers.fitbay_music]
+command = "node"
+args = ["scripts/music-source-mcp.mjs"]
+cwd = "."
+tool_timeout_sec = 120

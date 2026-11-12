@@ -6,6 +6,10 @@
 
 ## 接入本机 MCP 客户端
 
+本仓库已为 Codex 配置项目级 `fitbay_music`。从该工作区新开 Codex 会话并打开 FitBay 后，即可让 Agent 列出自己的已装音源、检查能力或切换。运行 `codex mcp get fitbay_music` 可以查看该项目实际加载的配置。其他 stdio 客户端可使用下面的配置。
+
+已在本机 Codex app-server 直接调用四项 MCP 工具。独立 Music 窗口先导入 Fish，再多选 Fish 与 Huibq，保留当前选择并得到两项。切换到 Huibq 再切回 Fish，尝试无效目录项后两项仍在。关闭宿主及客户端、用同一测试 profile 重启后，已装清单和选中源一致。回归命令为 `node scripts/check-music-agent.mjs`，需要 Codex 客户端、已构建的桌面入口和可访问的上游目录。
+
 先用桌面入口打开 FitBay 或 Music。把以下服务器配置放入支持标准 stdio 的本机 Agent 的项目级配置。本仓库没有改动全局 MCP 配置。当前机器的启动命令如下。
 
 ```powershell
