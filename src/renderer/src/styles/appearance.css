@@ -111,13 +111,23 @@
   background: var(--accent-soft);
 }
 
+.dockview-theme-workbench
+  .dv-tabs-and-actions-container:has(.dv-tab[data-tab-panel-id="component-music"]) {
+  --dv-tabs-and-actions-container-height: 32px;
+  padding-block: 0;
+}
+.dv-tab[data-tab-panel-id="component-music"] .dv-default-tab,
+.dv-tab[data-tab-panel-id="component-music"] .dv-default-tab-content {
+  display: inline-flex;
+  align-items: center;
+}
 .dv-tab[data-tab-panel-id="component-music"] .dv-default-tab-content::before {
   content: "";
   display: inline-block;
   width: 16px;
   height: 16px;
   margin-right: var(--space-8);
-  vertical-align: middle;
+  flex: 0 0 16px;
   background: currentColor;
   mask: url("./music-wave.svg") center / contain no-repeat;
 }

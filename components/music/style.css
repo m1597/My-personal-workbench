@@ -256,7 +256,17 @@ li[data-active="true"] .music-track-icon,
 .library-job {
   justify-content: space-between;
 }
+.library-title > div {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.library-title small {
+  line-height: 1.5;
+}
 .library-title h2 {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-title);
 }
 .library-job,
@@ -588,4 +598,12 @@ li[data-active="true"] .music-track-icon,
 
 .library-action-dialog .fui-DialogActions {
   flex-wrap: wrap;
+}
+
+.library-action-dialog .fui-DialogActions > .fui-Button {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

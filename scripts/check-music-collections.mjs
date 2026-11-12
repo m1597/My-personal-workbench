@@ -85,6 +85,14 @@ try {
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })
+  const spacing = await page
+    .locator('.library-title')
+    .evaluate(
+      (title) =>
+        title.querySelector('small').getBoundingClientRect().top -
+        title.querySelector('h2').getBoundingClientRect().bottom,
+    )
+  assert.ok(spacing >= 3.9, String(spacing))
   await page.screenshot({ path: path.join(evidence, 'standalone.png') })
   await resize(400)
   await expect(button('曲库导航')).toBeVisible()
@@ -98,6 +106,23 @@ try {
   const tab = shell.locator('[data-tab-panel-id="component-music"] .dv-default-tab-content')
   await expect(tab).toHaveCount(1)
   assert.equal(await tab.evaluate((el) => getComputedStyle(el, '::before').width), '16px')
+  const geometry = await tab.evaluate((title) => {
+    const tab = title.closest('.dv-tab')
+    const rect = tab.getBoundingClientRect()
+    const header = tab.closest('.dv-tabs-and-actions-container').getBoundingClientRect()
+    const close = tab.querySelector('.dv-default-tab-action').getBoundingClientRect()
+    const label = title.getBoundingClientRect()
+    return {
+      height: header.height,
+      baseline: header.bottom - rect.bottom,
+      centerDelta: (label.top + label.bottom - close.top - close.bottom) / 2,
+    }
+  })
+  assert.ok(geometry.height <= 33 && geometry.height >= 30, JSON.stringify(geometry))
+  assert.ok(
+    Math.abs(geometry.baseline) <= 1 && Math.abs(geometry.centerDelta) <= 1,
+    JSON.stringify(geometry),
+  )
   await shell.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })
@@ -141,6 +166,16 @@ try {
   await expect(button('通勤精选')).toBeVisible()
   await button('通勤精选').click()
   await button('从曲库移除晨间').click()
+  const trashButton = button('移至系统回收站')
+  await expect(trashButton).toHaveText('移至系统回收站')
+  await resize(400)
+  await expect(trashButton).toBeInViewport()
+  assert.ok(await trashButton.evaluate((el) => el.scrollWidth <= el.clientWidth + 1))
+  await page.screenshot({
+    path: path.join(evidence, 'remove-in-playlist-narrow.png'),
+    animations: 'disabled',
+  })
+  await resize(1040)
   await button('仅从当前歌单移除').click()
   await expect(page.locator('.library-name strong')).toHaveText(['雨夜'])
   await button('收藏').click()
@@ -190,7 +225,7 @@ try {
   await expect(page.locator('.library-name strong')).toHaveText(['海边'])
   const trash = async () => {
     await button('从曲库移除海边').click()
-    await button('移至系统回收站…').click()
+    await button('移至系统回收站').click()
   }
   await app.evaluate(({ dialog }, expected) => {
     dialog.showMessageBox = async (opts) => {
@@ -218,7 +253,7 @@ try {
   await trash()
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('曲库记录已保留')
   assert.equal((await stat(file)).size, wave.length)
-  await button('移至系统回收站…').click()
+  await button('移至系统回收站').click()
   await expect(page.locator('.library-row')).toHaveCount(0)
   await assert.rejects(stat(file), { code: 'ENOENT' })
   await button('收藏').click()

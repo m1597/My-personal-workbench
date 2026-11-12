@@ -520,7 +520,7 @@ export function LibraryPane({
                       disabled={submitting}
                       onClick={() => void confirm(() => remove(action.id, true))}
                     >
-                      移至系统回收站…
+                      移至系统回收站
                     </Button>
                   </>
                 ) : action.kind === 'rename' ? (
