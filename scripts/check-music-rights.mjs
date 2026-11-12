@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import { _electron as electron, expect } from '@playwright/test'
 import { DatabaseSync } from 'node:sqlite'
 import { MusicStore } from '../components/music/store.mjs'
+import { lyricPath } from '../examples/component-host/music-lyrics.mjs'
 import { MusicTaste } from '../examples/component-host/music-taste.mjs'
 
 await fs.mkdir('tmp', { recursive: true })
@@ -27,7 +28,7 @@ assert.equal(migratedCopy.digest, null)
 store.set('music-manual-dir', manual)
 store.set('music-recommend-dir', output)
 const code =
-  "// @name 授权夹具\nlx.on('request',()=> 'https://1.1.1.1/audio');lx.send('inited',{sources:{wy:{actions:['musicUrl'],qualitys:['320k'],allowPermanentSave:true}}})"
+  "// @name 授权夹具\nlx.on('request',({action,info})=> action==='lyric' ? {lyric:'[00:00.00]录音 '+info.musicInfo.id} : 'https://1.1.1.1/audio');lx.send('inited',{sources:{wy:{actions:['musicUrl'],qualitys:['320k'],allowPermanentSave:true}}})"
 const sourceFile = path.join(root, 'source.js')
 await fs.writeFile(sourceFile, code)
 const titles = [
@@ -146,6 +147,16 @@ try {
   const automatic = initial.items.find((r) => r.id === allowed.id).localId
   assert.ok(automatic)
   const pathFor = (id) => db.prepare('SELECT file FROM local_tracks WHERE id=?').get(id).file
+  const lrc = lyricPath(pathFor(automatic))
+  assert.equal(await fs.readFile(lrc, 'utf8'), '[00:00.00]录音 允许保存')
+  await fs.unlink(lrc)
+  const initialCalls = await app.evaluate(() => globalThis.downloadCalls)
+  await run(allowed.id)
+  assert.equal(await app.evaluate(() => globalThis.downloadCalls), initialCalls)
+  assert.equal(await fs.readFile(lrc, 'utf8'), '[00:00.00]录音 允许保存')
+  await fs.writeFile(lrc, '[00:01]个人校订')
+  await run(allowed.id)
+  assert.equal(await fs.readFile(lrc, 'utf8'), '[00:01]个人校订')
   await page.evaluate(async () => {
     const hits = await window.music.lxSearch({ title: '允许保存', artist: '艺人' })
     await window.music.lxDownload(hits.items[0].key, hits.quality[0])
@@ -313,6 +324,10 @@ try {
   await run(next)
   assert.equal((await state()).items.find((r) => r.id === next).status, '已入库')
   assert.equal((await state()).items.find((r) => r.id === next).notInterested, false)
+  const noLyricFile = pathFor((await state()).items.find((r) => r.id === next).localId)
+  assert.deepEqual(await fs.readFile(noLyricFile), await fs.readFile(replacement))
+  await assert.rejects(fs.access(lyricPath(noLyricFile)), { code: 'ENOENT' })
+  console.log('PASS 每日推荐下载匹配歌词、已验证副本补词且不重复下载、保留用户校订、缺词仍入库')
   console.log('PASS 内置目录逐曲许可、同版不同本地副本、文件换曲与旧源迁移 ' + root)
 } finally {
   db.close()

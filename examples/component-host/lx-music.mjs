@@ -457,6 +457,35 @@ export function registerLx(bind, getStore, dialog) {
     signal.throwIfAborted()
     return fetchRecording(src, row, quality, dir, signal, auditionId)
   }
+  async function saveRecordingLyrics(src, row, audio, signal) {
+    await saveLyrics(getStore().db, audio, async () => {
+      const timeout = AbortSignal.any([signal, AbortSignal.timeout(6000)])
+      let result = row.lyric
+      if (!result) {
+        try {
+          result = await runSource(
+            src.code,
+            {
+              action: 'lyric',
+              source: src.platform,
+              info: { musicInfo: row },
+            },
+            timeout,
+          )
+        } catch {
+          /* Some sources expose only audio. */
+        }
+      }
+      const raw = typeof result === 'string' ? result : result?.lyric
+      if (raw) return raw
+      const id = recordingId(src, row)
+      if (src.platform !== 'wy' || !/^\d+$/.test(id)) return ''
+      const response = await sourceRequest('https://music.163.com/api/song/lyric?lv=1&id=' + id, {
+        signal: timeout,
+      })
+      return response.body?.lrc?.lyric
+    }).catch(() => {})
+  }
   async function fetchRecording(src, row, quality, dir, signal, auditionId, dailyId) {
     for (let attempt = 0; ; attempt++) {
       const url = await runSource(
@@ -477,34 +506,7 @@ export function registerLx(bind, getStore, dialog) {
           dailyId,
         )
         if (filename && !auditionId) {
-          await saveLyrics(getStore().db, path.join(dir, filename), async () => {
-            const timeout = AbortSignal.any([signal, AbortSignal.timeout(6000)])
-            let result = row.lyric
-            if (!result) {
-              try {
-                result = await runSource(
-                  src.code,
-                  {
-                    action: 'lyric',
-                    source: src.platform,
-                    info: { musicInfo: row },
-                  },
-                  timeout,
-                )
-              } catch {
-                /* Some sources expose only audio. */
-              }
-            }
-            const raw = typeof result === 'string' ? result : result?.lyric
-            if (raw) return raw
-            const id = recordingId(src, row)
-            if (src.platform !== 'wy' || !/^\d+$/.test(id)) return ''
-            const response = await sourceRequest(
-              'https://music.163.com/api/song/lyric?lv=1&id=' + id,
-              { signal: timeout },
-            )
-            return response.body?.lrc?.lyric
-          }).catch(() => {})
+          await saveRecordingLyrics(src, row, path.join(dir, filename), signal)
         }
         return filename
       } catch (e) {
@@ -623,6 +625,7 @@ export function registerLx(bind, getStore, dialog) {
           return
         }
         markSaved(store, id, cached.id)
+        await saveRecordingLyrics(src, pick, cached.file, signal)
       } else {
         if (!prefs.recommendDir) throw Error('请在设置中选择推荐下载目录')
         store.status(id, '正在保存')

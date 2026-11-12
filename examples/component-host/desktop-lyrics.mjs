@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 export function desktopLyrics() {
   let win,
@@ -16,6 +16,13 @@ export function desktopLyrics() {
       win = new BrowserWindow({
         width: 660,
         height: 90,
+        ...(process.env.WORKBENCH_TEST_BACKGROUND === '1'
+          ? {
+              x: Math.min(...screen.getAllDisplays().map((d) => d.bounds.x)) - 2200,
+              y: 0,
+              focusable: false,
+            }
+          : {}),
         frame: false,
         transparent: true,
         alwaysOnTop: true,
