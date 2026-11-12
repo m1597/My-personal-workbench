@@ -1,5 +1,6 @@
 import { TrackMenu } from './TrackMenu'
 import { InfrequentTracks } from './InfrequentTracks'
+import { LibraryTools, RecentHistory } from './LibraryTools'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
@@ -33,6 +34,9 @@ import {
   Trash2,
   Pause,
   FolderSearch,
+  Heart,
+  History,
+  Archive,
 } from 'lucide-react'
 type FolderEntry = { id: string; name: string }
 type FolderNode = FolderEntry & { children: Map<string, FolderNode> }
@@ -51,6 +55,9 @@ export type LocalTrack = {
   observedAt: number
   lastHeardAt: number | null
   size: number | null
+  favorite: number
+  origin: 'local' | 'download' | 'daily'
+  playCount: number
 }
 export type ImportJob = {
   started?: boolean
@@ -63,6 +70,8 @@ export type ImportJob = {
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 type Props = {
+  refresh: () => Promise<void>
+  favorite: (id: string, value: boolean) => Promise<unknown>
   rows: LocalTrack[]
   tracks: LocalTrack[]
   playlists: Playlist[]
@@ -91,6 +100,8 @@ type Props = {
   removeFolder: (id: string) => Promise<boolean>
 }
 export function LibraryPane({
+  refresh,
+  favorite,
   tracks,
   playlists,
   collection,
@@ -265,6 +276,30 @@ export function LibraryPane({
         >
           不常听
         </Button>
+        <Button
+          appearance="subtle"
+          aria-pressed={collection === 'recent'}
+          icon={<History size={16} />}
+          onClick={() => choose('recent')}
+        >
+          最近播放
+        </Button>
+        <Button
+          appearance="subtle"
+          aria-pressed={collection === 'favorites'}
+          icon={<Heart size={16} />}
+          onClick={() => choose('favorites')}
+        >
+          我的收藏
+        </Button>
+        <Button
+          appearance="subtle"
+          aria-pressed={collection === 'library-tools'}
+          icon={<Archive size={16} />}
+          onClick={() => choose('library-tools')}
+        >
+          曲库管理
+        </Button>
         <h3>文件夹</h3>
         {folderRows(folders)}
         <div className="playlist-heading">
@@ -337,7 +372,11 @@ export function LibraryPane({
           )
         })}
       </aside>
-      {collection === 'infrequent' ? (
+      {collection === 'recent' ? (
+        <RecentHistory tracks={tracks} play={play} />
+      ) : collection === 'library-tools' ? (
+        <LibraryTools refresh={refresh} />
+      ) : collection === 'infrequent' ? (
         <InfrequentTracks
           rows={rows}
           days={days}
@@ -351,7 +390,7 @@ export function LibraryPane({
         <section className="local-library" aria-label="本地歌曲库">
           <div className="library-title">
             <div>
-              <h2>{heading}</h2>
+              <h2>{collection === 'favorites' ? '我的收藏' : heading}</h2>
               <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
             </div>
           </div>
@@ -441,6 +480,11 @@ export function LibraryPane({
                             />
                           </PopoverTrigger>
                           <PopoverSurface className="component-popup playlist-options">
+                            <Checkbox
+                              label="我的收藏"
+                              checked={!!t.favorite}
+                              onChange={(_, d) => void favorite(t.id, d.checked === true)}
+                            />
                             <strong>我的歌单</strong>
                             {playlists.some((p) => !p.system) ? (
                               playlists

@@ -72,6 +72,7 @@ type Item = {
 import { RecommendationComposer, RecordingActions } from './RecommendationComposer'
 import type { ModelInfo } from './ModelSettings'
 import { DownloadPane } from './LxPanel'
+import type { LibraryToolsAPI } from './LibraryTools'
 import type { Versions } from './LxPanel'
 type State = {
   prefs: MusicPreferences
@@ -91,7 +92,7 @@ type State = {
 type Mode = { mode: string }
 declare global {
   interface Window {
-    music: {
+    music: LibraryToolsAPI & {
       setMusicQuality(quality: string): Promise<void>
       setMusicOutput(volume: number, muted: boolean): Promise<void>
       setMusicShortcut(action: TransportAction, key: string): Promise<void>
@@ -273,21 +274,26 @@ function Music() {
   const playlist = state?.playlists.find((p) => p.id === requestedCollection)
   const collection =
     requestedCollection === 'infrequent' ||
+    ['recent', 'library-tools', 'favorites'].includes(requestedCollection) ||
     playlist ||
     (requestedCollection !== 'all' &&
       state?.localTracks.some((track) => track.folders.some((f) => f.id === requestedCollection)))
       ? requestedCollection
       : 'all'
   const memberIds = new Set(playlist?.tracks)
-  const categoryRows = (state?.localTracks ?? []).filter(
-    (row) =>
-      (collection === 'all' && !!row.listed) ||
-      (collection === 'infrequent' &&
-        !!row.listed &&
-        (row.lastHeardAt ?? row.observedAt) <= Date.now() - infrequentDays * 86400000) ||
-      memberIds.has(row.id) ||
-      row.folders.some((f) => f.id === collection),
-  )
+  const trackById = new Map((state?.localTracks ?? []).map((track) => [track.id, track]))
+  const categoryRows = playlist
+    ? playlist.tracks.flatMap((id) => trackById.get(id) ?? [])
+    : (state?.localTracks ?? []).filter(
+        (row) =>
+          (collection === 'all' && !!row.listed) ||
+          (collection === 'favorites' && !!row.favorite) ||
+          (collection === 'infrequent' &&
+            !!row.listed &&
+            (row.lastHeardAt ?? row.observedAt) <= Date.now() - infrequentDays * 86400000) ||
+          memberIds.has(row.id) ||
+          row.folders.some((f) => f.id === collection),
+      )
   const localRows = categoryRows.filter((row) =>
     [row.title, row.artist, row.album].some((value) =>
       value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
@@ -560,6 +566,8 @@ function Music() {
       <main key={tab} className="music-scroll">
         {tab === 'library' ? (
           <LibraryPane
+            refresh={refresh}
+            favorite={(id,on)=>act(()=>host.setFavorite(id,on))}
             rows={localRows}
             total={categoryRows.length}
             tracks={state?.localTracks ?? []}

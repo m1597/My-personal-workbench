@@ -53,12 +53,33 @@ export class LocalLibrary {
           .run('音乐源未允许永久保存此录音，或仅提供试听')
       }
       const trackColumns = this.db.prepare('PRAGMA table_info(local_tracks)').all()
+      this.db.exec(
+        'CREATE TABLE IF NOT EXISTS restored_recommendations(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE)',
+      )
       if (!trackColumns.some((column) => column.name === 'observedAt')) {
         this.db.exec(`ALTER TABLE local_tracks ADD COLUMN observedAt INTEGER;
           ALTER TABLE local_tracks ADD COLUMN lastHeardAt INTEGER;
           ALTER TABLE local_tracks ADD COLUMN size INTEGER;`)
         this.db.prepare('UPDATE local_tracks SET observedAt=?').run(Date.now())
       }
+      if (!trackColumns.some((column) => column.name === 'favorite')) {
+        this.db.exec(`ALTER TABLE local_tracks ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE local_tracks ADD COLUMN importedOrigin TEXT NOT NULL DEFAULT 'local';
+          CREATE TABLE local_play_history(event TEXT PRIMARY KEY, track TEXT NOT NULL REFERENCES local_tracks(id) ON DELETE CASCADE, playedAt INTEGER NOT NULL);
+          CREATE INDEX play_history_time ON local_play_history(playedAt DESC);
+          CREATE INDEX play_history_track ON local_play_history(track);
+          INSERT INTO local_play_history SELECT 'legacy-'||id, id, lastHeardAt FROM local_tracks WHERE lastHeardAt IS NOT NULL;`)
+        const root = store.get('root')
+        if (root)
+          for (const row of this.db.prepare('SELECT file FROM library').all())
+            this.db
+              .prepare('UPDATE local_tracks SET favorite=1 WHERE path_key=?')
+              .run(pathKey(path.join(root, row.file)))
+      }
+      if (!trackColumns.some((column) => column.name === 'awaitingLocation'))
+        this.db.exec(
+          'ALTER TABLE local_tracks ADD COLUMN awaitingLocation INTEGER NOT NULL DEFAULT 0',
+        )
       const legacyColumns = new Set(
         this.db
           .prepare('PRAGMA table_info(recording_versions)')
@@ -93,7 +114,7 @@ export class LocalLibrary {
   saved(track, filename) {
     const t = this.store.metadata(track),
       root = this.store.get('root')
-    if (t && root && path.basename(filename) === filename)
+    if (t && root && path.basename(filename) === filename) {
       this.upsert({
         file: path.join(root, filename),
         title: t.title,
@@ -101,6 +122,21 @@ export class LocalLibrary {
         album: t.album,
         duration: t.duration ?? 20,
       })
+      this.db
+        .prepare('UPDATE local_tracks SET favorite=1 WHERE path_key=?')
+        .run(pathKey(path.join(root, filename)))
+    }
+  }
+  heard(id, time = Date.now()) {
+    this.db.exec('BEGIN')
+    try {
+      if (this.db.prepare('UPDATE local_tracks SET lastHeardAt=? WHERE id=?').run(time, id).changes)
+        this.db.prepare('INSERT INTO local_play_history VALUES(?,?,?)').run(randomUUID(), id, time)
+      this.db.exec('COMMIT')
+    } catch (err) {
+      this.db.exec('ROLLBACK')
+      throw err
+    }
   }
   upsert(row, replacing) {
     const key = pathKey(row.file)
@@ -110,7 +146,7 @@ export class LocalLibrary {
     if (replacing || existing)
       this.db
         .prepare(
-          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,size=?,available=1,unplayable=0,listed=1 WHERE id=?',
+          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,size=?,available=1,unplayable=0,listed=1,awaitingLocation=0 WHERE id=?',
         )
         .run(...values, row.size ?? null, replacing ?? existing.id)
     else
@@ -131,7 +167,10 @@ export class LocalLibrary {
     )
     const rows = this.db
       .prepare(
-        `SELECT id,title,artist,album,duration,available,listed,file,observedAt,lastHeardAt,size,(SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
+        `SELECT id,title,artist,album,duration,available,listed,file,observedAt,lastHeardAt,size,favorite,
+        (SELECT COUNT(*) FROM local_play_history h WHERE h.track=local_tracks.id) AS playCount,
+        COALESCE((SELECT CASE MAX(v.automatic) WHEN 1 THEN 'daily' WHEN 0 THEN 'download' END FROM recording_copies v WHERE v.local=local_tracks.id),importedOrigin) AS origin,
+        (SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
       )
       .all()
     const parents = new Set(rows.filter((r) => r.listed).map((r) => pathKey(path.dirname(r.file))))
@@ -165,17 +204,26 @@ export class LocalLibrary {
     }
     const recommended = this.db
       .prepare(
-        'SELECT DISTINCT r.local FROM recommended_items r JOIN local_tracks t ON r.local=t.id',
+        `SELECT r.local FROM recommended_items r JOIN local_tracks t ON r.local=t.id GROUP BY r.local ORDER BY MIN(r.rowid)`,
       )
       .all()
+    const systemTracks = [
+      ...new Set([
+        ...recommended.map((r) => r.local),
+        ...this.db
+          .prepare('SELECT track FROM restored_recommendations ORDER BY rowid')
+          .all()
+          .map((r) => r.track),
+      ]),
+    ]
     return [
-      ...(recommended.length
+      ...(systemTracks.length
         ? [
             {
               id: 'system-recommendations',
               name: '歌曲推荐',
               system: true,
-              tracks: recommended.map((r) => r.local),
+              tracks: systemTracks,
             },
           ]
         : []),
@@ -214,6 +262,8 @@ export class LocalLibrary {
       dir = path.dirname(dir)
     }
     const retained = new Set(this.playlists().flatMap((list) => list.tracks))
+    for (const row of this.db.prepare('SELECT id FROM local_tracks WHERE favorite=1').all())
+      retained.add(row.id)
     const detached = this.db.prepare('UPDATE local_tracks SET listed=0 WHERE id=?')
     const removed = []
     for (const row of rows) {
@@ -250,6 +300,7 @@ export class LocalLibrary {
     return row
   }
   async verify(row) {
+    if (row.awaitingLocation) return false
     const size = await audioFileSize(row.file)
     const ok = !row.unplayable && size !== null
     if (Number(ok) !== row.available || size !== row.size)
@@ -261,7 +312,7 @@ export class LocalLibrary {
   async refresh() {
     this.refreshing ??= (async () => {
       const rows = this.db
-        .prepare('SELECT id,file,available,unplayable,size FROM local_tracks')
+        .prepare('SELECT id,file,available,unplayable,size,awaitingLocation FROM local_tracks')
         .all()
       for (let i = 0; i < rows.length; i += 16)
         await Promise.all(rows.slice(i, i + 16).map((r) => this.verify(r)))
@@ -318,5 +369,16 @@ export class LocalLibrary {
       this.job.cancelled = true
       void this.worker.terminate()
     }
+  }
+  scanFolder(dir) {
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(new URL('./library-worker.mjs', import.meta.url), {
+        workerData: { paths: [dir], folder: true },
+      })
+      const found = []
+      worker.on('message', ({ rows }) => found.push(...rows))
+      worker.once('error', reject)
+      worker.once('exit', (code) => (code ? reject(Error('无法扫描所选目录')) : resolve(found)))
+    })
   }
 }

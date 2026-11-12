@@ -1,4 +1,5 @@
 import { desktopLyrics } from './desktop-lyrics.mjs'
+import { registerLibraryTools } from './library-tools.mjs'
 import { localLines, ownedLyrics } from './music-lyrics.mjs'
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
@@ -91,7 +92,10 @@ export function musicService(profile, isSender) {
   bind('lyrics', async (id) => {
     if (!text(id)) return []
     if (grant?.id === id) return localLines(grant.file)
-    if (id.startsWith('local-')) return localLines(store.library.row(id).file)
+    if (id.startsWith('local-')) {
+      const track = store.library.row(id)
+      return track.awaitingLocation ? [] : localLines(track.file)
+    }
     const library = store.db
       .prepare(
         'SELECT t.file FROM recommended_items r JOIN local_tracks t ON t.id=r.local WHERE r.item=?',
@@ -113,6 +117,13 @@ export function musicService(profile, isSender) {
   bind('cancelImport', () => store.library.cancel())
   bind('relocateLocal', (id) => selectLocal('files', text(id)))
   bind('refreshLocal', () => store.library.refresh())
+  registerLibraryTools(
+    bind,
+    () => store,
+    () => taste,
+    dialog,
+    () => viewEpoch,
+  )
   bind('renamePlaylist', (id, name) => store.library.renamePlaylist(text(id), name))
   bind('deletePlaylist', (id) => store.library.deletePlaylist(text(id)))
   function updateLibrary(remove) {
@@ -165,6 +176,7 @@ export function musicService(profile, isSender) {
   }
   bind('trashLocal', async (id) => {
     const row = store.library.row(text(id))
+    if (row.awaitingLocation) throw Error('请先重新定位音频')
     if (localDialog || store.library.job.running) throw Error('请等待当前曲库操作结束')
     localDialog = true
     const epoch = viewEpoch
@@ -427,9 +439,7 @@ export function musicService(profile, isSender) {
   })
   bind('heardLocal', (url) => {
     if (!grant || grant.url !== text(url) || grant.audition) return
-    store.db
-      .prepare('UPDATE local_tracks SET lastHeardAt=? WHERE id=?')
-      .run(Date.now(), grant.libraryId ?? grant.id)
+    store.library.heard(grant.libraryId ?? grant.id)
   })
   bind('release', () => {
     grant = null

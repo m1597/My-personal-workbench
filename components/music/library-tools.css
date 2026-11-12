@@ -1,0 +1,39 @@
+.music-library-tools {
+  display: block;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.music-library-tools section {
+  margin-block: 20px;
+}
+.music-library-tools h3,
+.music-library-tools h4 {
+  margin-block: 12px 6px;
+}
+.music-library-tools p,
+.music-library-tools small {
+  color: var(--colorNeutralForeground2);
+}
+.music-library-tools ul {
+  padding: 0;
+  list-style: none;
+}
+.music-library-tools li,
+.library-tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.music-library-tools li {
+  justify-content: space-between;
+}
+.library-match {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0;
+}
+.library-match .fui-Dropdown {
+  max-width: 100%;
+  min-width: 0;
+}

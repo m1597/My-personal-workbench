@@ -13,6 +13,8 @@ export class MusicTaste {
     this.error = ''
   }
   document() {
+    const restored = this.store.get('restored-taste-document')
+    if (restored) return JSON.parse(restored)
     if (!existsSync(this.file))
       return { text: this.store.get('taste-profile'), updatedAt: '', incorporated: [] }
     const doc = JSON.parse(readFileSync(this.file, 'utf8'))
@@ -25,9 +27,9 @@ export class MusicTaste {
     const seen = new Set(doc.incorporated)
     const pending = []
     const tracks = this.store.db
-      .prepare(`SELECT t.title,t.artist,t.album,
+      .prepare(`SELECT t.title,t.artist,t.album,t.favorite,
       EXISTS(SELECT 1 FROM playlist_tracks p WHERE p.track=t.id) AS liked,
-      EXISTS(SELECT 1 FROM recording_copies v WHERE v.local=t.id AND v.automatic=1) AS automatic
+      (t.importedOrigin='daily' OR EXISTS(SELECT 1 FROM recording_copies v WHERE v.local=t.id AND v.automatic=1)) AS automatic
       FROM local_tracks t ORDER BY t.rowid`)
       .all()
     for (const track of tracks) {
@@ -49,6 +51,7 @@ export class MusicTaste {
       for (const signal of [
         ...(track.automatic ? [] : ['曲库新增']),
         ...(track.liked ? ['主动加入自建歌单'] : []),
+        ...(track.favorite ? ['主动收藏'] : []),
       ]) {
         const data = { ...meta, signal }
         const key = createHash('sha256').update(JSON.stringify(data)).digest('hex')
@@ -125,6 +128,7 @@ export class MusicTaste {
         try {
           writeFileSync(temp, JSON.stringify(doc), { flag: 'wx' })
           renameSync(temp, this.file)
+          this.store.set('restored-taste-document', '')
         } finally {
           rmSync(temp, { force: true })
         }
