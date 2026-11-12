@@ -31,7 +31,7 @@
     "build:prototype": "npm run build && node scripts/build-component-prototype.mjs",
     "check:music": "node scripts/check-music-storage.mjs && node scripts/check-music.mjs && node scripts/check-local-music.mjs && node scripts/check-music-collections.mjs && node scripts/check-music-settings.mjs && node scripts/check-music-queue.mjs && node scripts/check-music-presentation.mjs && node scripts/check-music-infrequent.mjs && node scripts/check-music-lyrics.mjs",
     "check:models": "node scripts/check-music-models.mjs && node scripts/check-music-rights.mjs && node scripts/check-music-failure-ui.mjs && node scripts/check-music-recording-identity.mjs",
-    "check:music-tools": "node scripts/check-music-library-tools.mjs && node scripts/check-music-plugins.mjs && node scripts/check-wave-rules-plugins.mjs && node scripts/check-music-tags.mjs --ui",
+    "check:music-tools": "node scripts/check-music-library-tools.mjs && node scripts/check-music-recent-playback.mjs && node scripts/check-recommendation-playlist.mjs && node scripts/check-music-plugins.mjs && node scripts/check-wave-rules-plugins.mjs && node scripts/check-music-tags.mjs --ui",
     "check:lx": "node scripts/check-lx-music.mjs",
     "check:prototype": "node scripts/check-workspace-migration.mjs && node scripts/check-component-prototype.mjs && node scripts/check-builtin-modules.mjs && node scripts/check-dock-transitions.mjs"
   },

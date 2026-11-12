@@ -7,6 +7,13 @@
   gap: var(--space-10);
   padding-block: var(--space-16);
 }
+.music-settings .music-library-tools > section {
+  margin: 0;
+  padding-block: var(--space-6);
+}
+.music-settings .music-library-tools > section > h3 {
+  margin: 0;
+}
 .music-settings section:first-child {
   padding-top: 0;
 }
