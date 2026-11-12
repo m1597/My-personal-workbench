@@ -106,7 +106,12 @@ async function downloadResults(source, track, signal) {
     if (pages.has(signature)) break
     pages.add(signature)
     for (const row of rows) {
-      if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
+      if (
+        !text(row?.name) ||
+        (row.source && row.source !== source.platform) ||
+        JSON.stringify(row).length > 16384
+      )
+        continue
       const identity = JSON.stringify([
         row.source ?? source.platform,
         recordingId(source, row) ?? row,
@@ -304,11 +309,11 @@ export function registerLx(bind, getStore, dialog) {
     const saved = getStore().get('lx-source')
     return saved ? JSON.parse(saved) : null
   }
-  async function currentSource(signal) {
+  async function currentSource(signal, withPlatforms = false) {
     const saved = getStore().get('lx-source')
     if (!saved) return null
     const current = JSON.parse(saved)
-    if (current.permissionsVersion === 1) return current
+    if (current.permissionsVersion === 1 && (!withPlatforms || current.platforms)) return current
     const parsed = await inspectSource(current.code, signal)
     signal.throwIfAborted()
     if (getStore().get('lx-source') !== saved) throw Error('音乐源已变更，请重试')
@@ -369,9 +374,14 @@ export function registerLx(bind, getStore, dialog) {
   )
   bind(
     'lxSearch',
-    exclusive(async (signal, id) => {
-      const src = source()
-      if (!src) throw Error('请先导入洛雪音乐源')
+    exclusive(async (signal, id, platform) => {
+      const selected = await currentSource(signal, platform !== undefined)
+      if (!selected) throw Error('请先导入洛雪音乐源')
+      const names = { wy: '网易云音乐', tx: 'QQ 音乐', kg: '酷狗音乐' }
+      if (platform !== undefined && !Object.hasOwn(names, platform)) throw Error('无效的下载平台')
+      if (platform && !selected.platforms?.[platform])
+        throw Error('当前音乐源不支持' + names[platform] + '的搜索和下载，请更换音乐源')
+      const src = platform ? { ...selected, ...selected.platforms[platform] } : selected
       let track
       if (typeof id === 'string') {
         track = id.startsWith('local-') ? getStore().library.row(id) : getStore().item(id)
@@ -398,6 +408,7 @@ export function registerLx(bind, getStore, dialog) {
         const key = randomUUID()
         matches.set(key, {
           sourceCode: src.code,
+          platform: src.platform,
           row,
           auditionId: typeof id === 'string' && !id.startsWith('local-') ? id : null,
         })
@@ -412,9 +423,13 @@ export function registerLx(bind, getStore, dialog) {
     }),
   )
   async function transfer(signal, key, quality, auditionId) {
-    const src = source(),
-      match = matches.get(key),
-      row = match?.row
+    const selected = source()
+    const match = matches.get(key)
+    const src = selected && {
+      ...selected,
+      ...selected.platforms?.[match?.platform],
+    }
+    const row = match?.row
     if (
       !src ||
       !row ||

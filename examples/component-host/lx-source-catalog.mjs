@@ -34,15 +34,14 @@ export async function fetchSource(link, signal, headers) {
 export async function inspectSource(code, signal) {
   if (typeof code !== 'string' || Buffer.byteLength(code) > 1024 * 1024) throw Error('源文件过大')
   const declared = await runSource(code, null, signal)
+  const platforms = {}
   for (const platform of ['wy', 'kw', 'tx', 'kg', 'mg']) {
     const d = declared?.[platform]
     if (!Array.isArray(d?.actions) || !d.actions.includes('musicUrl')) continue
     if (!d.actions.includes('search') && platform !== 'wy') continue
     const quality = qualities.filter((q) => d.qualitys?.includes(q))
     if (!quality.length) continue
-    return {
-      code,
-      name: text(code.match(/@name\s+([^\r\n*]+)/)?.[1]) || '自定义音乐源',
+    platforms[platform] = {
       platform,
       permissionsVersion: 1,
       permanentSave: [d.allowPermanentSave, d.permanentDownload].includes(false)
@@ -54,7 +53,14 @@ export async function inspectSource(code, signal) {
       quality,
     }
   }
-  throw Error('此源缺少可用的搜索平台、取址操作或音质')
+  const first = Object.values(platforms)[0]
+  if (!first) throw Error('此源缺少可用的搜索平台、取址操作或音质')
+  return {
+    ...first,
+    platforms,
+    code,
+    name: text(code.match(/@name\s+([^\r\n*]+)/)?.[1]) || '自定义音乐源',
+  }
 }
 const rawRoot = 'https://raw.githubusercontent.com/pdone/lx-music-source/main/'
 const mirror = 'https://gh-proxy.org/'
@@ -138,6 +144,7 @@ function capabilities(src) {
   return {
     name: src.name,
     platform: src.platform,
+    searchPlatforms: src.platforms ? Object.keys(src.platforms) : undefined,
     search: src.search ? 'source' : 'platform',
     musicUrl: true,
     quality: src.quality,

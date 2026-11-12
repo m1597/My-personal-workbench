@@ -59,10 +59,11 @@ if (live) {
   await fs.writeFile(
     sourceFile,
     `// @name FitBay 测试源
- lx.on('request',async ({action,info})=>{
+ lx.on('request',async ({action,info,source})=>{
   if(action==='search'){
    await new Promise(done=>setTimeout(done,600))
    if(info.limit !== 50) throw Error('下载查询上限错误')
+   if(source === 'tx') return {items:[{name:'QQ独有版本',source:'tx',id:'tx-test'}, {name:'异平台结果',source:'wy',id:'wrong'}],hasMore:false}
    if(info.keyword === '只搜艺人') return [{name:info.keyword,singer:'测试艺人',id:'single'}]
    const overlap = [{name:'摘要版本',hash:'h'}, {name:'平台版本',meta:{wy:{id:123}}}]
    if(info.page > 1) return {items:[...overlap.map(r=>({...r,rank:10})), ...Array.from({length:30},(_,i)=>({name:'分页录音'+i,singer:'测试艺人',id:'p'+i}))],hasMore:false}
@@ -75,7 +76,7 @@ if (live) {
   if(action==='lyric') return info.musicInfo.id === 'audio' ? {lyric:'[00:00.00]选定录音的歌词'} : null
   return info.musicInfo.id === 'audio' ? 'https://1.1.1.1/test-audio.mp3' : 'http://127.0.0.1/forbidden'
  })
- lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']},tx:{actions:['search','musicUrl'],qualitys:['128k']}}})`,
   )
 }
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
@@ -200,6 +201,15 @@ try {
     for (const title of ['摘要版本', '平台版本', '分页录音25']) {
       await expect(pane.getByText(title, { exact: true })).toHaveCount(1)
     }
+    await pane.getByRole('tab', { name: 'QQ 音乐' }).click()
+    await expect(pane.getByText('QQ独有版本')).toBeVisible()
+    await expect(pane.getByRole('listitem')).toHaveCount(1)
+    await expect(pane.getByRole('textbox', { name: '艺人', exact: true })).toHaveValue('手动艺人')
+    await pane.getByRole('tab', { name: '酷狗音乐' }).click()
+    await expect(pane.getByText(/不支持酷狗音乐/)).toBeVisible()
+    await expect(pane.getByRole('listitem')).toHaveCount(0)
+    await pane.getByRole('tab', { name: '网易云音乐' }).click()
+    await expect(pane.getByRole('listitem')).toHaveCount(50)
   }
   await pane.getByRole('combobox', { name: '从曲库选择' }).click()
   await pane.getByRole('option', { name: row.title + ' · ' + row.artist }).click()

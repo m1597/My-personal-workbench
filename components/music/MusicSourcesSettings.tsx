@@ -6,6 +6,7 @@ type Installed = CatalogEntry & {
   origin: string | null
   origins: string[]
   platform: string
+  searchPlatforms?: string[]
   search: string
   musicUrl: boolean
   quality: string[]

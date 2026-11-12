@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Input, Dropdown, Option, Combobox } from '@fluentui/react-components'
+import { Button, Input, Dropdown, Option, Combobox, Tab, TabList } from '@fluentui/react-components'
 import type { LocalTrack } from './LibraryPane'
 export type Versions = {
   items: { key: string; title: string; artist: string; album: string }[]
@@ -23,6 +23,10 @@ export function DownloadPane({
   const [artist, setArtist] = useState('')
   const [filter, setFilter] = useState('')
   const [picked, setPicked] = useState('')
+  const [platform, setPlatform] = useState('wy')
+  const [available, setAvailable] = useState<string[]>()
+  const platforms = { wy: '网易云音乐', tx: 'QQ 音乐', kg: '酷狗音乐' }
+  const unsupported = available && !available.includes(platform)
   const hasQuery = Boolean(title.trim() || artist.trim())
   const matching: LocalTrack[] = []
   const keyword = filter.trim().toLocaleLowerCase()
@@ -44,9 +48,9 @@ export function DownloadPane({
       if (live.current) setBusy(false)
     }
   }
-  async function search(query: string | { title: string; artist: string }) {
+  async function search(query: string | { title: string; artist: string }, target = platform) {
     setResult(undefined)
-    const found = await host.lxSearch(query)
+    const found = await host.lxSearch(query, target)
     if (!live.current) return
     setResult(found)
     setQuality(found.quality.includes(preferredQuality) ? preferredQuality : found.quality[0])
@@ -54,27 +58,66 @@ export function DownloadPane({
   }
   useEffect(() => {
     live.current = true
-    void host
-      .lxInfo()
-      .then((value) => {
-        if (live.current) setName(value)
-      })
-      .catch(() => {
-        if (live.current) setStatus('无法读取音乐源')
-      })
+    const load = () =>
+      void host
+        .lxSources()
+        .then((data) => {
+          if (!live.current) return
+          const active = data.installed.find((entry) => entry.id === data.active)
+          setName(active?.name ?? '')
+          setAvailable(active?.searchPlatforms)
+          setResult(undefined)
+          setStatus('')
+        })
+        .catch(() => {
+          if (live.current) setStatus('无法读取音乐源')
+        })
+    load()
+    const unsubscribe = host.onSourcesChanged(load)
     return () => {
       live.current = false
+      unsubscribe()
       void host.lxCancel().catch(() => {})
     }
   }, [])
   return (
     <section className="lx-panel" aria-label="下载音乐">
+      <TabList
+        size="small"
+        aria-label="下载平台"
+        selectedValue={platform}
+        onTabSelect={(_, data) => {
+          const next = String(data.value)
+          if (next === platform || busy) return
+          setPlatform(next)
+          setResult(undefined)
+          setStatus('')
+          if (name && hasQuery && (!available || available.includes(next)))
+            void act(() => search(picked || { title: title.trim(), artist: artist.trim() }, next))
+        }}
+      >
+        <Tab value="wy" disabled={busy}>
+          网易云音乐
+        </Tab>
+        <Tab value="tx" disabled={busy}>
+          QQ 音乐
+        </Tab>
+        <Tab value="kg" disabled={busy}>
+          酷狗音乐
+        </Tab>
+      </TabList>
       {!name && <p>请先到「设置」导入音乐源。</p>}
+      {unsupported && (
+        <p role="status">
+          当前音乐源不支持{platforms[platform as keyof typeof platforms]}
+          的搜索和下载，请更换音乐源。
+        </p>
+      )}
       <form
         className="download-search"
         onSubmit={(e) => {
           e.preventDefault()
-          if (!busy && name && hasQuery)
+          if (!busy && name && hasQuery && !unsupported)
             void act(() => search(picked || { title: title.trim(), artist: artist.trim() }))
         }}
       >
@@ -145,7 +188,11 @@ export function DownloadPane({
             }}
           />
         </label>
-        <Button type="submit" appearance="primary" disabled={!name || !hasQuery || busy}>
+        <Button
+          type="submit"
+          appearance="primary"
+          disabled={!name || !hasQuery || busy || unsupported}
+        >
           查找版本
         </Button>
       </form>

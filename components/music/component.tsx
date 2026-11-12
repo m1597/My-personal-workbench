@@ -105,7 +105,10 @@ declare global {
       lxInfo(): Promise<string>
       lxImport(link?: string): Promise<void>
       lxCancel(scope?: 'import'): Promise<void>
-      lxSearch(query: string | { title: string; artist: string }): Promise<Versions>
+      lxSearch(
+        query: string | { title: string; artist: string },
+        platform?: string,
+      ): Promise<Versions>
       lxPreview(id: string, key: string, quality: string): Promise<string>
       lxDownload(key: string, quality: string): Promise<string>
       createPlaylist(name: string): Promise<string>
