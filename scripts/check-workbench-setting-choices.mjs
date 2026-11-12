@@ -42,18 +42,28 @@ try {
     const paintedAtOpen = page.evaluate(
       () =>
         new Promise((resolve) => {
+          let placeholderHidden = false
           const observer = new MutationObserver(() => {
-            if (!document.querySelector('.settings-surface')) return
             const image = document.querySelector('.component-overlay-frame')
+            if (image && !image.hasAttribute('src')) {
+              placeholderHidden = getComputedStyle(image).visibility === 'hidden'
+            }
+            if (!document.querySelector('.settings-surface')) return
             observer.disconnect()
-            resolve(image?.dataset.composited === 'ready' && image.naturalWidth > 0)
+            resolve({
+              placeholderHidden,
+              painted:
+                image?.dataset.composited === 'ready' &&
+                image.naturalWidth > 0 &&
+                getComputedStyle(image).visibility === 'visible',
+            })
           })
           observer.observe(document.body, { childList: true, subtree: true })
         }),
     )
     await gear.click()
     await expect(dialog).toBeVisible()
-    assert.equal(await paintedAtOpen, true, '设置展开时必须已有停靠内容画面')
+    assert.deepEqual(await paintedAtOpen, { placeholderHidden: true, painted: true })
     if (attempt === 1) await dialog.getByRole('button', { name: '关闭设置' }).click()
   }
   for (const [name, initial, final] of [

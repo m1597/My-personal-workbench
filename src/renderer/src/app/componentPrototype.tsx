@@ -357,11 +357,13 @@ function ComponentBackdrop({ host }: { host: Window['componentHost'] }) {
       decoding="sync"
       draggable={false}
       onError={(event) => {
+        delete event.currentTarget.dataset.loaded
         event.currentTarget.dataset.composited = 'fallback'
       }}
       onLoad={(event) => {
         const image = event.currentTarget
-        if (image.dataset.composited) return
+        image.dataset.loaded = 'true'
+        if (image.dataset.composited === 'ready') return
         // The native child must cover the slot until Chromium has painted the decoded image.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
