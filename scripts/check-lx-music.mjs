@@ -105,6 +105,10 @@ try {
   await expect(tabs).toHaveCount(4)
   for (const [index, name] of ['本地曲库', '下载音乐', '每日推荐', '设置'].entries())
     await expect(tabs.nth(index)).toHaveAccessibleName(name)
+  await page
+    .getByRole('complementary', { name: 'Music 使用引导' })
+    .getByRole('button', { name: '跳过' })
+    .click()
   await expect(page.getByRole('button', { name: /音乐源|查找版本/ })).toHaveCount(0)
   await page.getByRole('tab', { name: '设置' }).click()
   await selectMusicSettings(page, '音乐源')

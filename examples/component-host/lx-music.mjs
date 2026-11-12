@@ -141,7 +141,9 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
   let published = false
   try {
     store.library.upsert(row)
-    store.db.prepare('UPDATE local_tracks SET importedOrigin=? WHERE path_key=?').run(dailyId?'daily':'download',pathKey(file))
+    store.db
+      .prepare('UPDATE local_tracks SET importedOrigin=? WHERE path_key=?')
+      .run(dailyId ? 'daily' : 'download', pathKey(file))
     if (version) {
       const local = store.db
         .prepare('SELECT id FROM local_tracks WHERE path_key=?')

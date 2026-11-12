@@ -286,12 +286,20 @@ try {
   await page.getByRole('button', { name: '歌曲推荐', exact: true }).click()
   const localId = rightsRows.find((r) => r.title === '样例歌曲1').localId
   const localTrack = history.localTracks.find((t) => t.id === localId)
-  const listIndex = history.localTracks
-    .filter((t) => list.tracks.includes(t.id))
-    .findIndex((t) => t.id === localId)
+  const listIndex = history.playlists.find((p) => p.system).tracks.indexOf(localId)
+  assert.ok(listIndex >= 0)
   const libraryRow = page.locator('.library-row').nth(listIndex)
   await libraryRow.getByText(localTrack.title, { exact: true }).click({ button: 'right' })
   await page.getByRole('menuitem', { name: '不感兴趣', exact: true }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async (id) =>
+          (await window.music.state()).localTracks.find((t) => t.id === id)?.notInterested,
+        localId,
+      ),
+    )
+    .toBe(true)
   const afterFeedback = await page.evaluate(() => window.music.state())
   assert.ok(afterFeedback.localTracks.find((t) => t.id === localId).notInterested)
   assert.deepEqual(afterFeedback.playlists, history.playlists)
