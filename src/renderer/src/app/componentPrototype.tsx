@@ -1,3 +1,4 @@
+import { useTranslation } from './preferences'
 import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { Button } from '@fluentui/react-components'
@@ -315,6 +316,7 @@ export function useDockedMusicBar() {
   return state?.phase === 'ready' && state.mode === 'docked' && state.presentation === 'bar'
 }
 export function MusicPlayerBar() {
+  const t = useTranslation()
   const visible = useDockedMusicBar()
   const slot = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -347,7 +349,11 @@ export function MusicPlayerBar() {
     }
   }, [visible])
   return visible ? (
-    <section aria-label="Music 播放栏" ref={slot} style={{ flex: '0 0 100px' }} />
+    <section
+      aria-label={t('Music 播放栏', 'Music player bar')}
+      ref={slot}
+      style={{ flex: '0 0 100px' }}
+    />
   ) : null
 }
 
@@ -369,6 +375,7 @@ export function ComponentDropPreview() {
 }
 
 export function ComponentSlot({ api }: IDockviewPanelProps) {
+  const t = useTranslation()
   const element = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<HostState>()
   useEffect(() => {
@@ -451,14 +458,18 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
         <>
           <p>
             {state?.error ||
-              (state?.mode === 'standalone' ? '组件在独立窗口中运行' : '正在连接组件')}
+              (state?.mode === 'standalone'
+                ? t('组件在独立窗口中运行', 'Component is running in a separate window')
+                : t('正在连接组件', 'Connecting component'))}
           </p>
           <Button
             onClick={() =>
               void (api.id === 'component-music' ? window.musicDock : window.componentHost)?.open()
             }
           >
-            {api.id === 'component-music' ? '重新连接音乐' : '重新连接示例'}
+            {api.id === 'component-music'
+              ? t('重新连接音乐', 'Reconnect Music')
+              : t('重新连接示例', 'Reconnect example')}
           </Button>
         </>
       )}

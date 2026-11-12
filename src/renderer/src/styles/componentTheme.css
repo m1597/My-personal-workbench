@@ -16,7 +16,7 @@
   background: var(--panel-surface);
   backdrop-filter: var(--panel-filter);
 }
-.component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {
+.component-popup:is(.fui-MenuPopover, .fui-PopoverSurface, .fui-DialogSurface, .fui-Listbox) {
   background: var(--menu-surface);
   backdrop-filter: var(--material-popup);
   border: 1px solid var(--edge-highlight);
@@ -34,18 +34,18 @@
     --shell-surface: var(--base);
     --panel-surface: var(--solid-surface);
   }
-  .component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {
+  .component-popup:is(.fui-MenuPopover, .fui-PopoverSurface, .fui-DialogSurface, .fui-Listbox) {
     background: var(--solid-surface);
   }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {
+  .component-popup:is(.fui-MenuPopover, .fui-PopoverSurface, .fui-DialogSurface, .fui-Listbox) {
     background: var(--solid-surface);
     backdrop-filter: none;
   }
 }
 @media (forced-colors: active) {
-  .component-popup:is(.fui-MenuPopover, .fui-DialogSurface, .fui-Listbox) {
+  .component-popup:is(.fui-MenuPopover, .fui-PopoverSurface, .fui-DialogSurface, .fui-Listbox) {
     background: Canvas;
     color: CanvasText;
     border-color: CanvasText;

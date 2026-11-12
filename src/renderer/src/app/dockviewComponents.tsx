@@ -1,3 +1,4 @@
+import { useTranslation } from './preferences'
 import { fixtureWorkspace } from './moduleRegistry'
 import { useState, useEffect, useContext } from 'react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelProps } from 'dockview-react'
@@ -27,9 +28,13 @@ export function BuiltinContent({ id }: { id: string }) {
       return null
   }
 }
-export const components = { module: ModulePanel, 'component-slot': ComponentSlot }
+export const components = {
+  module: ModulePanel,
+  'component-slot': ComponentSlot,
+}
 
 export function HeaderActions({ api, containerApi }: IDockviewHeaderActionsProps) {
+  const t = useTranslation()
   const [maximized, setMaximized] = useState(api.isMaximized())
   useEffect(() => {
     const subscription = containerApi.onDidMaximizedGroupChange(() =>
@@ -41,8 +46,8 @@ export function HeaderActions({ api, containerApi }: IDockviewHeaderActionsProps
     <button
       type="button"
       className="icon-button header-action"
-      aria-label={maximized ? '还原面板' : '最大化面板'}
-      title={maximized ? '还原面板' : '最大化面板'}
+      aria-label={maximized ? t('还原面板', 'Restore panel') : t('最大化面板', 'Maximize panel')}
+      title={maximized ? t('还原面板', 'Restore panel') : t('最大化面板', 'Maximize panel')}
       onClick={() => {
         if (api.isMaximized()) api.exitMaximized()
         else api.maximize()
@@ -55,16 +60,23 @@ export function HeaderActions({ api, containerApi }: IDockviewHeaderActionsProps
 }
 
 export function EmptyWorkspace() {
+  const t = useTranslation()
   const { api } = useContext(WorkspaceContext)
   const dockedBar = useDockedMusicBar()
   if (!fixtureWorkspace)
     return (
       <div className="empty-workspace">
         <PanelsTopLeft size={40} strokeWidth={1} />
-        <h2>{dockedBar ? '可在这里打开其他组件' : '工作区为空'}</h2>
+        <h2>
+          {dockedBar
+            ? t('可在这里打开其他组件', 'Open other components here')
+            : t('工作区为空', 'Your workspace is empty')}
+        </h2>
         {!dockedBar && (
           <p>
-            {window.musicDock ? '从「窗口 → Music」打开音乐组件。' : '从桌面工作台打开 Music。'}
+            {window.musicDock
+              ? t('从「窗口 → Music」打开音乐组件。', 'Open Music from the Window menu.')
+              : t('从桌面工作台打开 Music。', 'Open Music from the desktop workbench.')}
           </p>
         )}
       </div>
@@ -72,8 +84,13 @@ export function EmptyWorkspace() {
   return (
     <div className="empty-workspace">
       <PanelsTopLeft size={40} strokeWidth={1} />
-      <h2>留一点空间给新的想法</h2>
-      <p>从「窗口」菜单打开模块，或恢复默认布局。</p>
+      <h2>{t('留一点空间给新的想法', 'Make room for new ideas')}</h2>
+      <p>
+        {t(
+          '从「窗口」菜单打开模块，或恢复默认布局。',
+          'Open a module from the Window menu or restore the default layout.',
+        )}
+      </p>
       <button
         type="button"
         className="primary-button"
@@ -86,7 +103,7 @@ export function EmptyWorkspace() {
             )
         }}
       >
-        恢复默认布局
+        {t('恢复默认布局', 'Restore default layout')}
       </button>
     </div>
   )

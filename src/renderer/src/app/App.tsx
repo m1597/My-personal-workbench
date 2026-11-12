@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react'
 import type { ModuleId } from './builtinSession'
 import { WorkspaceContext, type WorkspaceState } from './WorkspaceContext'
@@ -8,7 +8,20 @@ import { WindowMenu } from './WindowMenu'
 import { restoreLayout } from './layoutStorage'
 import { ComponentDropPreview, MusicPlayerBar, useComponentPrototype } from './componentPrototype'
 
+import { WorkbenchSettings } from './WorkbenchSettings'
+import { LanguageContext, readPreferences } from './preferences'
+
 export default function App() {
+  const [preferences, setPreferences] = useState(readPreferences)
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty('--material-opacity', String(1 - preferences.transparency / 100))
+    root.style.setProperty('--material-frost', String(preferences.frost / 100))
+    root.style.setProperty('--material-light', String(preferences.brightness / 100))
+    root.lang = preferences.language
+    root.dataset.workbenchFont = preferences.font
+    root.dataset.workbenchSize = preferences.size
+  }, [preferences])
   const [theme] = useState(() => ({
     name: 'workbench',
     className: 'dockview-theme-workbench',
@@ -52,29 +65,37 @@ export default function App() {
   )
 
   return (
-    <ComponentTheme surface="workspace">
-      <WorkspaceContext.Provider
-        value={{ ...workspace, visible: [...workspace.visible, ...detached] }}
-      >
-        <div className="workbench">
-          <header className="app-header">
-            <WindowMenu />
-            <ComponentDropPreview />
-          </header>
-          <main className="docking-area" aria-label="可调整的模块工作区">
-            <DockviewReact
-              components={components}
-              onReady={onReady}
-              theme={theme}
-              dndStrategy={window.componentHost ? 'pointer' : 'auto'}
-              disableFloatingGroups
-              rightHeaderActionsComponent={HeaderActions}
-              watermarkComponent={EmptyWorkspace}
-            />
-          </main>
-          <MusicPlayerBar />
-        </div>
-      </WorkspaceContext.Provider>
-    </ComponentTheme>
+    <LanguageContext.Provider value={preferences.language}>
+      <ComponentTheme surface="workspace">
+        <WorkspaceContext.Provider
+          value={{ ...workspace, visible: [...workspace.visible, ...detached] }}
+        >
+          <div className="workbench">
+            <header className="app-header">
+              <WindowMenu />
+              <WorkbenchSettings value={preferences} onChange={setPreferences} />
+              <ComponentDropPreview />
+            </header>
+            <main
+              className="docking-area"
+              aria-label={
+                preferences.language === 'en' ? 'Adjustable workspace' : '可调整的模块工作区'
+              }
+            >
+              <DockviewReact
+                components={components}
+                onReady={onReady}
+                theme={theme}
+                dndStrategy={window.componentHost ? 'pointer' : 'auto'}
+                disableFloatingGroups
+                rightHeaderActionsComponent={HeaderActions}
+                watermarkComponent={EmptyWorkspace}
+              />
+            </main>
+            <MusicPlayerBar />
+          </div>
+        </WorkspaceContext.Provider>
+      </ComponentTheme>
+    </LanguageContext.Provider>
   )
 }

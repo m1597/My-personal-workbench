@@ -1,3 +1,4 @@
+import { useTranslation } from './preferences'
 import { useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
 import {
@@ -21,6 +22,7 @@ import {
 } from './layoutStorage'
 
 export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): void }) {
+  const t = useTranslation()
   const [presets, setPresets] = useState(readPresets)
   const [selected, setSelected] = useState(presets.defaultName ?? presets.items[0]?.name ?? '')
   const [name, setName] = useState('')
@@ -33,7 +35,12 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
       setMessage(feedback)
       return true
     } catch {
-      setMessage('保存失败，请检查应用存储空间后重试。')
+      setMessage(
+        t(
+          '保存失败，请检查应用存储空间后重试。',
+          'Could not save. Check the available storage and try again.',
+        ),
+      )
       return false
     }
   }
@@ -50,13 +57,13 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
             action={
               <Button
                 appearance="subtle"
-                aria-label="关闭布局"
+                aria-label={t('关闭布局', 'Close layouts')}
                 icon={<X size={16} />}
                 onClick={onClose}
               />
             }
           >
-            布局
+            {t('布局', 'Layouts')}
           </DialogTitle>
           <DialogContent className="layout-content">
             <form
@@ -66,7 +73,12 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                 const trimmed = name.trim()
                 if (!trimmed) return
                 if (presets.items.some((item) => item.name === trimmed)) {
-                  setMessage('此名称已存在。请选择已有布局并点击「更新快照」。')
+                  setMessage(
+                    t(
+                      '此名称已存在。请选择已有布局并点击「更新快照」。',
+                      'This name already exists. Select its layout and choose Update snapshot.',
+                    ),
+                  )
                   return
                 }
                 if (
@@ -75,7 +87,7 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                       ...presets,
                       items: [...presets.items, { name: trimmed, layout: captureLayout(api) }],
                     },
-                    '已保存当前布局。',
+                    t('已保存当前布局。', 'Current layout saved.'),
                   )
                 ) {
                   setSelected(trimmed)
@@ -83,16 +95,16 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                 }
               }}
             >
-              <Field label="新布局名称">
+              <Field label={t('新布局名称', 'New layout name')}>
                 <Input value={name} maxLength={80} onChange={(_, data) => setName(data.value)} />
               </Field>
               <Button type="submit" appearance="primary" disabled={!name.trim()}>
-                保存当前布局
+                {t('保存当前布局', 'Save current layout')}
               </Button>
             </form>
             {presets.items.length > 0 && (
               <>
-                <Field label="已保存的布局">
+                <Field label={t('已保存的布局', 'Saved layouts')}>
                   <Select
                     value={selected}
                     onChange={(_, data) => {
@@ -103,7 +115,7 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                     {presets.items.map((item) => (
                       <option key={item.name} value={item.name}>
                         {item.name}
-                        {item.name === presets.defaultName ? '（默认）' : ''}
+                        {item.name === presets.defaultName ? t('（默认）', ' (default)') : ''}
                       </option>
                     ))}
                   </Select>
@@ -118,7 +130,7 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                       }
                     }}
                   >
-                    切换布局
+                    {t('切换布局', 'Switch layout')}
                   </Button>
                   <Button
                     disabled={!chosen}
@@ -131,19 +143,23 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                             item === chosen ? { ...item, layout: captureLayout(api) } : item,
                           ),
                         },
-                        '已更新所选快照。',
+                        t('已更新所选快照。', 'Snapshot updated.'),
                       )
                     }
                   >
-                    更新快照
+                    {t('更新快照', 'Update snapshot')}
                   </Button>
                   <Button
                     disabled={!chosen || chosen.name === presets.defaultName}
                     onClick={() =>
-                      chosen && save({ ...presets, defaultName: chosen.name }, '已设为默认布局。')
+                      chosen &&
+                      save(
+                        { ...presets, defaultName: chosen.name },
+                        t('已设为默认布局。', 'Default layout set.'),
+                      )
                     }
                   >
-                    设为默认
+                    {t('设为默认', 'Set as default')}
                   </Button>
                 </div>
               </>
@@ -158,7 +174,7 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                   onClose()
                 }}
               >
-                还原默认布局
+                {t('还原默认布局', 'Restore default layout')}
               </Button>
             </div>
             {message && <span role="status">{message}</span>}

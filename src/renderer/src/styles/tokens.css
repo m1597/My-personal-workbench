@@ -41,12 +41,12 @@
   --line-height-body: 1.9;
   --line-height-hint: 1.7;
   --opacity-disabled: 0.45;
-  --font-size-caption: 12px;
-  --font-size-control: 13px;
-  --font-size-body: 14px;
-  --font-size-heading: 16px;
-  --font-size-empty: 18px;
-  --font-size-title: 24px;
+  --font-size-caption: calc(12px + var(--workbench-type-offset, 0px));
+  --font-size-control: calc(13px + var(--workbench-type-offset, 0px));
+  --font-size-body: calc(14px + var(--workbench-type-offset, 0px));
+  --font-size-heading: calc(16px + var(--workbench-type-offset, 0px));
+  --font-size-empty: calc(18px + var(--workbench-type-offset, 0px));
+  --font-size-title: calc(24px + var(--workbench-type-offset, 0px));
   --space-7: 7px;
   --space-16: 16px;
   --space-18: 18px;

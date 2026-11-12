@@ -137,3 +137,107 @@
   background: currentColor;
   mask: url("./music-wave.svg") center / contain no-repeat;
 }
+:root[data-workbench-size="small"] {
+  --workbench-type-offset: -1px;
+}
+:root[data-workbench-size="large"] {
+  --workbench-type-offset: 2px;
+}
+:root[data-workbench-font="yahei"] {
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+}
+:root[data-workbench-font="segoe"] {
+  --font-ui: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+.app-header .settings-trigger {
+  margin-inline-start: auto;
+}
+.settings-surface.fui-PopoverSurface {
+  display: grid;
+  gap: var(--space-16);
+  width: min(320px, calc(100vw - 32px));
+  padding: var(--space-20);
+}
+.settings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+.settings-heading h2 {
+  margin: 0;
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-medium);
+}
+.settings-surface {
+  max-height: calc(100dvh - var(--shell-header-height) - 16px);
+  overflow-y: auto;
+}
+.settings-material {
+  display: grid;
+  gap: var(--space-12);
+  margin: 0;
+  padding: var(--space-12) 0 0;
+  min-inline-size: 0;
+  border: 0;
+  border-top: 1px solid var(--stroke);
+}
+.settings-material legend {
+  float: left;
+  width: 100%;
+  color: var(--text-secondary);
+  font-size: var(--font-size-control);
+}
+.material-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+.material-control > span {
+  font-size: var(--font-size-caption);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.material-control .fui-Slider {
+  grid-column: 1 / -1;
+}
+/* Windows supplies the desktop Acrylic. These layers control its in-app tint,
+   diffuse veil and the actual blur used behind Fluent flyouts. */
+@media (prefers-reduced-transparency: no-preference) and (forced-colors: none) {
+  :root[data-workbench-size] {
+    --material-popup: blur(calc(var(--material-frost) * 56px));
+    --material-tint: color-mix(in srgb, #080b10, #536071 calc(var(--material-light) * 100%));
+    --shell-surface:
+      linear-gradient(
+        rgb(184 197 215 / calc(var(--material-frost) * 0.12)),
+        rgb(184 197 215 / calc(var(--material-frost) * 0.12))
+      ),
+      linear-gradient(
+        rgb(0 0 0 / max(0, calc(0.5 - var(--material-light)))),
+        rgb(0 0 0 / max(0, calc(0.5 - var(--material-light))))
+      ),
+      linear-gradient(
+        rgb(162 180 204 / max(0, calc((var(--material-light) - 0.5) * 0.5))),
+        rgb(162 180 204 / max(0, calc((var(--material-light) - 0.5) * 0.5)))
+      ),
+      color-mix(in srgb, var(--material-tint) calc(var(--material-opacity) * 100%), transparent);
+  }
+}
+@media (prefers-reduced-transparency: no-preference) and (forced-colors: none) {
+  .workbench {
+    position: relative;
+    overflow: clip;
+  }
+  /* A stationary grain layer gives the renderer real detail to diffuse even
+     when the workspace is empty. Foreground text stays outside the filter. */
+  .workbench::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    pointer-events: none;
+    z-index: -1;
+    background-image: url("./acrylic-grain.png");
+    opacity: 0.085;
+    filter: blur(calc(var(--material-frost) * 6px));
+  }
+}

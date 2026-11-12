@@ -1,3 +1,4 @@
+import { useTranslation } from './preferences'
 import { useContext, useRef, useState } from 'react'
 import {
   Button,
@@ -18,6 +19,7 @@ import { LayoutDialog } from './LayoutDialog'
 import { useMusicHostState } from './componentPrototype'
 
 export function WindowMenu() {
+  const t = useTranslation()
   const music = useMusicHostState()
   const running = music?.phase === 'ready' || music?.phase === 'attaching'
   const workspace = useContext(WorkspaceContext)
@@ -26,7 +28,12 @@ export function WindowMenu() {
   const trigger = useRef<HTMLButtonElement>(null)
   return (
     <>
-      <Menu positioning={{ position: modules.length ? 'below' : 'after', align: 'start' }}>
+      <Menu
+        positioning={{
+          position: modules.length ? 'below' : 'after',
+          align: 'start',
+        }}
+      >
         <MenuTrigger disableButtonEnhancement>
           <Button
             ref={trigger}
@@ -34,11 +41,11 @@ export function WindowMenu() {
             icon={<ChevronDown size={14} />}
             iconPosition="after"
           >
-            窗口
+            {t('窗口', 'Window')}
           </Button>
         </MenuTrigger>
         <MenuPopover className="component-popup workbench-menu">
-          <MenuList aria-label="窗口菜单" id="window-menu">
+          <MenuList aria-label={t('窗口菜单', 'Window menu')} id="window-menu">
             {modules.map((module) => (
               <MenuItem
                 key={module.id}
@@ -71,8 +78,8 @@ export function WindowMenu() {
                 {music?.phase === 'ready' && music.presentation === 'background' && (
                   <MenuItem
                     className="music-menu-reveal"
-                    aria-label="显示 Music"
-                    title="显示 Music"
+                    aria-label={t('显示 Music', 'Show Music')}
+                    title={t('显示 Music', 'Show Music')}
                     icon={<Eye size={16} />}
                     onClick={() => void window.musicDock?.reveal()}
                   />
@@ -81,7 +88,7 @@ export function WindowMenu() {
             )}
             <MenuDivider />
             <MenuItem icon={<PanelsTopLeft size={16} />} onClick={() => setLayoutsOpen(true)}>
-              布局
+              {t('布局', 'Layouts')}
             </MenuItem>
           </MenuList>
         </MenuPopover>
