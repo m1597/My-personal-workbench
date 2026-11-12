@@ -89,6 +89,7 @@ bridge.onSourcesChanged = (listener) => {
 }
 contextBridge.exposeInMainWorld('music', Object.freeze(bridge))
 contextBridge.exposeInMainWorld('musicWindow', {
+  thumbnailState: (state) => ipcRenderer.send('music-sample:thumbnail-state', state),
   onTransport: (fn) => {
     const cb = (_, action) => fn(action)
     ipcRenderer.on('music:transport', cb)

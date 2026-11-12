@@ -165,6 +165,12 @@ declare global {
       keep(batch: string): Promise<void>
     }
     musicWindow: {
+      thumbnailState(state: {
+        paused: boolean
+        previous: boolean
+        toggle: boolean
+        next: boolean
+      }): void
       onTransport(fn: (action: TransportAction) => void): () => void
       status(): Promise<Mode>
       present(mode: Presentation): Promise<void>
@@ -600,6 +606,17 @@ function Music() {
     else if (action === 'next' && !resolving && following) void act(next)
   })
   useEffect(() => window.musicWindow.onTransport((action) => transport(action)), [])
+  const canPrevious = Boolean(preceding)
+  const canToggle = Boolean(primary)
+  const canNext = !resolving && Boolean(following)
+  useEffect(() => {
+    window.musicWindow.thumbnailState({
+      paused,
+      previous: canPrevious,
+      toggle: canToggle,
+      next: canNext,
+    })
+  }, [paused, canPrevious, canToggle, canNext])
   async function audition(row: Item, key?: string, quality?: string, queueIds = visibleQueue) {
     const request = ++epoch.current
     setResolving(true)

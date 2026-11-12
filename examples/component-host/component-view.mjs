@@ -4,6 +4,7 @@ import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { watchNativeDock, positionAtRelease, outsideRelease } from './native-dock.mjs'
+import { musicThumbnails } from './music-thumbnails.mjs'
 export function componentView({
   music,
   componentRoot,
@@ -34,6 +35,13 @@ export function componentView({
   let confirmedTransfer = 0
   let transferTimer
   let pendingAttach
+  const thumbnails =
+    music && process.platform === 'win32'
+      ? musicThumbnails((action) => {
+          if (view && !view.webContents.isDestroyed())
+            view.webContents.send('music:transport', action)
+        })
+      : undefined
 
   let dragOver = null
   let placement = null
@@ -48,6 +56,8 @@ export function componentView({
     transfer,
   })
   function broadcast() {
+    if (phase === 'stopped' || phase === 'crashed') thumbnails?.reset()
+    else thumbnails?.owner(parent)
     if (shell() && !shell().isDestroyed())
       shell().webContents.send(music ? 'music-prototype:state' : 'prototype:state', snapshot())
     if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed())
@@ -312,6 +322,10 @@ export function componentView({
     discover,
     preview,
     listen() {
+      if (music)
+        ipcMain.on('music-sample:thumbnail-state', (event, state) => {
+          if (isSample(event)) thumbnails?.update(state)
+        })
       ipcMain.handle(music ? 'music-sample:hello' : 'sample:hello', (event, payload) => {
         if (!isSample(event) || payload?.protocol !== '0.1') throw new Error('DENIED')
         return snapshot()

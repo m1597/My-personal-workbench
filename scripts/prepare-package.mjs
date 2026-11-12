@@ -11,6 +11,8 @@ const commonHostFiles = [
   'main.mjs',
   'installed-products.mjs',
   'component-view.mjs',
+  'music-thumbnails.mjs',
+  'transport-icons.png',
   'builtin-windows.mjs',
   'builtin-preload.cjs',
   'workbench-preload.cjs',
