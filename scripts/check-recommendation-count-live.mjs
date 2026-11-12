@@ -63,11 +63,13 @@ try {
   })
   const page = await app.firstWindow()
   await page.waitForSelector('.music-shell')
-  await app.evaluate(({ app, BrowserWindow, dialog, screen }, output) => {
+  await app.evaluate(({ app, BaseWindow, dialog, screen }, output) => {
     const left = Math.min(...screen.getAllDisplays().map((display) => display.bounds.x))
+    const windows = BaseWindow.getAllWindows()
     if (
+      !windows.length ||
       !app.commandLine.hasSwitch('mute-audio') ||
-      !BrowserWindow.getAllWindows().every((w) => {
+      !windows.every((w) => {
         const { x, width } = w.getBounds()
         return x + width <= left && !w.isFocusable()
       })
