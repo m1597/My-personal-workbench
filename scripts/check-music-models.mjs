@@ -284,7 +284,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     source,
     `// @name 自动保存源
     lx.on('request',({action,info})=>{
-      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3';
+      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3?title='+encodeURIComponent(info.musicInfo.name);
       const [name,artist]=info.keyword.split(' ');
       const row={id:name,name,singer:artist,albumName:'原版'};
       if(name.endsWith('2')) return [row,{...row,id:name+'-live',albumName:'现场'}];
@@ -311,11 +311,12 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     const original = https.request
     globalThis.transfers = 0
     https.request = (url, opts, done) => {
-      if (url.href !== 'https://1.1.1.1/daily.mp3') return original(url, opts, done)
+      if (url.origin !== 'https://1.1.1.1' || url.pathname !== '/daily.mp3')
+        return original(url, opts, done)
       const file = recordings[globalThis.transfers++]
       const req = new EventEmitter()
       const deliver = () => {
-        if (globalThis.slowTransfer === globalThis.transfers) {
+        if (globalThis.slowTransfer && url.searchParams.get('title') === '传输中终止') {
           const { PassThrough } = process.getBuiltinModule('node:stream')
           const stream = Object.assign(new PassThrough(), {
             statusCode: 200,
@@ -335,7 +336,8 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
         )
       }
       req.end = () => {
-        if (globalThis.holdTransfer === globalThis.transfers) globalThis.releaseTransfer = deliver
+        if (globalThis.holdTransfer && url.searchParams.get('title') === '队列歌曲4')
+          globalThis.releaseTransfer = deliver
         else deliver()
       }
       return req
@@ -356,7 +358,9 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   const before = (await calls()).length
   await page.getByLabel('描述你想听什么').fill('')
   await page.getByRole('button', { name: '生成推荐' }).click()
-  await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4)
+  await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4, {
+    timeout: 15000,
+  })
   await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled()
   assert.ok((await calls()).length > before + 1)
   const denied = await page.evaluate(async () => (await window.music.state()).batches[0])
@@ -514,7 +518,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     source,
     `// @name 本批播放验收
     lx.on('request',({action,info})=>{
-      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3';
+      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3?title='+encodeURIComponent(info.musicInfo.name);
       const [name,singer]=info.keyword.split(' ');
       return [{id:name,name,singer,allowPermanentSave:true}]
     });
@@ -524,7 +528,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   await app.evaluate(() => {
     globalThis.rightsTracks = false
     globalThis.queueTracks = true
-    globalThis.holdTransfer = globalThis.transfers + 5
+    globalThis.holdTransfer = true
   })
   await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
@@ -590,7 +594,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     source,
     `// @name 目标数量验收
     lx.on('request',({action,info})=>{
-      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3'
+      if(action==='musicUrl') return 'https://1.1.1.1/daily.mp3?title='+encodeURIComponent(info.musicInfo.name)
       const [name,singer]=info.keyword.split(' ')
       return [{name,singer,id:name,allowPermanentSave:true}]
     })
@@ -673,7 +677,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   assert.deepEqual(await sample('听歌手甲本人的歌'), ['歌手甲', '歌手甲', '歌手甲'])
   assert.equal(await app.evaluate(() => globalThis.diversityCalls.length), 3)
   await app.evaluate(() => {
-    globalThis.slowTransfer = globalThis.transfers + 2
+    globalThis.slowTransfer = true
     globalThis.stopTestCalls = 0
     globalThis.fetch = async () => {
       const songs =
@@ -737,7 +741,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     source,
     `// @name 同作版本验收
     lx.on('request',({action,info})=>{
-      if(action==='musicUrl')return 'https://1.1.1.1/daily.mp3'
+      if(action==='musicUrl')return 'https://1.1.1.1/daily.mp3?title='+encodeURIComponent(info.musicInfo.name)
       const [title]=info.keyword.split(' ')
       if(title==='截短测试')return [{id:title,name:title,singer:'原唱',allowPermanentSave:true,durationSeconds:245}]
       if(title==='同作验收')return [

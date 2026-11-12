@@ -38,6 +38,57 @@ class RecordingError extends Error {
     this.kind = kind
   }
 }
+// Search and permission probes are read-only. Only the consumer of a match can publish.
+async function* availableSources(sources, probe, signal, parallel) {
+  const controller = new AbortController()
+  const searchSignal = AbortSignal.any([signal, controller.signal])
+  const pending = new Map()
+  let next = 0
+  function start() {
+    const index = next++
+    const src = sources[index]
+    pending.set(
+      index,
+      Promise.resolve()
+        .then(() => probe(src, searchSignal))
+        .then(
+          (candidate) => ({ index, src, candidate }),
+          (error) => ({ index, src, error }),
+        ),
+    )
+  }
+  try {
+    while (next < sources.length || pending.size) {
+      signal.throwIfAborted()
+      if (!pending.size) start()
+      // Give the selected source a head start. Fast successful requests usually need no alternatives.
+      let timer
+      const contenders = [...pending.values()]
+      if (next < sources.length && pending.size < parallel)
+        contenders.push(
+          new Promise((resolve) => {
+            timer = setTimeout(resolve, 300)
+          }),
+        )
+      let result
+      try {
+        result = await Promise.race(contenders)
+      } finally {
+        clearTimeout(timer)
+      }
+      signal.throwIfAborted()
+      if (!result) {
+        start()
+        continue
+      }
+      pending.delete(result.index)
+      yield result
+    }
+  } finally {
+    controller.abort()
+    await Promise.all(pending.values())
+  }
+}
 function failureKind(error) {
   if (error.kind) return error.kind
   if (error instanceof CatalogUnavailable) return 'network'
@@ -267,17 +318,23 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
 export async function saveRecording(url, dir, info, store, signal, auditionId, version, dailyId) {
   const temp = path.join(dir, '.fitbay-' + randomUUID() + '.part')
   try {
+    const connection = new AbortController()
+    const connectionTimer = dailyId && setTimeout(() => connection.abort(), 8000)
     const res = await openPublic(url, {
-      signal: AbortSignal.any([signal, AbortSignal.timeout(240000)]),
-    }).catch((error) => {
-      signal.throwIfAborted()
-      throw new SourceDownloadError(error.message)
+      signal: AbortSignal.any([signal, connection.signal, AbortSignal.timeout(240000)]),
     })
+      .catch((error) => {
+        signal.throwIfAborted()
+        throw new SourceDownloadError(error.message)
+      })
+      .finally(() => clearTimeout(connectionTimer))
     if (res.statusCode !== 200) {
       res.destroy()
       throw new SourceDownloadError('音频服务器拒绝下载（HTTP ' + res.statusCode + '）')
     }
-    res.setTimeout(120000, () => res.destroy(new TransferError('音频传输超时，请稍后重试')))
+    res.setTimeout(dailyId ? 10000 : 120000, () =>
+      res.destroy(new TransferError('音频传输超时，请稍后重试')),
+    )
     const hash = version && createHash('sha256')
     let size = 0
     const limit = new Transform({
@@ -364,6 +421,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
 
     if (auditionId) store.cacheOnline(auditionId, temp, metadata, extension(format))
     else if (dailyId) {
+      let published = false
       const match = await publishDaily(
         store,
         temp,
@@ -371,7 +429,34 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
         format.duration,
         version.digest,
         signal,
-        () => publishToLibrary(temp, metadata, store, version, dailyId),
+        () => {
+          // A sibling candidate can finish after preflight, even with different encoded bytes.
+          const siblings = store.db
+            .prepare(
+              `SELECT t.title,t.artist,c.platform,c.sourceId FROM items current
+             JOIN recommendation_runs run ON run.batch=current.batch
+             JOIN items i ON i.batch=current.batch AND i.id!=current.id
+             JOIN recommended_items r ON r.item=i.id JOIN local_tracks t ON t.id=r.local
+             LEFT JOIN recording_copies c ON c.local=t.id WHERE current.id=?`,
+            )
+            .all(dailyId)
+          if (
+            siblings.some(
+              (r) => r.platform === version.platform && r.sourceId === version.sourceId,
+            ) ||
+            inLibrary(metadata, siblings)
+          ) {
+            store.db
+              .prepare(
+                "UPDATE recommended_items SET error='本批已有同一录音',diagnosis='duplicate' WHERE item=?",
+              )
+              .run(dailyId)
+            store.status(dailyId, '已在曲库')
+            return
+          }
+          publishToLibrary(temp, metadata, store, version, dailyId)
+          published = true
+        },
       )
       if (match) {
         if (
@@ -389,6 +474,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
         store.status(dailyId, '已在曲库')
         return ''
       }
+      if (!published) return ''
     } else publishToLibrary(temp, metadata, store, version)
     return filename
   } finally {
@@ -695,38 +781,45 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }).catch(() => false)
     if (saved) lyricsSaved?.()
   }
-  async function fetchRecording(src, row, quality, dir, signal, auditionId, dailyId) {
+  async function recordingAddress(src, row, quality, signal, dailyId) {
     // Manual and audition requests were validated against the original search result.
     // A fallback resolver receives that row unchanged, regardless of its own search dialect.
     if (dailyId && !recordingQualities(src, row).includes(quality))
       throw Error('此录音不提供所选音质，请重新选择')
+    let url
+    const addressDeadline = AbortSignal.timeout(6500)
+    try {
+      url = await runSource(
+        src.code,
+        {
+          action: 'musicUrl',
+          source: src.platform,
+          info: { type: quality, musicInfo: row },
+        },
+        dailyId ? AbortSignal.any([signal, addressDeadline]) : signal,
+      )
+    } catch (error) {
+      signal.throwIfAborted()
+      if (dailyId && addressDeadline.aborted) throw new RecordingError('network', '音乐源取址超时')
+      if (!(error instanceof SourceRequestError)) throw error
+      throw new SourceDownloadError(
+        src.name +
+          '（' +
+          src.platform +
+          '）未能取得该版本的 ' +
+          quality +
+          ' 地址：' +
+          error.message,
+      )
+    }
+    if (typeof url !== 'string' || !url || url.length > 16384)
+      throw new SourceDownloadError('音乐源未返回可用地址')
+    return url
+  }
+  async function fetchRecording(src, row, quality, dir, signal, auditionId, dailyId, preparedUrl) {
     for (let attempt = 0; ; attempt++) {
-      let url
-      try {
-        url = await runSource(
-          src.code,
-          {
-            action: 'musicUrl',
-            source: src.platform,
-            info: { type: quality, musicInfo: row },
-          },
-          signal,
-        )
-      } catch (error) {
-        signal.throwIfAborted()
-        if (!(error instanceof SourceRequestError)) throw error
-        throw new SourceDownloadError(
-          src.name +
-            '（' +
-            src.platform +
-            '）未能取得该版本的 ' +
-            quality +
-            ' 地址：' +
-            error.message,
-        )
-      }
-      if (typeof url !== 'string' || !url || url.length > 16384)
-        throw new SourceDownloadError('音乐源未返回可用地址')
+      const url =
+        (!attempt && preparedUrl) || (await recordingAddress(src, row, quality, signal, dailyId))
       try {
         const filename = await saveRecording(
           url,
@@ -768,7 +861,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   )
   const choices = new Map()
   const running = new Map()
-  async function prepare(id, selected, batchSignal, constraints) {
+  async function prepare(id, selected, batchSignal, constraints, cooldown) {
     const store = getStore()
     const recommendation = store.db
       .prepare('SELECT local FROM recommended_items WHERE item=?')
@@ -831,31 +924,52 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       )
         throw Error('候选已变更，请重试')
       store.status(id, '正在匹配')
-      const selectRecording = async (src) => {
+      const selectRecording = async (src, probeSignal = signal) => {
         const cacheKey = src.search ? src.code + src.platform : src.platform
-        if (!cache.has(cacheKey))
+        if (!cache.has(cacheKey)) {
+          const deadline = AbortSignal.timeout(7000)
+          const lookup = batchSignal ? AbortSignal.any([probeSignal, deadline]) : probeSignal
           cache.set(
             cacheKey,
             searchRecommendation(
               item,
               src.platform,
-              (query, page, offset) => versions(src, query, signal, 20, page, offset),
-              signal,
+              (query, page, offset) => versions(src, query, lookup, 20, page, offset),
+              lookup,
               constraints,
-            ),
+            ).catch((error) => {
+              if (batchSignal && deadline.aborted && !probeSignal.aborted)
+                throw new RecordingError('network', '平台检索超时')
+              throw error
+            }),
           )
+        }
         const { matches: relevant, diagnostics } = await cache.get(cacheKey)
         const officialWy = !src.search && src.platform === 'wy'
         if (officialWy && !cache.has('wyRights')) {
           const ids = relevant
             .filter((r) => permission(src, r) === 'unknown' && /^\d+$/u.test(r.id))
             .map((r) => r.id)
-          if (ids.length) cache.set('wyRights', await freeDownloadQualities(ids, signal))
+          if (ids.length) {
+            const deadline = AbortSignal.timeout(5500)
+            cache.set(
+              'wyRights',
+              freeDownloadQualities(
+                ids,
+                batchSignal ? AbortSignal.any([probeSignal, deadline]) : probeSignal,
+              ).catch((error) => {
+                if (batchSignal && deadline.aborted && !probeSignal.aborted)
+                  throw new RecordingError('network', '下载权限查询超时')
+                throw error
+              }),
+            )
+          }
         }
+        const rights = officialWy ? await cache.get('wyRights') : undefined
         const candidates = new Map()
         const reasons = new Set()
         for (const row of relevant) {
-          const grant = officialWy ? cache.get('wyRights')?.get(row.id) : undefined
+          const grant = rights?.get(row.id)
           const right = permission(src, row)
           if (right !== 'granted' && !(right === 'unknown' && grant?.length)) {
             reasons.add(right === 'unknown' && grant && !grant.length ? 'denied' : right)
@@ -911,20 +1025,20 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         if (exact.length === 1) return exact[0]
         for (const [key, entry] of candidates) choicesForItem.set(key, entry)
       }
-      async function save({ src, row: pick, quality }) {
+      const ownedRecording = (identity) =>
+        batchSignal &&
+        store.db
+          .prepare(
+            'SELECT 1 FROM recording_copies c JOIN local_tracks t ON t.id=c.local WHERE c.platform=? AND c.sourceId=?',
+          )
+          .get(identity.platform, identity.sourceId)
+      async function save({ src, row: pick, quality, preparedUrl }) {
         const identity = versionInfo(src, pick, quality)
         if (store.ignoresRecording(identity.platform, identity.sourceId)) {
           store.status(id, '已跳过')
           return
         }
-        const ownedId =
-          batchSignal &&
-          store.db
-            .prepare(
-              'SELECT 1 FROM recording_copies c JOIN local_tracks t ON t.id=c.local WHERE c.platform=? AND c.sourceId=?',
-            )
-            .get(identity.platform, identity.sourceId)
-        if (ownedId || hasLocalCopy(pick)) return markDuplicate()
+        if (ownedRecording(identity) || hasLocalCopy(pick)) return markDuplicate()
         const version = identity.key
         const cached = await verifiedCopy(store, version, signal)
         if (cached) {
@@ -938,12 +1052,45 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         } else {
           if (!prefs.recommendDir) throw new RecordingError('storage', '请在设置中选择推荐下载目录')
           store.status(id, '正在保存')
-          await fetchRecording(src, pick, quality, prefs.recommendDir, signal, undefined, id)
+          await fetchRecording(
+            src,
+            pick,
+            quality,
+            prefs.recommendDir,
+            signal,
+            undefined,
+            id,
+            preparedUrl,
+          )
         }
       }
-      for (const src of saved ? [saved.src] : installed) {
+      const keyFor = (src) => src.code + '\0' + src.platform
+      const probe = async (src, probeSignal) => {
+        probeSignal.throwIfAborted()
+        if ((cooldown?.get(keyFor(src)) ?? 0) > Date.now())
+          throw new RecordingError('network', '同批请求刚刚失败，暂时跳过此来源')
+        const candidate = saved || (await selectRecording(src, probeSignal))
+        if (batchSignal && candidate && prefs.recommendDir) {
+          const identity = versionInfo(src, candidate.row, candidate.quality)
+          if (!ownedRecording(identity) && !hasLocalCopy(candidate.row))
+            candidate.preparedUrl = await recordingAddress(
+              src,
+              candidate.row,
+              candidate.quality,
+              probeSignal,
+              id,
+            )
+        }
+        return candidate
+      }
+      for await (const { src, candidate, error: searchError } of availableSources(
+        saved ? [saved.src] : installed,
+        probe,
+        signal,
+        batchSignal ? 3 : 1,
+      )) {
         try {
-          const candidate = saved || (await selectRecording(src))
+          if (searchError) throw searchError
           signal.throwIfAborted()
           if (!candidate) continue
           await save(candidate)
@@ -953,6 +1100,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           signal.throwIfAborted()
           if (error.code || (!prefs.recommendDir && error.message.includes('推荐下载目录')))
             throw error
+          if (
+            cooldown &&
+            ['network', 'source-request'].includes(failureKind(error)) &&
+            !(cooldown.get(keyFor(src)) > Date.now())
+          )
+            cooldown.set(keyFor(src), Date.now() + 12000)
           failures.push({ src, error })
         }
       }
@@ -1054,10 +1207,14 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         .find((s) => s.platform === 'wy' && !s.search && s.permanentSave !== false)
       if (!src) return []
       const pool = []
+      const deadline = AbortSignal.timeout(5000)
+      const lookup = AbortSignal.any([signal, deadline])
       for (const artist of [...new Set(seen.map((r) => r.artist))].slice(0, 5)) {
+        signal.throwIfAborted()
+        if (deadline.aborted) break
         try {
           const hits = searchRows(
-            await versions(src, { title: artist, artist: '' }, signal, 30),
+            await versions(src, { title: artist, artist: '' }, lookup, 30),
           ).filter(
             (row) =>
               artistMatches(artist, row.singer, row.artistAliases) &&
@@ -1068,7 +1225,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           if (!hits.length) continue
           const rights = await freeDownloadQualities(
             hits.map((r) => r.id),
-            signal,
+            lookup,
           )
           for (const row of hits.filter((r) => rights.get(r.id)?.length).slice(0, 10)) {
             const item = { title: text(row.name), artist: text(row.singer) }
@@ -1086,24 +1243,51 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       const ids = getStore()
         .db.prepare("SELECT id FROM items WHERE batch=? AND status='待处理'")
         .all(batch)
-      try {
-        for (const { id } of ids) {
-          if (epoch !== generation) break
-          signal.throwIfAborted()
-          const outcome = await prepare(id, undefined, signal, sourceHealth?.constraints)
-          if (sourceHealth) {
-            choices.delete(id)
-            sourceHealth.unreachable = outcome === 'unreachable' ? sourceHealth.unreachable + 1 : 0
-            if (sourceHealth.unreachable >= 3)
-              throw Error('连续多首歌曲的所有匹配来源均无法访问，请检查网络或音源状态')
-            const issue = getStore()
-              .db.prepare('SELECT diagnosis,summary FROM recommended_items WHERE item=?')
-              .get(id)
-            if (['source', 'storage'].includes(issue?.diagnosis)) throw Error(issue.summary)
+      const controller = new AbortController()
+      const work = AbortSignal.any([signal, controller.signal])
+      if (sourceHealth) sourceHealth.cooldown ??= new Map()
+      let index = 0
+      let fatal
+      let unreachable = 0
+      const worker = async () => {
+        try {
+          while (index < ids.length) {
+            if (epoch !== generation) break
+            work.throwIfAborted()
+            const { id } = ids[index++]
+            const outcome = await prepare(
+              id,
+              undefined,
+              work,
+              sourceHealth?.constraints,
+              sourceHealth?.cooldown,
+            )
+            work.throwIfAborted()
+            if (sourceHealth) {
+              choices.delete(id)
+              if (outcome === 'unreachable') unreachable++
+              const issue = getStore()
+                .db.prepare('SELECT diagnosis,summary FROM recommended_items WHERE item=?')
+                .get(id)
+              if (['source', 'storage'].includes(issue?.diagnosis)) throw Error(issue.summary)
+            }
           }
+        } catch (error) {
+          fatal ??= error
+          controller.abort()
+        }
+      }
+      try {
+        await Promise.all(Array.from({ length: Math.min(ids.length, 3) }, worker))
+        if (fatal) throw fatal
+        if (sourceHealth) {
+          sourceHealth.unreachable =
+            unreachable === ids.length ? sourceHealth.unreachable + unreachable : 0
+          if (sourceHealth.unreachable >= 3)
+            throw Error('连续多首歌曲的所有匹配来源均无法访问，请检查网络或音源状态')
         }
       } finally {
-        if (signal.aborted)
+        if (work.aborted)
           getStore()
             .db.prepare("UPDATE items SET status='待重试' WHERE batch=? AND status='待处理'")
             .run(batch)
