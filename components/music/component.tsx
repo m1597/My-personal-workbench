@@ -75,6 +75,7 @@ type Item = {
   batch: string
   title: string
   artist: string
+  recordingAlbum?: string
   reason: string
   track: string
   status: string
@@ -980,7 +981,11 @@ function Music() {
                               {r.status !== '模型推荐' && !(r.daily && r.status === '待重试') && (
                                 <small>
                                   {r.status}
-                                  {version ? ' · ' + version.album + ' · ' + version.version : ''}
+                                  {r.recordingAlbum
+                                    ? ' · ' + r.recordingAlbum
+                                    : version
+                                      ? ' · ' + version.album + ' · ' + version.version
+                                      : ''}
                                 </small>
                               )}
                               {r.online && !playable(r) && (

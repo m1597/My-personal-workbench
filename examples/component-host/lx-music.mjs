@@ -1,5 +1,13 @@
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
-import { titleMatch, artistMatches, inLibrary, searchRecommendation } from './music-discovery.mjs'
+import {
+  titleMatch,
+  artistMatches,
+  inLibrary,
+  searchRecommendation,
+  recordingPreference,
+  recordingDisplayTitle,
+  namesRequestedArtist,
+} from './music-discovery.mjs'
 import { CatalogUnavailable, platformSearch } from './lx-platform-search.mjs'
 import { describeFailure } from './music-download-diagnosis.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
@@ -97,6 +105,10 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
       const rights = flags.flatMap((f) => [f.allowPermanentSave, f.permanentDownload])
       return {
         name: s.name,
+        titleAliases: [
+          ...(Array.isArray(s.alias) ? s.alias : []),
+          ...(Array.isArray(s.transNames) ? s.transNames : []),
+        ].filter((v) => typeof v === 'string'),
         singer: s.artists?.map((a) => a.name).join('/'),
         artistAliases: s.artists?.map((a) =>
           [a.name, ...(a.alias ?? []), a.trans].filter((v) => typeof v === 'string'),
@@ -344,9 +356,9 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
     signal.throwIfAborted()
     const metadata = {
       file,
-      title: text(common.title) || info.name,
-      artist: text(common.artist) || info.singer || '未知艺人',
-      album: text(common.album) || text(info.albumName),
+      title: (dailyId && info.name) || text(common.title) || info.name,
+      artist: (dailyId && info.singer) || text(common.artist) || info.singer || '未知艺人',
+      album: (dailyId && text(info.albumName)) || text(common.album) || text(info.albumName),
       duration: format.duration,
     }
 
@@ -720,7 +732,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           url,
           dir,
           {
-            name: text(row.name),
+            name: dailyId ? text(recordingDisplayTitle(row)) : text(row.name),
+            durationSeconds: row.durationSeconds,
             singer: text(row.singer),
             albumName: text(row.albumName),
           },
@@ -755,7 +768,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   )
   const choices = new Map()
   const running = new Map()
-  async function prepare(id, selected, batchSignal) {
+  async function prepare(id, selected, batchSignal, constraints) {
     const store = getStore()
     const recommendation = store.db
       .prepare('SELECT local FROM recommended_items WHERE item=?')
@@ -764,6 +777,15 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     if (running.has(id) || store.db.prepare('SELECT 1 FROM dismissed_items WHERE item=?').get(id))
       return
     const item = store.item(id)
+    const batch = store.db
+      .prepare(
+        'SELECT b.preference,r.batch AS targeted FROM batches b LEFT JOIN recommendation_runs r ON r.batch=b.id WHERE b.id=?',
+      )
+      .get(item.batch)
+    constraints ??= {
+      version: recordingPreference(batch?.preference),
+      artist: namesRequestedArtist(batch?.preference, item.artist) ? item.artist : '',
+    }
     function hasLocalCopy(recording) {
       if (recommendation.local) return false
       const local = store.db
@@ -819,6 +841,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
               src.platform,
               (query, page, offset) => versions(src, query, signal, 20, page, offset),
               signal,
+              constraints,
             ),
           )
         const { matches: relevant, diagnostics } = await cache.get(cacheKey)
@@ -873,6 +896,14 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           )
           error.kinds = [...reasons]
           throw error
+        }
+        if (batch?.targeted) {
+          const rank = { exact: 0, variant: 1, cover: 2 }
+          return [...candidates.values()].sort(
+            (a, b) =>
+              rank[titleMatch(item, a.row, constraints)] -
+              rank[titleMatch(item, b.row, constraints)],
+          )[0]
         }
         const exact = [...candidates.values()].filter(
           ({ row }) => titleMatch(item, row) === 'exact',
@@ -1059,7 +1090,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         for (const { id } of ids) {
           if (epoch !== generation) break
           signal.throwIfAborted()
-          const outcome = await prepare(id, undefined, signal)
+          const outcome = await prepare(id, undefined, signal, sourceHealth?.constraints)
           if (sourceHealth) {
             choices.delete(id)
             sourceHealth.unreachable = outcome === 'unreachable' ? sourceHealth.unreachable + 1 : 0

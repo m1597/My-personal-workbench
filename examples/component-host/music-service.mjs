@@ -1,7 +1,12 @@
 import { desktopLyrics } from './desktop-lyrics.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
 import { localLines, ownedLyrics } from './music-lyrics.mjs'
-import { inLibrary, artistMatches, namesRequestedArtist } from './music-discovery.mjs'
+import {
+  inLibrary,
+  artistMatches,
+  namesRequestedArtist,
+  recordingPreference,
+} from './music-discovery.mjs'
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
@@ -448,7 +453,10 @@ export function musicService(
         let catalogChoices = []
         let repeated = 0
         let stalled = 0
-        const sourceHealth = { unreachable: 0 }
+        const sourceHealth = {
+          unreachable: 0,
+          constraints: { version: recordingPreference(preference), artist: '' },
+        }
         while (saved.length < targetCount) {
           signal.throwIfAborted()
           const remaining = targetCount - saved.length
@@ -483,6 +491,7 @@ export function musicService(
               requiredArtist =
                 rows.find((row) => namesRequestedArtist(preference, row.artist))?.artist ?? ''
           }
+          sourceHealth.constraints.artist = requiredArtist
           const local = localRows.all()
           const fresh = []
           for (const row of rows) {

@@ -36,6 +36,40 @@ assert.equal(
 assert.equal(namesRequestedArtist('比如 A、B 这类，尽量每位音乐人一首', 'A', true), false)
 assert.equal(namesRequestedArtist('ambient', 'A', true), false)
 assert.equal(namesRequestedArtist('想听 AC/DC 本人的歌', 'AC/DC'), true)
+const song = { title: '群青', artist: 'YOASOBI' }
+const cover = { name: '群青（Cover. YOASOBI）', singer: '梨绪Rio' }
+assert.equal(titleMatch(song, cover), 'cover')
+assert.equal(titleMatch(song, cover, { version: 'original' }), '')
+assert.equal(titleMatch(song, cover, { artist: 'YOASOBI' }), '')
+assert.equal(titleMatch(song, { name: '群青', singer: '其他艺人' }), '')
+assert.equal(titleMatch(song, { name: '群青 - 另一首歌', singer: 'YOASOBI' }), '')
+assert.equal(
+  titleMatch(
+    song,
+    { name: '群青 (YOASOBI 5th ANNIVERSARY DOME LIVE 2024 “超現実”)', singer: 'YOASOBI' },
+    { version: 'live' },
+  ),
+  'variant',
+)
+assert.equal(titleMatch(song, { name: '群青', singer: 'YOASOBI' }, { version: 'live' }), '')
+assert.equal(
+  titleMatch({ title: 'Blue', artist: 'A' }, { name: '青', titleAliases: ['Blue'], singer: 'A' }),
+  'exact',
+)
+assert.equal(
+  titleMatch({ title: 'Blue', artist: 'A' }, { name: '青', titleAliases: ['Blue'], singer: 'B' }),
+  '',
+)
+for (const [a, b] of [
+  ['Cover Adele', 'Cover Lionel Richie'],
+  ['Alpha Remix', 'Beta Remix'],
+  ['Live 2019', 'Live 2023'],
+]) {
+  const left = { title: 'Hello (' + a + ')', artist: 'Performer' }
+  const right = { title: 'Hello (' + b + ')', artist: 'Performer' }
+  assert.equal(titleMatch(left, right), '')
+  assert.equal(inLibrary(left, [right]), false)
+}
 const searches = []
 const recovered = await searchRecommendation(
   { title: '０１. Blue', artist: 'Artist' },
@@ -322,12 +356,11 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   const before = (await calls()).length
   await page.getByLabel('描述你想听什么').fill('')
   await page.getByRole('button', { name: '生成推荐' }).click()
-  await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(3)
+  await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4)
   await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled()
   assert.ok((await calls()).length > before + 1)
   const denied = await page.evaluate(async () => (await window.music.state()).batches[0])
   assert.match(denied.details, /明确禁止永久保存/)
-  assert.match(denied.details, /待选录音/)
   const row = page.locator('.music-list ol li').first()
   await row.getByRole('button', { name: /试听/ }).click()
   await expect.poll(() => page.locator('audio').evaluate((el) => el.currentTime)).toBeGreaterThan(0)
@@ -335,8 +368,8 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   const library = await page.evaluate(() => window.music.state())
   const list = library.playlists.find((p) => p.system)
   assert.equal(list.name, '歌曲推荐')
-  assert.equal(list.tracks.length, 3)
-  assert.equal((await fs.readdir(output)).length, 3)
+  assert.equal(list.tracks.length, 4)
+  assert.equal((await fs.readdir(output)).length, 4)
   assert.equal((await page.evaluate(() => window.music.getTasteStatus())).pending, 0)
   const transfers = await app.evaluate(() => globalThis.transfers)
   await page.getByRole('tab', { name: '每日推荐' }).click()
@@ -700,6 +733,68 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   await expect(page.getByText('已下载 1/1，已达到目标首数')).toBeVisible()
   assert.deepEqual(await page.locator('.music-list li strong').allTextContents(), ['新批歌曲'])
   console.log('PASS 传输写入128字节后从页面终止，保留1/2、清理临时文件、停止后无新写入，新批1/1')
+  await fs.writeFile(
+    source,
+    `// @name 同作版本验收
+    lx.on('request',({action,info})=>{
+      if(action==='musicUrl')return 'https://1.1.1.1/daily.mp3'
+      const [title]=info.keyword.split(' ')
+      if(title==='截短测试')return [{id:title,name:title,singer:'原唱',allowPermanentSave:true,durationSeconds:245}]
+      if(title==='同作验收')return [
+        {id:'denied',name:title,singer:'原唱',allowPermanentSave:false},
+        {id:'unrelated',name:title,singer:'同名他人',allowPermanentSave:true},
+        {id:'cover',name:title+' (Cover. 原唱)',singer:'实际表演者',albumName:'实际录音专辑',allowPermanentSave:true}
+      ]
+      return []
+    })
+    lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+  )
+  await page.evaluate(() => window.music.lxImport())
+  const isolateDb = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'))
+  isolateDb
+    .prepare('DELETE FROM music_sources WHERE id!=?')
+    .run((await page.evaluate(() => window.music.lxSources())).active)
+  isolateDb.close()
+  await app.evaluate(() => {
+    globalThis.versionCalls = 0
+    globalThis.fetch = async () =>
+      Response.json({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    songs: [
+                      {
+                        title: ++globalThis.versionCalls === 1 ? '截短测试' : '同作验收',
+                        artist: '原唱',
+                        reason: '实际录音',
+                      },
+                    ],
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      })
+  })
+  const versionBatch = await page.evaluate(async () => {
+    const id = await window.music.generate('新歌', 'auto', false, 1)
+    const s = await window.music.state()
+    return {
+      batch: s.batches.find((r) => r.id === id),
+      rows: s.items.filter((r) => r.batch === id),
+    }
+  })
+  assert.equal(versionBatch.batch.state, 'completed')
+  assert.match(versionBatch.batch.details, /音频时长与所选完整录音不符/)
+  assert.deepEqual(
+    versionBatch.rows.map((r) => [r.title, r.artist, r.recordingAlbum]),
+    [['同作验收 (Cover. 原唱)', '实际表演者', '实际录音专辑']],
+  )
+  assert.equal(await app.evaluate(() => globalThis.versionCalls), 2)
   // Unique new model titles cannot keep a batch spending indefinitely if every source denies them.
   await fs.writeFile(
     source,
@@ -761,7 +856,7 @@ try {
   assert.ok((await p.evaluate(() => window.music.state())).localTracks.some((t) => t.notInterested))
   assert.equal(
     (await p.evaluate(() => window.music.state())).playlists.find((s) => s.system).tracks.length,
-    18,
+    20,
   )
 } finally {
   await reopened.close()

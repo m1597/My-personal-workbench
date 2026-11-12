@@ -275,11 +275,13 @@ export class MusicStore {
     }
     const items = this.db
       .prepare(
-        `SELECT i.*, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.summary AS downloadSummary,r.diagnosis AS diagnosis,r.attemptSources,t.available AS localAvailable FROM items i JOIN batches b ON b.id=i.batch LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local LEFT JOIN recommendation_runs run ON run.batch=b.id WHERE b.day=? AND i.status != '已跳过' AND (run.batch IS NULL OR (i.status='已入库' AND t.available=1)) ORDER BY b.rowid DESC,i.rowid`,
+        `SELECT i.*, t.title AS recordingTitle, t.artist AS recordingArtist,t.album AS recordingAlbum, COALESCE(t.duration,o.duration) AS audioDuration, r.item AS daily, r.local AS localId, r.error AS downloadError,r.summary AS downloadSummary,r.diagnosis AS diagnosis,r.attemptSources,t.available AS localAvailable FROM items i JOIN batches b ON b.id=i.batch LEFT JOIN online_recordings o ON i.track=o.track LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local LEFT JOIN recommendation_runs run ON run.batch=b.id WHERE b.day=? AND i.status != '已跳过' AND (run.batch IS NULL OR (i.status='已入库' AND t.available=1)) ORDER BY b.rowid DESC,i.rowid`,
       )
       .all(today)
       .map((row) => ({
         ...row,
+        title: row.recordingTitle || row.title,
+        artist: row.recordingArtist || row.artist,
         notInterested:
           dismissed.has(row.id) ||
           localIds.has(row.localId) ||

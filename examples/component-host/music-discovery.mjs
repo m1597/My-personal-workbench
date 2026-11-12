@@ -42,16 +42,111 @@ function titles(title, artist) {
   }
   return values
 }
-export function titleMatch(item, row) {
-  const artist = row.singer ?? row.artist
-  if (!artistMatches(item.artist, artist, row.artistAliases)) return ''
-  const wanted = titles(item.title, item.artist)
-  const found = titles(row.name ?? row.title, artist)
-  if (wanted.some((a) => found.some((b) => key(a) === key(b)))) return 'exact'
-  if (
-    wanted.some((a) => found.some((b) => b.startsWith(a) && /^[\s(\[【-]/u.test(b.slice(a.length))))
+const versionLabels = [
+  [
+    'live',
+    /^(?:live(?:\s+(?:version|ver\.?|at\b.+|in\b.+|from\b.+|\d{4}.*))?|现场(?:版|录音)?|現場(?:版|錄音)?|ライブ(?:版)?|演唱会(?:版|现场)?)$/iu,
+  ],
+  [
+    'original',
+    /^(?:original(?:\s+(?:version|mix))?|studio(?:\s+version)?|原版|原唱版|录音室版|錄音室版)$/iu,
+  ],
+  ['acoustic', /^(?:acoustic(?:\s+version)?|unplugged|不插电(?:版)?)$/iu],
+  ['instrumental', /^(?:instrumental(?:\s+version)?|off vocal|伴奏(?:版)?|纯音乐(?:版)?)$/iu],
+  ['remix', /^(?:remix|[\w .'-]{1,50}\s+remix|混音版)$/iu],
+  ['remaster', /^(?:(?:\d{4}\s+)?remaster(?:ed)?(?:\s+\d{4})?|重制版|重製版)$/iu],
+]
+function edition(title) {
+  const name = fold(title)
+  const suffix = name.match(/^(.*?)\s*(?:[([【]([^()[\]【】]+)[)\]】]|\s+[-–—]\s+(.+))$/u)
+  if (suffix?.[1].trim()) {
+    const detail = (suffix[2] || suffix[3]).trim()
+    const credit =
+      detail.match(/^(?:cover\.?(?:\s+of)?|原唱|翻自|翻唱自)\s*[:：]?\s+(.+)$/iu) ||
+      detail.match(/^(?:原唱|翻自|翻唱自)\s*[:：]\s*(.+)$/iu)
+    if (credit) return { base: suffix[1].trim(), kind: 'cover', origin: credit[1].trim(), detail }
+    if (/\blive\b/iu.test(detail) && /\b(?:19|20)\d{2}\b/u.test(detail))
+      return { base: suffix[1].trim(), kind: 'live', detail }
+    for (const [kind, pattern] of versionLabels)
+      if (pattern.test(detail)) return { base: suffix[1].trim(), kind, detail }
+  }
+  return { base: name, kind: '', detail: '' }
+}
+export function recordingPreference(text) {
+  const description = fold(text).replace(/《[^》]*》/gu, '')
+  const live =
+    /(?:现场(?:版|录音)?|現場版|ライブ版|\blive(?:\s+(?:version|recording|at|in|from)|版|$))/iu
+  const original =
+    /(?:原版|原唱(?!\s*[:：])|录音室(?:版)?|錄音室版|\b(?:original|studio)(?:\s+(?:version|recording)|版|$))/iu
+  const excluded = description.match(
+    /(?:不要|不听|不想听|排除|避免|别来|非)\s*(?:听)?\s*(现场(?:版)?|現場版|live|原版|原唱版)/iu,
   )
-    return 'variant'
+  if (excluded) {
+    const positive = description.replace(excluded[0], '')
+    if (live.test(excluded[1])) return original.test(positive) ? 'original' : 'no-live'
+    return live.test(positive) ? 'live' : 'no-original'
+  }
+  if (live.test(description) !== original.test(description))
+    return live.test(description) ? 'live' : 'original'
+  return ''
+}
+const originalArtists = (row) =>
+  [row.originalArtist, ...(Array.isArray(row.originalArtists) ? row.originalArtists : [])]
+    .map((v) => (typeof v === 'string' ? v : v?.name))
+    .filter((v) => typeof v === 'string' && v.trim())
+    .join(' / ')
+const liveAlbum = (name) =>
+  /(?:^live$|\blive (?:at|in|from|recording|version|album|(?:19|20)\d{2})\b|[(【]live[)】]|现场(?:版|录音)|現場版|演唱会现场|ライブ盤)/iu.test(
+    name ?? '',
+  )
+export function titleMatch(item, row, constraints = {}) {
+  const artist = row.singer ?? row.artist
+  if (constraints.artist && !artistMatches(constraints.artist, artist, row.artistAliases)) return ''
+  const sameArtist = artistMatches(item.artist, artist, row.artistAliases)
+  const wanted = titles(item.title, item.artist).map(edition)
+  const found = titles(row.name ?? row.title, artist).map(edition)
+  // Catalog aliases establish spelling/translation only; the primary title determines the recording edition.
+  const primary = edition(row.name ?? row.title)
+  const workAliases = Array.isArray(row.titleAliases)
+    ? row.titleAliases.filter((v) => typeof v === 'string' && v.trim()).map(edition)
+    : []
+  const albumLive = liveAlbum(row.albumName)
+  const explicitOriginal = originalArtists(row)
+  if (primary.origin && explicitOriginal && !artistMatches(primary.origin, explicitOriginal))
+    return ''
+  for (const request of wanted) {
+    for (const entry of [...found, ...workAliases]) {
+      if (!key(request.base) || key(request.base) !== key(entry.base)) continue
+      const kind = primary.kind || (albumLive ? 'live' : '')
+      const cover = primary.origin || explicitOriginal
+      if (!sameArtist && !(cover && artistMatches(item.artist, cover))) continue
+      if (request.kind && request.kind !== kind && !(request.kind === 'original' && !kind)) continue
+      if (
+        request.origin &&
+        (!cover || !artistMatches(request.origin, cover) || !artistMatches(cover, request.origin))
+      )
+        continue
+      const qualified =
+        ['live', 'remix', 'remaster'].includes(request.kind) &&
+        !/^(?:live(?: version| ver\.?)?|现场(?:版|录音)?|現場版|ライブ版|remix|混音版|remaster(?:ed)?|重制版)$/iu.test(
+          request.detail,
+        )
+      if (qualified && key(request.detail) !== key(primary.detail)) continue
+      if (constraints.version === 'live' && kind !== 'live') continue
+      if (constraints.version === 'no-live' && kind === 'live') continue
+      if (
+        constraints.version === 'original' &&
+        (!sameArtist || (kind && kind !== 'original') || (cover && !artistMatches(artist, cover)))
+      )
+        continue
+      if (constraints.version === 'no-original' && sameArtist && (!kind || kind === 'original'))
+        continue
+      if (!sameArtist) return 'cover'
+      return kind === request.kind && (!kind || key(request.detail) === key(primary.detail))
+        ? 'exact'
+        : 'variant'
+    }
+  }
   return ''
 }
 export function inLibrary(item, rows) {
@@ -81,6 +176,8 @@ export function recordingQueries(item) {
     { title: item.title, artist: item.artist },
     { title, artist },
     { title, artist: '' },
+    { title: edition(title).base, artist },
+    { title: edition(title).base, artist: '' },
   ]
   return queries.filter(
     (q, index) =>
@@ -88,7 +185,7 @@ export function recordingQueries(item) {
   )
 }
 
-export async function searchRecommendation(item, platform, search, signal) {
+export async function searchRecommendation(item, platform, search, signal, constraints) {
   const queries = recordingQueries(item)
   const diagnostics = []
   for (const query of queries) {
@@ -117,7 +214,7 @@ export async function searchRecommendation(item, platform, search, signal) {
           typeof row.singer === 'string' &&
           (!row.source || row.source === platform) &&
           JSON.stringify(row).length <= 16384 &&
-          titleMatch(item, row),
+          titleMatch(item, row, constraints),
       )
       if (matches.length) return { matches, diagnostics }
       offset += rows.length
@@ -168,4 +265,9 @@ export function namesRequestedArtist(preference, artist, declared = false) {
     }
     return false
   })
+}
+
+export function recordingDisplayTitle(row) {
+  const name = String(row.name ?? '').trim()
+  return !edition(name).kind && liveAlbum(row.albumName) ? name + '（现场版）' : name
 }
