@@ -259,6 +259,14 @@ try {
   await app.close()
 }
 
+const longList = new MusicStore(dbdir)
+for (let i = 0; i < 225; i++) {
+  const title = '滚动测试' + String(i).padStart(3, '0')
+  const file = path.join(owned, title + '.mp3')
+  await copyFile('tests/fixtures/local-music/tone.mp3', file)
+  longList.library.upsert({ title, artist: '虚构艺人', album: '测试', duration: 4, file })
+}
+longList.db.close()
 app = await launch()
 try {
   const page = await app.firstWindow()
@@ -270,6 +278,20 @@ try {
       ),
     )
     .toBe(false)
+  const last = page.getByRole('button', { name: '播放滚动测试224' })
+  await expect
+    .poll(async () => {
+      await page.locator('.music-scroll').evaluate((el) => el.scrollTo(0, el.scrollHeight))
+      return await last.count()
+    })
+    .toBe(1)
+  await last.scrollIntoViewIfNeeded()
+  await page.getByRole('searchbox').fill('滚动测试224')
+  await expect(page.locator('.library-row')).toHaveCount(1)
+  await last.click()
+  await expect
+    .poll(() => page.locator('audio').evaluate((el) => !el.paused && el.currentTime > 0))
+    .toBe(true)
 } finally {
   await app.close()
 }

@@ -1,5 +1,5 @@
 import { LxPanel } from './LxPanel'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Input } from '@fluentui/react-components'
 import {
   FileMusic,
@@ -60,6 +60,19 @@ export function LibraryPane({
   remove,
 }: Props) {
   const [limit, setLimit] = useState(100)
+  const sentinel = useRef<HTMLLIElement>(null)
+  useEffect(() => {
+    const target = sentinel.current
+    if (!target || limit >= rows.length) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setLimit((n) => n + 100)
+      },
+      { root: target.closest('.music-scroll'), rootMargin: '400px' },
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [limit, rows.length])
   const [online, setOnline] = useState<LocalTrack | null | undefined>()
   return (
     <section className="local-library" aria-label="本地歌曲库">
@@ -178,10 +191,8 @@ export function LibraryPane({
                 />
               </li>
             ))}
+            {rows.length > limit && <li ref={sentinel} aria-hidden="true" />}
           </ul>
-          {rows.length > limit && (
-            <Button onClick={() => setLimit((n) => n + 100)}>显示更多歌曲</Button>
-          )}
         </>
       ) : (
         <div className="music-empty library-empty">
