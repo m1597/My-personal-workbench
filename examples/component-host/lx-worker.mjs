@@ -42,8 +42,9 @@ async function dispatch({ kind, id, url, options, ms }) {
     replies.push([id, '音乐源网络请求失败', null])
   }
 }
+const bootstrap = await readFile(new URL('lx-guest.js', import.meta.url), 'utf8')
 try {
-  evaluate(await readFile(new URL('lx-guest.js', import.meta.url), 'utf8'))
+  evaluate(bootstrap)
   evaluate(workerData.code)
   let started = false
   main: while (true) {

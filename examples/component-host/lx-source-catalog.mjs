@@ -293,6 +293,18 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     }
   }
   return {
+    alternatives(platform, quality, currentCode) {
+      const result = []
+      for (const { payload } of db
+        .prepare('SELECT payload FROM music_sources ORDER BY rowid')
+        .all()) {
+        const src = JSON.parse(payload)
+        const supported = src.platforms?.[platform]
+        if (src.code !== currentCode && supported?.quality.includes(quality))
+          result.push({ ...src, ...supported })
+      }
+      return result
+    },
     upgrade() {
       upgrading ??= upgradeInstalled().catch((error) => {
         upgrading = undefined

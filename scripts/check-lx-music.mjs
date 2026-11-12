@@ -164,7 +164,13 @@ try {
       } else await expect(page.getByText('操作已取消', { exact: true })).toBeVisible()
       expect(await page.evaluate(() => window.music.lxInfo())).toBe(savedName)
     }
-    const code = (await fs.readFile(sourceFile, 'utf8')).replace(/@name [^\n]+/, '@name 在线测试源')
+    const code = (await fs.readFile(sourceFile, 'utf8'))
+      .replace(/@name [^\n]+/, '@name 在线测试源')
+      .replace('https://1.1.1.1/test-audio.mp3', '')
+      .replace(
+        "if(action==='lyric')",
+        "if(action==='musicUrl') await new Promise(done=>setTimeout(done,500)); if(action==='lyric')",
+      )
     await app.evaluate((_electron, code) => {
       const https = process.getBuiltinModule('node:https')
       const { Readable } = process.getBuiltinModule('node:stream')
@@ -268,28 +274,38 @@ try {
   if (!live) {
     assert.match(status, /仅支持公网地址/)
     assert.deepEqual(await fs.readdir(output), [])
-    await app.evaluate((_electron, file) => {
-      const https = process.getBuiltinModule('node:https')
-      const fs = process.getBuiltinModule('node:fs')
-      const { EventEmitter } = process.getBuiltinModule('node:events')
-      const original = https.request
-      https.request = (url, _options, done) => {
-        https.request = original
-        if (url.href !== 'https://1.1.1.1/test-audio.mp3') throw Error('音频地址不匹配')
-        const req = new EventEmitter()
-        req.end = () =>
-          done(
-            Object.assign(fs.createReadStream(file), {
-              statusCode: 200,
-              headers: {},
-              setTimeout() {},
-            }),
-          )
-        return req
-      }
-    }, path.resolve('tests/fixtures/local-music/tone.mp3'))
     await downloads.nth(1).click()
-    await expect(pane.getByText(/已下载并入库/)).toBeVisible()
+    await pane.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(pane.getByRole('status')).toHaveText(/操作已取消/)
+    assert.deepEqual(await fs.readdir(output), [])
+    const mockAudio = () =>
+      app.evaluate((_electron, file) => {
+        const https = process.getBuiltinModule('node:https')
+        const fs = process.getBuiltinModule('node:fs')
+        const { EventEmitter } = process.getBuiltinModule('node:events')
+        const original = https.request
+        https.request = (url, _options, done) => {
+          https.request = original
+          if (url.href !== 'https://1.1.1.1/test-audio.mp3') throw Error('音频地址不匹配')
+          const req = new EventEmitter()
+          req.end = () =>
+            done(
+              Object.assign(fs.createReadStream(file), {
+                statusCode: 200,
+                headers: {},
+                setTimeout() {},
+              }),
+            )
+          return req
+        }
+      }, path.resolve('tests/fixtures/local-music/tone.mp3'))
+    await mockAudio()
+    await downloads.nth(1).click()
+    await expect(pane.getByText(/已下载并入库.*自动换源：在线测试源 → FitBay 测试源/)).toBeVisible()
+    assert.equal(await page.evaluate(() => window.music.lxInfo()), '在线测试源')
+    await mockAudio()
+    await downloads.nth(1).click()
+    await expect(pane.getByRole('status')).toHaveText('目标文件已存在，请选择其他目录')
     const audio = (await fs.readdir(output)).find((name) => name.endsWith('.mp3'))
     assert.ok(audio)
     assert.equal(

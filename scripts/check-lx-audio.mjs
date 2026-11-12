@@ -2,7 +2,7 @@ import { app } from 'electron'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import { verifyAudio } from '../examples/component-host/lx-audio-check.mjs'
+import { verifyAudio, AudioDecodeError } from '../examples/component-host/lx-audio-check.mjs'
 app.commandLine.appendSwitch('mute-audio')
 void app.whenReady().then(async () => {
   app.on('window-all-closed', () => {})
@@ -10,6 +10,10 @@ void app.whenReady().then(async () => {
     const root = app.getPath('userData')
     const valid = path.resolve('tests/fixtures/local-music/tone.mp3')
     await verifyAudio(valid, new AbortController().signal)
+    await assert.rejects(
+      verifyAudio(path.join(root, 'missing.mp3'), new AbortController().signal),
+      (error) => !(error instanceof AudioDecodeError),
+    )
     const truncated = (await fs.readFile('tests/fixtures/local-music/tone.flac')).subarray(0, 42)
     truncated[4] |= 128
     const bad = path.join(root, 'empty.flac')

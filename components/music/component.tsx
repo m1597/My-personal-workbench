@@ -116,6 +116,11 @@ declare global {
       ): Promise<Versions>
       lxPreview(id: string, key: string, quality: string): Promise<string>
       lxDownload(key: string, quality: string): Promise<string>
+      lxDownload(
+        key: string,
+        quality: string,
+        detailed: true,
+      ): Promise<'' | { file: string; sources: string[] }>
       createPlaylist(name: string): Promise<string>
       setMembership(playlist: string, track: string, added: boolean): Promise<void>
       importLocal(mode: 'folder' | 'files'): Promise<void>

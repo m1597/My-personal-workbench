@@ -244,9 +244,13 @@ export function DownloadPane({
                   size="small"
                   onClick={() =>
                     void act(async () => {
-                      const file = await host.lxDownload(item.key, quality)
-                      if (file) {
-                        setStatus('已下载并入库 · ' + file)
+                      const result = await host.lxDownload(item.key, quality, true)
+                      if (result) {
+                        const via =
+                          result.sources.length > 1
+                            ? ' · 自动换源：' + result.sources.join(' → ')
+                            : ''
+                        setStatus('已下载并入库 · ' + result.file + via)
                         await refresh()
                       }
                     })

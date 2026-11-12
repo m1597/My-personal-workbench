@@ -9,14 +9,15 @@ import { readFile, rm, lstat } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { Transform } from 'node:stream'
 import { parseFile } from 'music-metadata'
-import { runSource } from './lx-runtime.mjs'
+import { runSource, SourceRequestError } from './lx-runtime.mjs'
 import { sourceRequest, openPublic } from './lx-net.mjs'
-import { verifyAudio } from './lx-audio-check.mjs'
+import { verifyAudio, AudioDecodeError } from './lx-audio-check.mjs'
 import { pathKey, openAudio } from './music/local-files.mjs'
 import { getMusicPreferences } from './music-preferences.mjs'
 import { publish } from './music/store.mjs'
 
-class TransferError extends Error {}
+class SourceDownloadError extends Error {}
+class TransferError extends SourceDownloadError {}
 class RecordingError extends Error {
   constructor(kind, message) {
     super(message)
@@ -38,7 +39,8 @@ const explanations = {
 
 const text = (v) => (typeof v === 'string' ? v.trim().slice(0, 256) : '')
 function recordingQualities(source, row) {
-  if (source.search || !['tx', 'kg'].includes(source.platform)) return source.quality
+  if (source.search || !['tx', 'kg'].includes(source.platform) || !Array.isArray(row.types))
+    return source.quality
   return source.quality.filter((q) => row.types?.some((t) => t.type === q))
 }
 async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
@@ -139,7 +141,7 @@ function extension(format) {
   if (format.container === 'MPEG' && /layer 3/i.test(format.codec ?? '')) return '.mp3'
   if (/M4A|isom|mp4/i.test(format.container ?? '') && /AAC|ALAC|MPEG-4/i.test(format.codec ?? ''))
     return '.m4a'
-  throw Error('返回的文件不是支持的音频格式')
+  throw new SourceDownloadError('返回的文件不是支持的音频格式')
 }
 export function publishToLibrary(temp, row, store, version, dailyId) {
   const file = row.file
@@ -188,10 +190,13 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
   try {
     const res = await openPublic(url, {
       signal: AbortSignal.any([signal, AbortSignal.timeout(240000)]),
+    }).catch((error) => {
+      signal.throwIfAborted()
+      throw new SourceDownloadError(error.message)
     })
     if (res.statusCode !== 200) {
       res.destroy()
-      throw Error('音频服务器拒绝下载（HTTP ' + res.statusCode + '），可切换音乐源后重试')
+      throw new SourceDownloadError('音频服务器拒绝下载（HTTP ' + res.statusCode + '）')
     }
     res.setTimeout(120000, () => res.destroy(new TransferError('音频传输超时，请稍后重试')))
     const hash = version && createHash('sha256')
@@ -200,7 +205,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       transform(chunk, _encoding, cb) {
         hash?.update(chunk)
         size += chunk.length
-        if (size > 512 * 1024 * 1024) cb(Error('音频超过单曲大小限制'))
+        if (size > 512 * 1024 * 1024) cb(new SourceDownloadError('音频超过单曲大小限制'))
         else cb(null, chunk)
       },
     })
@@ -219,8 +224,14 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       store.status(dailyId, '已跳过')
       return ''
     }
-    const { format, common } = await parseFile(temp, { duration: true, skipCovers: true })
-    if (!(Number.isFinite(format.duration) && format.duration > 0)) throw Error('音频时长无效')
+    const { format, common } = await parseFile(temp, { duration: true, skipCovers: true }).catch(
+      (error) => {
+        if (error.syscall) throw error
+        throw new SourceDownloadError('返回的文件不是有效音频')
+      },
+    )
+    if (!(Number.isFinite(format.duration) && format.duration > 0))
+      throw new SourceDownloadError('音频时长无效')
     const name = (info.singer + ' - ' + info.name)
       .normalize()
       .replace(/[<>:"/\\|?*\p{Cc}]/gu, '_')
@@ -249,7 +260,10 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       filename = filename.slice(0, -ext.length) + '-' + randomUUID() + ext
       file = path.join(dir, filename)
     }
-    await verifyAudio(temp, signal)
+    await verifyAudio(temp, signal).catch((error) => {
+      if (error instanceof AudioDecodeError) throw new SourceDownloadError(error.message)
+      throw error
+    })
     signal.throwIfAborted()
     const metadata = {
       file,
@@ -442,7 +456,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       return { items, quality: src.quality }
     }),
   )
-  async function transfer(signal, key, quality, auditionId) {
+  async function transfer(signal, key, quality, auditionId, detailed = false) {
     const selected = source()
     const match = matches.get(key)
     const src = selected && {
@@ -475,7 +489,44 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         throw Error('推荐曲目无效')
     }
     signal.throwIfAborted()
-    return fetchRecording(src, row, quality, dir, signal, auditionId)
+    if (auditionId) return fetchRecording(src, row, quality, dir, signal, auditionId)
+    const tried = []
+    async function attempt(candidate) {
+      signal.throwIfAborted()
+      tried.push(candidate.name)
+      const file = await fetchRecording(candidate, row, quality, dir, signal)
+      return detailed ? { file, sources: tried } : file
+    }
+    let failure
+    try {
+      return await attempt(src)
+    } catch (error) {
+      signal.throwIfAborted()
+      if (
+        !(error instanceof SourceDownloadError) ||
+        !recordingId(src, row) ||
+        ['denied', 'preview'].includes(permission(src, row))
+      )
+        throw error
+      failure = error
+    }
+    await catalog().upgrade()
+    const reasons = [src.name + '：' + failure.message]
+    for (const candidate of catalog().alternatives(src.platform, quality, src.code)) {
+      if (['denied', 'preview'].includes(permission(candidate, row))) continue
+      try {
+        return await attempt(candidate)
+      } catch (error) {
+        signal.throwIfAborted()
+        if (!(error instanceof SourceDownloadError)) throw error
+        reasons.push(candidate.name + '：' + error.message)
+      }
+    }
+    signal.throwIfAborted()
+    throw Error(
+      reasons.join('；') +
+        (reasons.length === 1 ? '。没有其他可用的已导入音乐源。' : '。已尝试所有可用音乐源。'),
+    )
   }
   async function saveRecordingLyrics(src, row, audio, signal) {
     const saved = await saveLyrics(getStore().db, audio, async () => {
@@ -508,7 +559,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     if (saved) lyricsSaved?.()
   }
   async function fetchRecording(src, row, quality, dir, signal, auditionId, dailyId) {
-    if (!recordingQualities(src, row).includes(quality))
+    // Manual and audition requests were validated against the original search result.
+    // A fallback resolver receives that row unchanged, regardless of its own search dialect.
+    if (dailyId && !recordingQualities(src, row).includes(quality))
       throw Error('此录音不提供所选音质，请重新选择')
     for (let attempt = 0; ; attempt++) {
       let url
@@ -520,7 +573,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         )
       } catch (error) {
         signal.throwIfAborted()
-        throw Error(
+        if (!(error instanceof SourceRequestError)) throw error
+        throw new SourceDownloadError(
           src.name +
             '（' +
             src.platform +
@@ -530,7 +584,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             error.message,
         )
       }
-      if (typeof url !== 'string' || url.length > 16384) throw Error('音乐源未返回可用地址')
+      if (typeof url !== 'string' || !url || url.length > 16384)
+        throw new SourceDownloadError('音乐源未返回可用地址')
       try {
         const filename = await saveRecording(
           url,
@@ -554,7 +609,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   }
   bind(
     'lxDownload',
-    exclusive((signal, key, quality) => transfer(signal, key, quality)),
+    exclusive((signal, key, quality, detailed) =>
+      transfer(signal, key, quality, undefined, detailed === true),
+    ),
   )
   bind(
     'lxPreview',
