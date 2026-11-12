@@ -244,6 +244,9 @@ try {
     const target = BrowserWindow.getAllWindows()[0].getBounds()
     const blocker = new BaseWindow({ ...target, show: false, skipTaskbar: true, alwaysOnTop: true })
     blocker.showInactive()
+    // Reapply the off-screen test rectangle and Z order after native window placement.
+    blocker.setBounds(target)
+    blocker.moveTop()
     return blocker.id
   })
   // Wait for Windows to expose the off-screen blocker before releasing the drag.
