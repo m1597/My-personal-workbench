@@ -27,7 +27,7 @@ export class MusicTaste {
     const tracks = this.store.db
       .prepare(`SELECT t.title,t.artist,t.album,
       EXISTS(SELECT 1 FROM playlist_tracks p WHERE p.track=t.id) AS liked,
-      EXISTS(SELECT 1 FROM recording_versions v WHERE v.local=t.id AND v.automatic=1) AS automatic
+      EXISTS(SELECT 1 FROM recording_copies v WHERE v.local=t.id AND v.automatic=1) AS automatic
       FROM local_tracks t ORDER BY t.rowid`)
       .all()
     for (const track of tracks) {

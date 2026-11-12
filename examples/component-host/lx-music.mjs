@@ -8,7 +8,7 @@ import { parseFile } from 'music-metadata'
 import { runSource } from './lx-runtime.mjs'
 import { sourceRequest, openPublic } from './lx-net.mjs'
 import { verifyAudio } from './lx-audio-check.mjs'
-import { pathKey } from './music/local-files.mjs'
+import { pathKey, openAudio } from './music/local-files.mjs'
 import { getMusicPreferences } from './music-preferences.mjs'
 import { publish } from './music/store.mjs'
 
@@ -55,6 +55,7 @@ export async function inspectSource(code, signal) {
       code,
       name: text(code.match(/@name\s+([^\r\n*]+)/)?.[1]) || '自定义音乐源',
       platform,
+      permissionsVersion: 1,
       permanentSave: [d.allowPermanentSave, d.permanentDownload].includes(false)
         ? false
         : [d.allowPermanentSave, d.permanentDownload].includes(true)
@@ -80,15 +81,30 @@ async function versions(source, row, signal) {
   )
   const songs = response.body?.result?.songs
   if (!Array.isArray(songs)) throw Error('在线目录暂时不可用')
-  return songs.map((s) => ({
-    name: s.name,
-    singer: s.artists?.map((a) => a.name).join('/'),
-    albumName: s.album?.name,
-    id: String(s.id),
-    songmid: String(s.id),
-    source: 'wy',
-    meta: { wy: { id: String(s.id) } },
-  }))
+  const grants = response.body.result.privileges ?? response.body.privileges
+  const privileges = new Map(Array.isArray(grants) ? grants.map((p) => [String(p.id), p]) : [])
+  return songs
+    .filter((s) => s && s.id != null)
+    .map((s) => {
+      const flags = [s, s.meta, s.privilege, privileges.get(String(s.id))].filter(Boolean)
+      const rights = flags.flatMap((f) => [f.allowPermanentSave, f.permanentDownload])
+      return {
+        name: s.name,
+        singer: s.artists?.map((a) => a.name).join('/'),
+        albumName: s.album?.name,
+        id: String(s.id),
+        songmid: String(s.id),
+        source: 'wy',
+        meta: { wy: { id: String(s.id) } },
+        allowPermanentSave: rights.includes(false)
+          ? false
+          : rights.includes(true)
+            ? true
+            : undefined,
+        trial: flags.some((f) => f.trial || f.isPreview || f.freeTrialInfo),
+        downloadable: flags.some((f) => f.downloadable === false || f.dl === 0) ? false : undefined,
+      }
+    })
 }
 function extension(format) {
   if (format.container === 'FLAC') return '.flac'
@@ -111,7 +127,7 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
         .get(pathKey(file)).id
       store.db
         .prepare(
-          'INSERT OR REPLACE INTO recording_versions(version,local,automatic,source,platform,sourceId,quality) VALUES(?,?,?,?,?,?,?)',
+          'INSERT OR REPLACE INTO recording_copies(version,local,automatic,source,platform,sourceId,quality,digest) VALUES(?,?,?,?,?,?,?,?)',
         )
         .run(
           version.key,
@@ -121,6 +137,7 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
           version.platform,
           version.sourceId,
           version.quality,
+          version.digest,
         )
       if (dailyId) markSaved(store, dailyId, local)
     }
@@ -147,9 +164,11 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       throw Error('音频服务器拒绝下载')
     }
     res.setTimeout(120000, () => res.destroy(new TransferError('音频传输超时，请稍后重试')))
+    const hash = version && createHash('sha256')
     let size = 0
     const limit = new Transform({
       transform(chunk, _encoding, cb) {
+        hash?.update(chunk)
         size += chunk.length
         if (size > 512 * 1024 * 1024) cb(Error('音频超过单曲大小限制'))
         else cb(null, chunk)
@@ -173,12 +192,12 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       .slice(0, 140)
       .trim()
       .replace(/[. ]+$/, '')
-    const filename =
+    let filename =
       (/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(name) ? '_' : '') +
       name +
       (dailyId ? ' - ' + version.key.slice(0, 12) : '') +
       extension(format)
-    const file = path.join(dir, filename)
+    let file = path.join(dir, filename)
     signal.throwIfAborted()
     if (
       !auditionId &&
@@ -189,8 +208,12 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
           throw e
         },
       ))
-    )
-      throw Error('目标文件已存在，请选择其他目录')
+    ) {
+      if (!dailyId) throw Error('目标文件已存在，请选择其他目录')
+      const ext = extension(format)
+      filename = filename.slice(0, -ext.length) + '-' + randomUUID() + ext
+      file = path.join(dir, filename)
+    }
     await verifyAudio(temp, signal)
     signal.throwIfAborted()
     const metadata = {
@@ -200,6 +223,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       album: text(common.album) || text(info.albumName),
       duration: format.duration,
     }
+    if (version) version.digest = hash.digest('hex')
     if (auditionId) store.cacheOnline(auditionId, temp, metadata, extension(format))
     else publishToLibrary(temp, metadata, store, version, dailyId)
     return filename
@@ -215,6 +239,33 @@ function versionInfo(src, row, quality) {
     .digest('hex')
   return { key, source: src.name, platform: src.platform, sourceId: String(id), quality }
 }
+async function verifiedCopy(store, version, signal) {
+  const copies = store.db
+    .prepare(`SELECT t.*,c.digest FROM recording_copies c JOIN local_tracks t ON t.id=c.local
+    WHERE c.version=? AND c.digest IS NOT NULL ORDER BY c.automatic DESC`)
+    .all(version)
+  for (const row of copies) {
+    if (!(await store.library.verify(row))) continue
+    try {
+      const handle = await openAudio(row.file)
+      const before = await handle.stat({ bigint: true })
+      const hash = createHash('sha256')
+      for await (const chunk of handle.createReadStream({ signal })) hash.update(chunk)
+      const after = await lstat(row.file, { bigint: true })
+      if (
+        before.dev === after.dev &&
+        before.ino === after.ino &&
+        before.mtimeNs === after.mtimeNs &&
+        before.size === after.size &&
+        hash.digest('hex') === row.digest &&
+        store.db.prepare('SELECT 1 FROM local_tracks WHERE id=? AND file=?').get(row.id, row.file)
+      )
+        return row
+    } catch {
+      signal.throwIfAborted()
+    }
+  }
+}
 function markSaved(store, id, local) {
   store.db.prepare("UPDATE recommended_items SET local=?,error='' WHERE item=?").run(local, id)
   store.status(id, '已入库')
@@ -226,6 +277,17 @@ export function registerLx(bind, getStore, dialog) {
   const source = () => {
     const saved = getStore().get('lx-source')
     return saved ? JSON.parse(saved) : null
+  }
+  async function currentSource(signal) {
+    const saved = getStore().get('lx-source')
+    if (!saved) return null
+    const current = JSON.parse(saved)
+    if (current.permissionsVersion === 1) return current
+    const parsed = await inspectSource(current.code, signal)
+    signal.throwIfAborted()
+    if (getStore().get('lx-source') !== saved) throw Error('音乐源已变更，请重试')
+    getStore().set('lx-source', JSON.stringify(parsed))
+    return parsed
   }
   const exclusive =
     (fn, scope) =>
@@ -381,7 +443,7 @@ export function registerLx(bind, getStore, dialog) {
     running.set(id, task)
     const { signal } = task
     try {
-      const src = source()
+      const src = await currentSource(signal)
       if (!src) throw Error('请在下载音乐页导入可下载的音乐源')
       const prefs = getMusicPreferences(store)
       const quality = src.quality.includes(prefs.quality)
@@ -447,12 +509,8 @@ export function registerLx(bind, getStore, dialog) {
         pick = exact[0]
       }
       const version = versionInfo(src, pick, quality).key
-      const cached = store.db
-        .prepare(
-          'SELECT t.* FROM recording_versions v JOIN local_tracks t ON t.id=v.local WHERE v.version=?',
-        )
-        .get(version)
-      if (cached && (await store.library.verify(cached))) {
+      const cached = await verifiedCopy(store, version, signal)
+      if (cached) {
         signal.throwIfAborted()
         markSaved(store, id, cached.id)
       } else {

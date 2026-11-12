@@ -27,9 +27,9 @@ export class LocalLibrary {
           track TEXT NOT NULL REFERENCES local_tracks(id) ON DELETE CASCADE,
           PRIMARY KEY(playlist,track)
         );
-        CREATE TABLE IF NOT EXISTS recording_versions(version TEXT PRIMARY KEY, local TEXT NOT NULL, automatic INTEGER NOT NULL, source TEXT, platform TEXT, sourceId TEXT, quality TEXT);
+        CREATE TABLE IF NOT EXISTS recording_copies(version TEXT NOT NULL, local TEXT NOT NULL, automatic INTEGER NOT NULL, source TEXT, platform TEXT, sourceId TEXT, quality TEXT,digest TEXT,PRIMARY KEY(version,local));
         CREATE TABLE IF NOT EXISTS recommended_items(item TEXT PRIMARY KEY, local TEXT, error TEXT DEFAULT '');
-        CREATE INDEX IF NOT EXISTS recorded_local ON recording_versions(local);
+        CREATE INDEX IF NOT EXISTS recording_copy_local ON recording_copies(local);
         CREATE INDEX IF NOT EXISTS playlist_track_lookup ON playlist_tracks(track);
       `)
       if (
@@ -39,6 +39,16 @@ export class LocalLibrary {
           .some((col) => col.name === 'listed')
       )
         this.db.exec('ALTER TABLE local_tracks ADD COLUMN listed INTEGER NOT NULL DEFAULT 1')
+      if (
+        this.db
+          .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='recording_versions'")
+          .get()
+      ) {
+        // Legacy mappings retain provenance but cannot prove the identity of current file bytes.
+        this.db.exec(`INSERT OR IGNORE INTO recording_copies(version,local,automatic,source,platform,sourceId,quality)
+          SELECT version,local,automatic,source,platform,sourceId,quality FROM recording_versions;
+          DROP TABLE recording_versions;`)
+      }
       if (!store.get('local-index-v1')) {
         for (const row of this.db.prepare('SELECT track,file FROM library').all())
           this.saved(row.track, row.file)
@@ -91,7 +101,7 @@ export class LocalLibrary {
     )
     const rows = this.db
       .prepare(
-        `SELECT id,title,artist,album,duration,available,listed,file,(SELECT source || ' · ' || quality FROM recording_versions v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
+        `SELECT id,title,artist,album,duration,available,listed,file,(SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
       )
       .all()
     const parents = new Set(rows.filter((r) => r.listed).map((r) => pathKey(path.dirname(r.file))))
