@@ -23,11 +23,35 @@
   border-radius: var(--radius-9);
   box-shadow: var(--shadow-menu);
 }
-:where([data-music-view]) .component-popup.fui-Listbox {
-  background: color-mix(in srgb, var(--menu-surface) 40%, var(--solid-surface));
+/* Each renderer composites the same cool tint over the surface beneath it. */
+@media (prefers-reduced-transparency: no-preference) and (forced-colors: none) {
+  :root[data-workbench-size],
+  :root:has(.component-theme[data-surface="embedded"]) {
+    --material-popup: blur(calc(var(--material-frost, 1) * 18px));
+    --menu-surface: color-mix(
+      in srgb,
+      var(--workbench-popup-tint) calc(42% + var(--material-opacity, 0) * 55%),
+      transparent
+    );
+    --choice-surface: color-mix(
+      in srgb,
+      var(--workbench-popup-tint) calc(98% + var(--material-opacity, 0) * 2%),
+      transparent
+    );
+  }
+  .component-popup.fui-Listbox {
+    background: var(--choice-surface, var(--menu-surface));
+    color: var(--text);
+  }
 }
-.component-popup [role="option"][aria-selected="true"] {
-  background: var(--accent-soft);
+.component-popup .fui-Option:hover {
+  background-color: var(--hover);
+}
+.component-popup .fui-Option[aria-selected="true"] {
+  background-color: var(--accent-soft);
+}
+.component-popup .fui-Option[data-activedescendant-focusvisible]::after {
+  border-color: var(--accent);
 }
 @supports not (backdrop-filter: blur(1px)) {
   :root {

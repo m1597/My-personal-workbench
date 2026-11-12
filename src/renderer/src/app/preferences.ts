@@ -4,20 +4,14 @@ export const languages = ['zh-CN', 'en'] as const
 export const fonts = ['default', 'yahei', 'segoe'] as const
 export const sizes = ['small', 'standard', 'large'] as const
 
-export interface Preferences {
-  transparency: number
-  frost: number
-  brightness: number
+import { materialDefaults, type Material } from './material'
+
+export interface Preferences extends Material {
   language: (typeof languages)[number]
   font: (typeof fonts)[number]
   size: (typeof sizes)[number]
 }
 export const preferenceKey = 'workbench.preferences.v1'
-export const materialDefaults = {
-  transparency: 40,
-  frost: 50,
-  brightness: 50,
-}
 const defaults: Preferences = {
   ...materialDefaults,
   language: 'zh-CN',

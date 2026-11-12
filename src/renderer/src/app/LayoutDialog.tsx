@@ -1,3 +1,4 @@
+import { WorkbenchChoice } from './WorkbenchChoice'
 import { useTranslation } from './preferences'
 import { useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
@@ -10,7 +11,6 @@ import {
   DialogTitle,
   Field,
   Input,
-  Select,
 } from '@fluentui/react-components'
 import { X } from 'lucide-react'
 import {
@@ -104,22 +104,18 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
             </form>
             {presets.items.length > 0 && (
               <>
-                <Field label={t('已保存的布局', 'Saved layouts')}>
-                  <Select
-                    value={selected}
-                    onChange={(_, data) => {
-                      setSelected(data.value)
-                      setMessage('')
-                    }}
-                  >
-                    {presets.items.map((item) => (
-                      <option key={item.name} value={item.name}>
-                        {item.name}
-                        {item.name === presets.defaultName ? t('（默认）', ' (default)') : ''}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                <WorkbenchChoice
+                  label={t('已保存的布局', 'Saved layouts')}
+                  values={presets.items.map((item) => item.name)}
+                  value={selected}
+                  text={(name) =>
+                    name + (name === presets.defaultName ? t('（默认）', ' (default)') : '')
+                  }
+                  onChange={(name) => {
+                    setSelected(name)
+                    setMessage('')
+                  }}
+                />
                 <div className="layout-actions">
                   <Button
                     disabled={!chosen}

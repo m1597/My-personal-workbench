@@ -210,7 +210,6 @@
    its own grain and Fluent flyouts. */
 @media (prefers-reduced-transparency: no-preference) and (forced-colors: none) {
   :root[data-workbench-size] {
-    --material-popup: blur(calc(var(--material-frost) * 56px));
     --shell-surface: var(--workbench-material);
   }
   .workbench {
@@ -226,7 +225,7 @@
     pointer-events: none;
     z-index: -1;
     background-image: url("./acrylic-grain.png");
-    opacity: 0.025;
+    opacity: calc(0.025 + var(--material-frost) * 0.08);
     filter: blur(calc(var(--material-frost) * 6px));
   }
 }
@@ -260,4 +259,12 @@
 }
 .workbench-menu.fui-MenuPopover {
   app-region: no-drag;
+}
+
+.component-overlay-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }

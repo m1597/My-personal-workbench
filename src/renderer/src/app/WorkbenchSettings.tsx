@@ -1,18 +1,11 @@
+import { materialDefaults } from './material'
+import { WorkbenchChoice } from './WorkbenchChoice'
 import { useState } from 'react'
-import {
-  Button,
-  Field,
-  Popover,
-  PopoverSurface,
-  PopoverTrigger,
-  Select,
-  Slider,
-} from '@fluentui/react-components'
+import { Button, Popover, PopoverSurface, PopoverTrigger, Slider } from '@fluentui/react-components'
 import { Settings, X } from 'lucide-react'
 import {
   fonts,
   languages,
-  materialDefaults,
   sizes,
   preferenceKey,
   useTranslation,
@@ -22,12 +15,15 @@ import {
 export function WorkbenchSettings({
   value,
   onChange,
+  open,
+  setOpen,
 }: {
   value: Preferences
+  open: boolean
+  setOpen: (open: boolean) => void
   onChange: (next: Preferences) => void
 }) {
   const t = useTranslation()
-  const [open, setOpen] = useState(false)
   const [failed, setFailed] = useState(false)
   function change(next: Preferences) {
     try {
@@ -79,54 +75,27 @@ export function WorkbenchSettings({
             onClick={() => setOpen(false)}
           />
         </div>
-        <Field label={t('界面语言', 'Interface language')}>
-          <Select
-            value={value.language}
-            onChange={(_, d) =>
-              change({
-                ...value,
-                language: languages.find((v) => v === d.value) ?? value.language,
-              })
-            }
-          >
-            <option value="zh-CN">简体中文</option>
-            <option value="en">English</option>
-          </Select>
-        </Field>
-        <Field label={t('字体', 'Font')}>
-          <Select
-            value={value.font}
-            onChange={(_, d) =>
-              change({
-                ...value,
-                font: fonts.find((v) => v === d.value) ?? value.font,
-              })
-            }
-          >
-            {fonts.map((f) => (
-              <option key={f} value={f}>
-                {fontNames[f]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('字号', 'Font size')}>
-          <Select
-            value={value.size}
-            onChange={(_, d) =>
-              change({
-                ...value,
-                size: sizes.find((v) => v === d.value) ?? value.size,
-              })
-            }
-          >
-            {sizes.map((s) => (
-              <option key={s} value={s}>
-                {sizeNames[s]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <WorkbenchChoice
+          label={t('界面语言', 'Interface language')}
+          values={languages}
+          value={value.language}
+          text={(key) => (key === 'en' ? 'English' : '简体中文')}
+          onChange={(language) => change({ ...value, language })}
+        />
+        <WorkbenchChoice
+          label={t('字体', 'Font')}
+          values={fonts}
+          value={value.font}
+          text={(key) => fontNames[key]}
+          onChange={(font) => change({ ...value, font })}
+        />
+        <WorkbenchChoice
+          label={t('字号', 'Font size')}
+          values={sizes}
+          value={value.size}
+          text={(key) => sizeNames[key]}
+          onChange={(size) => change({ ...value, size })}
+        />
         <fieldset className="settings-material">
           <legend>{t('背景材质', 'Background material')}</legend>
           <Button

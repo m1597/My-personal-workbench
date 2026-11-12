@@ -44,9 +44,11 @@ export function componentView({
       : undefined
 
   let dragOver = null
+  let material
   let placement = null
   const snapshot = () => ({
     mode,
+    material: mode === 'docked' ? material : undefined,
     presentation,
     phase,
     error,
@@ -317,6 +319,11 @@ export function componentView({
 
   return {
     isSender: isSample,
+    setMaterial(next) {
+      material = next
+      if (mode === 'docked' && view && !view.webContents.isDestroyed())
+        view.webContents.send(music ? 'music-sample:state' : 'sample:state', snapshot())
+    },
     discover,
     preview,
     listen() {
@@ -340,6 +347,36 @@ export function componentView({
         if (!isShell(event)) throw new Error('DENIED')
         return snapshot()
       })
+      // Only the trusted shell may composite this component's own docked surface.
+      let capturing = false
+      ipcMain.handle(
+        music ? 'music-prototype:overlay-frame' : 'prototype:overlay-frame',
+        async (event) => {
+          if (!isShell(event)) throw new Error('DENIED')
+          const source = view
+          const docked = () =>
+            source &&
+            source === view &&
+            phase === 'ready' &&
+            mode === 'docked' &&
+            parent === shell() &&
+            presentation !== 'background' &&
+            !source.webContents.isDestroyed()
+          if (capturing || !docked()) return null
+          capturing = true
+          try {
+            const frame = await source.webContents.capturePage(undefined, {
+              stayHidden: true,
+              stayAwake: true,
+            })
+            return docked() && !frame.isEmpty() ? frame.toDataURL() : null
+          } catch {
+            return null
+          } finally {
+            capturing = false
+          }
+        },
+      )
       ipcMain.handle(music ? 'music-prototype:restore' : 'prototype:restore', async (event) => {
         if (!isShell(event)) throw new Error('DENIED')
         if (presentation !== 'full') {
@@ -387,47 +424,51 @@ export function componentView({
           event.returnValue = Boolean(isShell(event) && id > 0 && id === confirmedTransfer)
         },
       )
-      ipcMain.on(music ? 'music-prototype:bounds' : 'prototype:bounds', (event, bounds, id) => {
-        if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return
-        if (presentation === 'background' || (presentation === 'bar') !== (id === 'bar')) return
-        if (phase === 'attaching' && id !== transfer) return
-        if (bounds === null) {
-          if (parent === shell()) view.setVisible(false)
-          return
-        }
-        if (
-          !bounds ||
-          !['x', 'y', 'width', 'height'].every(
-            (key) => Number.isFinite(bounds[key]) && bounds[key] >= 0,
+      ipcMain.on(
+        music ? 'music-prototype:bounds' : 'prototype:bounds',
+        (event, bounds, id, composited = false) => {
+          if (typeof composited !== 'boolean') return
+          if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return
+          if (presentation === 'background' || (presentation === 'bar') !== (id === 'bar')) return
+          if (phase === 'attaching' && id !== transfer) return
+          if (bounds === null) {
+            if (parent === shell()) view.setVisible(false)
+            return
+          }
+          if (
+            !bounds ||
+            !['x', 'y', 'width', 'height'].every(
+              (key) => Number.isFinite(bounds[key]) && bounds[key] >= 0,
+            )
           )
-        )
-          return
-        const [width, height] = shell().getContentSize()
-        if (
-          bounds.width < 1 ||
-          bounds.height < 1 ||
-          bounds.x + bounds.width > width + 1 ||
-          bounds.y + bounds.height > height + 1
-        )
-          return
-        if (phase === 'attaching') {
-          clearTimeout(transferTimer)
-          const transferFocus = !background && standalone?.isFocused()
-          moveTo(shell())
-          if (transferFocus) shell().focus()
-          mode = 'docked'
-          confirmedTransfer = transfer
-          phase = 'ready'
-          standalone?.hide()
-          broadcast()
-        }
-        if (mode === 'docked') {
-          view.setBounds(
-            Object.fromEntries(Object.entries(bounds).map(([k, v]) => [k, Math.round(v)])),
+            return
+          const [width, height] = shell().getContentSize()
+          if (
+            bounds.width < 1 ||
+            bounds.height < 1 ||
+            bounds.x + bounds.width > width + 1 ||
+            bounds.y + bounds.height > height + 1
           )
-          view.setVisible(true)
-        }
-      })
+            return
+          if (phase === 'attaching') {
+            clearTimeout(transferTimer)
+            const transferFocus = !background && standalone?.isFocused()
+            moveTo(shell())
+            if (transferFocus) shell().focus()
+            mode = 'docked'
+            confirmedTransfer = transfer
+            phase = 'ready'
+            standalone?.hide()
+            broadcast()
+          }
+          if (mode === 'docked') {
+            view.setBounds(
+              Object.fromEntries(Object.entries(bounds).map(([k, v]) => [k, Math.round(v)])),
+            )
+            view.setVisible(!composited)
+          }
+        },
+      )
     },
     closing() {
       if (phase === 'attaching') cancelAttach('目标工作台已关闭')

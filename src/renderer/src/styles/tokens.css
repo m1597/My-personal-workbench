@@ -90,15 +90,16 @@
 /* Default glass surface. Material is a UI overlay over native Acrylic. */
 :root {
   --workbench-tint-dark: #0b0d10;
-  --workbench-tint-light: #33363b;
+  --workbench-tint-light: #272c32;
   --workbench-tint: color-mix(
     in srgb,
     var(--workbench-tint-dark),
-    var(--workbench-tint-light) calc(var(--material-light, 0.5) * 100%)
+    var(--workbench-tint-light) calc(var(--material-light, 1) * 100%)
   );
+  --workbench-popup-tint: color-mix(in srgb, var(--workbench-tint) 72%, var(--icon-muted));
   --workbench-material: color-mix(
     in srgb,
-    var(--workbench-tint) calc(76% + var(--material-opacity, 0.6) * 24%),
+    var(--workbench-tint) calc(55% + var(--material-opacity, 0) * 45%),
     transparent
   );
   --shell-surface: transparent;

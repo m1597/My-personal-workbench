@@ -30,12 +30,14 @@ function componentBridge(prefix) {
           reveal: () => ipcRenderer.invoke('music-prototype:reveal'),
         }
       : {}),
+    overlayFrame: () => ipcRenderer.invoke(`${prefix}:overlay-frame`),
     status: () => ipcRenderer.invoke(`${prefix}:status`),
     restore: () => ipcRenderer.invoke(`${prefix}:restore`),
     open: () => ipcRenderer.invoke(`${prefix}:open`),
     dropZone: (rect) => ipcRenderer.send('prototype:drop-zone', rect),
     confirmedTransfer: (id) => ipcRenderer.sendSync(`${prefix}:confirmed-transfer`, id),
-    bounds: (bounds, id) => ipcRenderer.send(`${prefix}:bounds`, bounds, id),
+    bounds: (bounds, id, composited) =>
+      ipcRenderer.send(`${prefix}:bounds`, bounds, id, composited),
     detach: (release) => ipcRenderer.invoke(`${prefix}:detach`, release),
     onActivate: (callback) => {
       const listener = () => callback()
@@ -51,6 +53,7 @@ function componentBridge(prefix) {
 }
 contextBridge.exposeInMainWorld('componentHost', {
   ...componentBridge('prototype'),
+  setMaterial: (value) => ipcRenderer.send('workbench:material', value),
   sampleEnabled: process.argv.includes('--enable-sample-component'),
 })
 contextBridge.exposeInMainWorld('musicDock', componentBridge('music-prototype'))

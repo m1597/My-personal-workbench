@@ -271,6 +271,18 @@ else {
       if (fixturePanels) builtins.listen()
       Menu.setApplicationMenu(null)
       nativeTheme.themeSource = 'dark'
+      ipcMain.on('workbench:material', (event, value) => {
+        if (
+          !isShell(event) ||
+          !value ||
+          !['transparency', 'frost', 'brightness'].every(
+            (key) => Number.isInteger(value[key]) && value[key] >= 0 && value[key] <= 100,
+          )
+        )
+          return
+        const { transparency, frost, brightness } = value
+        for (const item of components) item.setMaterial({ transparency, frost, brightness })
+      })
       ipcMain.on('prototype:drop-zone', (event, regions) => {
         if (!isShell(event)) return
         dropZone = null

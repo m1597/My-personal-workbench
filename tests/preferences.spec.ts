@@ -18,10 +18,13 @@ test('工作台设置即时生效，重启保留六项偏好和旧布局', async
         const original = await page
           .getByRole('slider')
           .evaluateAll((elements) => elements.map((el) => (el as HTMLInputElement).value))
-        expect(original).toEqual(['40', '50', '50'])
-        await page.getByLabel('界面语言').selectOption('en')
-        await page.getByLabel('Font', { exact: true }).selectOption('yahei')
-        await page.getByLabel('Font size').selectOption('large')
+        expect(original).toEqual(['100', '100', '100'])
+        await page.getByLabel('界面语言').click()
+        await page.getByRole('option', { name: 'English', exact: true }).click()
+        await page.getByLabel('Font', { exact: true }).click()
+        await page.getByRole('option', { name: 'Microsoft YaHei UI', exact: true }).click()
+        await page.getByLabel('Font size').click()
+        await page.getByRole('option', { name: 'Large', exact: true }).click()
         for (const slider of await page.getByRole('slider').all()) {
           await slider.press('End')
           await slider.press('ArrowLeft')
@@ -30,16 +33,16 @@ test('工作台设置即时生效，重启保留六项偏好和旧布局', async
         await page.getByRole('button', { name: 'Workbench settings' }).click()
       }
       await expect(page.getByRole('combobox')).toHaveCount(3)
-      await expect(page.getByLabel('Interface language')).toHaveValue('en')
-      await expect(page.getByLabel('Font', { exact: true })).toHaveValue('yahei')
-      await expect(page.getByLabel('Font size')).toHaveValue('large')
+      await expect(page.getByLabel('Interface language')).toHaveText('English')
+      await expect(page.getByLabel('Font', { exact: true })).toHaveText('Microsoft YaHei UI')
+      await expect(page.getByLabel('Font size')).toHaveText('Large')
       const sliders = page.getByRole('slider')
       if (stage < 2) {
         for (const slider of await sliders.all()) await expect(slider).toHaveValue('99')
       }
       if (stage === 1) await page.getByRole('button', { name: 'Restore defaults' }).click()
       if (stage > 0) {
-        for (const [index, value] of ['40', '50', '50'].entries()) {
+        for (const [index, value] of ['100', '100', '100'].entries()) {
           await expect(sliders.nth(index)).toHaveValue(value)
         }
       }
