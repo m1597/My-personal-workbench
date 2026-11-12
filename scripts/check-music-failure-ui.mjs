@@ -77,6 +77,7 @@ await verify(async (page, list) => {
     await expect(details.locator('p')).toContainText(title)
     await expect(details.locator('p')).toContainText(message)
   }
+  await expect(details.locator('p')).toContainText('当前来源仅提供试听')
   await expect(details.locator('p')).toContainText('暂时无法获取QQ 音乐的结果')
   await expect(list.getByRole('button', { name: '重试', exact: true })).toHaveCount(0)
   await page.evaluate(() => {

@@ -40,6 +40,20 @@ import {
 import { PlaybackQueue } from './PlaybackQueue'
 import { VolumeControls } from './VolumeControls'
 import './style.css'
+const legacySummaries: Record<string, string> = {
+  denied: '当前来源明确禁止保存这首歌',
+  preview: '当前来源仅提供试听',
+  unknown: '当前来源未声明是否允许保存这首歌',
+  mixed: '各来源的结果不同，本次未能保存',
+  missing: '当前来源没有找到匹配的录音版本',
+  quality: '当前来源没有可下载的完整音质',
+  unusable: '当前来源没有返回可保存的完整音频',
+  source: '请先在设置中导入音乐源',
+  'source-request': '音乐源暂未返回可用结果，可稍后重试',
+  storage: '保存文件失败，请检查下载目录和可用空间',
+  network: '暂时无法获取平台结果，可稍后重试',
+  cancelled: '本次下载已取消',
+}
 type Batch = {
   id: string
   day: string
@@ -380,7 +394,10 @@ function Music() {
       ? batchRows
           .filter((row) => row.daily && !savedDaily(row))
           .map((row) => {
-            const messages = [row.downloadSummary, row.downloadError].filter(Boolean)
+            const messages = [
+              row.downloadSummary || legacySummaries[row.diagnosis],
+              row.downloadError,
+            ].filter(Boolean)
             const reason = [...new Set(messages)].join(' · ') || row.status
             return `${row.title} · ${row.artist}：${reason}`
           })
