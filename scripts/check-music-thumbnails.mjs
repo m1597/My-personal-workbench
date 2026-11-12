@@ -65,7 +65,7 @@ try {
       ['上一首', 'A', false],
       ['下一首', 'B', false],
     ]) {
-      const before = await page.locator('.music-transport strong').innerText()
+      const before = await page.locator('.music-transport strong').textContent()
       const buttons = () => app.evaluate((_, id) => globalThis.registrations.get(id), windowId)
       await expect
         .poll(async () => (await buttons())?.some((b) => b.label === label && !b.disabled))
