@@ -23,7 +23,7 @@ type HostState = {
 const attachingGroups = new WeakMap<IDockviewPanelProps['api'], string>()
 declare global {
   interface Window {
-    musicDock?: Window['componentHost']
+    musicDock?: NonNullable<Window['componentHost']> & { reveal(): Promise<void> }
     componentHost?: {
       sampleEnabled?: boolean
       dropZone(value: Region[] | null): void
@@ -310,10 +310,12 @@ export function useMusicHostState() {
   return state
 }
 
-export function MusicPlayerBar() {
+export function useDockedMusicBar() {
   const state = useMusicHostState()
-  const visible =
-    state?.phase === 'ready' && state.mode === 'docked' && state.presentation === 'bar'
+  return state?.phase === 'ready' && state.mode === 'docked' && state.presentation === 'bar'
+}
+export function MusicPlayerBar() {
+  const visible = useDockedMusicBar()
   const slot = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!visible) return

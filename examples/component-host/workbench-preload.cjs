@@ -25,7 +25,10 @@ if (process.argv.includes('--fixture-panels'))
 function componentBridge(prefix) {
   return {
     ...(prefix === 'music-prototype'
-      ? { close: () => ipcRenderer.invoke('music-prototype:close') }
+      ? {
+          close: () => ipcRenderer.invoke('music-prototype:close'),
+          reveal: () => ipcRenderer.invoke('music-prototype:reveal'),
+        }
       : {}),
     status: () => ipcRenderer.invoke(`${prefix}:status`),
     restore: () => ipcRenderer.invoke(`${prefix}:restore`),

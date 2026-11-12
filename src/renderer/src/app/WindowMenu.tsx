@@ -5,10 +5,11 @@ import {
   MenuTrigger,
   MenuPopover,
   MenuList,
+  MenuSplitGroup,
   MenuItem,
   MenuDivider,
 } from '@fluentui/react-components'
-import { ChevronDown, Check, Plus, PanelsTopLeft } from 'lucide-react'
+import { ChevronDown, Check, Eye, Plus, PanelsTopLeft } from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { modules } from './moduleRegistry'
 import { openModule } from './workspace'
@@ -50,22 +51,33 @@ export function WindowMenu() {
               </MenuItem>
             ))}
             {window.musicDock && (
-              <MenuItem
-                role="menuitemcheckbox"
-                aria-checked={running}
-                icon={running ? <Check size={16} /> : <Plus size={16} />}
-                onClick={async () => {
-                  const host = window.musicDock
-                  if (!host) return
-                  const state = await host.status()
-                  if (state.phase === 'ready' || state.phase === 'attaching') {
-                    await host.close?.()
-                    setMusicError('')
-                  } else setMusicError((await host.open()).error ?? '')
-                }}
-              >
-                Music
-              </MenuItem>
+              <MenuSplitGroup>
+                <MenuItem
+                  role="menuitemcheckbox"
+                  aria-checked={running}
+                  icon={running ? <Check size={16} /> : <Plus size={16} />}
+                  onClick={async () => {
+                    const host = window.musicDock
+                    if (!host) return
+                    const state = await host.status()
+                    if (state.phase === 'ready' || state.phase === 'attaching') {
+                      await host.close?.()
+                      setMusicError('')
+                    } else setMusicError((await host.open()).error ?? '')
+                  }}
+                >
+                  Music
+                </MenuItem>
+                {music?.phase === 'ready' && music.presentation === 'background' && (
+                  <MenuItem
+                    className="music-menu-reveal"
+                    aria-label="显示 Music"
+                    title="显示 Music"
+                    icon={<Eye size={16} />}
+                    onClick={() => void window.musicDock?.reveal()}
+                  />
+                )}
+              </MenuSplitGroup>
             )}
             <MenuDivider />
             <MenuItem icon={<PanelsTopLeft size={16} />} onClick={() => setLayoutsOpen(true)}>

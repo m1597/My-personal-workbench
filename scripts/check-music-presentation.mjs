@@ -32,6 +32,10 @@ try {
   const shell = await app.firstWindow()
   const menu = shell.getByRole('button', { name: '窗口', exact: true })
   const musicItem = shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true })
+  const reveal = shell.getByRole('menuitem', {
+    name: '显示 Music',
+    exact: true,
+  })
   const tab = shell.getByRole('tab', { name: 'Music', exact: true })
   const bar = shell.locator('[aria-label="Music 播放栏"]')
   async function checked(running, click = false) {
@@ -97,6 +101,16 @@ try {
     }
     await checked(true)
     await playing()
+    const expand = music.getByRole('button', {
+      name: '展开 Music',
+      exact: true,
+    })
+    const stop = music.getByRole('button', { name: '停止播放', exact: true })
+    const stopBox = await stop.boundingBox()
+    expect((await expand.boundingBox()).x).toBeGreaterThanOrEqual(stopBox.x + stopBox.width)
+    await menu.click()
+    await expect(reveal).toHaveCount(0)
+    await shell.keyboard.press('Escape')
     for (const name of ['播放进度', '音量'])
       await expect(music.getByRole('slider', { name, exact: true })).toBeInViewport()
     for (const name of [
@@ -156,6 +170,32 @@ try {
     ).toEqual([true, queue])
     await music.getByRole('button', { name: /^(继续播放|播放)$/ }).click()
     await music.getByRole('button', { name: '隐藏到后台' }).click()
+    const hiddenAt = await clock()
+    const hiddenTrack = await music.locator('audio').evaluate((audio) => audio.currentSrc)
+    await expect.poll(clock, { timeout: 8000 }).toBeGreaterThan(hiddenAt + 2)
+    await menu.click()
+    await expect(reveal).toHaveAttribute('title', '显示 Music')
+    expect(
+      await reveal.evaluate((eye) => {
+        const main = eye.previousElementSibling.getBoundingClientRect()
+        const icon = eye.getBoundingClientRect()
+        return icon.top === main.top && icon.left >= main.right
+      }),
+    ).toBe(true)
+    await reveal.click()
+    await expect.poll(async () => (await native())[docked ? 'docked' : 'standalone']).toBe(true)
+    if (docked) await expect(tab).toHaveAttribute('aria-selected', 'true')
+    await expect(music.getByRole('button', { name: '隐藏到后台' })).toBeVisible()
+    expect(await clock()).toBeGreaterThan(hiddenAt + 2)
+    expect(await music.locator('audio').evaluate((audio) => audio.currentSrc)).toBe(hiddenTrack)
+    expect(
+      await music.evaluate(async () => [
+        window.originalAudio === document.querySelector('audio'),
+        (await window.music.state()).queue,
+      ]),
+    ).toEqual([true, queue])
+    await playing()
+    await music.getByRole('button', { name: '隐藏到后台' }).click()
     await playing()
     await checked(true, true)
     await expect.poll(() => !!page()).toBe(false)
@@ -163,7 +203,7 @@ try {
     console.log(
       'PASS',
       docked ? '停靠' : '独立',
-      '完整播放栏、暂停/播放、后台、空间和队列、二次启动激活、菜单停止',
+      '播放栏右侧展开、后台持续播放、眼睛恢复同一播放器及队列、二次启动激活、菜单停止',
     )
   }
   await checked(false, true)
@@ -175,4 +215,44 @@ try {
   console.log('PASS 仅播放栏关闭。截图', evidence)
 } finally {
   await app.close()
+}
+
+const daily = await electron.launch({
+  args: [
+    ...args.filter((value) => !value.startsWith('--user-data-dir=')),
+    '--user-data-dir=' + path.join(evidence, 'empty-profile'),
+    '--mode=workbench',
+  ],
+  env: { ...env, FITBAY_TEST_PANELS: '0' },
+})
+try {
+  const shell = await daily.firstWindow()
+  const original = shell.getByText('从「窗口 → Music」打开音乐组件。', {
+    exact: true,
+  })
+  const other = shell.getByText('可在这里打开其他组件', { exact: true })
+  await expect(original).toBeVisible()
+  await shell.getByRole('button', { name: '窗口', exact: true }).click()
+  await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
+  await expect
+    .poll(() => daily.windows().some((p) => p.url().includes('/music/index.html')))
+    .toBe(true)
+  const music = daily.windows().find((p) => p.url().includes('/music/index.html'))
+  await music.getByRole('button', { name: '只显示播放栏' }).click()
+  await expect(other).toBeVisible()
+  await expect(original).toHaveCount(0)
+  await shell.evaluate(() => delete document.documentElement.dataset.backdrop)
+  await daily.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].setBackgroundColor('#202227'),
+  )
+  await shell
+    .locator('.docking-area')
+    .screenshot({ path: path.join(evidence, '仅播放栏中央提示.png') })
+  await music.getByRole('button', { name: '展开 Music' }).click()
+  await music.getByRole('button', { name: '隐藏到后台' }).click()
+  await expect(original).toBeVisible()
+  await expect(other).toHaveCount(0)
+  console.log('PASS 普通空工作区和仅剩停靠播放栏的提示')
+} finally {
+  await daily.close()
 }

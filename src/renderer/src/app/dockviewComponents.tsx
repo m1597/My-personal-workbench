@@ -8,7 +8,7 @@ import { NavigationPanel } from '../../../../tests/fixtures/workspace/Navigation
 import { CanvasPanel } from '../../../../tests/fixtures/workspace/CanvasPanel'
 import { Inspector } from '../../../../tests/fixtures/workspace/Inspector'
 import { BottomPanel } from '../../../../tests/fixtures/workspace/BottomPanel'
-import { ComponentSlot } from './componentPrototype'
+import { ComponentSlot, useDockedMusicBar } from './componentPrototype'
 
 function ModulePanel({ api }: IDockviewPanelProps) {
   return <BuiltinContent id={api.id} />
@@ -56,12 +56,17 @@ export function HeaderActions({ api, containerApi }: IDockviewHeaderActionsProps
 
 export function EmptyWorkspace() {
   const { api } = useContext(WorkspaceContext)
+  const dockedBar = useDockedMusicBar()
   if (!fixtureWorkspace)
     return (
       <div className="empty-workspace">
         <PanelsTopLeft size={40} strokeWidth={1} />
-        <h2>工作区为空</h2>
-        <p>{window.musicDock ? '从「窗口 → Music」打开音乐组件。' : '从桌面工作台打开 Music。'}</p>
+        <h2>{dockedBar ? '可在这里打开其他组件' : '工作区为空'}</h2>
+        {!dockedBar && (
+          <p>
+            {window.musicDock ? '从「窗口 → Music」打开音乐组件。' : '从桌面工作台打开 Music。'}
+          </p>
+        )}
       </div>
     )
   return (

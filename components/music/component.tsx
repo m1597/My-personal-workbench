@@ -1025,16 +1025,6 @@ function Music() {
       </main>
       <footer className="music-player">
         <div className="music-transport">
-          {presentation === 'bar' && (
-            <Button
-              appearance="subtle"
-              size="small"
-              aria-label="展开 Music"
-              title="展开 Music"
-              icon={<PanelTopOpen size={17} />}
-              onClick={() => void act(() => window.musicWindow.present('full'))}
-            />
-          )}
           <div className="music-disc">
             <Disc3 size={23} />
           </div>
@@ -1113,6 +1103,16 @@ function Music() {
             disabled={!resolving && (localMode ? !current.current : !state?.items.some(playable))}
             onClick={() => void act(() => end(!localMode))}
           />
+          {presentation === 'bar' && (
+            <Button
+              appearance="subtle"
+              size="small"
+              aria-label="展开 Music"
+              title="展开 Music"
+              icon={<PanelTopOpen size={17} />}
+              onClick={() => void act(() => window.musicWindow.present('full'))}
+            />
+          )}
         </div>
         <div className="music-seek">
           <span>{clock(elapsed)}</span>

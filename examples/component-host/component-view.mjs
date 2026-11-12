@@ -348,11 +348,16 @@ export function componentView({
             throw Error('DENIED')
           setPresentation(next)
         })
-      if (music)
+      if (music) {
+        ipcMain.handle('music-prototype:reveal', (event) => {
+          if (!isShell(event)) throw Error('DENIED')
+          if (presentation === 'background') setPresentation('full')
+        })
         ipcMain.handle('music-prototype:close', (event) => {
           if (!isShell(event)) throw Error('DENIED')
           stopMusic()
         })
+      }
       ipcMain.handle(music ? 'music-prototype:open' : 'prototype:open', (event) => {
         if (!isShell(event)) throw new Error('DENIED')
         return attach()

@@ -562,6 +562,10 @@ input:disabled {
 .workbench-menu.fui-MenuPopover {
   min-width: 200px;
 }
+.workbench-menu .music-menu-reveal {
+  flex: 0 0 32px;
+  justify-content: center;
+}
 .workbench-dialog.fui-DialogSurface {
   width: min(460px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
