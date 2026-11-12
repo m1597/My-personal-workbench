@@ -47,7 +47,6 @@ input:not(.fui-Input__input):focus-visible {
 button,
 kbd,
 .app-header,
-.workspace-toolbar,
 .statusbar {
   user-select: none;
 }
@@ -91,13 +90,6 @@ svg {
   background: var(--accent-soft);
   color: var(--accent);
 }
-.workspace-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-7);
-  color: var(--muted);
-  font-size: var(--font-size-control);
-}
 .accent-dot {
   width: 5px;
   height: 5px;
@@ -105,18 +97,6 @@ svg {
   flex-shrink: 0;
   background: var(--accent);
   border-radius: 50%;
-}
-.header-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--line);
-  margin: 0 var(--space-negative-5);
-}
-.reset-button {
-  height: 30px;
-  padding: 0 var(--space-11);
-  background: var(--hover);
-  font-size: var(--font-size-control);
 }
 .avatar {
   display: grid;
@@ -127,35 +107,6 @@ svg {
   color: var(--accent);
   border-radius: 50%;
   font-size: var(--font-size-control);
-}
-.workspace-toolbar {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  height: 43px;
-  padding: 0 var(--space-16);
-  gap: var(--space-16);
-  border-bottom: 1px solid var(--stroke);
-}
-.workspace-title {
-  display: flex;
-  gap: var(--space-9);
-  align-items: center;
-  font-size: var(--font-size-control);
-  color: var(--text-secondary);
-}
-.toolbar-divider {
-  height: 14px;
-  width: 1px;
-  background: var(--line);
-}
-.toolbar-hint {
-  font-size: var(--font-size-control);
-  color: var(--text-muted);
-}
-.module-shortcuts {
-  display: flex;
-  gap: var(--space-3);
 }
 .docking-area {
   flex: 1;
@@ -589,11 +540,6 @@ svg {
   background: var(--accent-hover);
 }
 @media (max-width: 1000px) {
-  .toolbar-hint,
-  .workspace-label,
-  .status-hint {
-    display: none !important;
-  }
   .app-header {
     gap: var(--space-10);
   }
@@ -654,16 +600,23 @@ input:disabled {
   color: var(--text-secondary);
   margin: var(--space-12) 0 var(--space-20);
 }
-.workbench-dialog dl {
+
+.layout-content.fui-DialogContent {
   display: grid;
-  grid-template-columns: 76px 1fr;
-  gap: var(--space-15) var(--space-10);
-  margin: 0 0 var(--space-24);
+  gap: var(--space-16);
 }
-.workbench-dialog dt {
-  color: var(--accent);
+.layout-create,
+.layout-actions {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--space-8);
 }
-.workbench-dialog dd {
-  margin: 0;
-  color: var(--text-secondary);
+.layout-create .fui-Field {
+  flex: 1;
+  min-width: 140px;
+}
+.layout-restore {
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--stroke);
 }

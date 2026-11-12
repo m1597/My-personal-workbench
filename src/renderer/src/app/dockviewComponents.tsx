@@ -3,7 +3,7 @@ import { useState, useEffect, useContext } from 'react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelProps } from 'dockview-react'
 import { Minimize2, Maximize2, PanelsTopLeft } from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
-import { createDefaultLayout } from './workspace'
+import { readPresets, switchLayout } from './layoutStorage'
 import { NavigationPanel } from '../../../../tests/fixtures/workspace/NavigationPanel'
 import { CanvasPanel } from '../../../../tests/fixtures/workspace/CanvasPanel'
 import { Inspector } from '../../../../tests/fixtures/workspace/Inspector'
@@ -72,7 +72,14 @@ export function EmptyWorkspace() {
       <button
         type="button"
         className="primary-button"
-        onClick={() => api && createDefaultLayout(api)}
+        onClick={() => {
+          const presets = readPresets()
+          if (api)
+            switchLayout(
+              api,
+              presets.items.find((item) => item.name === presets.defaultName)?.layout,
+            )
+        }}
       >
         恢复默认布局
       </button>

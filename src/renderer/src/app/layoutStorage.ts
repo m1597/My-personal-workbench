@@ -120,6 +120,32 @@ function retirePlaceholders(layout: SerializedDockview) {
   if (previousActive && !layout.activeGroup && firstGroup) layout.activeGroup = firstGroup
   for (const id of retiredPanelIds) delete layout.panels[id]
 }
+export function captureLayout(api: DockviewApi) {
+  const layout = api.toJSON()
+  Reflect.deleteProperty(layout.grid, 'maximizedNode')
+  return layout
+}
+
+function restoreSnapshot(api: DockviewApi, snapshot: SerializedDockview, gap: number) {
+  const layout = structuredClone(snapshot)
+  // 8.9.0 writes maximizedNode at runtime although its public grid type omits it.
+  Reflect.deleteProperty(layout.grid, 'maximizedNode')
+  // Older versions assigned 160 × 110 to every panel reopened from the menu.
+  for (const { id } of modules) {
+    const panel = layout.panels[id]
+    if (panel?.minimumWidth === 160 && panel.minimumHeight === 110)
+      Object.assign(panel, minimumPanelSize[id])
+  }
+  retirePlaceholders(layout)
+  const savedMusic = layout.panels['component-music']
+  if (savedMusic) savedMusic.title = 'Music'
+  applyLayout(api, layout, gap)
+  const slot = api.getPanel('component-example')
+  if (slot && !window.componentHost?.sampleEnabled) api.removePanel(slot)
+  const music = api.getPanel('component-music')
+  if (music && !window.musicDock) api.removePanel(music)
+}
+
 export function restoreLayout(api: DockviewApi, gap: number) {
   try {
     const raw = localStorage.getItem(layoutStorageKey)
@@ -128,28 +154,16 @@ export function restoreLayout(api: DockviewApi, gap: number) {
       const saved: unknown = JSON.parse(raw)
       if (!record(saved) || saved.version !== formatVersion || !validLayout(saved.layout))
         throw new Error('布局格式、版本或模块不兼容')
-      // 8.9.0 writes maximizedNode at runtime although its public grid type omits it.
-      Reflect.deleteProperty(saved.layout.grid, 'maximizedNode')
-      // Older versions assigned 160 × 110 to every panel reopened from the menu.
-      for (const { id } of modules) {
-        const panel = saved.layout.panels[id]
-        if (panel?.minimumWidth === 160 && panel.minimumHeight === 110)
-          Object.assign(panel, minimumPanelSize[id])
-      }
-      retirePlaceholders(saved.layout)
-      const savedMusic = saved.layout.panels['component-music']
-      if (savedMusic) savedMusic.title = 'Music'
-      applyLayout(api, saved.layout, gap)
-      const slot = api.getPanel('component-example')
-      if (slot && !window.componentHost?.sampleEnabled) api.removePanel(slot)
-      const music = api.getPanel('component-music')
-      if (music && !window.musicDock) api.removePanel(music)
+      restoreSnapshot(api, saved.layout, gap)
       return
     }
   } catch {
-    console.warn('无法恢复工作区布局，已使用默认布局；可通过“重置布局”重新保存。')
+    console.warn('无法恢复工作区布局，已使用默认布局；可从窗口菜单还原默认布局。')
   }
-  createDefaultLayout(api)
+  const presets = readPresets()
+  const chosen = presets.items.find((item) => item.name === presets.defaultName)
+  if (chosen) restoreSnapshot(api, chosen.layout, gap)
+  else createDefaultLayout(api)
 }
 
 // Attach only after restore/default creation completes. Cleanup never serializes a
@@ -162,8 +176,7 @@ export function trackLayout(api: DockviewApi) {
     clearTimeout(timer)
     if (pauses) return
     try {
-      const layout = api.toJSON()
-      Reflect.deleteProperty(layout.grid, 'maximizedNode')
+      const layout = captureLayout(api)
       const raw = JSON.stringify({ version: formatVersion, layout })
       if (raw !== lastSaved) {
         localStorage.setItem(layoutStorageKey, raw)
@@ -198,4 +211,53 @@ export function trackLayout(api: DockviewApi) {
       window.removeEventListener('beforeunload', save)
     },
   }
+}
+
+type NamedLayout = { name: string; layout: SerializedDockview }
+export type LayoutPresets = { items: NamedLayout[]; defaultName?: string }
+const presetsKey = 'workbench.layoutPresets'
+
+export function readPresets(): LayoutPresets {
+  try {
+    const saved = JSON.parse(localStorage.getItem(presetsKey) ?? 'null')
+    if (record(saved) && saved.version === 1 && Array.isArray(saved.items)) {
+      const items = saved.items.filter(
+        (entry): entry is NamedLayout =>
+          record(entry) &&
+          typeof entry.name === 'string' &&
+          !!entry.name.trim() &&
+          validLayout(entry.layout),
+      )
+      return {
+        items,
+        defaultName: typeof saved.defaultName === 'string' ? saved.defaultName : undefined,
+      }
+    }
+  } catch {
+    console.warn('无法读取命名布局。')
+  }
+  return { items: [] }
+}
+
+export function savePresets(presets: LayoutPresets) {
+  localStorage.setItem(presetsKey, JSON.stringify({ ...presets, version: 1 }))
+}
+
+// Dockview synchronously emits remove events while it reconciles a saved layout.
+const switching = new WeakSet<DockviewApi>()
+export function switchingLayout(api: DockviewApi) {
+  return switching.has(api)
+}
+export function switchLayout(api: DockviewApi, snapshot?: SerializedDockview) {
+  const gap = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--space-8'),
+  )
+  switching.add(api)
+  try {
+    if (snapshot) restoreSnapshot(api, snapshot, gap)
+    else createDefaultLayout(api)
+  } finally {
+    switching.delete(api)
+  }
+  if (api.getPanel('component-music')) void window.musicDock?.restore()
 }

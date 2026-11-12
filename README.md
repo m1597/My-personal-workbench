@@ -30,7 +30,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 | npm run build                 | 类型检查并构建至 out/                                           |
 | npm start                     | electron-vite preview 构建后启动桌面程序                        |
 | npm test                      | 构建并执行发布、开发两套 Electron 交互测试                      |
-| npm run check                 | 环境、格式、静态、类型、构建、28 项交互及 doctor 回归的统一入口 |
+| npm run check                 | 环境、格式、静态、类型、构建、30 项交互及 doctor 回归的统一入口 |
 
 统一检查只执行一次类型检查和生产构建。失败从终端首个错误看起，报告打开方法见开发流程。2026-11-09 已按用户授权推送，[首次 Windows CI](https://github.com/m1597/My-personal-workbench/actions/runs/42599390733) 已通过（提交 8af4c32，含 10 项交互测试）。
 
@@ -50,7 +50,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 ## 当前工作区
 
-拖动标签到面板边缘分屏，到标签栏合并；拖动分隔线缩放。「窗口」菜单重新打开模块，「重置布局」恢复初始排列。
+拖动标签到面板边缘分屏，到标签栏合并；拖动分隔线缩放。「窗口」菜单重新打开模块，「窗口 → 布局」可命名保存当前排列、更新或切换快照、指定或还原默认布局。再次启动会恢复最后使用的工作区，包括全部标签关闭的情况。
 
 ![深色实际渲染截图](docs/images/workbench.png)
 

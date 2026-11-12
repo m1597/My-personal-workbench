@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react'
-import { RotateCcw, MousePointer2, LayoutGrid } from 'lucide-react'
-import { createDefaultLayout, openModule } from './workspace'
 import type { ModuleId } from './builtinSession'
-import { modules, icons } from './moduleRegistry'
 import { WorkspaceContext, type WorkspaceState } from './WorkspaceContext'
 import { components, HeaderActions, EmptyWorkspace } from './dockviewComponents'
-import { Button } from '@fluentui/react-components'
 import { ComponentTheme } from './ComponentTheme'
 import { WindowMenu } from './WindowMenu'
-import { HelpDialog } from './HelpDialog'
 import { restoreLayout } from './layoutStorage'
 import { ComponentDropPreview, useComponentPrototype } from './componentPrototype'
 
@@ -65,48 +60,7 @@ export default function App() {
           <header className="app-header">
             <WindowMenu />
             <ComponentDropPreview />
-            <div className="header-spacer" />
-            <div className="workspace-label">
-              <span className="accent-dot" />
-              本地工作区
-            </div>
-            <HelpDialog />
-            <span className="header-divider" />
-            <Button
-              appearance="secondary"
-              icon={<RotateCcw size={16} />}
-              className="workbench-reset"
-              onClick={() => workspace.api && createDefaultLayout(workspace.api)}
-            >
-              重置布局
-            </Button>
           </header>
-          <div className="workspace-toolbar">
-            <span className="workspace-title">
-              <LayoutGrid size={14} />
-              默认工作区
-            </span>
-            <span className="toolbar-divider" />
-            <span className="toolbar-hint">拖动标签，自由组合工作区</span>
-            <div className="header-spacer" />
-            <div className="module-shortcuts">
-              {modules.map((module, index) => {
-                const Icon = icons[index]
-                return (
-                  <button
-                    type="button"
-                    key={module.id}
-                    className={`icon-button ${workspace.active === module.id ? 'is-active' : ''}`}
-                    title={`打开${module.title}`}
-                    aria-label={`显示${module.title}`}
-                    onClick={() => workspace.api && openModule(workspace.api, module.id)}
-                  >
-                    <Icon size={16} />
-                  </button>
-                )
-              })}
-            </div>
-          </div>
           <main className="docking-area" aria-label="可调整的模块工作区">
             <DockviewReact
               components={components}
@@ -125,13 +79,6 @@ export default function App() {
             </span>
             <span className="status-separator" />
             <span data-testid="panel-count">{workspace.visible.length} 个模块已打开</span>
-            <div className="header-spacer" />
-            <span className="status-hint">
-              <MousePointer2 size={12} />
-              拖动标签排列 · 拖动边界缩放
-            </span>
-            <span className="status-separator" />
-            <span>基础框架 v0.1</span>
           </footer>
         </div>
       </WorkspaceContext.Provider>

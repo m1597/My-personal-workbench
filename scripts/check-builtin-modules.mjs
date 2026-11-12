@@ -72,7 +72,7 @@ try {
   await expect(nav.getByRole('textbox', { name: '搜索模块' })).toHaveValue('模块 2')
   await nav.getByRole('textbox', { name: '搜索模块' }).fill('模块 4')
   await nav.getByRole('button', { name: '打开模块 4' }).click()
-  await expect(shell.getByRole('button', { name: '显示模块 4' })).toHaveClass(/is-active/)
+  await expect(shell.locator('.dv-active-group .dv-active-tab')).toContainText('模块 4')
   for (const id of ['module-2', 'module-3', 'module-4']) {
     await dragOut(id)
     await expect((await pageFor(id)).getByTestId(id)).toBeVisible()
@@ -200,7 +200,8 @@ try {
   console.log('PASS 空工作台接回、同组、四边实际位置、超时重试、导航搜索保持')
   await dragOut('module-3')
   const inspector = await pageFor('module-3')
-  await shell.getByRole('button', { name: '显示模块 2' }).click()
+  await shell.getByRole('button', { name: '窗口', exact: true }).click()
+  await shell.getByRole('menuitem', { name: '模块 2', exact: true }).click()
   await expect(inspector.getByText('模块 2', { exact: true })).toBeVisible()
   const content = await shell.getByTestId('module-2').boundingBox()
   await expect
@@ -219,7 +220,8 @@ try {
       .close(),
   )
   await expect.poll(() => app.windows().length).toBe(1)
-  await shell.getByRole('button', { name: '显示模块 3' }).click()
+  await shell.getByRole('button', { name: '窗口', exact: true }).click()
+  await shell.getByRole('menuitem', { name: '模块 3', exact: true }).click()
   await expect(shell.getByTestId('module-3')).toBeVisible()
   await app.evaluate(({ ipcMain }) => {
     const [report] = ipcMain.listeners('builtin:workspace')
@@ -229,7 +231,7 @@ try {
   })
   await shell.reload()
   await launchIntent('module-2')
-  await expect(shell.getByRole('button', { name: '显示模块 2' })).toHaveClass(/is-active/, {
+  await expect(shell.locator('.dv-active-group .dv-active-tab')).toContainText('模块 2', {
     timeout: 8000,
   })
   expect(app.windows()).toHaveLength(1)

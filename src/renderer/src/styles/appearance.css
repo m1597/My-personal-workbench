@@ -8,10 +8,6 @@
   padding: 0 var(--space-18);
   border-bottom: 1px solid var(--stroke);
 }
-.workspace-toolbar {
-  height: var(--shell-toolbar-height);
-  border-bottom: 0;
-}
 .docking-area {
   padding-top: var(--space-4);
 }

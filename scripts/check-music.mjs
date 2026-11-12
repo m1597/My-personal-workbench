@@ -59,6 +59,20 @@ try {
   await dragMusicIn(app)
   const shell = await page(app, '/out/renderer/index.html')
   await expect(music.locator('[data-surface="embedded"]')).toBeVisible()
+  const layouts = async () => {
+    await shell.getByRole('button', { name: '窗口', exact: true }).click()
+    await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
+  }
+  await layouts()
+  await shell.getByRole('textbox', { name: '新布局名称' }).fill('试听')
+  await shell.getByRole('button', { name: '保存当前布局' }).click()
+  await shell.getByRole('button', { name: '还原默认布局' }).click()
+  await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toHaveCount(0)
+  const hiddenTime = await clock()
+  await expect.poll(clock).toBeGreaterThan(hiddenTime + 0.1)
+  await layouts()
+  await shell.getByRole('button', { name: '切换布局' }).click()
+  await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
   const dockTime = await clock()
   await promisify(execFile)(executable, [...args, '--mode=music'], {
     env,
@@ -153,7 +167,7 @@ try {
     '模块 3',
     '模块 4',
     'Music',
-    '重置布局',
+    '布局',
   ])
   // Off-screen capture cannot composite the Windows acrylic background.
   await shell.evaluate(() => {

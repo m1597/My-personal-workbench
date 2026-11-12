@@ -5,7 +5,7 @@ import { Button } from '@fluentui/react-components'
 import { bindBuiltinDock } from './builtinDock'
 import { type ModuleId, navigationQuery } from './builtinSession'
 import { modules } from './moduleRegistry'
-import { applyLayout, trackLayout } from './layoutStorage'
+import { applyLayout, switchingLayout, trackLayout } from './layoutStorage'
 
 type Region = { id: string; x: number; y: number; width: number; height: number }
 type Target = Region & { direction: 'within' | 'left' | 'right' | 'above' | 'below' }
@@ -41,6 +41,13 @@ declare global {
     }
   }
 }
+export function showMusicSlot(api: DockviewApi) {
+  const slot =
+    api.getPanel('component-music') ??
+    api.addPanel({ id: 'component-music', title: 'Music', component: 'component-slot' })
+  slot.api.setActive()
+}
+
 export function useComponentPrototype(
   api: DockviewApi | undefined,
   gap: number,
@@ -142,10 +149,14 @@ export function useComponentPrototype(
         }
       }
       const removed = api.onDidRemovePanel((panel) => {
+        if (panelId === 'component-music' && switchingLayout(api)) return
         if (panel.id === panelId && last?.mode === 'docked' && last.phase === 'ready')
           void (host.close ? host.close() : host.detach())
       })
-      const offActivate = host.onActivate(() => api.getPanel(panelId)?.api.setActive())
+      const offActivate = host.onActivate(() => {
+        if (panelId === 'component-music' && last?.mode === 'docked') showMusicSlot(api)
+        else api.getPanel(panelId)?.api.setActive()
+      })
       let disposed = false
       const off = host.subscribe(update)
       void host.status().then((state) => {

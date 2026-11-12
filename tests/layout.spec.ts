@@ -118,9 +118,7 @@ test('位置、宽高、标签分组和活动标签跨次恢复', async ({}, inf
     .filter({ has: page.getByRole('tab', { name: '模块 2', exact: true }) })
   await expect(group.getByRole('tab', { name: '模块 3', exact: true })).toBeVisible()
   await expect(page.getByTestId('module-2')).toBeVisible()
-  await expect(page.getByRole('button', { name: '显示模块 2', exact: true })).toHaveClass(
-    /is-active/,
-  )
+  await expect(page.locator('.dv-active-group .dv-active-tab')).toContainText('模块 2')
   const afterLeft = (await page.getByTestId('module-1').boundingBox())!
   const afterBottom = (await page.getByTestId('module-4').boundingBox())!
   expect(Math.abs(afterLeft.width - beforeLeft.width)).toBeLessThan(3)
@@ -139,8 +137,10 @@ test('关闭部分及全部模块保持状态，重置后持久恢复默认', as
   await restart(0)
   await expect(page.getByRole('button', { name: '恢复默认布局' })).toBeVisible()
   expect(Object.keys((await saved()).panels)).toHaveLength(0)
-  for (const id of [1, 2, 3, 4])
-    await page.getByRole('button', { name: `显示模块 ${id}`, exact: true }).click()
+  for (const id of [1, 2, 3, 4]) {
+    await page.getByRole('button', { name: '窗口', exact: true }).click()
+    await page.getByRole('menuitem', { name: `模块 ${id}`, exact: true }).click()
+  }
   await expect.poll(async () => (await saved()).panels).toEqual(baseline.panels)
   await page.evaluate((key) => {
     window.addEventListener('beforeunload', () => {
@@ -153,15 +153,15 @@ test('关闭部分及全部模块保持状态，重置后持久恢复默认', as
   await restart()
   await expect(page.locator('.dv-groupview')).toHaveCount(1)
   await expect.poll(async () => (await saved()).panels).toEqual(baseline.panels)
-  await page.getByRole('button', { name: '重置布局', exact: true }).click()
+  await page.getByRole('button', { name: '窗口', exact: true }).click()
+  await page.getByRole('menuitem', { name: '布局', exact: true }).click()
+  await page.getByRole('button', { name: '还原默认布局', exact: true }).click()
   await restart()
   await expect(page.locator('.dv-groupview')).toHaveCount(4)
   const restored = await saved()
   // Generated group ids can differ, but each panel's constraints must survive.
   expect(restored.panels).toEqual(baseline.panels)
-  await expect(page.getByRole('button', { name: '显示模块 2', exact: true })).toHaveClass(
-    /is-active/,
-  )
+  await expect(page.locator('.dv-active-group .dv-active-tab')).toContainText('模块 2')
 })
 
 test('最大化退出后恢复正常布局和原有宽高', async () => {
@@ -233,4 +233,43 @@ test('组件宿主缺失只移除对应标签', async () => {
   await restart(3)
   for (const id of [1, 2, 3]) await expect(page.getByTestId('module-' + id)).toBeVisible()
   await expect(page.getByTestId('module-4')).toHaveCount(0)
+})
+
+test('命名快照可显式更新，默认布局独立于重启实时布局', async ({}, info) => {
+  const layouts = async () => {
+    await page.getByRole('button', { name: '窗口', exact: true }).click()
+    await page.getByRole('menuitem', { name: '布局', exact: true }).click()
+  }
+  const close = () => page.getByRole('button', { name: '关闭布局' }).click()
+  await layouts()
+  const name = page.getByRole('textbox', { name: '新布局名称' })
+  await name.fill('编辑')
+  await page.getByRole('button', { name: '保存当前布局' }).click()
+  await page.getByRole('button', { name: '设为默认' }).click()
+  await close()
+  await page.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
+  await layouts()
+  await page.getByRole('button', { name: '切换布局' }).click()
+  await expect(page.getByTestId('module-4')).toBeVisible()
+  await page.getByRole('button', { name: 'Close 模块 4', exact: true }).click()
+  await layouts()
+  await page.getByRole('button', { name: '更新快照' }).click()
+  await close()
+  for (const id of [1, 2, 3])
+    await page.getByRole('button', { name: `Close 模块 ${id}`, exact: true }).click()
+  await layouts()
+  await name.fill('空白')
+  await page.getByRole('button', { name: '保存当前布局' }).click()
+  await name.fill('编辑')
+  await page.getByRole('button', { name: '保存当前布局' }).click()
+  await expect(page.getByRole('status')).toContainText('此名称已存在')
+  await page.screenshot({ path: info.outputPath('named-layouts.png'), animations: 'disabled' })
+  await restart(0)
+  await layouts()
+  await page.getByRole('button', { name: '还原默认布局' }).click()
+  await expect(page.getByTestId('panel-count')).toHaveText('3 个模块已打开')
+  await layouts()
+  await page.getByLabel('已保存的布局').selectOption('空白')
+  await page.getByRole('button', { name: '切换布局' }).click()
+  await restart(0)
 })

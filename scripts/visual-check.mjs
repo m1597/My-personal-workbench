@@ -27,10 +27,10 @@ for (const scale of [1.25, 1.5]) {
     const { root } = await cdp.send('DOM.getDocument')
     const { nodeId } = await cdp.send('DOM.querySelector', {
       nodeId: root.nodeId,
-      selector: '.toolbar-hint',
+      selector: '.empty-workspace p',
     })
     const fonts = await cdp.send('CSS.getPlatformFontsForNode', { nodeId })
-    const title = page.locator('.toolbar-hint')
+    const title = page.locator('.empty-workspace p')
     const typography = await title.evaluate((element) => {
       const style = getComputedStyle(element)
       return {
@@ -84,9 +84,11 @@ for (const scale of [1.25, 1.5]) {
       await capture('workspace')
       for (const [trigger, role] of [
         ['窗口', 'menu'],
-        ['操作帮助', 'dialog'],
+        ['窗口', 'dialog'],
       ]) {
         await page.getByRole('button', { name: trigger, exact: true }).click()
+        if (role === 'dialog')
+          await page.getByRole('menuitem', { name: '布局', exact: true }).click()
         const popup = page.getByRole(role)
         await expect(popup).toBeVisible()
         await capture(role)

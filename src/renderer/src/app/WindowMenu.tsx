@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react'
+import { useContext, useRef, useState } from 'react'
 import {
   Button,
   Menu,
@@ -8,19 +8,29 @@ import {
   MenuItem,
   MenuDivider,
 } from '@fluentui/react-components'
-import { ChevronDown, Check, Plus, RotateCcw, Music } from 'lucide-react'
+import { ChevronDown, Check, Plus, PanelsTopLeft, Music } from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { modules } from './moduleRegistry'
-import { createDefaultLayout, openModule } from './workspace'
+import { openModule } from './workspace'
+
+import { LayoutDialog } from './LayoutDialog'
+import { showMusicSlot } from './componentPrototype'
 
 export function WindowMenu() {
   const workspace = useContext(WorkspaceContext)
   const [musicError, setMusicError] = useState('')
+  const [layoutsOpen, setLayoutsOpen] = useState(false)
+  const trigger = useRef<HTMLButtonElement>(null)
   return (
     <>
       <Menu positioning={{ position: modules.length ? 'below' : 'after', align: 'start' }}>
         <MenuTrigger disableButtonEnhancement>
-          <Button appearance="subtle" icon={<ChevronDown size={14} />} iconPosition="after">
+          <Button
+            ref={trigger}
+            appearance="subtle"
+            icon={<ChevronDown size={14} />}
+            iconPosition="after"
+          >
             窗口
           </Button>
         </MenuTrigger>
@@ -41,7 +51,10 @@ export function WindowMenu() {
               <MenuItem
                 icon={<Music size={16} />}
                 onClick={async () => {
-                  workspace.api?.getPanel('component-music')?.api.setActive()
+                  const host = window.musicDock
+                  const state = await host?.status()
+                  if (workspace.api && state?.mode === 'docked' && state.phase === 'ready')
+                    showMusicSlot(workspace.api)
                   setMusicError((await window.musicDock?.open())?.error ?? '')
                 }}
               >
@@ -49,15 +62,21 @@ export function WindowMenu() {
               </MenuItem>
             )}
             <MenuDivider />
-            <MenuItem
-              icon={<RotateCcw size={16} />}
-              onClick={() => workspace.api && createDefaultLayout(workspace.api)}
-            >
-              重置布局
+            <MenuItem icon={<PanelsTopLeft size={16} />} onClick={() => setLayoutsOpen(true)}>
+              布局
             </MenuItem>
           </MenuList>
         </MenuPopover>
       </Menu>
+      {layoutsOpen && workspace.api && (
+        <LayoutDialog
+          api={workspace.api}
+          onClose={() => {
+            setLayoutsOpen(false)
+            trigger.current?.focus()
+          }}
+        />
+      )}
       {musicError && <span role="alert">{musicError}</span>}
     </>
   )
