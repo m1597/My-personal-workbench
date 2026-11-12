@@ -1,3 +1,5 @@
+import { musicShortcuts } from './music-shortcuts.mjs'
+import { getMusicPreferences, setMusicQuality } from './music-preferences.mjs'
 import { openAudio, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
@@ -14,12 +16,14 @@ export function musicService(profile, isSender) {
     grant,
     localDialog = false,
     viewEpoch = 0
+  const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   const bind = (name, fn) =>
     ipcMain.handle('music:' + name, async (event, ...args) => {
       if (!isSender(event)) throw Error('DENIED')
       try {
         store ??= new MusicStore(path.join(profile, 'fitbay-music'))
+        shortcuts.activate(event.sender, store)
         return await fn(...args)
       } catch (e) {
         // File system and SQLite errors may contain local paths.
@@ -203,7 +207,24 @@ export function musicService(profile, isSender) {
       throw e
     }
   })
-  bind('state', () => ({ ...store.snapshot(), models: modelInfo(store) }))
+  bind('state', () => ({
+    ...store.snapshot(),
+    models: modelInfo(store),
+    prefs: { ...getMusicPreferences(store), shortcutFailures: shortcuts.failures() },
+  }))
+  bind('setMusicQuality', (quality) => setMusicQuality(store, quality))
+  bind('setMusicShortcut', (action, key) => shortcuts.setCustom(store, action, key))
+  bind('setMusicMediaKeys', (enabled) => shortcuts.setMedia(store, enabled))
+  bind('chooseMusicDirectory', async (kind) => {
+    if (!['manual', 'recommend'].includes(kind)) throw Error('无效的目录用途')
+    const epoch = viewEpoch
+    const choice = await dialog.showOpenDialog({
+      title: kind === 'manual' ? '选择手动下载目录' : '选择推荐下载目录',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (!choice.canceled && choice.filePaths.length && viewEpoch === epoch)
+      store.set('music-' + kind + '-dir', choice.filePaths[0])
+  })
   bind('configureModel', (id, model, key, forget) => {
     if (pending) throw Error('请先结束当前生成')
     configureModel(store, safeStorage, id, model, key, forget)

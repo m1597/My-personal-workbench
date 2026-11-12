@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  MusicSettings,
+  type MusicPreferences,
+  type TransportAction,
+  type TasteStatus,
+} from './MusicSettings'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Button,
@@ -57,6 +63,7 @@ import type { ModelInfo } from './ModelSettings'
 import { DownloadPane } from './LxPanel'
 import type { Versions } from './LxPanel'
 type State = {
+  prefs: MusicPreferences
   profile: string
   models: ModelInfo
   items: Item[]
@@ -75,6 +82,10 @@ type Mode = { mode: string }
 declare global {
   interface Window {
     music: {
+      setMusicQuality(quality: string): Promise<void>
+      setMusicShortcut(action: TransportAction, key: string): Promise<void>
+      setMusicMediaKeys(enabled: boolean): Promise<void>
+      chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
       configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
       lxInfo(): Promise<string>
       lxImport(link?: string): Promise<void>
@@ -98,6 +109,8 @@ declare global {
       playQueue(id: string, ids: string[], position: number): Promise<void>
       state(): Promise<State>
       draft(s: string): Promise<void>
+      getTasteStatus(): Promise<TasteStatus>
+      setTasteConsent(value: boolean): Promise<TasteStatus>
       generateProfile(description: string, summary?: string[]): Promise<string>
       generate(
         s: string,
@@ -119,6 +132,7 @@ declare global {
       keep(batch: string): Promise<void>
     }
     musicWindow: {
+      onTransport(fn: (action: TransportAction) => void): () => void
       status(): Promise<Mode>
       transfer(action: string): Promise<{ ok: boolean; error?: string }>
       subscribe(fn: (v: Mode) => void): () => void
@@ -356,6 +370,18 @@ function Music() {
     !current.current && active && available.has(active.id)
       ? '从 ' + Math.floor(elapsed) + ' 秒继续'
       : '播放'
+  function togglePlayback() {
+    if (audio.current && !audio.current.paused) {
+      ++epoch.current
+      audio.current.pause()
+    } else void act(resumeOrStart)
+  }
+  const transport = useEffectEvent((action: TransportAction) => {
+    if (action === 'toggle') togglePlayback()
+    else if (action === 'previous' && preceding) void act(() => navigate(preceding, queue))
+    else if (action === 'next' && !resolving && following) void act(next)
+  })
+  useEffect(() => window.musicWindow.onTransport((action) => transport(action)), [])
   async function audition(row: Item, key?: string, quality?: string, queueIds = visibleQueue) {
     const request = ++epoch.current
     setResolving(true)
@@ -398,7 +424,13 @@ function Music() {
           <div className="music-heading">
             <h1>Music</h1>
             <small>
-              {tab === 'download' ? '在线下载' : tab === 'library' ? '本地音乐' : '每日推荐'}
+              {tab === 'download'
+                ? '在线下载'
+                : tab === 'library'
+                  ? '本地音乐'
+                  : tab === 'settings'
+                    ? '设置'
+                    : '每日推荐'}
             </small>
           </div>
         </header>
@@ -412,6 +444,7 @@ function Music() {
         <Tab value="library">本地曲库</Tab>
         <Tab value="download">下载音乐</Tab>
         <Tab value="audition">每日推荐</Tab>
+        <Tab value="settings">设置</Tab>
       </TabList>
       <main className="music-scroll">
         {tab === 'library' ? (
@@ -437,7 +470,6 @@ function Music() {
             job={state?.importJob}
             active={now}
             playing={!paused}
-            importFiles={(mode) => void act(() => host.importLocal(mode))}
             cancel={() => void act(() => host.cancelImport())}
             play={(id) => void act(() => startTrack(id))}
             relocate={(id) => void act(() => host.relocateLocal(id))}
@@ -460,8 +492,21 @@ function Music() {
               })
             }
           />
+        ) : tab === 'settings' ? (
+          state && (
+            <MusicSettings
+              models={state.models}
+              prefs={state.prefs}
+              job={state.importJob}
+              refresh={refresh}
+            />
+          )
         ) : tab === 'download' ? (
-          <DownloadPane tracks={state?.localTracks ?? []} refresh={refresh} />
+          <DownloadPane
+            preferredQuality={state?.prefs.quality}
+            tracks={state?.localTracks ?? []}
+            refresh={refresh}
+          />
         ) : (
           <>
             {state && (
@@ -696,12 +741,7 @@ function Music() {
             aria-label={paused ? resumeLabel : '暂停'}
             title={paused ? resumeLabel : '暂停'}
             icon={paused ? <Play size={16} /> : <Pause size={16} />}
-            onClick={() => {
-              if (!paused) {
-                ++epoch.current
-                audio.current?.pause()
-              } else void act(resumeOrStart)
-            }}
+            onClick={togglePlayback}
           />
           <Button
             appearance="subtle"

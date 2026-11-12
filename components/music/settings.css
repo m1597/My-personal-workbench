@@ -1,0 +1,54 @@
+.music-settings {
+  width: min(100%, 820px);
+  margin-inline: auto;
+}
+.music-settings section {
+  display: grid;
+  gap: var(--space-10);
+  padding-block: var(--space-16);
+  border-bottom: 1px solid var(--stroke);
+}
+.music-settings section:first-child {
+  padding-top: 0;
+}
+.music-settings p,
+.settings-directory span {
+  color: var(--text-secondary);
+}
+.music-settings p {
+  line-height: 1.6;
+}
+.settings-buttons,
+.settings-directory,
+.settings-shortcut {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.settings-shortcut {
+  align-items: end;
+}
+.settings-directory {
+  justify-content: space-between;
+}
+.settings-directory > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+.settings-directory span {
+  overflow-wrap: anywhere;
+}
+.music-settings .fui-Dropdown {
+  max-width: 250px;
+  min-width: 120px;
+}
+.settings-message {
+  position: sticky;
+  bottom: 0;
+  padding: var(--space-8);
+  background: var(--base);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-6);
+}

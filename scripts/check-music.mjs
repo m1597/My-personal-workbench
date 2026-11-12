@@ -23,11 +23,12 @@ async function page(app, fragment) {
 let app = await launch('music')
 try {
   const music = await page(app, '/music/index.html')
-  await music.getByRole('tab', { name: '每日推荐' }).click()
+  await music.getByRole('tab', { name: '设置' }).click()
   await music.getByRole('button', { name: '模型设置' }).click()
   await music.getByRole('combobox', { name: '服务商' }).click()
   await music.getByRole('option', { name: '离线示例' }).click()
   await music.getByRole('button', { name: '保存设置' }).click()
+  await music.getByRole('tab', { name: '每日推荐' }).click()
   await music.getByLabel('今天想听什么').fill('电子')
   await music.getByRole('button', { name: '生成离线试听单' }).click()
   await expect(music.locator('li')).toHaveCount(5)

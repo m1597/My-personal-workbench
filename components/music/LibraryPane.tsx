@@ -19,14 +19,12 @@ import {
   PopoverTrigger,
 } from '@fluentui/react-components'
 import {
-  FileMusic,
   Folder,
   ChevronRight,
   Plus,
   ListMusic,
   ListPlus,
   PanelLeft,
-  FolderPlus,
   Music2,
   Play,
   Search,
@@ -73,7 +71,6 @@ type Props = {
   active: string
   playing: boolean
   play: (id: string) => void
-  importFiles: (mode: 'folder' | 'files') => void
   cancel: () => void
   relocate: (id: string) => void
   playRow: (id: string) => void
@@ -98,7 +95,6 @@ export function LibraryPane({
   active,
   playing,
   play,
-  importFiles,
   cancel,
   relocate,
   remove,
@@ -324,25 +320,6 @@ export function LibraryPane({
           <div>
             <h2>{heading}</h2>
             <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
-          </div>
-          <div className="library-import">
-            <Button
-              size="small"
-              icon={<FileMusic size={16} />}
-              disabled={job?.running}
-              onClick={() => importFiles('files')}
-            >
-              添加文件
-            </Button>
-            <Button
-              size="small"
-              appearance="primary"
-              icon={<FolderPlus size={16} />}
-              disabled={job?.running}
-              onClick={() => importFiles('folder')}
-            >
-              添加文件夹
-            </Button>
           </div>
         </div>
         <Input

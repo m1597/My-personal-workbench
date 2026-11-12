@@ -6,6 +6,10 @@ const names = [
   'lxDownload',
   'lxPreview',
   'lxCancel',
+  'setMusicQuality',
+  'setMusicShortcut',
+  'setMusicMediaKeys',
+  'chooseMusicDirectory',
   'configureModel',
   'state',
   'createPlaylist',
@@ -24,6 +28,8 @@ const names = [
   'playQueue',
   'draft',
   'generate',
+  'getTasteStatus',
+  'setTasteConsent',
   'generateProfile',
   'stopGeneration',
   'match',
@@ -43,6 +49,11 @@ const bridge = Object.fromEntries(
 )
 contextBridge.exposeInMainWorld('music', Object.freeze(bridge))
 contextBridge.exposeInMainWorld('musicWindow', {
+  onTransport: (fn) => {
+    const cb = (_, action) => fn(action)
+    ipcRenderer.on('music:transport', cb)
+    return () => ipcRenderer.removeListener('music:transport', cb)
+  },
   status: () => ipcRenderer.invoke('music-sample:hello', { protocol: '0.1' }),
   transfer: (action) => ipcRenderer.invoke('music-sample:transfer', action),
   subscribe: (fn) => {
