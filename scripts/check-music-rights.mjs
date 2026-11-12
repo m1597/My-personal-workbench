@@ -1,3 +1,4 @@
+import { writeFixtureRecording } from './music-recording-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -351,14 +352,16 @@ try {
     (await state()).items.some((r) => r.id === next),
     false,
   )
+  const separateRecording = path.join(root, 'different-recording.wav')
+  await writeFixtureRecording(separateRecording, 42)
   await app.evaluate((_e, file) => {
     globalThis.testAudioFile = file
-  }, path.resolve('tests/fixtures/local-music/tone.flac'))
+  }, separateRecording)
   await run(next)
   assert.equal((await state()).items.find((r) => r.id === next).status, '已入库')
   assert.equal((await state()).items.find((r) => r.id === next).notInterested, false)
   const noLyricFile = pathFor((await state()).items.find((r) => r.id === next).localId)
-  assert.deepEqual(await fs.readFile(noLyricFile), await fs.readFile(replacement))
+  assert.deepEqual(await fs.readFile(noLyricFile), await fs.readFile(separateRecording))
   await assert.rejects(fs.access(lyricPath(noLyricFile)), { code: 'ENOENT' })
   const scoped = new MusicStore(musicRoot)
   const group = scoped.saveSuggestions(

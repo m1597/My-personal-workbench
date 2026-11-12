@@ -1,3 +1,4 @@
+import { writeFixtureRecording } from './music-recording-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -210,7 +211,13 @@ try {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, source)
   await page.evaluate(() => window.music.lxImport())
-  await app.evaluate((_e, file) => {
+  const recordings = []
+  for (let n = 0; n < 10; n++) {
+    const file = path.join(root, 'take-' + n + '.wav')
+    await writeFixtureRecording(file, n + 1)
+    recordings.push(file)
+  }
+  await app.evaluate((_e, recordings) => {
     const https = process.getBuiltinModule('node:https'),
       fs = process.getBuiltinModule('node:fs'),
       { EventEmitter } = process.getBuiltinModule('node:events')
@@ -218,7 +225,7 @@ try {
     globalThis.transfers = 0
     https.request = (url, opts, done) => {
       if (url.href !== 'https://1.1.1.1/daily.mp3') return original(url, opts, done)
-      globalThis.transfers++
+      const file = recordings[globalThis.transfers++]
       const req = new EventEmitter()
       const deliver = () =>
         done(
@@ -234,7 +241,7 @@ try {
       }
       return req
     }
-  }, path.resolve('tests/fixtures/local-music/tone.mp3'))
+  }, recordings)
   const calls = () => app.evaluate(() => globalThis.modelCalls)
   await page.evaluate(() => window.music.setTasteConsent(true))
   const docfile = path.join(profile, 'fitbay-music/music-taste.json')

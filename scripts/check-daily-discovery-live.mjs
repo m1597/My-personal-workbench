@@ -172,7 +172,7 @@ try {
     return {
       id: latest,
       visible,
-      summary: await page.locator('.music-tools small, .music-empty p').first().innerText(),
+      summary: await page.locator('.music-tools small, .music-empty p').first().textContent(),
     }
   }
   const firstBatch = await visibleBatch()

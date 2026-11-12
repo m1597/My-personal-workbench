@@ -3,6 +3,7 @@ import { titleMatch, artistMatches, inLibrary } from './music-discovery.mjs'
 import { CatalogUnavailable, platformSearch } from './lx-platform-search.mjs'
 import { describeFailure } from './music-download-diagnosis.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
+import { publishDaily } from './music-recording-identity.mjs'
 import { saveLyrics } from './music-lyrics.mjs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
@@ -206,6 +207,22 @@ function extension(format) {
     return '.m4a'
   throw new InvalidAudio('返回的文件不是支持的音频格式')
 }
+function rememberCopy(store, version, local, automatic) {
+  store.db
+    .prepare(
+      'INSERT OR REPLACE INTO recording_copies(version,local,automatic,source,platform,sourceId,quality,digest) VALUES(?,?,?,?,?,?,?,?)',
+    )
+    .run(
+      version.key,
+      local,
+      Number(automatic),
+      version.source,
+      version.platform,
+      version.sourceId,
+      version.quality,
+      version.digest,
+    )
+}
 export function publishToLibrary(temp, row, store, version, dailyId) {
   const file = row.file
   const before = lstatSync(temp, { bigint: true })
@@ -220,20 +237,7 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
       const local = store.db
         .prepare('SELECT id FROM local_tracks WHERE path_key=?')
         .get(pathKey(file)).id
-      store.db
-        .prepare(
-          'INSERT OR REPLACE INTO recording_copies(version,local,automatic,source,platform,sourceId,quality,digest) VALUES(?,?,?,?,?,?,?,?)',
-        )
-        .run(
-          version.key,
-          local,
-          Number(!!dailyId),
-          version.source,
-          version.platform,
-          version.sourceId,
-          version.quality,
-          version.digest,
-        )
+      rememberCopy(store, version, local, !!dailyId)
       if (dailyId) markSaved(store, dailyId, local)
     }
     publish(temp, file)
@@ -347,7 +351,33 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
     }
 
     if (auditionId) store.cacheOnline(auditionId, temp, metadata, extension(format))
-    else publishToLibrary(temp, metadata, store, version, dailyId)
+    else if (dailyId) {
+      const match = await publishDaily(
+        store,
+        temp,
+        size,
+        format.duration,
+        version.digest,
+        signal,
+        () => publishToLibrary(temp, metadata, store, version, dailyId),
+      )
+      if (match) {
+        if (
+          store.db
+            .prepare('SELECT 1 FROM recommended_items WHERE item=? AND local=?')
+            .get(dailyId, match.local)
+        ) {
+          if (match.kind === 'SHA-256') rememberCopy(store, version, match.local, true)
+          markSaved(store, dailyId, match.local)
+          return ''
+        }
+        store.db
+          .prepare("UPDATE recommended_items SET error=?,diagnosis='duplicate' WHERE item=?")
+          .run('本地曲库已有相同录音（' + match.kind + '）', dailyId)
+        store.status(dailyId, '已在曲库')
+        return ''
+      }
+    } else publishToLibrary(temp, metadata, store, version)
     return filename
   } finally {
     await rm(temp, { force: true })
