@@ -320,11 +320,18 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
         rect.right > preview.x &&
         rect.top < preview.y + preview.height &&
         rect.bottom > preview.y
+      const menu = document.querySelector('[role="menu"]')?.getBoundingClientRect()
+      const menuOverlaps =
+        rect &&
+        menu &&
+        rect.left < menu.right &&
+        rect.right > menu.left &&
+        rect.top < menu.bottom &&
+        rect.bottom > menu.top
       const blocked =
         covered ||
-        document.querySelector(
-          '[role="dialog"], [role="menu"], .dv-drop-target-selection, [data-component-drag]',
-        )
+        menuOverlaps ||
+        document.querySelector('[role="dialog"], .dv-drop-target-selection, [data-component-drag]')
       const bounds =
         rect &&
         api.isVisible &&

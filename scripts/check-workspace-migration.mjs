@@ -59,6 +59,24 @@ try {
   await shell.screenshot({ path: path.join(profile, 'window-menu.png') })
   await shell.getByRole('menuitem', { name: 'Music', exact: true }).click()
   await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
+  const nativeVisible = () =>
+    app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].contentView.children.some((v) => v.getVisible()),
+    )
+  await expect.poll(nativeVisible).toBe(true)
+  const layoutBefore = await shell.locator('.dv-tab').allTextContents()
+  await menu.click()
+  await expect(shell.getByRole('menu')).toBeVisible()
+  await shell.waitForFunction(
+    () => document.querySelector('[role="menu"]')?.getClientRects().length,
+  )
+  await shell.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  )
+  assert.equal(await nativeVisible(), true, '窗口菜单展开时应保留 Music 视图')
+  await shell.keyboard.press('Escape')
+  await expect.poll(nativeVisible).toBe(true)
+  assert.deepEqual(await shell.locator('.dv-tab').allTextContents(), layoutBefore)
   const player = app.windows().find((p) => p.url().includes('/music/index.html'))
   await expect(player.getByRole('heading', { name: 'Music', exact: true })).toBeVisible()
   await player.getByRole('button', { name: '分离窗口' }).click()

@@ -18,7 +18,7 @@ export function WindowMenu() {
   const [musicError, setMusicError] = useState('')
   return (
     <>
-      <Menu positioning={{ position: 'below', align: 'start' }}>
+      <Menu positioning={{ position: modules.length ? 'below' : 'after', align: 'start' }}>
         <MenuTrigger disableButtonEnhancement>
           <Button appearance="subtle" icon={<ChevronDown size={14} />} iconPosition="after">
             窗口
