@@ -71,7 +71,7 @@ try {
       }
     })
     assert.ok(
-      colors.background.slice(0, 3).every((v) => v < 105) && colors.background[3] > 127,
+      colors.background.slice(0, 3).every((v) => v < 105) && colors.background[3] >= 240,
       `菜单底色应为深色 ${JSON.stringify(colors)}`,
     )
     assert.ok(
