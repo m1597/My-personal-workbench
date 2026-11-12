@@ -54,6 +54,11 @@ const names = [
 const bridge = Object.fromEntries(
   names.map((name) => [name, (...args) => ipcRenderer.invoke('music:' + name, ...args)]),
 )
+bridge.onSourcesChanged = (listener) => {
+  const notify = () => listener()
+  ipcRenderer.on('music:sources-changed', notify)
+  return () => ipcRenderer.removeListener('music:sources-changed', notify)
+}
 contextBridge.exposeInMainWorld('music', Object.freeze(bridge))
 contextBridge.exposeInMainWorld('musicWindow', {
   onTransport: (fn) => {

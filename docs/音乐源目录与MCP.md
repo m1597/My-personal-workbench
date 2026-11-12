@@ -49,4 +49,4 @@ $env:FITBAY_TEST_SDK_DIR = (Resolve-Path tmp/mcp-sdk).Path
 node scripts/check-music-source-live.mjs fish
 ```
 
-2026-11-12 对目录 Fish（脚本名 fish_music）实测。官方 SDK 完成列源、导入、能力查询和切换。按歌名与作者找到 Kevin MacLeod 的 _Monkeys Spinning Monkeys_，该录音由作者按 CC BY 4.0 授权。平台目录返回 50 条候选，精确选择同名同艺人的录音，以声明的 320k 档手动保存 5,005,105 字节 MP3。独立 Music 本地播放器解码时长 125.074286 秒，静音播放时钟推进到 0.286826 秒。此结果限于该次录音和该源，不推定其他音质或录音许可。Huibq 同曲可检索，实际取址失败，保存和播放未验证。测试音频仅存于被 Git 忽略的隔离目录。[作者曲目与许可](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400011)
+2026-11-12 对目录 Fish（脚本名 fish_music）实测。先从设置导入一个本地对照源，官方 SDK 列源、导入 Fish 并确认当前选择保持。查询能力后切换到 Fish，再切回对照源、重新选定 Fish；打开的设置页三次均自动同步。按歌名与作者找到 Kevin MacLeod 的 _Monkeys Spinning Monkeys_，该录音由作者按 CC BY 4.0 授权。平台目录返回 50 条候选，精确选择同名同艺人的录音，以声明的 320k 档手动保存 5,005,105 字节 MP3。独立 Music 本地播放器解码时长 125.074286 秒，静音播放时钟推进到 0.729785 秒。此结果限于该次录音和该源，不推定其他音质或录音许可。Huibq 同曲可检索，实际取址失败，保存和播放未验证。测试音频仅存于被 Git 忽略的隔离目录。[作者曲目与许可](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400011)

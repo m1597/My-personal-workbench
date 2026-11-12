@@ -95,6 +95,7 @@ declare global {
       setMusicMediaKeys(enabled: boolean): Promise<void>
       chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
       configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
+      onSourcesChanged(listener: () => void): () => void
       lxSources(): Promise<SourceInventory>
       lxRefreshCatalog(): Promise<SourceInventory>
       lxImportSelected(ids: string[]): Promise<{ origin: string; id?: string; error?: string }[]>

@@ -39,9 +39,11 @@ export function MusicSourcesSettings() {
           if (mounted) setStatus(String(e))
         })
     refresh()
+    const unsubscribe = host.onSourcesChanged(refresh)
     window.addEventListener('focus', refresh)
     return () => {
       mounted = false
+      unsubscribe()
       window.removeEventListener('focus', refresh)
       void host.lxCancel('import').catch(() => {})
     }

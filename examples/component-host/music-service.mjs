@@ -31,10 +31,12 @@ export function musicService(profile, isSender) {
   }
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
+  let musicView
   const bind = (name, fn) =>
     ipcMain.handle('music:' + name, async (event, ...args) => {
       if (!isSender(event)) throw Error('DENIED')
       try {
+        musicView = event.sender
         ensureStore()
         shortcuts.activate(event.sender, store)
         return await fn(...args)
@@ -406,9 +408,18 @@ export function musicService(profile, isSender) {
   }, 60000)
   timer.unref()
   return {
-    sourceTool(name, args, signal) {
+    async sourceTool(name, args, signal) {
       ensureStore()
-      return lx.sourceTool(name, args, signal)
+      try {
+        return await lx.sourceTool(name, args, signal)
+      } finally {
+        if (
+          (name === 'import_sources' || name === 'select_source') &&
+          musicView &&
+          !musicView.isDestroyed()
+        )
+          musicView.send('music:sources-changed')
+      }
     },
     register(session) {
       if (!sessions.has(session)) {

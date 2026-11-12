@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { selectMusicSettings } from './music-settings-fixture.mjs'
-import { mkdir, mkdtemp, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import assert from 'node:assert/strict'
 import { _electron as electron, expect } from '@playwright/test'
@@ -24,6 +24,19 @@ try {
   assert.equal(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio')), true)
   const player = await app.firstWindow()
   await player.waitForSelector('.music-shell')
+  const localSource = path.join(dir, 'offline.js')
+  await writeFile(
+    localSource,
+    "// @name 本地对照源\nlx.on('request',()=>null);lx.send('inited',{sources:{wy:{actions:['musicUrl'],qualitys:['128k']}}})",
+  )
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, localSource)
+  await player.getByRole('tab', { name: '设置' }).click()
+  await selectMusicSettings(player, '音乐源')
+  await player.getByRole('button', { name: '本地导入' }).click()
+  const dropdown = player.getByRole('combobox')
+  await expect(dropdown).toHaveText('本地对照源')
   const { Client } = await import(
     pathToFileURL(sdk.resolve('@modelcontextprotocol/sdk/client/index.js'))
   )
@@ -48,18 +61,27 @@ try {
       if (result.isError) throw Error(result.content[0].text)
       return JSON.parse(result.content[0].text)
     }
-    console.log('listed', (await call('list_sources')).catalog.length)
+    const before = await call('list_sources')
+    console.log('listed', before.catalog.length)
     const [entry] = await call('import_sources', { ids: [process.argv[2] || 'fish'] })
     console.log('import', entry)
     assert.ok(entry.id, entry.error)
     console.log('capabilities', await call('source_capabilities', { id: entry.id }))
+    assert.equal((await call('list_sources')).active, before.active)
+    assert.notEqual(entry.id, before.active)
     await call('select_source', { id: entry.id })
+    assert.equal((await call('list_sources')).active, entry.id)
+    await expect(dropdown).not.toHaveText('本地对照源')
+    await call('select_source', { id: before.active })
+    await expect(dropdown).toHaveText('本地对照源')
+    await call('select_source', { id: entry.id })
+    await expect(dropdown).not.toHaveText('本地对照源')
+    console.log('保留当前、跨源切换、切回和设置自动同步通过')
     console.log('active', await player.evaluate(() => window.music.lxInfo()))
   } finally {
     await client.close()
   }
-  await player.getByRole('tab', { name: '设置' }).click()
-  await selectMusicSettings(player, '音乐源')
+
   await player.getByRole('button', { name: '音源目录' }).click()
   await expect(player.getByRole('checkbox', { name: /已导入/ })).toBeDisabled()
   await player.evaluate(() => {
