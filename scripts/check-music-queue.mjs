@@ -7,7 +7,7 @@ import { recording } from '../components/music/offline-source.mjs'
 const root = await mkdtemp(path.resolve('tmp/music-queue-'))
 const profile = path.join(root, 'profile')
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
-for (const title of ['A', 'B', 'C', 'D']) {
+for (const title of ['A', 'B', 'C', 'D', 'E']) {
   const file = path.join(root, title + '.wav')
   await writeFile(file, recording('fitbay-tone-1'))
   store.library.upsert({ title, file, artist: '测试艺人', album: '', duration: 20 })
@@ -59,15 +59,89 @@ try {
   })
   await page.screenshot({ path: path.join(root, 'queue.png') })
   await page.keyboard.press('Escape')
-  await button('随机播放').click()
+  const mode = page.locator('.music-order')
+  await mode.click()
   await enqueue('C', '下一首播放')
   await button('下一首').click()
   await expect.poll(async () => (await snapshot()).current).toBe('C')
-  assert.deepEqual((await snapshot()).list, ['A', 'B', 'C', 'D'])
+  const titles = ['A', 'B', 'C', 'D', 'E']
+  assert.deepEqual((await snapshot()).list, titles)
   await page.getByRole('tab', { name: '下载音乐' }).click()
   await button('播放队列').click()
   await expect(pop.getByText('当前曲目 · C · 测试艺人')).toBeVisible()
-  console.log('PASS 空队列、临时插播、追加、随机下一首、跨页与原歌单顺序。' + root)
+  await page.keyboard.press('Escape')
+  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await button('播放A').click()
+  const playing = async () => {
+    await expect
+      .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0))
+      .toBe(true)
+    return page.locator('.music-transport strong').innerText()
+  }
+  await expect(page.locator('.music-transport strong')).toHaveText('A')
+  const heard = [await playing()]
+  for (let i = 0; i < 12; i++) {
+    await button('下一首').click()
+    await expect(page.locator('.music-transport strong')).not.toHaveText(heard.at(-1))
+    heard.push(await playing())
+  }
+  for (const start of [0, 5]) assert.deepEqual([...heard.slice(start, start + 5)].sort(), titles)
+  assert.notEqual(heard[4], heard[5])
+  assert.notEqual(heard[9], heard[10])
+  // Let the decoder emit a real ended event at a shuffle boundary.
+  for (let i = 0; i < 2; i++) {
+    await button('下一首').click()
+    await expect(page.locator('.music-transport strong')).not.toHaveText(heard.at(-1))
+    heard.push(await playing())
+  }
+  const audio = page.locator('audio')
+  const finish = () =>
+    audio.evaluate(
+      (a) =>
+        new Promise((resolve) => {
+          a.addEventListener('ended', () => resolve(), { once: true })
+          a.currentTime = a.duration - 0.2
+        }),
+    )
+  await finish()
+  await expect(page.locator('.music-transport strong')).not.toHaveText(heard.at(-1))
+  await playing()
+  await mode.click()
+  await expect(mode).toHaveText('单曲循环')
+  const repeat = async (title) => {
+    await audio.evaluate(
+      (a) =>
+        new Promise((resolve) => {
+          a.addEventListener('ended', () => resolve(), { once: true })
+          a.currentTime = 0
+          a.playbackRate = 4
+        }),
+    )
+    await expect
+      .poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0 && a.currentTime < 3))
+      .toBe(true)
+    await expect(page.locator('.music-transport strong')).toHaveText(title)
+  }
+  const current = await playing()
+  await repeat(current)
+  await button('下一首').click()
+  await expect(page.locator('.music-transport strong')).not.toHaveText(current)
+  const second = await playing()
+  await repeat(second)
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }],
+  })
+  await page.screenshot({ path: path.join(root, 'repeat-one.png') })
+  await button('上一首').click()
+  await expect(page.locator('.music-transport strong')).toHaveText(current)
+  console.log(
+    'PASS 临时插播、追加、跨页、随机跨轮、单曲自然重播和手动切歌。',
+    heard.slice(0, 13).join(' → '),
+    current,
+    second,
+    root,
+  )
 } finally {
   await app.close()
 }

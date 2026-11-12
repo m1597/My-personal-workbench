@@ -25,6 +25,7 @@ import {
   SkipForward,
   SkipBack,
   Shuffle,
+  Repeat1,
   ListOrdered,
   FolderPlus,
   Square,
@@ -280,6 +281,7 @@ function Music() {
   const [infrequentDays, setInfrequentDays] = useState(90)
   const [resolving, setResolving] = useState(false)
   const [shuffled, setShuffled] = useState<string[] | null>(null)
+  const [repeatOne, setRepeatOne] = useState(false)
   const switching = useRef(Promise.resolve())
   const audio = useRef<HTMLAudioElement>(null),
     current = useRef(''),
@@ -461,13 +463,19 @@ function Music() {
     ...available,
     ...(state?.items ?? []).filter((r) => r.online).map((r) => r.id),
   ])
-  const following = index >= 0 ? order.slice(index + 1).find((id) => navigable.has(id)) : undefined
+  const playableQueue = queue.filter((id) => navigable.has(id))
+  const following =
+    index >= 0
+      ? (order.slice(index + 1).find((id) => navigable.has(id)) ??
+        (repeatOne && playableQueue.length > 1 ? playableQueue[0] : undefined))
+      : undefined
   const preceding =
-    index > 0
-      ? order
+    index >= 0
+      ? (order
           .slice(0, index)
           .reverse()
-          .find((id) => navigable.has(id))
+          .find((id) => navigable.has(id)) ??
+        (repeatOne && playableQueue.length > 1 ? playableQueue.at(-1) : undefined))
       : undefined
   function onQueue(id: string, next: boolean) {
     const update = async () => {
@@ -558,6 +566,21 @@ function Music() {
   }
   async function next() {
     if (following) await navigate(following, queue)
+    else if (shuffled && playableQueue.length) {
+      const round = shuffleQueue(playableQueue)
+      if (round.length > 1 && round[0] === now) {
+        const swap = 1 + Math.floor(Math.random() * (round.length - 1))
+        ;[round[0], round[swap]] = [round[swap], round[0]]
+      }
+      setShuffled(round)
+      await navigate(round[0], queue)
+    }
+  }
+  async function finishTrack() {
+    if (repeatOne && audio.current && current.current) {
+      audio.current.currentTime = 0
+      await audio.current.play()
+    } else await next()
   }
   async function end(clean = true) {
     ++epoch.current
@@ -637,12 +660,15 @@ function Music() {
   const transport = useEffectEvent((action: TransportAction) => {
     if (action === 'toggle') togglePlayback()
     else if (action === 'previous' && preceding) void act(() => navigate(preceding, queue))
-    else if (action === 'next' && !resolving && following) void act(next)
+    else if (action === 'next' && canNext) void act(next)
   })
   useEffect(() => window.musicWindow.onTransport((action) => transport(action)), [])
   const canPrevious = Boolean(preceding)
   const canToggle = Boolean(primary)
-  const canNext = !resolving && Boolean(following)
+  const canNext =
+    !resolving && Boolean(following || (shuffled && index >= 0 && playableQueue.length))
+  const modeName = shuffled ? '随机播放' : repeatOne ? '单曲循环' : '顺序播放'
+  const nextModeName = shuffled ? '单曲循环' : repeatOne ? '顺序播放' : '随机播放'
   useEffect(() => {
     window.musicWindow.thumbnailState({
       paused,
@@ -1141,13 +1167,27 @@ function Music() {
             appearance="subtle"
             size="small"
             className="music-order"
-            aria-label="随机播放"
-            aria-pressed={shuffled !== null}
-            title={shuffled ? '当前随机播放，切换为顺序播放' : '当前顺序播放，切换为随机播放'}
-            icon={shuffled ? <Shuffle size={17} /> : <ListOrdered size={17} />}
-            onClick={() => setShuffled(shuffled ? null : shuffleQueue(queue, now))}
+            aria-label={`当前${modeName}，切换为${nextModeName}`}
+            title={`当前${modeName}，切换为${nextModeName}`}
+            icon={
+              shuffled ? (
+                <Shuffle size={17} />
+              ) : repeatOne ? (
+                <Repeat1 size={17} />
+              ) : (
+                <ListOrdered size={17} />
+              )
+            }
+            onClick={() => {
+              setRepeatOne(!!shuffled)
+              setShuffled(
+                !shuffled && !repeatOne
+                  ? shuffleQueue(queue.length ? queue : visibleQueue, now)
+                  : null,
+              )
+            }}
           >
-            <span>{shuffled ? '随机播放' : '顺序播放'}</span>
+            <span>{modeName}</span>
           </Button>
           <Button
             size="small"
@@ -1206,7 +1246,7 @@ function Music() {
             aria-label="下一首"
             title="下一首"
             icon={<SkipForward size={17} />}
-            disabled={resolving || !following}
+            disabled={!canNext}
             onClick={() => void act(next)}
           />
           <Button
@@ -1275,7 +1315,7 @@ function Music() {
                 .catch((e) => setError(String(e)))
             }
           }}
-          onEnded={() => void act(next)}
+          onEnded={() => void act(finishTrack)}
         >
           <track kind="captions" />
         </audio>

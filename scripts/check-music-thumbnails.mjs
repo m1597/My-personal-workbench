@@ -57,8 +57,12 @@ try {
       },
       { id, mode },
     )
-    if (mode === 'standalone')
+    if (mode === 'standalone') {
       await page.getByRole('button', { name: '播放B', exact: true }).click()
+      await page.locator('.music-order').click()
+      await page.locator('.music-order').click()
+    }
+    await expect(page.locator('.music-order')).toHaveText('单曲循环')
     for (const [label, title, paused] of [
       ['暂停', 'B', true],
       ['播放', 'B', false],

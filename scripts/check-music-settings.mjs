@@ -31,9 +31,11 @@ try {
   let shell = await app.firstWindow()
   await app.evaluate(({ globalShortcut }) => {
     globalThis.testMusicCallbacks = new Map()
+    globalThis.testMediaAttempts = new Map()
     const register = globalShortcut.register.bind(globalShortcut)
     // Exercise Electron's real OS registration without injecting keystrokes into the user's desktop.
     globalShortcut.register = (key, callback) => {
+      if (key.startsWith('Media')) globalThis.testMediaAttempts.set(key, callback)
       const ok = register(key, callback)
       if (ok) globalThis.testMusicCallbacks.set(key, callback)
       return ok
@@ -104,6 +106,21 @@ try {
   ).toBe(false)
   await player.getByLabel('启用键盘媒体键').check()
   await expect.poll(async () => (await prefs()).mediaKeys).toBe(true)
+  const mode = player.locator('.music-order')
+  await mode.click()
+  await mode.click()
+  await expect(mode).toHaveText('单曲循环')
+  const unavailableKeys = (await prefs()).shortcutFailures
+  for (const [binding, title] of [
+    ['MediaNextTrack', 'B'],
+    ['MediaPreviousTrack', 'A'],
+  ]) {
+    if (unavailableKeys.includes(binding)) {
+      console.log('系统键被占用，仅调用 FitBay 提交的媒体回调', binding)
+      await app.evaluate((_, k) => globalThis.testMediaAttempts.get(k)(), binding)
+    } else await key(binding)
+    await expect(player.locator('.music-transport strong')).toHaveText(title)
+  }
   const paused = () => player.locator('audio').evaluate((a) => a.paused)
   await key(combo)
   await expect.poll(paused).toBe(true)

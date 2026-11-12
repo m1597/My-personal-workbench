@@ -115,7 +115,7 @@ try {
       await expect(music.getByRole('slider', { name, exact: true })).toBeInViewport()
     for (const name of [
       '展开 Music',
-      '随机播放',
+      '当前顺序播放，切换为随机播放',
       '桌面歌词',
       '播放队列',
       '上一首',
