@@ -47,7 +47,7 @@ type Batch = {
   targetCount: number | null
   state: 'running' | 'completed' | 'cancelled' | 'blocked' | null
   message: string | null
-  details?: string
+  details: string | null
 }
 type Track = {
   id: string
@@ -845,6 +845,7 @@ function Music() {
           <>
             {state && (
               <RecommendationComposer
+                activeTarget={running ? batch?.targetCount : null}
                 running={running}
                 models={state.models}
                 openSettings={() => openSettings('model')}

@@ -4,6 +4,7 @@ import type { ModelInfo } from './ModelSettings'
 type Props = {
   models: ModelInfo
   onGenerating(busy: boolean): void
+  activeTarget?: number | null
   running: boolean
   initialDraft: string
   refresh(): Promise<void>
@@ -11,6 +12,7 @@ type Props = {
 }
 export function RecommendationComposer({
   models,
+  activeTarget,
   running,
   initialDraft,
   refresh,
@@ -67,7 +69,7 @@ export function RecommendationComposer({
             min={1}
             step={1}
             aria-label="推荐首数"
-            value={count}
+            value={activeTarget ? String(activeTarget) : count}
             disabled={busy}
             onChange={(_, d) => setCount(d.value)}
           />
