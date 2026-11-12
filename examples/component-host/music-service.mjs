@@ -59,6 +59,10 @@ export function musicService(profile, isSender) {
     if (!['folder', 'files'].includes(mode)) throw Error('导入方式无效')
     return selectLocal(mode)
   })
+  bind('createPlaylist', (name) => store.library.createPlaylist(name))
+  bind('setMembership', (playlist, track, added) =>
+    store.library.setMembership(playlist, track, added),
+  )
   bind('cancelImport', () => store.library.cancel())
   bind('relocateLocal', (id) => selectLocal('files', text(id)))
   bind('refreshLocal', () => store.library.refresh())

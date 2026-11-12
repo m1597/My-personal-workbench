@@ -89,6 +89,7 @@ export class MusicStore {
       }))
     return {
       localTracks: this.library.list(),
+      playlists: this.library.playlists(),
       importJob: this.library.job,
       queue: JSON.parse(this.get('play-queue') || '[]'),
       batches,

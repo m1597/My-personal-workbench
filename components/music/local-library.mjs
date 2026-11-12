@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
 import { catalogue } from './offline-source.mjs'
 import { pathKey, regularFile } from './local-files.mjs'
@@ -14,6 +14,16 @@ export class LocalLibrary {
       this.db.exec(
         'CREATE TABLE IF NOT EXISTS local_tracks(id TEXT PRIMARY KEY, path_key TEXT UNIQUE, file TEXT NOT NULL,title TEXT NOT NULL,artist TEXT NOT NULL,album TEXT NOT NULL,duration REAL NOT NULL,available INTEGER NOT NULL DEFAULT 1,unplayable INTEGER NOT NULL DEFAULT 0)',
       )
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS music_roots(dir TEXT PRIMARY KEY COLLATE NOCASE);
+        CREATE TABLE IF NOT EXISTS playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE);
+        CREATE TABLE IF NOT EXISTS playlist_tracks(
+          playlist TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+          track TEXT NOT NULL REFERENCES local_tracks(id) ON DELETE CASCADE,
+          PRIMARY KEY(playlist,track)
+        );
+        CREATE INDEX IF NOT EXISTS playlist_track_lookup ON playlist_tracks(track);
+      `)
       if (!store.get('local-index-v1')) {
         for (const row of this.db.prepare('SELECT track,file FROM library').all())
           this.saved(row.track, row.file)
@@ -57,11 +67,68 @@ export class LocalLibrary {
     return !!(existing || replacing)
   }
   list() {
-    return this.db
+    const roots = new Set(
+      this.db
+        .prepare('SELECT dir FROM music_roots')
+        .all()
+        .map((r) => pathKey(r.dir)),
+    )
+    const rows = this.db
       .prepare(
-        'SELECT id,title,artist,album,duration,available FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id',
+        'SELECT id,title,artist,album,duration,available,file FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id',
       )
       .all()
+    const parents = new Set(rows.map((r) => pathKey(path.dirname(r.file))))
+    const cached = new Map()
+    function folders(dir) {
+      if (cached.has(dir)) return cached.get(dir)
+      const ancestors = [dir]
+      while (path.dirname(ancestors[0]) !== ancestors[0])
+        ancestors.unshift(path.dirname(ancestors[0]))
+      let start = ancestors.findIndex((d) => roots.has(pathKey(d)))
+      if (start < 0) start = ancestors.findIndex((d) => parents.has(pathKey(d)))
+      const result = ancestors.slice(start).map((d) => ({
+        id: createHash('sha256').update(pathKey(d)).digest('hex'),
+        name: path.basename(d) || path.parse(d).root,
+      }))
+      cached.set(dir, result)
+      return result
+    }
+    return rows.map(({ file, ...row }) => ({ ...row, folders: folders(path.dirname(file)) }))
+  }
+  playlists() {
+    const lists = this.db.prepare('SELECT id,name FROM playlists ORDER BY rowid').all()
+    const byId = new Map(lists.map((list) => [list.id, { ...list, tracks: [] }]))
+    for (const row of this.db
+      .prepare('SELECT playlist,track FROM playlist_tracks ORDER BY rowid')
+      .all()) {
+      byId.get(row.playlist).tracks.push(row.track)
+    }
+    return [...byId.values()]
+  }
+  createPlaylist(name) {
+    if (typeof name !== 'string' || !name.trim() || name.trim().length > 80)
+      throw Error('歌单名称须为 1 至 80 个字符')
+    const id = randomUUID()
+    if (
+      !this.db.prepare('INSERT OR IGNORE INTO playlists(id,name) VALUES(?,?)').run(id, name.trim())
+        .changes
+    )
+      throw Error('已有同名歌单')
+    return id
+  }
+  setMembership(playlist, track, added) {
+    if (typeof playlist !== 'string' || typeof track !== 'string' || typeof added !== 'boolean')
+      throw Error('歌单操作无效')
+    this.row(track)
+    if (!this.db.prepare('SELECT 1 FROM playlists WHERE id=?').get(playlist))
+      throw Error('未找到歌单')
+    if (added)
+      this.db.prepare('INSERT OR IGNORE INTO playlist_tracks VALUES(?,?)').run(playlist, track)
+    else
+      this.db
+        .prepare('DELETE FROM playlist_tracks WHERE playlist=? AND track=?')
+        .run(playlist, track)
   }
   row(id) {
     const row = this.db.prepare('SELECT * FROM local_tracks WHERE id=?').get(id)
@@ -95,6 +162,10 @@ export class LocalLibrary {
     const worker = new Worker(new URL('./library-worker.mjs', import.meta.url), {
       workerData: { paths, folder },
     })
+    if (folder)
+      this.db
+        .prepare('INSERT OR IGNORE INTO music_roots(dir) VALUES(?)')
+        .run(path.resolve(paths[0]))
     this.worker = worker
     const job = {
       started: true,

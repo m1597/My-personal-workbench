@@ -26,7 +26,13 @@ import {
   ListMusic,
   ChevronRight,
 } from 'lucide-react'
-import { LibraryPane, formatTime, type LocalTrack, type ImportJob } from './LibraryPane'
+import {
+  type Playlist,
+  LibraryPane,
+  formatTime,
+  type LocalTrack,
+  type ImportJob,
+} from './LibraryPane'
 import './style.css'
 type Batch = { id: string; day: string; preference: string }
 type Track = {
@@ -59,6 +65,7 @@ type State = {
   draft: string
   current: string
   position: number
+  playlists: Playlist[]
   localTracks: LocalTrack[]
   importJob: ImportJob
   queue: string[]
@@ -74,6 +81,8 @@ declare global {
       lxCancel(): Promise<void>
       lxSearch(id: string): Promise<Versions>
       lxDownload(key: string, quality: string): Promise<string>
+      createPlaylist(name: string): Promise<string>
+      setMembership(playlist: string, track: string, added: boolean): Promise<void>
       importLocal(mode: 'folder' | 'files'): Promise<void>
       cancelImport(): Promise<void>
       refreshLocal(): Promise<void>
@@ -131,6 +140,7 @@ function Music() {
     [error, setError] = useState(''),
     [docked, setDocked] = useState(false)
   const [tab, setTab] = useState('library'),
+    [requestedCollection, setCollection] = useState('all'),
     [search, setSearch] = useState('')
   const [settings, setSettings] = useState(false),
     [online, setOnline] = useState<Item | null>(null)
@@ -147,9 +157,11 @@ function Music() {
       setError('')
       await fn()
       await refresh()
+      return true
     } catch (e) {
       setError(String(e).replace(/^Error:.*?Error: /, ' '))
       await refresh().catch(() => {})
+      return false
     }
   }
   useEffect(() => {
@@ -192,7 +204,19 @@ function Music() {
     }
   }, [working])
   const rows = state?.items.filter((i) => i.batch === batch) ?? []
-  const localRows = (state?.localTracks ?? []).filter((row) =>
+  const playlist = state?.playlists.find((p) => p.id === requestedCollection)
+  const collection =
+    playlist ||
+    (requestedCollection !== 'all' &&
+      state?.localTracks.some((track) => track.folders.some((f) => f.id === requestedCollection)))
+      ? requestedCollection
+      : 'all'
+  const memberIds = new Set(playlist?.tracks)
+  const categoryRows = (state?.localTracks ?? []).filter(
+    (row) =>
+      collection === 'all' || memberIds.has(row.id) || row.folders.some((f) => f.id === collection),
+  )
+  const localRows = categoryRows.filter((row) =>
     [row.title, row.artist, row.album].some((value) =>
       value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
     ),
@@ -346,7 +370,21 @@ function Music() {
           <LibraryPane
             refresh={refresh}
             rows={localRows}
-            total={state?.localTracks.length ?? 0}
+            total={categoryRows.length}
+            tracks={state?.localTracks ?? []}
+            playlists={state?.playlists ?? []}
+            collection={collection}
+            select={(id) => {
+              setCollection(id)
+              setSearch('')
+            }}
+            create={(name) =>
+              act(async () => {
+                setCollection(await host.createPlaylist(name))
+                setSearch('')
+              })
+            }
+            membership={(list, id, added) => act(() => host.setMembership(list, id, added))}
             search={search}
             setSearch={setSearch}
             job={state?.importJob}

@@ -7,6 +7,8 @@ const names = [
   'lxCancel',
   'configureModel',
   'state',
+  'createPlaylist',
+  'setMembership',
   'importLocal',
   'cancelImport',
   'refreshLocal',
