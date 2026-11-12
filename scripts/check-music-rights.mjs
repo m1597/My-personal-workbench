@@ -178,6 +178,13 @@ try {
   delete src.permanentSave
   delete src.permissionsVersion
   db.prepare("UPDATE state SET value=? WHERE key='lx-source'").run(JSON.stringify(src))
+  const oldActive = (await page.evaluate(() => window.music.lxSources())).active
+  db.prepare('UPDATE music_sources SET payload=? WHERE id=?').run(JSON.stringify(src), oldActive)
+  const oldCapabilities = await page.evaluate(() => window.music.lxSources())
+  assert.equal(
+    oldCapabilities.installed.find((entry) => entry.id === oldActive).permanentSave,
+    null,
+  )
   await run(allowed.id)
   const migrated = JSON.parse(
     db.prepare("SELECT value FROM state WHERE key='lx-source'").get().value,
@@ -187,6 +194,17 @@ try {
   assert.equal(counted, false)
   assert.equal(verifiedAgain, 1)
   assert.equal(migrated.permanentSave, true)
+  const newCapabilities = await page.evaluate(() => window.music.lxSources())
+  assert.equal(
+    newCapabilities.installed.find((entry) => entry.id === oldActive).permanentSave,
+    true,
+  )
+  await page.evaluate((id) => window.music.lxSelectSource(id), oldActive)
+  assert.equal(
+    JSON.parse(db.prepare("SELECT value FROM state WHERE key='lx-source'").get().value)
+      .permanentSave,
+    true,
+  )
   assert.deepEqual(await fs.readFile(pathFor(automatic)), await fs.readFile(replacement))
   db.prepare('UPDATE recording_copies SET digest=NULL').run()
   const beforeLegacy = await app.evaluate(() => globalThis.downloadCalls)

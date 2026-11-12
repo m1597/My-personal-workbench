@@ -25,12 +25,12 @@
 
 代理默认连接本仓库的 `local/desktop-profile`。验证专用宿主时由操作者在 args 末尾加上宿主已打开的绝对 profile 路径。标准输入输出只承载 MCP JSON-RPC。[stdio 规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
 
-| 工具 | 参数示例 | 返回 |
-| --- | --- | --- |
-| `list_sources` | `{}` | 仓库目录、已安装源和当前 ID |
-| `import_sources` | `{"ids":["fish"]}` | 每个选中目录 ID 的结果或失败原因 |
+| 工具                  | 参数示例                               | 返回                                               |
+| --------------------- | -------------------------------------- | -------------------------------------------------- |
+| `list_sources`        | `{}`                                   | 仓库目录、已安装源和当前 ID                        |
+| `import_sources`      | `{"ids":["fish"]}`                     | 每个选中目录 ID 的结果或失败原因                   |
 | `source_capabilities` | 使用上一项返回的 `{"id":"pdone:fish"}` | 已接入平台、检索方式、取址操作、音质、永久保存声明 |
-| `select_source` | 使用实际返回的源 ID | 切换后的能力 |
+| `select_source`       | 使用实际返回的源 ID                    | 切换后的能力                                       |
 
 本地导入或从旧版迁移的源可能使用 `sha256:` ID。显示名不唯一，应始终传入实际取得的 ID。声明的音质和取址操作只描述接口。曲目是否可下载、是否能解码、是否有永久保存许可要分别确认。永久保存为 `null` 表示源没有声明，推荐自动下载继续执行原有的逐曲授权校验。
 
@@ -49,4 +49,4 @@ $env:FITBAY_TEST_SDK_DIR = (Resolve-Path tmp/mcp-sdk).Path
 node scripts/check-music-source-live.mjs fish
 ```
 
-2026-11-12 对目录 Fish（脚本名 fish_music）实测。官方 SDK 完成列源、导入、能力查询和切换。按歌名与作者找到 Kevin MacLeod 的 *Monkeys Spinning Monkeys*，该录音由作者按 CC BY 4.0 授权。平台目录返回 50 条候选，精确选择同名同艺人的录音，以声明的 320k 档手动保存 5,005,105 字节 MP3。独立 Music 本地播放器解码时长 125.074286 秒，静音播放时钟推进到 0.286826 秒。此结果限于该次录音和该源，不推定其他音质或录音许可。Huibq 同曲可检索，实际取址失败，保存和播放未验证。测试音频仅存于被 Git 忽略的隔离目录。[作者曲目与许可](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400011)
+2026-11-12 对目录 Fish（脚本名 fish_music）实测。官方 SDK 完成列源、导入、能力查询和切换。按歌名与作者找到 Kevin MacLeod 的 _Monkeys Spinning Monkeys_，该录音由作者按 CC BY 4.0 授权。平台目录返回 50 条候选，精确选择同名同艺人的录音，以声明的 320k 档手动保存 5,005,105 字节 MP3。独立 Music 本地播放器解码时长 125.074286 秒，静音播放时钟推进到 0.286826 秒。此结果限于该次录音和该源，不推定其他音质或录音许可。Huibq 同曲可检索，实际取址失败，保存和播放未验证。测试音频仅存于被 Git 忽略的隔离目录。[作者曲目与许可](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400011)
