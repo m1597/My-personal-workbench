@@ -76,7 +76,7 @@ try {
     await expect
       .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0))
       .toBe(true)
-    return page.locator('.music-transport strong').innerText()
+    return page.locator('.music-transport strong').textContent()
   }
   await expect(page.locator('.music-transport strong')).toHaveText('A')
   const heard = [await playing()]
