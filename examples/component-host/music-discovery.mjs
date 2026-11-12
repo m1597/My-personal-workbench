@@ -151,8 +151,13 @@ export function titleMatch(item, row, constraints = {}) {
   }
   return ''
 }
-export function inLibrary(item, rows) {
-  return rows.some((row) => {
+function recommendationCredits(row) {
+  return row.artist?.includes('×') ? { ...row, artist: row.artist.replaceAll('×', '/') } : row
+}
+export function inLibrary(candidate, rows) {
+  const item = recommendationCredits(candidate)
+  return rows.some((entry) => {
+    const row = recommendationCredits(entry)
     if (titleMatch(item, row) === 'exact' || titleMatch(row, item) === 'exact') return true
     if (row.artist && row.artist !== '未知艺人') return false
     const parts = fold(row.title).split(/\s+[-–—]\s+/u)

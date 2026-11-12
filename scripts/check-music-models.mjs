@@ -18,6 +18,16 @@ import {
 assert.ok(artistMatches('mizuki', '瑞葵(mizuki) / SawanoHiroyuki[nZk]'))
 assert.ok(artistMatches('AC/DC', 'AC/DC & Guest'))
 assert.ok(artistMatches('Sakuzyo', '削除', [['削除', 'Sakuzyo']]))
+const fireworks = { title: '打上花火', artist: 'DAOKO' }
+for (const artist of ['DAOKO×米津玄師', 'Daoko × 米津玄師']) {
+  const duet = { title: '打上花火', artist }
+  assert.ok(inLibrary(duet, [fireworks]))
+  assert.ok(inLibrary(fireworks, [duet]))
+  assert.equal(inLibrary({ ...fireworks, title: '別の曲' }, [duet]), false)
+  assert.equal(inLibrary({ ...fireworks, artist: '別の歌手' }, [duet]), false)
+  assert.equal(inLibrary({ ...fireworks, title: '打上花火 (Live)' }, [duet]), false)
+  assert.equal(inLibrary(duet, [{ ...fireworks, title: '打上花火 (Live)' }]), false)
+}
 assert.ok(
   inLibrary({ title: 'BOW AND ARROW', artist: '米津玄師' }, [
     { title: 'BOW AND ARROW - 米津玄師', artist: '未知艺人' },
