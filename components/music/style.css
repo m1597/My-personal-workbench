@@ -105,6 +105,19 @@ body {
   min-width: 120px;
   flex: 1 1 150px;
 }
+.music-target-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+.music-target-count .fui-Input {
+  flex: none;
+  min-width: 0;
+  width: 5.5em;
+}
+.music-batch-status p {
+  margin-block: var(--space-6);
+}
 .music-summary.fui-Button {
   padding-inline: 0;
   color: var(--text-secondary);

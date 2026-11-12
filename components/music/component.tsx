@@ -40,7 +40,15 @@ import {
 import { PlaybackQueue } from './PlaybackQueue'
 import { VolumeControls } from './VolumeControls'
 import './style.css'
-type Batch = { id: string; day: string; preference: string }
+type Batch = {
+  id: string
+  day: string
+  preference: string
+  targetCount: number | null
+  state: 'running' | 'completed' | 'cancelled' | 'blocked' | null
+  message: string | null
+  details?: string
+}
 type Track = {
   id: string
   artist: string
@@ -149,7 +157,12 @@ declare global {
       setTasteConsent(value: boolean): Promise<TasteStatus>
       prepareRecommendation(id: string, key?: string): Promise<void>
       recommendationChoices(id: string): Promise<Versions['items']>
-      generate(s: string, mode?: 'style' | 'artist', similar?: boolean): Promise<string | null>
+      generate(
+        s: string,
+        mode?: 'auto' | 'style' | 'artist',
+        similar?: boolean,
+        targetCount?: number,
+      ): Promise<string | null>
       stopGeneration(): Promise<void>
       match(id: string): Promise<void>
       choose(id: string, track: string): Promise<void>
@@ -325,7 +338,10 @@ function Music() {
     }
   }, [tab])
   const [generating, setGenerating] = useState(false)
+  const batch = state?.batches[0]
+  const running = batch?.state === 'running'
   const working =
+    running ||
     generating ||
     !!state?.importJob.running ||
     state?.items.some((i) =>
@@ -372,7 +388,7 @@ function Music() {
       : row.status === '待选录音'
         ? 1
         : 2
-  const rows = batchRows.sort((a, b) => priority(a) - priority(b)).slice(0, 5)
+  const rows = batchRows.sort((a, b) => priority(a) - priority(b)).slice(0, batch?.targetCount ?? 5)
   const downloaded = [
     ...new Set(rows.flatMap((r) => (priority(r) === 0 && r.localId ? [r.localId] : []))),
   ]
@@ -829,6 +845,7 @@ function Music() {
           <>
             {state && (
               <RecommendationComposer
+                running={running}
                 models={state.models}
                 openSettings={() => openSettings('model')}
                 initialDraft={state.draft}
@@ -840,12 +857,28 @@ function Music() {
               <div className="music-section-head">
                 <h2>本次推荐</h2>
               </div>
+              {batch?.targetCount && (
+                <div className="music-batch-status">
+                  <p role="status">
+                    已下载 {rows.length}/{batch.targetCount}
+                    {batch.message ? '，' + batch.message : ''}
+                  </p>
+                  {batch.details && (
+                    <details className="music-failure-details">
+                      <summary>查看详情</summary>
+                      <p>{batch.details}</p>
+                    </details>
+                  )}
+                </div>
+              )}
               {rows.length > 0 ? (
                 <>
                   <div className="music-tools">
-                    <small>
-                      本次 {rows.length} 首 · 已下载 {downloaded.length}/{rows.length}
-                    </small>
+                    {!batch?.targetCount && (
+                      <small>
+                        本次 {rows.length} 首 · 已下载 {downloaded.length}/{rows.length}
+                      </small>
+                    )}
                     {rows.some((r) => r.daily) && (
                       <Button
                         className="music-play-batch"
@@ -1067,7 +1100,11 @@ function Music() {
                 <div className="music-empty">
                   <ListMusic size={24} />
                   <p>
-                    {state?.batches.length ? '本次找到 0 首新歌' : '生成后，这里会显示本次推荐'}
+                    {running
+                      ? '正在查找可下载的新歌…'
+                      : state?.batches.length
+                        ? '本次尚无新歌入库'
+                        : '生成后，这里会显示本次推荐'}
                   </p>
                 </div>
               )}

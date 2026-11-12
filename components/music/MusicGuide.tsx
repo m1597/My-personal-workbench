@@ -18,7 +18,7 @@ export const guideSteps = [
     page: 'model',
     target: 'model',
     title: '设置模型 API',
-    text: '选择服务商，填写模型 ID 和 API Key 后保存。也可以选择离线示例，继续体验推荐。',
+    text: '选择服务商，填写模型 ID 和 API Key 后保存。',
   },
   {
     page: 'audition',

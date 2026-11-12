@@ -1,29 +1,31 @@
 import { useEffect, useState } from 'react'
-import { Button, Checkbox, Input, Tab, TabList } from '@fluentui/react-components'
+import { Button, Input } from '@fluentui/react-components'
 import type { ModelInfo } from './ModelSettings'
 type Props = {
   models: ModelInfo
   onGenerating(busy: boolean): void
+  running: boolean
   initialDraft: string
   refresh(): Promise<void>
   openSettings(): void
 }
 export function RecommendationComposer({
   models,
+  running,
   initialDraft,
   refresh,
   openSettings,
   onGenerating,
 }: Props) {
-  const [mode, setMode] = useState<'artist' | 'style'>('style')
-  const [artist, setArtist] = useState('')
-  const [style, setStyle] = useState(initialDraft)
-  const [similar, setSimilar] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [description, setDescription] = useState(initialDraft)
+  const [submitting, setBusy] = useState(false)
+  const [count, setCount] = useState('5')
+  const target = Number(count)
+  const validCount = /^\d+$/.test(count) && Number.isSafeInteger(target) && target > 0
+  const busy = submitting || running
   const [error, setError] = useState('')
-  const offline = models.active === 'offline'
   async function generate() {
-    if (!offline && !models.providers.find((p) => p.id === models.active)?.hasKey) {
+    if (!models.providers.find((p) => p.id === models.active)?.hasKey) {
       openSettings()
       return
     }
@@ -31,11 +33,7 @@ export function RecommendationComposer({
     setBusy(true)
     setError('')
     try {
-      await window.music.generate(
-        mode === 'artist' ? artist : style,
-        mode,
-        mode === 'artist' && similar,
-      )
+      await window.music.generate(description, 'auto', false, target)
       await refresh()
     } catch (e) {
       setError(String(e).split('Error: ').pop() || '推荐失败')
@@ -47,43 +45,38 @@ export function RecommendationComposer({
   }
   return (
     <section className="music-compose">
-      <TabList
-        aria-label="推荐方式"
-        selectedValue={mode}
-        disabled={busy}
-        onTabSelect={(_, d) => setMode(d.value as 'artist' | 'style')}
-      >
-        <Tab value="artist">按歌手推荐</Tab>
-        <Tab value="style">按风格推荐</Tab>
-      </TabList>
+      <label htmlFor="music-description">描述你想听什么</label>
       <div className="music-input">
         <Input
           data-guide-anchor="recommend"
-          aria-label={mode === 'artist' ? '指定歌手' : '今天想听什么'}
-          placeholder={mode === 'artist' ? '指定歌手（可选）' : '指定风格（可选）'}
+          id="music-description"
+          placeholder="比如：想听点适合夜里散步的歌"
           maxLength={1000}
           disabled={busy}
-          value={mode === 'artist' ? artist : style}
+          value={description}
           onChange={(_, d) => {
-            if (mode === 'artist') setArtist(d.value)
-            else {
-              setStyle(d.value)
-              void window.music.draft(d.value).catch((e) => setError(String(e)))
-            }
+            setDescription(d.value)
+            void window.music.draft(d.value).catch((e) => setError(String(e)))
           }}
         />
-        <Button disabled={busy} appearance="primary" onClick={() => void generate()}>
-          {offline ? '生成离线试听单' : '生成推荐'}
+        <label className="music-target-count" htmlFor="music-count">
+          推荐首数
+          <Input
+            id="music-count"
+            type="number"
+            min={1}
+            step={1}
+            aria-label="推荐首数"
+            value={count}
+            disabled={busy}
+            onChange={(_, d) => setCount(d.value)}
+          />
+        </label>
+        <Button disabled={busy || !validCount} appearance="primary" onClick={() => void generate()}>
+          生成推荐
         </Button>
       </div>
-      {mode === 'artist' && !offline && (
-        <Checkbox
-          checked={similar}
-          label="发现相似歌手"
-          onChange={(_, d) => setSimilar(d.checked === true)}
-        />
-      )}
-      {offline && <small>离线示例使用 FitBay 合成录音。</small>}
+      {!validCount && <small>请输入大于零的整数。</small>}
       {busy && (
         <Button size="small" onClick={() => void window.music.stopGeneration()}>
           取消生成

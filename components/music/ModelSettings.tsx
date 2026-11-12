@@ -59,28 +59,26 @@ export function ModelSettings({
           </Option>
         ))}
       </Dropdown>
-      {id !== 'offline' && (
-        <>
-          <label htmlFor="model-id">模型 ID</label>
-          <Input id="model-id" value={model} required onChange={(_, v) => setModel(v.value)} />
-          <label htmlFor="model-secret">API Key</label>
-          <Input
-            id="model-secret"
-            type="password"
-            autoComplete="off"
-            value={key}
-            placeholder={chosen.hasKey ? '已保存，留空沿用' : '填写此服务商的密钥'}
-            onChange={(_, v) => setKey(v.value)}
-          />
-          {chosen.hasKey && !key && (
-            <Checkbox
-              label="清除此服务商的密钥"
-              checked={forget}
-              onChange={(_, v) => setForget(v.checked === true)}
-            />
-          )}
-        </>
+
+      <label htmlFor="model-id">模型 ID</label>
+      <Input id="model-id" value={model} required onChange={(_, v) => setModel(v.value)} />
+      <label htmlFor="model-secret">API Key</label>
+      <Input
+        id="model-secret"
+        type="password"
+        autoComplete="off"
+        value={key}
+        placeholder={chosen.hasKey ? '已保存，留空沿用' : '填写此服务商的密钥'}
+        onChange={(_, v) => setKey(v.value)}
+      />
+      {chosen.hasKey && !key && (
+        <Checkbox
+          label="清除此服务商的密钥"
+          checked={forget}
+          onChange={(_, v) => setForget(v.checked === true)}
+        />
       )}
+
       {error && <span role="alert">{error}</span>}
       <div>
         <Button size="small" type="submit" appearance="primary" disabled={saving}>
