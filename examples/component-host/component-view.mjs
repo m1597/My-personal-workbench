@@ -175,7 +175,8 @@ export function componentView({
         backgroundThrottling: false,
       },
     })
-    view.setBackgroundColor('#00000000')
+    const loadingView = view
+    loadingView.setBackgroundColor(music ? '#202227' : '#00000000')
     secure(view.webContents)
     if (onDispose) {
       view.webContents.once('destroyed', onDispose)
@@ -199,6 +200,8 @@ export function componentView({
     await view.webContents.loadFile(entry, {
       query: supportsAcrylic ? { nativeBackdrop: 'acrylic' } : {},
     })
+    if (music && view === loadingView && !loadingView.webContents.isDestroyed())
+      loadingView.setBackgroundColor('#00000000')
     return true
   }
   function cancelAttach(reason) {

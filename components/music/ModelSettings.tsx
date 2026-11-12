@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Select, Checkbox } from '@fluentui/react-components'
+import { Button, Input, Dropdown, Option, Checkbox } from '@fluentui/react-components'
 export type ModelInfo = {
   active: string
   providers: { id: string; label: string; model: string; hasKey: boolean }[]
@@ -36,11 +36,14 @@ export function ModelSettings({
       }}
     >
       <label htmlFor="model-provider">服务商</label>
-      <Select
+      <Dropdown
+        inlinePopup
+        listbox={{ className: 'component-popup' }}
         id="model-provider"
-        value={id}
-        onChange={(e) => {
-          const next = info.providers.find((x) => x.id === e.target.value)
+        value={chosen.label}
+        selectedOptions={[id]}
+        onOptionSelect={(_, data) => {
+          const next = info.providers.find((x) => x.id === data.optionValue)
           if (!next) return
           setId(next.id)
           setModel(next.model)
@@ -50,11 +53,11 @@ export function ModelSettings({
         }}
       >
         {info.providers.map((p) => (
-          <option key={p.id} value={p.id}>
+          <Option key={p.id} value={p.id}>
             {p.label}
-          </option>
+          </Option>
         ))}
-      </Select>
+      </Dropdown>
       {id !== 'offline' && (
         <>
           <label htmlFor="model-id">模型 ID</label>

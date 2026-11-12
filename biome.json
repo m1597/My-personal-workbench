@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!package-lock.json", "!docs/images"]
+    "includes": ["**", "!package-lock.json", "!docs/images", "!!.agents/skills/impeccable"]
   },
   "formatter": {
     "enabled": true,

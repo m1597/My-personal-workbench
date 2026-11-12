@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Input, Select } from '@fluentui/react-components'
+import { Button, Input, Dropdown, Option } from '@fluentui/react-components'
 import type { LocalTrack } from './LibraryPane'
 export type Versions = {
   items: { key: string; title: string; artist: string; album: string }[]
@@ -133,16 +133,23 @@ export function LxPanel({
         <>
           <label htmlFor="lx-quality">
             下载音质{' '}
-            <Select
+            <Dropdown
+              inlinePopup
+              listbox={{ className: 'component-popup' }}
               id="lx-quality"
               size="small"
               value={quality}
-              onChange={(e) => setQuality(e.target.value)}
+              selectedOptions={[quality]}
+              onOptionSelect={(_, data) => {
+                if (data.optionValue) setQuality(data.optionValue)
+              }}
             >
               {result.quality.map((q) => (
-                <option key={q}>{q}</option>
+                <Option key={q} value={q}>
+                  {q}
+                </Option>
               ))}
-            </Select>
+            </Dropdown>
           </label>
           <ul>
             {result.items.map((item) => (

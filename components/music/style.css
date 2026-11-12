@@ -390,3 +390,30 @@ li[data-active="true"] .music-track-icon,
   flex: 1;
   min-width: 0;
 }
+
+/* A child WebContentsView has its own compositor surface, including when docked. */
+:root[data-music-view] {
+  background: var(--base);
+}
+:root[data-music-view][data-backdrop="acrylic"],
+:root[data-music-view]:has([data-surface="embedded"]) {
+  background: var(--music-backdrop);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-music-view][data-backdrop],
+  :root[data-music-view]:has([data-surface]) {
+    background: var(--base);
+  }
+}
+@media (forced-colors: active) {
+  :root[data-music-view],
+  :root[data-music-view][data-backdrop],
+  :root[data-music-view]:has([data-surface]) {
+    background: Canvas;
+  }
+}
+
+.music-shell .fui-Input input::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}

@@ -30,7 +30,7 @@ try {
   await page.getByRole('tab', { name: '推荐试听' }).click()
   await page.getByLabel('今天想听什么').fill('雨天的爵士乐')
   await page.getByRole('button', { name: '生成推荐' }).click()
-  await expect(page.getByLabel('服务商', { exact: true })).toHaveValue('deepseek')
+  await expect(page.getByLabel('服务商', { exact: true })).toHaveText('DeepSeek')
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })
@@ -64,7 +64,13 @@ try {
   })
   for (const [index, id] of ['deepseek', 'openai', 'claude', 'gemini'].entries()) {
     if (index) await page.getByRole('button', { name: '模型设置' }).click()
-    await page.getByLabel('服务商', { exact: true }).selectOption(id)
+    await page.getByRole('combobox', { name: '服务商' }).click()
+    await page
+      .getByRole('option', {
+        name: { deepseek: 'DeepSeek', openai: 'OpenAI', claude: 'Claude', gemini: 'Gemini' }[id],
+        exact: true,
+      })
+      .click()
     await page.getByLabel('API Key').fill('fixture-' + id)
     await page.getByRole('button', { name: '保存设置' }).click()
     await page.getByRole('button', { name: '生成推荐' }).click()
