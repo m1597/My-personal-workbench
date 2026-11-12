@@ -125,7 +125,7 @@ declare global {
         detailed: true,
       ): Promise<'' | { file: string; sources: string[] }>
       createPlaylist(name: string): Promise<string>
-      setMembership(playlist: string, track: string, added: boolean): Promise<void>
+      setMembership(playlist: string, track: string | string[], added: boolean): Promise<void>
       importLocal(mode: 'folder' | 'files'): Promise<void>
       cancelImport(): Promise<void>
       refreshLocal(): Promise<void>

@@ -58,6 +58,53 @@ try {
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
   }
   await button('全部歌曲').click()
+  await button('多选').click()
+  await expect(button('加入歌单')).toBeDisabled()
+  await expect(button('从当前歌单移除')).toHaveCount(0)
+  await page.getByRole('checkbox', { name: '选择晨间' }).check()
+  await expect(page.getByRole('checkbox', { name: '全选当前列表' })).toBeChecked({
+    indeterminate: true,
+  })
+  await page.getByRole('searchbox', { name: '搜索本地歌曲' }).fill('海边')
+  await expect(button('加入歌单')).toBeDisabled()
+  await page.getByRole('checkbox', { name: '全选当前列表' }).check()
+  await button('加入歌单').click()
+  await page.getByRole('menuitem', { name: '通勤' }).click()
+  await button('通勤').click()
+  await expect(page.locator('.library-name strong')).toHaveText(['海边'])
+  await button('全部歌曲').click()
+  await button('多选').click()
+  await page.getByRole('checkbox', { name: '全选当前列表' }).check()
+  await expect(page.getByText('已选 3 首')).toBeVisible()
+  await page.evaluate(() => {
+    delete document.documentElement.dataset.backdrop
+  })
+  await button('加入歌单').click()
+  await page.screenshot({ path: path.join(evidence, 'batch-playlist.png'), animations: 'disabled' })
+  await page.getByRole('menuitem', { name: '通勤' }).click()
+  await button('通勤').click()
+  await expect(page.locator('.library-row')).toHaveCount(3)
+  await button('多选').click()
+  await page.getByRole('checkbox', { name: '全选当前列表' }).check()
+  await button('从当前歌单移除').click()
+  await expect(page.locator('.library-row')).toHaveCount(0)
+  await button('全部歌曲').click()
+  await expect(page.locator('.library-row')).toHaveCount(3)
+  const atomic = await page.evaluate(async () => {
+    const state = await window.music.state()
+    const list = state.playlists.find((p) => p.name === '通勤').id
+    const id = state.localTracks[0].id
+    try {
+      await window.music.setMembership(list, [id, 'missing-track'], true)
+      return false
+    } catch {
+      return (
+        typeof id === 'string' &&
+        !(await window.music.state()).playlists.find((p) => p.id === list).tracks.length
+      )
+    }
+  })
+  assert.ok(atomic, '失效的歌曲应中止整批写入')
   for (const [song, lists] of [
     ['晨间', ['通勤', '收藏']],
     ['雨夜', ['通勤']],
@@ -264,7 +311,7 @@ try {
   await button('收藏').click()
   await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
   console.log(
-    'PASS 文件夹移除保留歌单播放、重命名、删除歌单、单歌移除范围、双击播放、回收站取消/失败/成功。截图 ' +
+    'PASS 单选、全选当前结果、批量加入和移除歌单、失效批次回滚、文件夹移除保留歌单播放、重命名、删除歌单、单歌移除范围、双击播放、回收站取消/失败/成功。截图 ' +
       evidence,
   )
 } finally {

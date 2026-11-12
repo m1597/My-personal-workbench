@@ -296,18 +296,45 @@ export class LocalLibrary {
     }
     return removed
   }
-  setMembership(playlist, track, added) {
-    if (typeof playlist !== 'string' || typeof track !== 'string' || typeof added !== 'boolean')
+  setMembership(playlist, tracks, added) {
+    const ids = Array.isArray(tracks) ? tracks : [tracks]
+    if (
+      typeof playlist !== 'string' ||
+      !ids.length ||
+      ids.some((id) => typeof id !== 'string') ||
+      typeof added !== 'boolean'
+    )
       throw Error('歌单操作无效')
-    this.row(track)
     if (!this.db.prepare('SELECT 1 FROM playlists WHERE id=?').get(playlist))
       throw Error('未找到歌单')
-    if (added)
-      this.db.prepare('INSERT OR IGNORE INTO playlist_tracks VALUES(?,?)').run(playlist, track)
-    else
-      this.db
-        .prepare('DELETE FROM playlist_tracks WHERE playlist=? AND track=?')
-        .run(playlist, track)
+    const data = JSON.stringify(ids)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      if (
+        this.db
+          .prepare(
+            'SELECT 1 FROM json_each(?) j LEFT JOIN local_tracks t ON t.id=j.value WHERE t.id IS NULL LIMIT 1',
+          )
+          .get(data)
+      )
+        throw Error('歌曲已移除')
+      if (added)
+        this.db
+          .prepare(
+            'INSERT OR IGNORE INTO playlist_tracks SELECT ?, value FROM json_each(?) ORDER BY key',
+          )
+          .run(playlist, data)
+      else
+        this.db
+          .prepare(
+            'DELETE FROM playlist_tracks WHERE playlist=? AND track IN (SELECT value FROM json_each(?))',
+          )
+          .run(playlist, data)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
     this.changed?.()
   }
   row(id) {
