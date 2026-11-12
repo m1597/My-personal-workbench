@@ -26,6 +26,7 @@ const names = [
   'localSource',
   'mediaFailed',
   'playQueue',
+  'setQueue',
   'draft',
   'generate',
   'getTasteStatus',

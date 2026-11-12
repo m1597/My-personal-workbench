@@ -1,3 +1,4 @@
+import { TrackMenu } from './TrackMenu'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
@@ -43,6 +44,7 @@ export type LocalTrack = {
   album: string
   duration: number
   recommendationSource?: string
+  notInterested?: boolean
   listed: number
   available: number
 }
@@ -73,6 +75,8 @@ type Props = {
   play: (id: string) => void
   cancel: () => void
   relocate: (id: string) => void
+  onQueue: (id: string, next: boolean) => void
+  dismiss: (id: string) => void
   playRow: (id: string) => void
   error: string
   remove: (id: string, trash: boolean) => Promise<boolean>
@@ -100,6 +104,8 @@ export function LibraryPane({
   remove,
   error,
   playRow,
+  onQueue,
+  dismiss,
   renameList,
   deleteList,
   removeFolder,
@@ -352,93 +358,102 @@ export function LibraryPane({
             </div>
             <ul>
               {rows.slice(0, limit).map((t) => (
-                <li
+                <TrackMenu
                   key={t.id}
-                  data-active={active === t.id}
-                  className="library-row"
-                  onDoubleClick={(e) => {
-                    if (
-                      t.available &&
-                      e.target instanceof Element &&
-                      e.currentTarget.contains(e.target) &&
-                      !e.target.closest('button, input, .track-actions, [role="button"]')
-                    )
-                      playRow(t.id)
-                  }}
+                  queueable={!!t.available}
+                  onQueue={(next) => onQueue(t.id, next)}
+                  onDismiss={
+                    collection === 'system-recommendations' ? () => dismiss(t.id) : undefined
+                  }
+                  dismissed={t.notInterested}
                 >
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    disabled={!t.available}
-                    aria-label={(active === t.id && playing ? '暂停' : '播放') + t.title}
-                    icon={active === t.id && playing ? <Pause size={15} /> : <Play size={15} />}
-                    onClick={() => play(t.id)}
-                  />
-                  <div className="library-name">
-                    <strong title={t.title}>{t.title}</strong>
-                    <small title={t.artist}>{t.artist}</small>
-                    {t.recommendationSource && (
-                      <small title={t.recommendationSource}>
-                        推荐来源 · {t.recommendationSource}
-                      </small>
-                    )}
-                    {!t.available && <small>文件不可用</small>}
-                  </div>
-                  <span className="library-album" title={t.album}>
-                    {t.album || '—'}
-                  </span>
-                  <small className="library-time">{formatTime(t.duration)}</small>
-                  <div className="track-actions">
-                    <Popover>
-                      <PopoverTrigger disableButtonEnhancement>
-                        <Button
-                          size="small"
-                          appearance="subtle"
-                          aria-label={'管理歌单' + t.title}
-                          title="加入或移出歌单"
-                          icon={<ListPlus size={16} />}
-                        />
-                      </PopoverTrigger>
-                      <PopoverSurface className="component-popup playlist-options">
-                        <strong>我的歌单</strong>
-                        {playlists.some((p) => !p.system) ? (
-                          playlists
-                            .filter((p) => !p.system)
-                            .map((list) => (
-                              <Checkbox
-                                key={list.id}
-                                label={list.name}
-                                checked={list.tracks.includes(t.id)}
-                                onChange={(_, v) =>
-                                  void membership(list.id, t.id, v.checked === true)
-                                }
-                              />
-                            ))
-                        ) : (
-                          <small>在曲库导航中点「＋」新建歌单。</small>
-                        )}
-                      </PopoverSurface>
-                    </Popover>
-                    {!t.available && (
-                      <Button
-                        size="small"
-                        appearance="subtle"
-                        title="重新定位"
-                        aria-label={'重新定位' + t.title}
-                        icon={<FolderSearch size={16} />}
-                        onClick={() => relocate(t.id)}
-                      />
-                    )}
+                  <li
+                    data-active={active === t.id}
+                    className="library-row"
+                    onDoubleClick={(e) => {
+                      if (
+                        t.available &&
+                        e.target instanceof Element &&
+                        e.currentTarget.contains(e.target) &&
+                        !e.target.closest('button, input, .track-actions, [role="button"]')
+                      )
+                        playRow(t.id)
+                    }}
+                  >
                     <Button
                       size="small"
                       appearance="subtle"
-                      title="从曲库移除"
-                      aria-label={'从曲库移除' + t.title}
-                      icon={<Trash2 size={15} />}
-                      onClick={() => setAction({ kind: 'song', id: t.id, name: t.title })}
+                      disabled={!t.available}
+                      aria-label={(active === t.id && playing ? '暂停' : '播放') + t.title}
+                      icon={active === t.id && playing ? <Pause size={15} /> : <Play size={15} />}
+                      onClick={() => play(t.id)}
                     />
-                  </div>
-                </li>
+                    <div className="library-name">
+                      <strong title={t.title}>{t.title}</strong>
+                      <small title={t.artist}>{t.artist}</small>
+                      {t.recommendationSource && (
+                        <small title={t.recommendationSource}>
+                          推荐来源 · {t.recommendationSource}
+                        </small>
+                      )}
+                      {!t.available && <small>文件不可用</small>}
+                    </div>
+                    <span className="library-album" title={t.album}>
+                      {t.album || '—'}
+                    </span>
+                    <small className="library-time">{formatTime(t.duration)}</small>
+                    <div className="track-actions">
+                      <Popover>
+                        <PopoverTrigger disableButtonEnhancement>
+                          <Button
+                            size="small"
+                            appearance="subtle"
+                            aria-label={'管理歌单' + t.title}
+                            title="加入或移出歌单"
+                            icon={<ListPlus size={16} />}
+                          />
+                        </PopoverTrigger>
+                        <PopoverSurface className="component-popup playlist-options">
+                          <strong>我的歌单</strong>
+                          {playlists.some((p) => !p.system) ? (
+                            playlists
+                              .filter((p) => !p.system)
+                              .map((list) => (
+                                <Checkbox
+                                  key={list.id}
+                                  label={list.name}
+                                  checked={list.tracks.includes(t.id)}
+                                  onChange={(_, v) =>
+                                    void membership(list.id, t.id, v.checked === true)
+                                  }
+                                />
+                              ))
+                          ) : (
+                            <small>在曲库导航中点「＋」新建歌单。</small>
+                          )}
+                        </PopoverSurface>
+                      </Popover>
+                      {!t.available && (
+                        <Button
+                          size="small"
+                          appearance="subtle"
+                          title="重新定位"
+                          aria-label={'重新定位' + t.title}
+                          icon={<FolderSearch size={16} />}
+                          onClick={() => relocate(t.id)}
+                        />
+                      )}
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        title="从曲库移除"
+                        aria-label={'从曲库移除' + t.title}
+                        icon={<Trash2 size={15} />}
+                        onClick={() => setAction({ kind: 'song', id: t.id, name: t.title })}
+                      />
+                    </div>
+                  </li>
+                </TrackMenu>
               ))}
               {rows.length > limit && <li ref={sentinel} aria-hidden="true" />}
             </ul>

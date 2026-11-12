@@ -36,6 +36,7 @@ import {
   type LocalTrack,
   type ImportJob,
 } from './LibraryPane'
+import { PlaybackQueue } from './PlaybackQueue'
 import './style.css'
 type Batch = { id: string; day: string; preference: string }
 type Track = {
@@ -109,6 +110,8 @@ declare global {
       relocateLocal(id: string): Promise<void>
       mediaFailed(id: string, url: string): Promise<void>
       localSource(id: string): Promise<string>
+      dismissRecommendation(id: string): Promise<void>
+      setQueue(ids: string[]): Promise<void>
       playQueue(id: string, ids: string[], position: number): Promise<void>
       state(): Promise<State>
       draft(s: string): Promise<void>
@@ -275,6 +278,26 @@ function Music() {
           .reverse()
           .find((id) => navigable.has(id))
       : undefined
+  function onQueue(id: string, next: boolean) {
+    const update = async () => {
+      const latest = await host.state()
+      const currentId = current.current || latest.current
+      function arrange(ids: string[]) {
+        if (currentId === id) return ids.includes(id) ? ids : [id, ...ids]
+        const result = ids.filter((key) => key !== id)
+        if (currentId && !result.includes(currentId)) result.unshift(currentId)
+        const position = next ? result.indexOf(currentId) + 1 : result.length
+        result.splice(position, 0, id)
+        return result
+      }
+      const ids = arrange(latest.queue.length ? latest.queue : legacyQueue)
+      await host.setQueue(ids)
+      setShuffled((prev) => prev && arrange(prev))
+      await refresh()
+    }
+    const op = switching.current.then(update)
+    switching.current = op.catch((e) => setError(String(e)))
+  }
   function startTrack(id: string) {
     if (current.current === id && audio.current) {
       ++epoch.current
@@ -288,6 +311,7 @@ function Music() {
   function resumeOrStart() {
     if (!primary) return Promise.resolve()
     if (primary === now && queue.includes(primary)) return navigate(primary, queue)
+    if (queue.length && order.includes(primary)) return navigate(primary, queue)
     if (shuffled) {
       const nextOrder = shuffleQueue(visibleQueue)
       setShuffled(nextOrder)
@@ -367,7 +391,10 @@ function Music() {
   const duration =
     audio.current?.duration ||
     (active ? ('duration' in active ? active.duration : (active.audioDuration ?? 20)) : 0)
-  const primary = active && available.has(active.id) ? active.id : visibleQueue[0]
+  const primary =
+    active && available.has(active.id)
+      ? active.id
+      : (order.find((id) => navigable.has(id)) ?? visibleQueue[0])
   const resumeLabel =
     !current.current && active && available.has(active.id)
       ? '从 ' + Math.floor(elapsed) + ' 秒继续'
@@ -476,6 +503,8 @@ function Music() {
             play={(id) => void act(() => startTrack(id))}
             relocate={(id) => void act(() => host.relocateLocal(id))}
             error={error}
+            onQueue={onQueue}
+            dismiss={(id) => void act(() => host.dismissRecommendation(id))}
             playRow={(id) => void act(() => play(id, visibleQueue))}
             renameList={(id, name) => act(() => host.renamePlaylist(id, name))}
             deleteList={(id) => act(() => host.deletePlaylist(id))}
@@ -739,6 +768,15 @@ function Music() {
           >
             <span>{shuffled ? '随机播放' : '顺序播放'}</span>
           </Button>
+          <PlaybackQueue
+            active={active}
+            tracks={state?.localTracks}
+            items={state?.items}
+            order={order}
+            index={index}
+            navigable={navigable}
+          />
+
           <Button
             appearance="subtle"
             aria-label="上一首"

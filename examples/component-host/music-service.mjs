@@ -214,6 +214,25 @@ export function musicService(profile, isSender) {
       grant = null
     }
   })
+  function validateQueue(ids) {
+    if (!Array.isArray(ids)) throw Error('播放队列无效')
+    const known = new Set(
+      store.db
+        .prepare('SELECT id FROM items UNION ALL SELECT id FROM local_tracks')
+        .all()
+        .map((row) => row.id),
+    )
+    if (
+      ids.length > known.size ||
+      ids.some((key) => !known.has(key)) ||
+      new Set(ids).size !== ids.length
+    )
+      throw Error('播放队列无效')
+  }
+  bind('setQueue', (ids) => {
+    validateQueue(ids)
+    store.set('play-queue', JSON.stringify(ids))
+  })
   bind('playQueue', (id, ids, position) => {
     if (
       !(store.active === id || grant?.id === id) ||
@@ -223,13 +242,7 @@ export function musicService(profile, isSender) {
       position < 0
     )
       throw Error('播放队列无效')
-    const known = new Set(
-      store.db
-        .prepare('SELECT id FROM items UNION ALL SELECT id FROM local_tracks')
-        .all()
-        .map((row) => row.id),
-    )
-    if (ids.length > known.size || ids.some((key) => !known.has(key))) throw Error('播放队列无效')
+    validateQueue(ids)
     store.db.exec('BEGIN')
     try {
       store.set('play-queue', JSON.stringify(ids))
