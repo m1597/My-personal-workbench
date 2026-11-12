@@ -1,6 +1,6 @@
 import { materialDefaults } from './material'
 import { WorkbenchChoice } from './WorkbenchChoice'
-import { useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 import { Button, Popover, PopoverSurface, PopoverTrigger, Slider } from '@fluentui/react-components'
 import { Settings, X } from 'lucide-react'
 import {
@@ -25,6 +25,27 @@ export function WorkbenchSettings({
 }) {
   const t = useTranslation()
   const [failed, setFailed] = useState(false)
+  const [surfaceReady, setSurfaceReady] = useState(false)
+  useLayoutEffect(() => {
+    if (!open) {
+      setSurfaceReady(false)
+      return
+    }
+    let frame = 0
+    const present = () => {
+      const pending = document.querySelectorAll<HTMLImageElement>(
+        '.component-overlay-frame:not([data-composited])',
+      )
+      if (Array.from(pending).some((image) => image.clientWidth && image.clientHeight)) {
+        frame = requestAnimationFrame(present)
+      } else {
+        // Let the slot send its visibility update before starting the popover's enter animation.
+        frame = requestAnimationFrame(() => setSurfaceReady(true))
+      }
+    }
+    present()
+    return () => cancelAnimationFrame(frame)
+  }, [open])
   function change(next: Preferences) {
     try {
       localStorage.setItem(preferenceKey, JSON.stringify(next))
@@ -47,7 +68,7 @@ export function WorkbenchSettings({
   }
   return (
     <Popover
-      open={open}
+      open={open && surfaceReady}
       onOpenChange={(_, data) => setOpen(data.open)}
       positioning={{ position: 'below', align: 'end', offset: 8 }}
       trapFocus

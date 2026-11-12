@@ -33,9 +33,29 @@ try {
     )
       throw Error('工作台未离屏静音')
   })
-  await page.getByRole('button', { name: '工作台设置' }).click()
+  await page.getByRole('button', { name: '窗口', exact: true }).click()
+  await page.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
+  await expect(page.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
+  const gear = page.getByRole('button', { name: '工作台设置' })
   const dialog = page.getByRole('dialog', { name: '工作台设置' })
-  await expect(dialog).toBeVisible()
+  for (const attempt of [1, 2]) {
+    const paintedAtOpen = page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const observer = new MutationObserver(() => {
+            if (!document.querySelector('.settings-surface')) return
+            const image = document.querySelector('.component-overlay-frame')
+            observer.disconnect()
+            resolve(image?.dataset.composited === 'ready' && image.naturalWidth > 0)
+          })
+          observer.observe(document.body, { childList: true, subtree: true })
+        }),
+    )
+    await gear.click()
+    await expect(dialog).toBeVisible()
+    assert.equal(await paintedAtOpen, true, '设置展开时必须已有停靠内容画面')
+    if (attempt === 1) await dialog.getByRole('button', { name: '关闭设置' }).click()
+  }
   for (const [name, initial, final] of [
     ['字体', '默认（HarmonyOS Sans SC）', 'Segoe UI Variable'],
     ['字号', '标准', '大'],

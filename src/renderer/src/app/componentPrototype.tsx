@@ -354,9 +354,20 @@ function ComponentBackdrop({ host }: { host: Window['componentHost'] }) {
       ref={ref}
       className="component-overlay-frame"
       alt=""
+      decoding="sync"
       draggable={false}
+      onError={(event) => {
+        event.currentTarget.dataset.composited = 'fallback'
+      }}
       onLoad={(event) => {
-        event.currentTarget.dataset.composited = 'ready'
+        const image = event.currentTarget
+        if (image.dataset.composited) return
+        // The native child must cover the slot until Chromium has painted the decoded image.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (image.isConnected) image.dataset.composited = 'ready'
+          })
+        })
       }}
     />
   ) : null
