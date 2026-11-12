@@ -1,13 +1,12 @@
-import { startSourcePipe } from './music-source-pipe.mjs'
+import { installedProducts } from './installed-products.mjs'
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
 import { shellExposed, snapTarget } from './native-dock.mjs'
 import { app, BrowserWindow, ipcMain, protocol, screen, nativeTheme, Menu } from 'electron'
 import { realpath } from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { componentView } from './component-view.mjs'
-import { musicService } from './music-service.mjs'
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'fitbay-plugin', privileges: { standard: true, secure: true } },
@@ -19,12 +18,24 @@ protocol.registerSchemesAsPrivileged([
 const here = path.dirname(fileURLToPath(import.meta.url))
 const argument = (name) =>
   process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3)
-// The launcher selects a profile explicitly. Tests always supply a temporary directory.
-const profile = argument('user-data-dir')
+const installation = app.isPackaged ? await installedProducts(app.getAppPath()) : undefined
+if (installation) app.setName('FitBay')
+const profile =
+  argument('user-data-dir') ||
+  (installation && path.join(app.getPath('appData'), 'FitBay', 'desktop-profile'))
 if (!profile || !path.isAbsolute(profile)) throw new Error('原型必须指定独立的绝对 --user-data-dir')
 app.setPath('userData', profile)
-const componentRoot = argument('component')
-const workbenchFile = argument('workbench')
+const componentRoot = installation ? undefined : argument('component')
+const workbenchFile = installation ? undefined : argument('workbench')
+async function findWorkbenchFile() {
+  if (!installation) return workbenchFile
+  const root = await installation.find('workbench')
+  return root && path.join(root, 'workbench', 'index.html')
+}
+async function findMusicRoot() {
+  const root = installation ? await installation.find('music') : path.dirname(here)
+  return root && path.join(root, 'music')
+}
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
 const background = process.env.WORKBENCH_TEST_BACKGROUND === '1'
 if (background) app.commandLine.appendSwitch('mute-audio')
@@ -79,8 +90,9 @@ function openWorkbench() {
 }
 async function createWorkbench() {
   if (shell && !shell.isDestroyed()) return
-  if (!workbenchFile) throw new Error('NOT_INSTALLED：未部署工作台界面；组件仍可独立使用')
-  const file = await realpath(workbenchFile)
+  const entry = await findWorkbenchFile()
+  if (!entry) throw new Error('NOT_INSTALLED：未安装 FitBay 工作台；Music 仍可独立使用')
+  const file = await realpath(entry)
   shell = new BrowserWindow({
     ...options(1480, 960),
     minWidth: 900,
@@ -135,11 +147,37 @@ const shared = {
 const sample = componentView({ ...shared, componentRoot, music: false })
 let closeSourcePipe
 let musicRuntime
+let startingMusic
+function startMusic(root) {
+  startingMusic ??= loadMusic(root).catch((error) => {
+    startingMusic = undefined
+    throw error
+  })
+  return startingMusic
+}
+async function loadMusic(root) {
+  const hostRoot = path.join(root, '../host')
+  const [{ musicService }, { startSourcePipe }] = await Promise.all(
+    ['music-service.mjs', 'music-source-pipe.mjs'].map(
+      (name) => import(pathToFileURL(path.join(hostRoot, name)).href),
+    ),
+  )
+  const script = installation ? path.join(root, '../scripts/music-source-mcp.mjs') : undefined
+  musicRuntime = musicService(profile, music.isSender, script)
+  closeSourcePipe = await startSourcePipe(profile, (...args) =>
+    musicRuntime.sourceTool(...args),
+  ).catch(() => {
+    console.warn('本地音源 MCP 未能连接')
+  })
+}
 const music = componentView({
-  configureSession: (s) => musicRuntime.register(s),
+  configureSession: async (s, root) => {
+    await startMusic(root)
+    musicRuntime.register(s)
+  },
   onDispose: () => musicRuntime?.dispose(),
   ...shared,
-  componentRoot: path.resolve(here, '../music'),
+  componentRoot: findMusicRoot,
   music: true,
 })
 const components = [sample, music]
@@ -156,7 +194,7 @@ const builtins = builtinWindows({
   preload: path.join(here, 'builtin-preload.cjs'),
   supportsAcrylic,
 })
-const requestedMode = argument('mode')
+const requestedMode = installation?.product || argument('mode')
 const intent =
   requestedMode === 'music' ||
   requestedMode === 'workbench' ||
@@ -177,7 +215,7 @@ async function openIntent(request) {
   } else {
     const component = request === 'music' ? music : sample
     if (!(await component.open())) {
-      if (workbenchFile) await openWorkbench()
+      if (await findWorkbenchFile()) await openWorkbench()
       else throw new Error(component.failure())
     }
   }
@@ -230,12 +268,8 @@ else {
           dropZone = regions
       })
       for (const item of components) item.listen()
-      musicRuntime = musicService(profile, music.isSender)
-      closeSourcePipe = await startSourcePipe(profile, (...args) =>
-        musicRuntime.sourceTool(...args),
-      ).catch(() => {
-        console.warn('本地音源 MCP 未能连接')
-      })
+      const musicRoot = await findMusicRoot()
+      if (musicRoot) await startMusic(musicRoot)
       await openIntent(intent)
     })
     .catch((failure) => {

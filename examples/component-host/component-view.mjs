@@ -110,8 +110,12 @@ export function componentView({
   }
   async function discover() {
     try {
-      if (!componentRoot) throw new Error('NOT_INSTALLED：未登记组件')
-      const root = await realpath(componentRoot)
+      const folder = typeof componentRoot === 'function' ? await componentRoot() : componentRoot
+      if (!folder)
+        throw new Error(
+          music ? 'NOT_INSTALLED：请先安装 FitBay Music' : 'NOT_INSTALLED：未登记组件',
+        )
+      const root = await realpath(folder)
       const manifest = JSON.parse(await readFile(path.join(root, 'component.json'), 'utf8'))
       if (
         manifest.manifestVersion !== 1 ||
@@ -147,7 +151,7 @@ export function componentView({
     if (!root || restoreWindow?.isDestroyed()) return false
     view?.webContents.close()
     const isolated = session.fromPartition(`component-${sessionId}`)
-    configureSession?.(isolated)
+    await configureSession?.(isolated, root)
     isolated.setPermissionRequestHandler((_, __, callback) => callback(false))
     isolated.setPermissionCheckHandler(() => false)
     const allowed = new Set(
@@ -170,7 +174,9 @@ export function componentView({
     view = new WebContentsView({
       webPreferences: {
         session: isolated,
-        preload: path.join(here, music ? 'music-preload.cjs' : 'sample-preload.cjs'),
+        preload: music
+          ? path.resolve(root, '../host/music-preload.cjs')
+          : path.join(here, 'sample-preload.cjs'),
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,

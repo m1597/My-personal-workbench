@@ -15,7 +15,11 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
 import { localStream } from './local-stream.mjs'
-export function musicService(profile, isSender) {
+export function musicService(
+  profile,
+  isSender,
+  mcpScript = path.resolve(import.meta.dirname, '../../../scripts/music-source-mcp.mjs'),
+) {
   let store,
     pending,
     taste,
@@ -61,7 +65,7 @@ export function musicService(profile, isSender) {
   bind('pluginCall', (id, action, args) => plugins.call(id, action, args))
   bind('musicGuide', () => ({
     seen: Boolean(store.get('music-guide-v1')),
-    script: path.resolve(import.meta.dirname, '../../../scripts/music-source-mcp.mjs'),
+    script: mcpScript,
   }))
   bind('markMusicGuide', () => store.set('music-guide-v1', 1))
   const lx = registerLx(
