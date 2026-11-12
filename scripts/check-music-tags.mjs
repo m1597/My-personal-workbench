@@ -1,3 +1,4 @@
+import { choosePluginFile } from './music-plugin-file-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
@@ -195,7 +196,8 @@ if (process.argv.includes('--ui')) {
     await page.getByRole('tab', { name: '设置', exact: true }).click()
     await selectMusicSettings(page, '插件')
     const item = page.locator('article').filter({ hasText: '歌曲标签与封面整理' })
-    await item.getByRole('button', { name: '安装本地包' }).click()
+    await choosePluginFile(app, 'tags')
+    await item.getByRole('button', { name: '选择插件文件' }).click()
     await item.getByRole('button', { name: '打开', exact: true }).click()
     const panel = page.getByRole('region', { name: '歌曲标签与封面整理' })
     const corrupt = path.join(dir, 'truncated.png')

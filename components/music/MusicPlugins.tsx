@@ -26,7 +26,7 @@ declare global {
   interface Window {
     musicPlugins: {
       list(): Promise<PluginRow[]>
-      install(id: string, method: 'local' | 'file' | 'link', url?: string): Promise<boolean>
+      install(id: string): Promise<boolean>
       remove(id: string): Promise<void>
       call<T = unknown>(id: string, action: string, ...args: unknown[]): Promise<T>
       guide(): Promise<{ seen: boolean; script: string }>
@@ -53,18 +53,14 @@ export function PluginSettings({
   guide: () => void
 }) {
   const [busy, setBusy] = useState('')
-  const [source, setSource] = useState('')
-  const [url, setUrl] = useState('')
   const [message, setMessage] = useState('')
-  async function run(row: PluginRow, method: 'local' | 'file' | 'link' | 'remove') {
+  async function run(row: PluginRow, method: 'file' | 'remove') {
     setBusy(row.id)
     setMessage('')
     try {
       if (method === 'remove') await window.musicPlugins.remove(row.id)
-      else if (!(await window.musicPlugins.install(row.id, method, url))) return
+      else if (!(await window.musicPlugins.install(row.id))) return
       await reload()
-      setSource('')
-      setUrl('')
       setMessage(
         method === 'remove'
           ? '已卸载，插件资料已保留。'
@@ -104,46 +100,18 @@ export function PluginSettings({
                 <Button
                   appearance="primary"
                   disabled={!!busy}
-                  onClick={() => void run(row, 'local')}
+                  onClick={() => void run(row, 'file')}
                 >
-                  {row.outdated ? '更新本地包' : '安装本地包'}
+                  {row.outdated ? '选择新版插件文件' : '选择插件文件'}
                 </Button>
                 {row.outdated && (
                   <Button disabled={!!busy} onClick={() => void run(row, 'remove')}>
                     卸载旧版
                   </Button>
                 )}
-                <Button
-                  disabled={!!busy}
-                  onClick={() => {
-                    setUrl('')
-                    setSource(source === row.id ? '' : row.id)
-                  }}
-                >
-                  其他来源
-                </Button>
               </>
             )}
           </div>
-          {source === row.id && !row.installed && (
-            <div className="music-plugin-source">
-              <Button disabled={!!busy} onClick={() => void run(row, 'file')}>
-                选择安装包文件
-              </Button>
-              <Input
-                aria-label="安装包 HTTPS 直链"
-                value={url}
-                placeholder="安装包 HTTPS 直链"
-                onChange={(_, v) => setUrl(v.value)}
-              />
-              <Button
-                disabled={!!busy || !url.startsWith('https://')}
-                onClick={() => void run(row, 'link')}
-              >
-                下载并安装
-              </Button>
-            </div>
-          )}
         </article>
       ))}
       {busy && <p role="status">正在处理安装包…</p>}

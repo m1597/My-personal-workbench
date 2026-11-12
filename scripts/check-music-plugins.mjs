@@ -1,3 +1,4 @@
+import { choosePluginFile, pluginFile } from './music-plugin-file-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { mkdir, mkdtemp, writeFile, access } from 'node:fs/promises'
@@ -12,15 +13,17 @@ const oldDigest = 'a'.repeat(64)
 const oldFolder = path.join(upgradeProfile, 'fitbay-music', 'plugins', 'rules-' + oldDigest)
 await mkdir(oldFolder, { recursive: true })
 const registrations = new Map([['music-plugin-install-rules', oldDigest]])
+let chosen = path.join(root, 'bad')
 const manager = musicPlugins(upgradeProfile, () => registrations, {
-  showOpenDialog: async () => ({ canceled: false, filePaths: [path.join(root, 'bad')] }),
+  showOpenDialog: async () => ({ canceled: false, filePaths: [chosen] }),
 })
 await writeFile(path.join(root, 'bad'), 'bad')
 assert.ok(manager.list().find((p) => p.id === 'rules').outdated)
-await assert.rejects(manager.install('rules', 'file'), /大小/)
+await assert.rejects(manager.install('rules'), /大小/)
 await access(oldFolder)
 assert.equal(registrations.get('music-plugin-install-rules'), oldDigest)
-await manager.install('rules', 'local')
+chosen = pluginFile('rules')
+await manager.install('rules')
 await assert.rejects(access(oldFolder), { code: 'ENOENT' })
 await manager.remove('rules')
 assert.ok(manager.list().every((p) => !p.installed))
@@ -77,18 +80,24 @@ try {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, bad)
   const rules = row('智能歌单')
-  await rules.getByText('其他来源').click()
-  await rules.getByText('选择安装包文件').click()
+  await rules.getByText('选择插件文件').click()
   await expect(
     page.getByRole('status').filter({ hasText: '安装包大小与当前版本不符' }),
   ).toBeVisible()
-  await rules.getByText('安装本地包').click()
+  await choosePluginFile(app, 'rules')
+  await rules.getByText('选择插件文件').click()
   await rules.getByText('打开', { exact: true }).click()
   await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveAttribute(
     'aria-selected',
     'true',
   )
   await expect(page.locator('.music-extensions').getByRole('textbox').first()).toBeVisible()
+  assert.deepEqual(
+    await page.evaluate(async () =>
+      (await window.musicPlugins.list()).filter((x) => x.installed).map((x) => x.id),
+    ),
+    ['rules'],
+  )
   await app.close()
   app = await launch()
   page = await app.firstWindow()

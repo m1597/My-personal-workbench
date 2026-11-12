@@ -70,7 +70,7 @@ contextBridge.exposeInMainWorld(
   'musicPlugins',
   Object.freeze({
     list: () => ipcRenderer.invoke('music:pluginList'),
-    install: (id, method, url) => ipcRenderer.invoke('music:pluginInstall', id, method, url),
+    install: (id) => ipcRenderer.invoke('music:pluginInstall', id),
     remove: (id) => ipcRenderer.invoke('music:pluginRemove', id),
     call: (id, action, ...args) => ipcRenderer.invoke('music:pluginCall', id, action, args),
     guide: () => ipcRenderer.invoke('music:musicGuide'),

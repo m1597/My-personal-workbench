@@ -1,3 +1,4 @@
+import { choosePluginFile } from './music-plugin-file-fixture.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -90,7 +91,8 @@ try {
   await button('跳过').click()
   await settings()
   for (const name of [wave, rules]) {
-    await button('安装本地包', entry(name)).click()
+    await choosePluginFile(app, name === wave ? 'wave' : 'rules')
+    await button('选择插件文件', entry(name)).click()
     await expect(button('打开', entry(name))).toBeVisible()
   }
   const readPending = () =>
@@ -167,7 +169,7 @@ try {
   await settings()
   for (const name of [wave, rules]) {
     await button('卸载', entry(name)).click()
-    await expect(button('安装本地包', entry(name))).toBeVisible()
+    await expect(button('选择插件文件', entry(name))).toBeVisible()
   }
   await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)
   await app.close()
@@ -175,7 +177,8 @@ try {
   page = await app.firstWindow()
   await settings()
   for (const name of [wave, rules]) {
-    await button('安装本地包', entry(name)).click()
+    await choosePluginFile(app, name === wave ? 'wave' : 'rules')
+    await button('选择插件文件', entry(name)).click()
     await expect(button('打开', entry(name))).toBeVisible()
   }
   await button('打开', entry(rules)).click()

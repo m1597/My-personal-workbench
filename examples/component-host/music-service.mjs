@@ -56,7 +56,7 @@ export function musicService(profile, isSender) {
       }
     })
   bind('pluginList', () => plugins.list())
-  bind('pluginInstall', (id, method, url) => plugins.install(id, method, url))
+  bind('pluginInstall', (id) => plugins.install(id))
   bind('pluginRemove', (id) => plugins.remove(id))
   bind('pluginCall', (id, action, args) => plugins.call(id, action, args))
   bind('musicGuide', () => ({

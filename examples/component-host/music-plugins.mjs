@@ -1,33 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile, lstat } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import path from 'node:path'
-import { openPublic } from './lx-net.mjs'
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const ids = ['wave', 'tags', 'rules']
-async function download(url, size) {
-  if (typeof url !== 'string' || url.length > 8192 || !url.startsWith('https://'))
-    throw Error('请输入 HTTPS 安装包直链')
-  const res = await openPublic(url, { signal: AbortSignal.timeout(60000) })
-  const chunks = []
-  let length = 0
-  try {
-    if (res.statusCode !== 200) throw Error('安装包下载失败，请检查链接')
-    for await (const chunk of res) {
-      length += chunk.length
-      if (length > size) throw Error('安装包大小与当前版本不符')
-      chunks.push(chunk)
-    }
-    return Buffer.concat(chunks)
-  } finally {
-    res.destroy()
-  }
-}
 export function musicPlugins(profile, getStore, dialog, nativeImage) {
   const root = path.join(profile, 'fitbay-music', 'plugins')
-  const distribution = fileURLToPath(new URL('../plugin-packs/', import.meta.url))
   let entries
   const list = () =>
     (entries ??= JSON.parse(
@@ -72,23 +52,16 @@ export function musicPlugins(profile, getStore, dialog, nativeImage) {
     if (hash(bytes) !== item.files[name]) throw Error('插件文件已变化，请重新安装')
     return bytes
   }
-  async function install(item, method, url) {
-    let data
-    if (method === 'link') data = await download(url, item.bytes)
-    else {
-      let file = path.join(distribution, item.id + '.fitbayplugin')
-      if (method === 'file') {
-        const choice = await dialog.showOpenDialog({
-          title: '选择 ' + item.title + ' 安装包',
-          properties: ['openFile'],
-          filters: [{ name: 'FitBay 插件', extensions: ['fitbayplugin'] }],
-        })
-        if (choice.canceled) return false
-        file = choice.filePaths[0]
-      } else if (method !== 'local') throw Error('未知安装方式')
-      if ((await stat(file)).size !== item.bytes) throw Error('安装包大小与当前版本不符')
-      data = await readFile(file)
-    }
+  async function install(item) {
+    const choice = await dialog.showOpenDialog({
+      title: '选择' + item.title + '插件文件',
+      properties: ['openFile'],
+      filters: [{ name: 'FitBay Music 插件', extensions: ['fitbayplugin'] }],
+    })
+    if (choice.canceled) return false
+    const file = choice.filePaths[0]
+    if ((await stat(file)).size !== item.bytes) throw Error('安装包大小与当前版本不符')
+    const data = await readFile(file)
     if (hash(data) !== item.digest) throw Error('安装包内容与当前版本不符')
     const pack = JSON.parse(data.toString())
     const target = folder(item)
@@ -133,9 +106,9 @@ export function musicPlugins(profile, getStore, dialog, nativeImage) {
         version: digest.slice(0, 12),
       }))
     },
-    install(id, method, url) {
+    install(id) {
       const item = byId(id)
-      return serial(id, () => install(item, method, url))
+      return serial(id, () => install(item))
     },
     remove(id) {
       const item = byId(id)
