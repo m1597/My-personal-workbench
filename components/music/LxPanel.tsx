@@ -143,7 +143,7 @@ export function DownloadPane({
     return () => {
       live.current = false
       unsubscribe()
-      void host.lxCancel().catch(() => {})
+      void host.lxCancel('search').catch(() => {})
     }
   }, [])
   function versionRow(item: Versions['items'][number]) {

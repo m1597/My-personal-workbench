@@ -675,6 +675,18 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   const sourceKey = (src) => JSON.stringify([src.name, src.platform])
   let active = null
   let activeScope
+  const downloads = []
+  bind('downloadTasks', () => downloads)
+  bind('cancelDownloadTask', (id) => {
+    if (activeScope === 'download' && downloads[0]?.id === id && downloads[0].status === '下载中')
+      active?.abort()
+  })
+  function downloadTask(title) {
+    const task = { id: randomUUID(), title, status: '下载中', detail: '' }
+    downloads.unshift(task)
+    if (downloads.length > 50) downloads.pop()
+    return task
+  }
   const matches = new Map()
   const source = () => {
     const saved = getStore().get('lx-source')
@@ -811,7 +823,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         })
       }
       return { items, quality: src.quality, partial }
-    }),
+    }, 'search'),
   )
   const onlineRows = new Map()
   bind('rememberOnline', (key, quality) => {
@@ -1081,9 +1093,21 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   }
   bind(
     'lxDownload',
-    exclusive((signal, key, quality, detailed) =>
-      transfer(signal, key, quality, undefined, detailed === true),
-    ),
+    exclusive(async (signal, key, quality, detailed) => {
+      const row = matches.get(key)?.row
+      if (!row) throw Error('请重新选择要下载的录音')
+      const task = downloadTask([text(row.name), text(row.singer)].filter(Boolean).join(' · '))
+      try {
+        const result = await transfer(signal, key, quality, undefined, detailed === true)
+        task.status = result ? '已入库' : '已取消'
+        return result
+      } catch (e) {
+        task.status = signal.aborted ? '已取消' : '下载失败'
+        // Storage errors can contain absolute paths.
+        task.detail = e.code ? '请检查存储目录' : String(e.message).slice(0, 200)
+        throw e
+      }
+    }, 'download'),
   )
   bind(
     'downloadSelection',
@@ -1096,38 +1120,61 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         throw Error('所选歌曲无效')
       const store = getStore()
       const results = []
-      let dir = getMusicPreferences(store).manualDir
-      for (const id of new Set(ids)) {
-        signal.throwIfAborted()
-        if (!id.startsWith('online-recording-') || (await store.library.onlineCopy(id))) {
-          results.push({ id, status: 'skipped' })
-          continue
-        }
-        if (!dir) {
-          const choice = await dialog.showOpenDialog({
-            title: '选择歌曲下载文件夹',
-            properties: ['openDirectory', 'createDirectory'],
-          })
-          if (choice.canceled) break
-          dir = choice.filePaths[0]
-        }
-        try {
-          const { record, src } = onlineRecording(id)
-          const row =
-            onlineRows.get(id) ??
-            (await downloadResults(src, JSON.parse(record.query), signal, record.recording)).rows[0]
-          if (!row) throw Error('音乐源中已找不到该录音')
-          const rights = permission(src, row)
-          if (rights === 'denied' || rights === 'preview') throw Error(explanations[rights])
-          await downloadManual(src, row, record.quality, dir, signal, false)
-          results.push({ id, status: 'saved' })
-        } catch (error) {
+      const selected = new Set(ids)
+      if (!selected.size) return results
+      const task = downloadTask('所选歌曲 · ' + selected.size + ' 首')
+      task.detail = '已处理 0/' + selected.size
+      try {
+        let dir = getMusicPreferences(store).manualDir
+        for (const id of selected) {
           signal.throwIfAborted()
-          results.push({ id, status: 'failed', error: String(error.message).slice(0, 400) })
+          if (!id.startsWith('online-recording-') || (await store.library.onlineCopy(id))) {
+            results.push({ id, status: 'skipped' })
+            task.detail = '已处理 ' + results.length + '/' + selected.size
+            continue
+          }
+          if (!dir) {
+            const choice = await dialog.showOpenDialog({
+              title: '选择歌曲下载文件夹',
+              properties: ['openDirectory', 'createDirectory'],
+            })
+            if (choice.canceled) break
+            dir = choice.filePaths[0]
+          }
+          try {
+            const { record, src } = onlineRecording(id)
+            const row =
+              onlineRows.get(id) ??
+              (await downloadResults(src, JSON.parse(record.query), signal, record.recording))
+                .rows[0]
+            if (!row) throw Error('音乐源中已找不到该录音')
+            const rights = permission(src, row)
+            if (rights === 'denied' || rights === 'preview') throw Error(explanations[rights])
+            await downloadManual(src, row, record.quality, dir, signal, false)
+            results.push({ id, status: 'saved' })
+          } catch (error) {
+            signal.throwIfAborted()
+            results.push({ id, status: 'failed', error: String(error.message).slice(0, 400) })
+          }
+          task.detail = '已处理 ' + results.length + '/' + selected.size
         }
+        const saved = results.filter((r) => r.status === 'saved').length
+        const failed = results.filter((r) => r.status === 'failed').length
+        task.status = results.length < selected.size ? '已取消' : failed ? '含失败项' : '已完成'
+        task.detail =
+          '已下载 ' +
+          saved +
+          ' 首 · 已跳过 ' +
+          (results.length - saved - failed) +
+          ' 首 · 失败 ' +
+          failed +
+          ' 首'
+        return results
+      } catch (e) {
+        task.status = signal.aborted ? '已取消' : '下载失败'
+        throw e
       }
-      return results
-    }),
+    }, 'download'),
   )
   bind(
     'lxPreview',
@@ -1597,7 +1644,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }))
   })
   bind('lxCancel', (scope) => {
-    if (scope === undefined || (scope === 'import' && activeScope === 'import')) active?.abort()
+    if (
+      scope === undefined ||
+      (['search', 'download', 'import'].includes(scope) && scope === activeScope)
+    )
+      active?.abort()
   })
   let generation = 0
   function onlineRecording(id) {

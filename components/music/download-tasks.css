@@ -1,0 +1,30 @@
+.download-tasks {
+  width: min(320px, calc(100vw - 36px));
+  max-height: min(420px, 65vh);
+  overflow-y: auto;
+}
+.download-tasks section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+.download-tasks section b,
+.download-tasks small {
+  overflow-wrap: anywhere;
+}
+.download-tasks small {
+  grid-column: 1 / -1;
+  color: var(--colorNeutralForeground3);
+}
+.download-tasks section button {
+  justify-self: start;
+}
+.music-compose-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
