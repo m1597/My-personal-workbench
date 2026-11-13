@@ -701,3 +701,20 @@ li[data-active="true"] .music-track-icon,
   max-height: calc(100dvh - var(--space-12));
   overflow-y: auto;
 }
+.library-sidebar button[data-insert] {
+  position: relative;
+}
+.library-sidebar button[data-insert]::after {
+  content: "";
+  position: absolute;
+  inset-inline: var(--space-4);
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.library-sidebar button[data-insert="before"]::after {
+  top: 0;
+}
+.library-sidebar button[data-insert="after"]::after {
+  bottom: 0;
+}

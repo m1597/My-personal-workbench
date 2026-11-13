@@ -107,6 +107,7 @@ type State = {
   draft: string
   current: string
   position: number
+  sidebarOrder: Record<'folders' | 'playlists', string[]>
   playlists: Playlist[]
   localTracks: LocalTrack[]
   importJob: ImportJob
@@ -146,6 +147,12 @@ declare global {
         quality: string,
         detailed: true,
       ): Promise<'' | { file: string; sources: string[] }>
+      moveSidebarItem(
+        group: 'folders' | 'playlists',
+        id: string,
+        target: string,
+        after: boolean,
+      ): Promise<void>
       createPlaylist(name: string): Promise<string>
       setMembership(playlist: string, track: string | string[], added: boolean): Promise<void>
       importLocal(mode: 'folder' | 'files'): Promise<void>
@@ -799,6 +806,10 @@ function Music() {
             rows={localRows}
             total={categoryRows.length}
             tracks={state?.localTracks ?? []}
+            sidebarOrder={state?.sidebarOrder}
+            moveSidebarItem={(group, id, target, after) =>
+              act(() => host.moveSidebarItem(group, id, target, after))
+            }
             playlists={state?.playlists ?? []}
             collection={collection}
             days={infrequentDays}

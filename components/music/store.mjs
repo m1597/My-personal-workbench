@@ -78,6 +78,39 @@ export class MusicStore {
   set(key, value) {
     this.db.prepare('INSERT OR REPLACE INTO state VALUES(?,?)').run(key, String(value))
   }
+  sidebarOrder(group) {
+    const raw = this.get('sidebar-order-' + group)
+    if (!raw) return []
+    try {
+      const ids = JSON.parse(raw)
+      return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : []
+    } catch {
+      return []
+    }
+  }
+  moveSidebarItem(group, id, target, after) {
+    if (!['folders', 'playlists'].includes(group) || typeof after !== 'boolean')
+      throw Error('无效的曲库分组')
+    const entries =
+      group === 'folders'
+        ? [
+            ...new Map(
+              this.library
+                .list()
+                .filter((r) => r.folder)
+                .map((r) => [r.folder.id, r.folder]),
+            ).values(),
+          ].sort((a, b) => a.name.localeCompare(b.name))
+        : this.library.playlists()
+    const valid = new Set(entries.map((e) => e.id))
+    if (!valid.has(id) || !valid.has(target)) throw Error('曲库分组已变化，请重新排序')
+    if (id === target) return
+    const order = [
+      ...new Set([...this.sidebarOrder(group).filter((key) => valid.has(key)), ...valid]),
+    ].filter((key) => key !== id)
+    order.splice(order.indexOf(target) + Number(after), 0, id)
+    this.set('sidebar-order-' + group, JSON.stringify(order))
+  }
   metadata(track) {
     return (
       catalogue.find((t) => t.id === track) ??
@@ -322,6 +355,10 @@ export class MusicStore {
         ),
       }))
     return {
+      sidebarOrder: {
+        folders: this.sidebarOrder('folders'),
+        playlists: this.sidebarOrder('playlists'),
+      },
       localTracks: this.library.list().map((t) => ({ ...t, notInterested: localIds.has(t.id) })),
       playlists: this.library.playlists(),
       importJob: this.library.job,

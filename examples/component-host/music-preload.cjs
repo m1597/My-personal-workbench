@@ -23,6 +23,7 @@ const names = [
   'chooseMusicDirectory',
   'configureModel',
   'state',
+  'moveSidebarItem',
   'createPlaylist',
   'setMembership',
   'importLocal',

@@ -1,3 +1,4 @@
+import { useSidebarSorting, orderedSidebarItems, type SidebarSorting } from './SidebarSorting'
 import { TrackMenu } from './TrackMenu'
 import { InfrequentTracks } from './InfrequentTracks'
 import { RecentHistory } from './LibraryTools'
@@ -67,7 +68,7 @@ export type ImportJob = {
 }
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
-type Props = {
+type Props = SidebarSorting & {
   favorite: (id: string, value: boolean) => Promise<unknown>
   addFavorites: (ids: string[]) => Promise<number | null>
   rows: LocalTrack[]
@@ -103,6 +104,8 @@ export function LibraryPane({
   addFavorites,
   tracks,
   playlists,
+  sidebarOrder,
+  moveSidebarItem,
   collection,
   days,
   changeDays,
@@ -211,6 +214,7 @@ export function LibraryPane({
     for (const { folder } of tracks) if (folder) entries.set(folder.id, folder)
     return [...entries.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [tracks])
+  const sortable = useSidebarSorting(moveSidebarItem)
   const currentFolder = folders.find((f) => f.id === collection)
   const heading =
     playlists.find((p) => p.id === collection)?.name ?? currentFolder?.name ?? '全部歌曲'
@@ -271,12 +275,13 @@ export function LibraryPane({
           我的收藏
         </Button>
         <h3>文件夹</h3>
-        {folders.map((node) => (
+        {orderedSidebarItems(folders, sidebarOrder?.folders).map((node) => (
           <Menu key={node.id} openOnContext>
             <MenuTrigger disableButtonEnhancement>
               <Button
                 appearance="subtle"
                 size="small"
+                {...sortable('folders', node.id)}
                 title={node.name}
                 aria-pressed={collection === node.id}
                 icon={<Folder size={16} />}
@@ -330,10 +335,11 @@ export function LibraryPane({
             </Button>
           </form>
         )}
-        {playlists.map((list) => {
+        {orderedSidebarItems(playlists, sidebarOrder?.playlists).map((list) => {
           const trigger = (
             <Button
               key={list.id}
+              {...sortable('playlists', list.id)}
               appearance="subtle"
               size="small"
               aria-pressed={collection === list.id}

@@ -136,6 +136,9 @@ export function musicService(
     if (!['folder', 'files'].includes(mode)) throw Error('导入方式无效')
     return selectLocal(mode)
   })
+  bind('moveSidebarItem', (group, id, target, after) =>
+    store.moveSidebarItem(group, id, target, after),
+  )
   bind('createPlaylist', (name) => store.library.createPlaylist(name))
   bind('setMembership', (playlist, track, added) =>
     store.library.setMembership(playlist, track, added),
