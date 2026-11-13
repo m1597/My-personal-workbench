@@ -343,6 +343,11 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
   store.db.exec('BEGIN IMMEDIATE')
   let published = false
   try {
+    if (
+      !dailyId &&
+      store.db.prepare('SELECT 1 FROM local_tracks WHERE path_key=?').get(pathKey(file))
+    )
+      throw Error('目标路径已有曲库记录，请选择其他目录')
     store.library.upsert({
       ...row,
       size: Number(before.size),
@@ -802,13 +807,6 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }),
   )
   const onlineRows = new Map()
-  function onlineDatabase() {
-    const { db } = getStore()
-    db.exec(`CREATE TABLE IF NOT EXISTS online_recording_sources (
-      id TEXT PRIMARY KEY, source TEXT NOT NULL, platform TEXT NOT NULL, recording TEXT NOT NULL,
-      quality TEXT NOT NULL, query TEXT NOT NULL, identifiers TEXT NOT NULL)`)
-    return db
-  }
   bind('rememberOnline', (key, quality) => {
     const match = matches.get(key)
     const selected = source()
@@ -831,7 +829,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       createHash('sha256')
         .update(JSON.stringify([sourceId, src.platform, recording]))
         .digest('hex')
-    const db = onlineDatabase()
+    const { db } = getStore()
     db.exec('BEGIN')
     try {
       db.prepare(`INSERT INTO online_recording_sources VALUES(?,?,?,?,?,?,?)
@@ -895,6 +893,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }
     signal.throwIfAborted()
     if (auditionId) return fetchRecording(src, row, quality, dir, signal, auditionId)
+    return downloadManual(src, row, quality, dir, signal, detailed)
+  }
+  async function downloadManual(src, row, quality, dir, signal, detailed) {
     await catalog().upgrade()
     const eligible = recordingId(src, row) && !['denied', 'preview'].includes(permission(src, row))
     const candidates = [
@@ -1076,6 +1077,50 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     exclusive((signal, key, quality, detailed) =>
       transfer(signal, key, quality, undefined, detailed === true),
     ),
+  )
+  bind(
+    'downloadSelection',
+    exclusive(async (signal, ids) => {
+      if (
+        !Array.isArray(ids) ||
+        ids.length > 10000 ||
+        ids.some((id) => typeof id !== 'string' || id.length > 120)
+      )
+        throw Error('所选歌曲无效')
+      const store = getStore()
+      const results = []
+      let dir = getMusicPreferences(store).manualDir
+      for (const id of new Set(ids)) {
+        signal.throwIfAborted()
+        if (!id.startsWith('online-recording-') || (await store.library.onlineCopy(id))) {
+          results.push({ id, status: 'skipped' })
+          continue
+        }
+        if (!dir) {
+          const choice = await dialog.showOpenDialog({
+            title: '选择歌曲下载文件夹',
+            properties: ['openDirectory', 'createDirectory'],
+          })
+          if (choice.canceled) break
+          dir = choice.filePaths[0]
+        }
+        try {
+          const { record, src } = onlineRecording(id)
+          const row =
+            onlineRows.get(id) ??
+            (await downloadResults(src, JSON.parse(record.query), signal, record.recording)).rows[0]
+          if (!row) throw Error('音乐源中已找不到该录音')
+          const rights = permission(src, row)
+          if (rights === 'denied' || rights === 'preview') throw Error(explanations[rights])
+          await downloadManual(src, row, record.quality, dir, signal, false)
+          results.push({ id, status: 'saved' })
+        } catch (error) {
+          signal.throwIfAborted()
+          results.push({ id, status: 'failed', error: String(error.message).slice(0, 400) })
+        }
+      }
+      return results
+    }),
   )
   bind(
     'lxPreview',
@@ -1548,21 +1593,23 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     if (scope === undefined || (scope === 'import' && activeScope === 'import')) active?.abort()
   })
   let generation = 0
+  function onlineRecording(id) {
+    const { db } = getStore()
+    const record = db.prepare('SELECT * FROM online_recording_sources WHERE id=?').get(id)
+    const installed =
+      record &&
+      db.prepare("SELECT payload FROM music_sources WHERE id=? AND disabled=''").get(record.source)
+    if (!installed) throw Error('录音的原音乐源不可用，请重新搜索')
+    const source = JSON.parse(installed.payload)
+    const platform =
+      source.platforms?.[record.platform] ?? (source.platform === record.platform ? source : null)
+    if (!platform?.quality.includes(record.quality)) throw Error('原音乐源已不支持此音质')
+    const src = { ...source, ...platform }
+    return { record, src }
+  }
   return {
     onlineAddress(id) {
-      const db = onlineDatabase()
-      const record = db.prepare('SELECT * FROM online_recording_sources WHERE id=?').get(id)
-      const installed =
-        record &&
-        db
-          .prepare("SELECT payload FROM music_sources WHERE id=? AND disabled=''")
-          .get(record.source)
-      if (!installed) throw Error('录音的原音乐源不可用，请重新搜索')
-      const source = JSON.parse(installed.payload)
-      const platform =
-        source.platforms?.[record.platform] ?? (source.platform === record.platform ? source : null)
-      if (!platform?.quality.includes(record.quality)) throw Error('原音乐源已不支持此音质')
-      const src = { ...source, ...platform }
+      const { record, src } = onlineRecording(id)
       let row = onlineRows.get(id)
       return async (signal) => {
         if (!row) {

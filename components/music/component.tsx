@@ -42,6 +42,7 @@ import {
   type LocalTrack,
   type OnlineTrack,
   type PlaylistTrack,
+  type SelectionDownload,
   type ImportJob,
 } from './LibraryPane'
 import { PlaybackQueue } from './PlaybackQueue'
@@ -196,6 +197,7 @@ declare global {
       mediaFailed(id: string, url: string): Promise<void>
       localSource(id: string): Promise<string>
       rememberOnline(key: string, quality?: string): Promise<string>
+      downloadSelection(ids: string[]): Promise<SelectionDownload[]>
       dismissRecommendation(id: string): Promise<void>
       setRepeatOne(enabled: boolean): Promise<void>
       setQueue(ids: string[], occurrence?: number, pendingAlbum?: string[]): Promise<void>
@@ -1028,6 +1030,13 @@ function Music() {
               return ok ? added : null
             }}
             rows={localRows}
+            downloadSelected={async (ids) => {
+              let result: SelectionDownload[] = []
+              await act(async () => {
+                result = await host.downloadSelection(ids)
+              })
+              return result
+            }}
             total={categoryRows.length}
             tracks={state?.localTracks ?? []}
             sidebarOrder={state?.sidebarOrder}

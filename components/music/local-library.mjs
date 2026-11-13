@@ -47,7 +47,11 @@ export class LocalLibrary {
       }
       this.db.exec(`CREATE TABLE IF NOT EXISTS online_tracks(
         id TEXT PRIMARY KEY,title TEXT NOT NULL,artist TEXT NOT NULL,album TEXT NOT NULL,duration REAL NOT NULL
-      );`)
+      );
+      CREATE TABLE IF NOT EXISTS online_recording_sources (
+        id TEXT PRIMARY KEY, source TEXT NOT NULL, platform TEXT NOT NULL, recording TEXT NOT NULL,
+        quality TEXT NOT NULL, query TEXT NOT NULL, identifiers TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS copy_by_platform_recording ON recording_copies(platform,sourceId);`)
       if (
         this.db
           .prepare('PRAGMA foreign_key_list(playlist_tracks)')
@@ -191,6 +195,10 @@ export class LocalLibrary {
           .all()
           .map((col) => col.name),
       )
+      this.db.exec(`CREATE VIEW IF NOT EXISTS online_local_copies AS
+        SELECT s.id AS online,t.id AS local FROM online_recording_sources s
+        JOIN recording_copies c ON c.platform=s.platform AND c.sourceId=s.recording
+        JOIN local_tracks t ON t.id=c.local WHERE t.available=1 AND t.unplayable=0 AND t.awaitingLocation=0;`)
       if (legacyColumns.size) {
         // Legacy mappings retain provenance but cannot prove the identity of current file bytes.
         const columns = [
@@ -644,6 +652,15 @@ export class LocalLibrary {
     const row = this.db.prepare('SELECT * FROM local_tracks WHERE id=?').get(id)
     if (!row) throw Error('歌曲已移除')
     return row
+  }
+  async onlineCopy(id) {
+    const rows = this.db
+      .prepare(
+        'SELECT t.* FROM online_local_copies c JOIN local_tracks t ON t.id=c.local WHERE c.online=? ORDER BY t.id',
+      )
+      .all(id)
+    for (const row of rows) if (await this.verify(row)) return row
+    return null
   }
   async verify(row) {
     if (row.awaitingLocation) return false

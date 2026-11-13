@@ -281,6 +281,19 @@ export function musicService(
     const play = playbackEpoch
     const epoch = viewEpoch
     if (text(id).startsWith('online-recording-')) {
+      const copy = await store.library.onlineCopy(id)
+      if (epoch !== viewEpoch || play !== playbackEpoch) throw Error('播放请求已结束')
+      if (copy) {
+        store.release()
+        grant = {
+          id,
+          libraryId: copy.id,
+          file: copy.file,
+          duration: copy.duration,
+          url: 'fitbay-audio://track/' + randomUUID(),
+        }
+        return grant.url
+      }
       const address = lx.onlineAddress(id)
       store.release()
       grant = {
@@ -366,7 +379,7 @@ export function musicService(
         store.db
           .prepare('UPDATE local_tracks SET available=0,unplayable=1 WHERE id=?')
           .run(grant.libraryId ?? id)
-        if (grant.libraryId) store.status(id, '待重试')
+        if (grant.libraryId && !id.startsWith('online-recording-')) store.status(id, '待重试')
       }
       grant = null
     }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import path from 'node:path'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
 import { offlineSourceRepository } from './music-source-fixture.mjs'
@@ -12,11 +13,23 @@ const file = path.join(root, 'source.js')
 const tone = path.join(root, 'local.wav')
 const { recording } = await import('../components/music/offline-source.mjs')
 await writeFile(tone, recording('fitbay-tone-1'))
+const digest = async (file) =>
+  createHash('sha256')
+    .update(await readFile(file))
+    .digest('hex')
+const originalDigest = await digest(tone)
+const downloadDir = path.join(root, 'downloads')
+await mkdir(downloadDir)
+const conflict = path.join(downloadDir, '艺人 - 文件冲突.wav')
+await writeFile(conflict, '既有文件')
+const conflictDigest = await digest(conflict)
 await writeFile(
   file,
   `// @name 在线歌单夹具
-lx.on('request',({action,info})=>action==='search' ? [{name:'测试在线歌曲',singer:'艺人',id:'persistent',durationSeconds:20}] :
-  'https://1.1.1.1/online-tone.wav?quality='+info.type+'&session='+Date.now());
+lx.on('request',({action,info})=>action==='search' ? (info.keyword==='混选夹具' ?
+  ['另存在线','文件冲突','未选在线'].map(name=>({name,singer:'艺人',id:name,allowPermanentSave:true})) :
+  [{name:'测试在线歌曲',singer:'艺人',id:'persistent',durationSeconds:20}]) :
+  action==='lyric' ? null : 'https://1.1.1.1/online-tone.wav?quality='+info.type+'&session='+Date.now());
 lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k','128k']}}})`,
 )
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
@@ -29,6 +42,7 @@ store.library.upsert({
   duration: 20,
 })
 const local = store.library.list()[0].id
+store.set('music-manual-dir', downloadDir)
 store.db.close()
 
 let previousGrant, onlineId
@@ -138,7 +152,9 @@ for (const restart of [false, true]) {
       await button('曲库导航').click()
       await button('混合歌单').click()
       await expect(page.locator('.library-row')).toHaveCount(2)
-      await expect(page.locator('.library-row').first().getByText('在线录音')).toBeVisible()
+      await expect(
+        page.locator('.library-row').first().getByText('在线', { exact: true }),
+      ).toBeVisible()
       await button('播放测试在线歌曲').click()
       await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime >= 3)).toBe(true)
       assert.notEqual(await audio.evaluate((a) => a.src), previousGrant)
@@ -168,9 +184,70 @@ for (const restart of [false, true]) {
       await expect.poll(() => app.evaluate(() => globalThis.delayOnlineRecording)).toBe('aborted')
       await expect(page.locator('.music-transport strong')).toHaveText('本地歌曲')
       await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
+      await app.evaluate(() => {
+        globalThis.delayOnlineRecording = false
+      })
+      const extra = await page.evaluate(async (list) => {
+        const found = await window.music.lxSearch({ title: '混选夹具', artist: '' }, 'wy')
+        const ids = []
+        for (const row of found.items) ids.push(await window.music.rememberOnline(row.key))
+        await window.music.setMembership(list, ids, true)
+        return ids
+      }, list)
+      assert.equal(extra.length, 3)
+      await page.getByRole('tab', { name: '搜索音乐' }).click()
+      await page.getByRole('tab', { name: '本地曲库' }).click()
+      const rows = page.locator('.library-row')
+      await expect(rows).toHaveCount(5)
+      await button('多选').click()
+      await page.getByRole('checkbox', { name: '选择本地歌曲' }).check()
+      await expect(button('下载所选')).toBeDisabled()
+      for (const name of ['另存在线', '文件冲突'])
+        await page.getByRole('checkbox', { name: '选择' + name }).check()
+      await button('下载所选').click()
+      await expect(page.getByText('已下载 1 首 · 已跳过 1 首 · 失败 1 首')).toBeVisible()
+      const selectedRow = (name) => rows.filter({ has: page.getByText(name, { exact: true }) })
+      await expect(selectedRow('另存在线').getByText('本地', { exact: true })).toBeVisible()
+      await expect(selectedRow('文件冲突').getByText(/下载失败/)).toBeVisible()
+      await expect(selectedRow('未选在线').getByText('在线', { exact: true })).toBeVisible()
+      const audit = await page.evaluate(() => window.music.state())
+      assert.equal(audit.localTracks.length, 2)
+      assert.equal(
+        audit.onlineTracks.find((r) => r.id === extra[0]).localCopy,
+        audit.localTracks.find((r) => r.id !== local).id,
+      )
+      assert.equal(audit.onlineTracks.find((r) => r.id === extra[1]).localCopy, null)
+      assert.equal(audit.onlineTracks.find((r) => r.id === extra[2]).localCopy, null)
+      assert.deepEqual(audit.playlists.find((p) => p.id === list).tracks, [
+        onlineId,
+        local,
+        ...extra,
+      ])
+      assert.deepEqual(
+        (await readdir(downloadDir)).sort(),
+        ['艺人 - 另存在线.wav', '艺人 - 文件冲突.wav'].sort(),
+      )
+      assert.equal(await digest(tone), originalDigest)
+      assert.equal(await digest(conflict), conflictDigest)
+      for (const name of ['文件冲突', '本地歌曲'])
+        await page.getByRole('checkbox', { name: '选择' + name }).uncheck()
+      await expect(button('下载所选')).toBeDisabled()
+      for (const name of ['文件冲突', '本地歌曲'])
+        await page.getByRole('checkbox', { name: '选择' + name }).check()
+      await page.screenshot({ path: path.join(root, 'mixed-download.png') })
+      await button('退出多选').click()
+      await app.evaluate(() => {
+        globalThis.delayOnlineRecording = 'block network'
+      })
+      await button('播放另存在线').click()
+      await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
+      assert.equal(await app.evaluate(() => globalThis.delayOnlineRecording), 'block network')
     }
   } finally {
     await app.close()
   }
 }
-console.log('PASS 在线录音加入歌单、暂停释放、重启重新取址恢复进度、本地与在线切换', root)
+console.log(
+  'PASS 在线录音重启、切歌、混选下载、原行转本地及离线播放、未选与已有文件数量及 SHA-256',
+  root,
+)

@@ -15,6 +15,7 @@ const names = [
   'lxSearch',
   'rememberOnline',
   'lxDownload',
+  'downloadSelection',
   'lxPreview',
   'lxCancel',
   'setMusicQuality',

@@ -392,7 +392,8 @@ export class MusicStore {
       },
       localTracks: this.library.list().map((t) => ({ ...t, notInterested: localIds.has(t.id) })),
       onlineTracks: this.db
-        .prepare("SELECT *, 'online' AS origin, 1 AS available FROM online_tracks")
+        .prepare(`SELECT *, 'online' AS origin, 1 AS available,
+          (SELECT MIN(c.local) FROM online_local_copies c WHERE c.online=t.id) AS localCopy FROM online_tracks t`)
         .all(),
       albumRevision: this.library.albums.revision,
       playlists: this.library.playlists(),

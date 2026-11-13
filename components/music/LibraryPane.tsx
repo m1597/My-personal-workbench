@@ -76,7 +76,12 @@ export type ImportJob = {
 export type OnlineTrack = Pick<
   LocalTrack,
   'id' | 'title' | 'artist' | 'album' | 'duration' | 'available'
-> & { origin: 'online' }
+> & { origin: 'online'; localCopy: string | null }
+export type SelectionDownload = {
+  id: string
+  status: 'saved' | 'skipped' | 'failed'
+  error?: string
+}
 export type PlaylistTrack = LocalTrack | OnlineTrack
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
@@ -84,6 +89,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   albumRevision: number
   favorite: (id: string, value: boolean) => Promise<unknown>
   addFavorites: (ids: string[]) => Promise<number | null>
+  downloadSelected: (ids: string[]) => Promise<SelectionDownload[]>
   rows: PlaylistTrack[]
   tracks: LocalTrack[]
   playlists: Playlist[]
@@ -119,6 +125,7 @@ export function LibraryPane({
   albumRevision,
   favorite,
   addFavorites,
+  downloadSelected,
   tracks,
   playlists,
   sidebarOrder,
@@ -159,12 +166,29 @@ export function LibraryPane({
   const showAlbums = collection === 'all' && albumView
   const [selection, setSelection] = useState<Set<string> | null>(null)
   const [batchBusy, setBatchBusy] = useState(false)
+  const [downloads, setDownloads] = useState<SelectionDownload[]>([])
+  const failedDownloads = new Map(
+    downloads.filter((r) => r.status === 'failed').map((r) => [r.id, r.error]),
+  )
   const [favoriteResult, setFavoriteResult] = useState<{ selection: Set<string>; text: string }>()
   const selectedIds = useMemo(
     () => (selection ? rows.filter((t) => selection.has(t.id)).map((t) => t.id) : []),
     [selection, rows],
   )
   const userPlaylists = playlists.filter((list) => !list.system)
+  const downloadable = rows.some(
+    (r) => r.origin === 'online' && !r.localCopy && selection?.has(r.id),
+  )
+  async function download() {
+    if (batchBusy || !downloadable) return
+    setBatchBusy(true)
+    setDownloads([])
+    try {
+      setDownloads(await downloadSelected(selectedIds))
+    } finally {
+      setBatchBusy(false)
+    }
+  }
   const batchFavorite = async () => {
     if (batchBusy || !selection || !selectedIds.length) return
     setBatchBusy(true)
@@ -453,7 +477,10 @@ export function LibraryPane({
                   size="small"
                   disabled={batchBusy || (!selection && !rows.length)}
                   aria-pressed={!!selection}
-                  onClick={() => setSelection(selection ? null : new Set())}
+                  onClick={() => {
+                    setDownloads([])
+                    setSelection(selection ? null : new Set())
+                  }}
                 >
                   {selection ? '退出多选' : '多选'}
                 </Button>
@@ -486,6 +513,22 @@ export function LibraryPane({
                     }
                   />
                   <small role="status">已选 {selectedIds.length} 首</small>
+                  {rows.some((r) => r.origin === 'online') && (
+                    <Button
+                      size="small"
+                      disabled={batchBusy || !downloadable}
+                      onClick={() => void download()}
+                    >
+                      下载所选
+                    </Button>
+                  )}
+                  {!!downloads.length && (
+                    <small role="status">
+                      已下载 {downloads.filter((r) => r.status === 'saved').length} 首 · 已跳过{' '}
+                      {downloads.filter((r) => r.status === 'skipped').length} 首 · 失败{' '}
+                      {downloads.filter((r) => r.status === 'failed').length} 首
+                    </small>
+                  )}
                   <Menu>
                     <MenuTrigger disableButtonEnhancement>
                       <Button
@@ -636,9 +679,22 @@ export function LibraryPane({
                             />
                           )}
                           <div className="library-name">
-                            <strong title={t.title}>{t.title}</strong>
+                            <div className="library-track-title">
+                              <strong title={t.title}>{t.title}</strong>
+                              <small className="library-track-location">
+                                {t.origin === 'online' && !t.localCopy
+                                  ? '在线'
+                                  : t.available
+                                    ? '本地'
+                                    : '缺失'}
+                              </small>
+                            </div>
                             <small title={t.artist}>{t.artist}</small>
-                            {t.origin === 'online' && <small>在线录音</small>}
+                            {failedDownloads.has(t.id) && (
+                              <small title={failedDownloads.get(t.id)}>
+                                下载失败 · {failedDownloads.get(t.id)}
+                              </small>
+                            )}
                             {!t.available && <small>文件不可用</small>}
                           </div>
                           <span className="library-album" title={t.album}>
