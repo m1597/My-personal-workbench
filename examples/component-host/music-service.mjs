@@ -496,7 +496,10 @@ export function musicService(
           return null
         }
         signal.throwIfAborted()
-        if (!store.get('lx-source')) throw Error('请先在设置中导入音乐源')
+        await lx.synchronizeSources(signal)
+        if (musicView && !musicView.isDestroyed()) musicView.send('music:sources-changed')
+        if (!store.get('lx-source'))
+          throw Error('目录和已导入的音乐源均不可用，请在设置中检查音乐源')
         const profile = await taste.refresh(signal)
         signal.throwIfAborted()
         const seen = []
