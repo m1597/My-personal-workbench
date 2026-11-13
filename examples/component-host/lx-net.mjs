@@ -19,20 +19,10 @@ async function lookupPublicHost(hostname, signal) {
   }
 }
 
-export async function openPublic(input, options = {}, redirects = 0) {
-  const url = new URL(input)
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.port ||
-    redirects > 4
-  )
-    throw Error('音源地址无效')
-  const hostname = url.hostname.replace(/^\[|\]$/g, '')
+async function resolvePublicPeer(hostname, signal) {
   let addresses = isIP(hostname)
     ? [{ address: hostname, family: isIP(hostname) }]
-    : await lookupPublicHost(hostname, options.signal)
+    : await lookupPublicHost(hostname, signal)
   // Fake-IP proxies can return benchmarking addresses. Resolve the hostname independently.
   if (
     !isIP(hostname) &&
@@ -43,7 +33,7 @@ export async function openPublic(input, options = {}, redirects = 0) {
   ) {
     const dns = await sourceRequest(
       'https://1.1.1.1/dns-query?type=A&name=' + encodeURIComponent(hostname),
-      { headers: { accept: 'application/dns-json' }, signal: options.signal },
+      { headers: { accept: 'application/dns-json' }, signal: signal },
     )
     addresses = (dns.body?.Answer ?? [])
       .filter((a) => a.type === 1 && isIP(a.data) === 4)
@@ -54,7 +44,31 @@ export async function openPublic(input, options = {}, redirects = 0) {
     addresses.some(({ address }) => ipaddr.process(address).range() !== 'unicast')
   )
     throw Error('音源仅支持公网地址')
-  const peer = addresses.find((a) => a.family === 4) ?? addresses[0]
+  return addresses.find((a) => a.family === 4) ?? addresses[0]
+}
+
+export function openPublic(input, options = {}) {
+  return openRedirect(input, options, 0, new Map())
+}
+
+async function openRedirect(input, options, redirects, peers) {
+  options.signal?.throwIfAborted()
+  const url = new URL(input)
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.port ||
+    redirects > 4
+  )
+    throw Error('音源地址无效')
+  const hostname = url.hostname.replace(/^\[|\]$/g, '')
+  // Pin the verified address for this redirect chain only.
+  let peer = peers.get(hostname)
+  if (!peer) {
+    peer = await resolvePublicPeer(hostname, options.signal)
+    peers.set(hostname, peer)
+  }
   const headers = {}
   for (const [name, value] of Object.entries(options.headers ?? {})) {
     if (
@@ -86,10 +100,11 @@ export async function openPublic(input, options = {}, redirects = 0) {
   })
   if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
     response.destroy()
-    return openPublic(
+    return openRedirect(
       new URL(response.headers.location, url),
       { ...options, method: 'GET', body: undefined },
       redirects + 1,
+      peers,
     )
   }
   return response
