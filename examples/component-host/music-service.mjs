@@ -23,7 +23,7 @@ import { openAudio, pathKey, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
-import { ipcMain, dialog, safeStorage, shell } from 'electron'
+import { ipcMain, dialog, nativeImage, safeStorage, shell } from 'electron'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
 import { localStream } from './local-stream.mjs'
@@ -148,6 +148,9 @@ export function musicService(
     if (!['folder', 'files'].includes(mode)) throw Error('导入方式无效')
     return selectLocal(mode)
   })
+  bind('albums', () => store.library.albums.list())
+  bind('albumCover', (id) => store.library.albums.cover(id, nativeImage))
+  bind('trackCover', (id) => store.library.albums.trackCover(id, nativeImage))
   bind('moveSidebarItem', (group, id, target, after) =>
     store.moveSidebarItem(group, id, target, after),
   )

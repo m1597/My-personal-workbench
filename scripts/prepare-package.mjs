@@ -92,6 +92,7 @@ export async function prepareProduct(product) {
       'offline-source.mjs',
       'store.mjs',
       'local-files.mjs',
+      'albums.mjs',
       'library-worker.mjs',
       'local-library.mjs',
     ])

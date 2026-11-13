@@ -2,6 +2,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
 import { audioFileStat, fileIdentity, confirmedMissing, pathKey } from './local-files.mjs'
+import { AlbumLibrary } from './albums.mjs'
 
 const folderKey = (dir) => createHash('sha256').update(pathKey(dir)).digest('hex')
 function playlistName(name) {
@@ -53,6 +54,10 @@ export class LocalLibrary {
           .run('音乐源未允许永久保存此录音，或仅提供试听')
       }
       const trackColumns = this.db.prepare('PRAGMA table_info(local_tracks)').all()
+      if (!trackColumns.some((column) => column.name === 'albumArtist'))
+        this.db.exec(`ALTER TABLE local_tracks ADD COLUMN albumArtist TEXT;
+          ALTER TABLE local_tracks ADD COLUMN discNumber INTEGER;
+          ALTER TABLE local_tracks ADD COLUMN trackNumber INTEGER;`)
       if (
         !this.db
           .prepare('PRAGMA table_info(recommended_items)')
@@ -149,6 +154,7 @@ export class LocalLibrary {
           this.saved(row.track, row.file)
         store.set('local-index-v1', 1)
       }
+      this.albums = new AlbumLibrary(this.db)
       this.db.exec('COMMIT')
     } catch (e) {
       this.db.exec('ROLLBACK')
@@ -200,17 +206,20 @@ export class LocalLibrary {
       row.album,
       row.duration,
       typeof row.language === 'string' ? row.language.trim().slice(0, 80) : null,
+      row.albumArtist ?? null,
+      row.discNumber ?? null,
+      row.trackNumber ?? null,
     ]
     if (replacing || existing)
       this.db
         .prepare(
-          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,language=?,size=?,fileIdentity=?,available=1,unplayable=0,listed=1,awaitingLocation=0 WHERE id=?',
+          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,language=?,albumArtist=?,discNumber=?,trackNumber=?,size=?,fileIdentity=?,available=1,unplayable=0,listed=1,awaitingLocation=0 WHERE id=?',
         )
         .run(...values, row.size ?? null, row.identity ?? null, replacing ?? existing.id)
     else
       this.db
         .prepare(
-          'INSERT INTO local_tracks(path_key,file,title,artist,album,duration,language,id,observedAt,size,fileIdentity) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+          'INSERT INTO local_tracks(path_key,file,title,artist,album,duration,language,albumArtist,discNumber,trackNumber,id,observedAt,size,fileIdentity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
         )
         .run(...values, 'local-' + randomUUID(), Date.now(), row.size ?? null, row.identity ?? null)
     this.changed?.()

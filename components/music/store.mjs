@@ -389,6 +389,7 @@ export class MusicStore {
         playlists: this.sidebarOrder('playlists'),
       },
       localTracks: this.library.list().map((t) => ({ ...t, notInterested: localIds.has(t.id) })),
+      albumRevision: this.library.albums.revision,
       playlists: this.library.playlists(),
       importJob: this.library.job,
       queue: JSON.parse(this.get('play-queue') || '[]'),

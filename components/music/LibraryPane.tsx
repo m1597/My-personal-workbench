@@ -1,5 +1,6 @@
 import { useSidebarSorting, orderedSidebarItems, type SidebarSorting } from './SidebarSorting'
 import { TrackMenu } from './TrackMenu'
+import { AlbumBrowser } from './AlbumBrowser'
 import { InfrequentTracks } from './InfrequentTracks'
 import { RecentHistory } from './LibraryTools'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -69,6 +70,7 @@ export type ImportJob = {
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 type Props = SidebarSorting & {
+  albumRevision: number
   favorite: (id: string, value: boolean) => Promise<unknown>
   addFavorites: (ids: string[]) => Promise<number | null>
   rows: LocalTrack[]
@@ -92,6 +94,7 @@ type Props = SidebarSorting & {
   onQueue: (id: string, next: boolean) => void
   dismiss: (id: string) => void
   playRow: (id: string) => void
+  playAlbum: (id: string, queue: string[]) => void
   error: string
   remove: (id: string | string[], trash: boolean) => Promise<boolean>
   renameList: (id: string, name: string) => Promise<boolean>
@@ -100,6 +103,7 @@ type Props = SidebarSorting & {
   removeFolder: (id: string) => Promise<boolean>
 }
 export function LibraryPane({
+  albumRevision,
   favorite,
   addFavorites,
   tracks,
@@ -125,6 +129,7 @@ export function LibraryPane({
   remove,
   error,
   playRow,
+  playAlbum,
   onQueue,
   dismiss,
   renameList,
@@ -133,6 +138,8 @@ export function LibraryPane({
   openFolder,
 }: Props) {
   const [limit, setLimit] = useState(100)
+  const [albumView, setAlbumView] = useState(false)
+  const showAlbums = collection === 'all' && albumView
   const [selection, setSelection] = useState<Set<string> | null>(null)
   const [batchBusy, setBatchBusy] = useState(false)
   const [favoriteResult, setFavoriteResult] = useState<{ selection: Set<string>; text: string }>()
@@ -168,7 +175,7 @@ export function LibraryPane({
   const sentinel = useRef<HTMLLIElement>(null)
   useEffect(() => {
     const target = sentinel.current
-    if (!target || limit >= rows.length) return
+    if (showAlbums || !target || limit >= rows.length) return
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) setLimit((n) => n + 100)
@@ -177,7 +184,7 @@ export function LibraryPane({
     )
     observer.observe(target)
     return () => observer.disconnect()
-  }, [limit, rows.length])
+  }, [limit, rows.length, showAlbums])
   const [sidebar, setSidebar] = useState(false)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -219,6 +226,7 @@ export function LibraryPane({
   const heading =
     playlists.find((p) => p.id === collection)?.name ?? currentFolder?.name ?? '全部歌曲'
   const choose = (id: string) => {
+    setAlbumView(false)
     setSelection(null)
     select(id)
     setSidebar(false)
@@ -386,276 +394,311 @@ export function LibraryPane({
         />
       ) : (
         <section className="local-library" aria-label="本地歌曲库">
-          <div className="library-title">
-            <div>
-              <h2>{collection === 'favorites' ? '我的收藏' : heading}</h2>
-              <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
-            </div>
-            <Button
-              size="small"
-              disabled={batchBusy || (!selection && !rows.length)}
-              aria-pressed={!!selection}
-              onClick={() => setSelection(selection ? null : new Set())}
-            >
-              {selection ? '退出多选' : '多选'}
-            </Button>
-          </div>
-          <Input
-            aria-label="搜索本地歌曲"
-            type="search"
-            placeholder="搜索歌名、艺人或专辑"
-            contentBefore={<Search size={16} />}
-            value={search}
-            onChange={(_, v) => {
-              if (selection) setSelection(new Set())
-              setSearch(v.value)
-            }}
-          />
-          {selection && (
-            <section className="library-import" aria-label="批量管理歌曲">
-              <Checkbox
-                label="全选当前列表"
-                disabled={batchBusy || !rows.length}
-                checked={
-                  selectedIds.length === 0 ? false : selectedIds.length === rows.length || 'mixed'
-                }
-                onChange={() =>
-                  setSelection(
-                    new Set(selectedIds.length === rows.length ? [] : rows.map((t) => t.id)),
-                  )
-                }
+          {collection === 'all' && (
+            <fieldset className="library-view-switch" aria-label="曲库视图">
+              {(['歌曲', '专辑'] as const).map((name) => (
+                <Button
+                  key={name}
+                  size="small"
+                  appearance="subtle"
+                  aria-pressed={name === (albumView ? '专辑' : '歌曲')}
+                  onClick={() => setAlbumView(name === '专辑')}
+                >
+                  {name}
+                </Button>
+              ))}
+            </fieldset>
+          )}
+          {showAlbums ? (
+            <AlbumBrowser
+              revision={albumRevision}
+              tracks={tracks}
+              active={active}
+              play={playAlbum}
+            />
+          ) : (
+            <>
+              <div className="library-title">
+                <div>
+                  <h2>{collection === 'favorites' ? '我的收藏' : heading}</h2>
+                  <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
+                </div>
+                <Button
+                  size="small"
+                  disabled={batchBusy || (!selection && !rows.length)}
+                  aria-pressed={!!selection}
+                  onClick={() => setSelection(selection ? null : new Set())}
+                >
+                  {selection ? '退出多选' : '多选'}
+                </Button>
+              </div>
+              <Input
+                aria-label="搜索本地歌曲"
+                type="search"
+                placeholder="搜索歌名、艺人或专辑"
+                contentBefore={<Search size={16} />}
+                value={search}
+                onChange={(_, v) => {
+                  if (selection) setSelection(new Set())
+                  setSearch(v.value)
+                }}
               />
-              <small role="status">已选 {selectedIds.length} 首</small>
-              <Menu>
-                <MenuTrigger disableButtonEnhancement>
+              {selection && (
+                <section className="library-import" aria-label="批量管理歌曲">
+                  <Checkbox
+                    label="全选当前列表"
+                    disabled={batchBusy || !rows.length}
+                    checked={
+                      selectedIds.length === 0
+                        ? false
+                        : selectedIds.length === rows.length || 'mixed'
+                    }
+                    onChange={() =>
+                      setSelection(
+                        new Set(selectedIds.length === rows.length ? [] : rows.map((t) => t.id)),
+                      )
+                    }
+                  />
+                  <small role="status">已选 {selectedIds.length} 首</small>
+                  <Menu>
+                    <MenuTrigger disableButtonEnhancement>
+                      <Button
+                        size="small"
+                        disabled={batchBusy || !selectedIds.length}
+                        icon={<ListPlus size={15} />}
+                      >
+                        加入歌单
+                      </Button>
+                    </MenuTrigger>
+                    <MenuPopover className="component-popup">
+                      <MenuList>
+                        {userPlaylists.length ? (
+                          userPlaylists.map((list) => (
+                            <MenuItem
+                              key={list.id}
+                              onClick={() => void batchMembership(list.id, true)}
+                            >
+                              {list.name}
+                            </MenuItem>
+                          ))
+                        ) : (
+                          <MenuItem disabled>请先在曲库导航中新建歌单</MenuItem>
+                        )}
+                      </MenuList>
+                    </MenuPopover>
+                  </Menu>
                   <Button
                     size="small"
                     disabled={batchBusy || !selectedIds.length}
-                    icon={<ListPlus size={15} />}
+                    icon={<Heart size={15} />}
+                    onClick={() => void batchFavorite()}
                   >
-                    加入歌单
+                    加入收藏
                   </Button>
-                </MenuTrigger>
-                <MenuPopover className="component-popup">
-                  <MenuList>
-                    {userPlaylists.length ? (
-                      userPlaylists.map((list) => (
-                        <MenuItem key={list.id} onClick={() => void batchMembership(list.id, true)}>
-                          {list.name}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>请先在曲库导航中新建歌单</MenuItem>
-                    )}
-                  </MenuList>
-                </MenuPopover>
-              </Menu>
-              <Button
-                size="small"
-                disabled={batchBusy || !selectedIds.length}
-                icon={<Heart size={15} />}
-                onClick={() => void batchFavorite()}
-              >
-                加入收藏
-              </Button>
-              {currentFolder && (
-                <Button
-                  size="small"
-                  disabled={batchBusy || !selectedIds.length}
-                  icon={<Trash2 size={15} />}
-                  onClick={() =>
-                    setAction({
-                      kind: 'batch',
-                      id: collection,
-                      ids: selectedIds,
-                      name: '所选 ' + selectedIds.length + ' 首歌曲',
-                    })
-                  }
-                >
-                  移除所选歌曲
-                </Button>
-              )}
-              {playlists.some((list) => list.id === collection) && (
-                <Button
-                  size="small"
-                  disabled={batchBusy || !selectedIds.length}
-                  onClick={() => void batchMembership(collection, false)}
-                >
-                  从当前歌单移除
-                </Button>
-              )}
-              {favoriteResult?.selection === selection && (
-                <small role="status">{favoriteResult.text}</small>
-              )}
-            </section>
-          )}
-          {job?.started && (
-            <div className="library-job" role="status">
-              <span>
-                {job.running ? '正在导入' : job.cancelled ? '导入已取消' : '导入完成'} · 新增{' '}
-                {job.added} · 重复 {job.duplicates} · 失败 {job.failed}
-              </span>
-              {job.running && (
-                <Button size="small" appearance="subtle" onClick={cancel}>
-                  取消导入
-                </Button>
-              )}
-            </div>
-          )}
-          {rows.length ? (
-            <>
-              <div className="library-columns" aria-hidden="true">
-                <span>歌曲 / 艺人</span>
-                <span>专辑</span>
-                <span>时长</span>
-              </div>
-              <ul>
-                {rows.slice(0, limit).map((t) => (
-                  <TrackMenu
-                    key={t.id}
-                    queueable={!!t.available}
-                    onQueue={(next) => onQueue(t.id, next)}
-                    onDismiss={
-                      collection === 'system-recommendations' ? () => dismiss(t.id) : undefined
-                    }
-                    dismissed={t.notInterested}
-                  >
-                    <li
-                      data-active={active === t.id}
-                      className="library-row"
-                      onDoubleClick={(e) => {
-                        if (
-                          !selection &&
-                          t.available &&
-                          e.target instanceof Element &&
-                          e.currentTarget.contains(e.target) &&
-                          !e.target.closest('button, input, .track-actions, [role="button"]')
-                        )
-                          playRow(t.id)
-                      }}
+                  {currentFolder && (
+                    <Button
+                      size="small"
+                      disabled={batchBusy || !selectedIds.length}
+                      icon={<Trash2 size={15} />}
+                      onClick={() =>
+                        setAction({
+                          kind: 'batch',
+                          id: collection,
+                          ids: selectedIds,
+                          name: '所选 ' + selectedIds.length + ' 首歌曲',
+                        })
+                      }
                     >
-                      {selection ? (
-                        <Checkbox
-                          aria-label={'选择' + t.title}
-                          checked={selection.has(t.id)}
-                          disabled={batchBusy}
-                          onChange={(_, data) =>
-                            setSelection((current) => {
-                              if (!current) return current
-                              const next = new Set(current)
-                              if (data.checked) next.add(t.id)
-                              else next.delete(t.id)
-                              return next
-                            })
-                          }
-                        />
-                      ) : (
-                        <Button
-                          size="small"
-                          appearance="subtle"
-                          disabled={!t.available}
-                          aria-label={(active === t.id && playing ? '暂停' : '播放') + t.title}
-                          icon={
-                            active === t.id && playing ? <Pause size={15} /> : <Play size={15} />
-                          }
-                          onClick={() => play(t.id)}
-                        />
-                      )}
-                      <div className="library-name">
-                        <strong title={t.title}>{t.title}</strong>
-                        <small title={t.artist}>{t.artist}</small>
-                        {t.recommendationSource && (
-                          <small title={t.recommendationSource}>
-                            推荐来源 · {t.recommendationSource}
-                          </small>
-                        )}
-                        {!t.available && <small>文件不可用</small>}
-                      </div>
-                      <span className="library-album" title={t.album}>
-                        {t.album || '—'}
-                      </span>
-                      <small className="library-time">{formatTime(t.duration)}</small>
-                      {!selection && (
-                        <div className="track-actions">
-                          <Popover>
-                            <PopoverTrigger disableButtonEnhancement>
-                              <Button
-                                size="small"
-                                appearance="subtle"
-                                aria-label={'管理歌单' + t.title}
-                                title="加入或移出歌单"
-                                icon={<ListPlus size={16} />}
-                              />
-                            </PopoverTrigger>
-                            <PopoverSurface className="component-popup playlist-options">
-                              <Checkbox
-                                label="我的收藏"
-                                checked={!!t.favorite}
-                                onChange={(_, d) => void favorite(t.id, d.checked === true)}
-                              />
-                              <strong>我的歌单</strong>
-                              {playlists.some((p) => !p.system) ? (
-                                playlists
-                                  .filter((p) => !p.system)
-                                  .map((list) => (
-                                    <Checkbox
-                                      key={list.id}
-                                      label={list.name}
-                                      checked={list.tracks.includes(t.id)}
-                                      onChange={(_, v) =>
-                                        void membership(list.id, t.id, v.checked === true)
-                                      }
-                                    />
-                                  ))
-                              ) : (
-                                <small>在曲库导航中点「＋」新建歌单。</small>
-                              )}
-                            </PopoverSurface>
-                          </Popover>
-                          {!t.available && (
+                      移除所选歌曲
+                    </Button>
+                  )}
+                  {playlists.some((list) => list.id === collection) && (
+                    <Button
+                      size="small"
+                      disabled={batchBusy || !selectedIds.length}
+                      onClick={() => void batchMembership(collection, false)}
+                    >
+                      从当前歌单移除
+                    </Button>
+                  )}
+                  {favoriteResult?.selection === selection && (
+                    <small role="status">{favoriteResult.text}</small>
+                  )}
+                </section>
+              )}
+              {job?.started && (
+                <div className="library-job" role="status">
+                  <span>
+                    {job.running ? '正在导入' : job.cancelled ? '导入已取消' : '导入完成'} · 新增{' '}
+                    {job.added} · 重复 {job.duplicates} · 失败 {job.failed}
+                  </span>
+                  {job.running && (
+                    <Button size="small" appearance="subtle" onClick={cancel}>
+                      取消导入
+                    </Button>
+                  )}
+                </div>
+              )}
+              {rows.length ? (
+                <>
+                  <div className="library-columns" aria-hidden="true">
+                    <span>歌曲 / 艺人</span>
+                    <span>专辑</span>
+                    <span>时长</span>
+                  </div>
+                  <ul>
+                    {rows.slice(0, limit).map((t) => (
+                      <TrackMenu
+                        key={t.id}
+                        queueable={!!t.available}
+                        onQueue={(next) => onQueue(t.id, next)}
+                        onDismiss={
+                          collection === 'system-recommendations' ? () => dismiss(t.id) : undefined
+                        }
+                        dismissed={t.notInterested}
+                      >
+                        <li
+                          data-active={active === t.id}
+                          className="library-row"
+                          onDoubleClick={(e) => {
+                            if (
+                              !selection &&
+                              t.available &&
+                              e.target instanceof Element &&
+                              e.currentTarget.contains(e.target) &&
+                              !e.target.closest('button, input, .track-actions, [role="button"]')
+                            )
+                              playRow(t.id)
+                          }}
+                        >
+                          {selection ? (
+                            <Checkbox
+                              aria-label={'选择' + t.title}
+                              checked={selection.has(t.id)}
+                              disabled={batchBusy}
+                              onChange={(_, data) =>
+                                setSelection((current) => {
+                                  if (!current) return current
+                                  const next = new Set(current)
+                                  if (data.checked) next.add(t.id)
+                                  else next.delete(t.id)
+                                  return next
+                                })
+                              }
+                            />
+                          ) : (
                             <Button
                               size="small"
                               appearance="subtle"
-                              title="重新定位"
-                              aria-label={'重新定位' + t.title}
-                              icon={<FolderSearch size={16} />}
-                              onClick={() => relocate(t.id)}
+                              disabled={!t.available}
+                              aria-label={(active === t.id && playing ? '暂停' : '播放') + t.title}
+                              icon={
+                                active === t.id && playing ? (
+                                  <Pause size={15} />
+                                ) : (
+                                  <Play size={15} />
+                                )
+                              }
+                              onClick={() => play(t.id)}
                             />
                           )}
-                          <Button
-                            size="small"
-                            appearance="subtle"
-                            title="从曲库移除"
-                            aria-label={'从曲库移除' + t.title}
-                            icon={<Trash2 size={15} />}
-                            onClick={() => setAction({ kind: 'song', id: t.id, name: t.title })}
-                          />
-                        </div>
-                      )}
-                    </li>
-                  </TrackMenu>
-                ))}
-                {rows.length > limit && <li ref={sentinel} aria-hidden="true" />}
-              </ul>
+                          <div className="library-name">
+                            <strong title={t.title}>{t.title}</strong>
+                            <small title={t.artist}>{t.artist}</small>
+                            {t.recommendationSource && (
+                              <small title={t.recommendationSource}>
+                                推荐来源 · {t.recommendationSource}
+                              </small>
+                            )}
+                            {!t.available && <small>文件不可用</small>}
+                          </div>
+                          <span className="library-album" title={t.album}>
+                            {t.album || '—'}
+                          </span>
+                          <small className="library-time">{formatTime(t.duration)}</small>
+                          {!selection && (
+                            <div className="track-actions">
+                              <Popover>
+                                <PopoverTrigger disableButtonEnhancement>
+                                  <Button
+                                    size="small"
+                                    appearance="subtle"
+                                    aria-label={'管理歌单' + t.title}
+                                    title="加入或移出歌单"
+                                    icon={<ListPlus size={16} />}
+                                  />
+                                </PopoverTrigger>
+                                <PopoverSurface className="component-popup playlist-options">
+                                  <Checkbox
+                                    label="我的收藏"
+                                    checked={!!t.favorite}
+                                    onChange={(_, d) => void favorite(t.id, d.checked === true)}
+                                  />
+                                  <strong>我的歌单</strong>
+                                  {playlists.some((p) => !p.system) ? (
+                                    playlists
+                                      .filter((p) => !p.system)
+                                      .map((list) => (
+                                        <Checkbox
+                                          key={list.id}
+                                          label={list.name}
+                                          checked={list.tracks.includes(t.id)}
+                                          onChange={(_, v) =>
+                                            void membership(list.id, t.id, v.checked === true)
+                                          }
+                                        />
+                                      ))
+                                  ) : (
+                                    <small>在曲库导航中点「＋」新建歌单。</small>
+                                  )}
+                                </PopoverSurface>
+                              </Popover>
+                              {!t.available && (
+                                <Button
+                                  size="small"
+                                  appearance="subtle"
+                                  title="重新定位"
+                                  aria-label={'重新定位' + t.title}
+                                  icon={<FolderSearch size={16} />}
+                                  onClick={() => relocate(t.id)}
+                                />
+                              )}
+                              <Button
+                                size="small"
+                                appearance="subtle"
+                                title="从曲库移除"
+                                aria-label={'从曲库移除' + t.title}
+                                icon={<Trash2 size={15} />}
+                                onClick={() => setAction({ kind: 'song', id: t.id, name: t.title })}
+                              />
+                            </div>
+                          )}
+                        </li>
+                      </TrackMenu>
+                    ))}
+                    {rows.length > limit && <li ref={sentinel} aria-hidden="true" />}
+                  </ul>
+                </>
+              ) : (
+                <div className="music-empty library-empty">
+                  <Music2 size={28} />
+                  <h2>
+                    {total
+                      ? '没有匹配的歌曲'
+                      : collection === 'all'
+                        ? '曲库还是空的'
+                        : '这里还没有歌曲'}
+                  </h2>
+                  <p>
+                    {total
+                      ? '试试其他歌名、艺人或专辑。'
+                      : collection === 'all'
+                        ? '选择音乐文件或文件夹，歌曲会保留在原位置。'
+                        : '在歌曲右侧打开「管理歌单」添加歌曲。'}
+                  </p>
+                </div>
+              )}
             </>
-          ) : (
-            <div className="music-empty library-empty">
-              <Music2 size={28} />
-              <h2>
-                {total
-                  ? '没有匹配的歌曲'
-                  : collection === 'all'
-                    ? '曲库还是空的'
-                    : '这里还没有歌曲'}
-              </h2>
-              <p>
-                {total
-                  ? '试试其他歌名、艺人或专辑。'
-                  : collection === 'all'
-                    ? '选择音乐文件或文件夹，歌曲会保留在原位置。'
-                    : '在歌曲右侧打开「管理歌单」添加歌曲。'}
-              </p>
-            </div>
           )}
         </section>
       )}

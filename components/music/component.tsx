@@ -1,4 +1,5 @@
 import { TrackMenu } from './TrackMenu'
+import { Cover, type Album } from './AlbumBrowser'
 import { guideSteps, MusicGuide } from './MusicGuide'
 import { observeListening } from './listening'
 import type { SourceInventory } from './MusicSourcesSettings'
@@ -110,6 +111,7 @@ type State = {
   sidebarOrder: Record<'folders' | 'playlists', string[]>
   playlists: Playlist[]
   localTracks: LocalTrack[]
+  albumRevision: number
   importJob: ImportJob
   queue: string[]
   hasLibrary: boolean
@@ -119,6 +121,9 @@ type Mode = { mode: string; presentation: Presentation }
 declare global {
   interface Window {
     music: LibraryToolsAPI & {
+      albums(): Promise<Album[]>
+      albumCover(id: string): Promise<string | null>
+      trackCover(id: string): Promise<string | null>
       musicGuide(): Promise<{ seen: boolean; script: string }>
       markMusicGuide(): Promise<void>
       setMusicQuality(quality: string): Promise<void>
@@ -801,6 +806,7 @@ function Music() {
       <main key={tab} className="music-scroll">
         {tab === 'library' ? (
           <LibraryPane
+            albumRevision={state?.albumRevision ?? 0}
             favorite={(id, on) => act(() => host.setFavorite(id, on))}
             addFavorites={async (ids) => {
               let added = 0
@@ -844,6 +850,12 @@ function Music() {
             onQueue={onQueue}
             dismiss={(id) => void act(() => host.dismissRecommendation(id))}
             playRow={(id) => void act(() => play(id, visibleQueue))}
+            playAlbum={(id, ids) =>
+              void act(() => {
+                if (shuffled) setShuffled(shuffleQueue(ids, id))
+                return play(id, ids)
+              })
+            }
             renameList={(id, name) => act(() => host.renamePlaylist(id, name))}
             deleteList={(id) => act(() => host.deletePlaylist(id))}
             openFolder={(id) => void act(() => host.openFolder(id))}
@@ -1174,7 +1186,11 @@ function Music() {
       <footer className="music-player">
         <div className="music-transport">
           <div className="music-disc">
-            <Disc3 size={23} />
+            <Cover
+              key={state?.albumRevision}
+              id={(active && ('duration' in active ? active.id : active.localId)) || undefined}
+              track
+            />
           </div>
           <div className="music-heading">
             <strong>{active?.title ?? '尚未播放'}</strong>

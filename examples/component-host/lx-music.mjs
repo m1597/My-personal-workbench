@@ -24,6 +24,7 @@ import { runSource, SourceRequestError } from './lx-runtime.mjs'
 import { sourceRequest, openPublic } from './lx-net.mjs'
 import { verifyAudio, AudioDecodeError } from './lx-audio-check.mjs'
 import { pathKey, openAudio } from './music/local-files.mjs'
+import { albumTags } from './music/albums.mjs'
 import { getMusicPreferences } from './music-preferences.mjs'
 import { publish } from './music/store.mjs'
 
@@ -487,6 +488,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       title: (dailyId && info.name) || text(common.title) || info.name,
       artist: (dailyId && info.singer) || text(common.artist) || info.singer || '未知艺人',
       album: (dailyId && text(info.albumName)) || text(common.album) || text(info.albumName),
+      ...albumTags(common),
       duration: format.duration,
       language: text(common.language),
     }

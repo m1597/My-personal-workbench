@@ -13,6 +13,7 @@ for (const f of [
   'offline-source.mjs',
   'store.mjs',
   'local-files.mjs',
+  'albums.mjs',
   'library-worker.mjs',
   'local-library.mjs',
 ])

@@ -3,6 +3,7 @@ import { opendir, lstat, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { parseStream } from 'music-metadata'
 import { fileIdentity, audioTypes, pathKey, openAudio } from './local-files.mjs'
+import { albumTags } from './albums.mjs'
 const text = (s) => (typeof s === 'string' ? s.trim().slice(0, 2048) : '')
 let rows = [],
   failed = 0
@@ -30,6 +31,7 @@ async function file(entry) {
       title: text(common.title) || path.basename(entry, path.extname(entry)),
       artist: text(common.artist) || '未知艺人',
       album: text(common.album),
+      ...albumTags(common),
       language: text(common.language),
       duration: format.duration,
       size,
