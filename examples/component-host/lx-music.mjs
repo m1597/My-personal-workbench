@@ -336,7 +336,11 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
   store.db.exec('BEGIN IMMEDIATE')
   let published = false
   try {
-    store.library.upsert(row)
+    store.library.upsert({
+      ...row,
+      size: Number(before.size),
+      identity: [before.dev, before.ino, before.birthtimeNs].join(':'),
+    })
     store.db
       .prepare('UPDATE local_tracks SET importedOrigin=? WHERE path_key=?')
       .run(dailyId ? 'daily' : 'download', pathKey(file))
@@ -345,7 +349,19 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
         .prepare('SELECT id FROM local_tracks WHERE path_key=?')
         .get(pathKey(file)).id
       rememberCopy(store, version, local, !!dailyId)
-      if (dailyId) markSaved(store, dailyId, local)
+      if (dailyId) {
+        markSaved(store, dailyId, local)
+        store.db
+          .prepare(`INSERT INTO daily_downloads(local,batch,file,digest,identity)
+          SELECT ?,batch,?,?,? FROM items WHERE id=?`)
+          .run(
+            local,
+            file,
+            version.digest,
+            [before.dev, before.ino, before.birthtimeNs].join(':'),
+            dailyId,
+          )
+      }
     }
     publish(temp, file)
     published = true

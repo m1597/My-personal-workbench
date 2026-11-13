@@ -140,6 +140,12 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
       throw Error('收藏操作无效')
     const { db, library } = getStore()
     const data = JSON.stringify(ids)
+    if (
+      db
+        .prepare('SELECT 1 FROM pending_trash WHERE local IN (SELECT value FROM json_each(?))')
+        .get(data)
+    )
+      throw Error('该歌曲正在移至回收站')
     db.exec('BEGIN IMMEDIATE')
     let changed
     try {

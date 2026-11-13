@@ -76,6 +76,11 @@ bridge.onLyricsSaved = (listener) => {
   ipcRenderer.on('music:lyrics-saved', notify)
   return () => ipcRenderer.removeListener('music:lyrics-saved', notify)
 }
+bridge.onLibraryChanged = (listener) => {
+  const notify = (_, removed) => listener(removed)
+  ipcRenderer.on('music:library-changed', notify)
+  return () => ipcRenderer.removeListener('music:library-changed', notify)
+}
 bridge.onLyricLocked = (listener) => {
   const notify = (_, locked) => listener(locked)
   ipcRenderer.on('music:lyric-locked', notify)

@@ -62,6 +62,27 @@ export class MusicStore {
     for (const { id } of this.db.prepare('SELECT id FROM items').all())
       this.removeCache(id, '.part')
     this.library = new LocalLibrary(this)
+    this.db.exec(`CREATE TABLE IF NOT EXISTS daily_downloads(
+      local TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE,
+      batch TEXT NOT NULL,file TEXT NOT NULL,digest TEXT NOT NULL,identity TEXT);
+      CREATE TABLE IF NOT EXISTS pending_trash(local TEXT PRIMARY KEY,file TEXT NOT NULL);`)
+    if (
+      !this.db
+        .prepare('PRAGMA table_info(pending_trash)')
+        .all()
+        .some((c) => c.name === 'lyric')
+    ) {
+      this.db.exec(
+        'ALTER TABLE pending_trash ADD COLUMN lyric TEXT; ALTER TABLE pending_trash ADD COLUMN recycled INTEGER NOT NULL DEFAULT 0',
+      )
+    }
+    // Older downloads never recorded the original filesystem identity. Leave these files in place.
+    if (!this.get('latest-daily-run')) {
+      const prior = this.db
+        .prepare('SELECT batch FROM recommendation_runs ORDER BY rowid DESC LIMIT 1')
+        .get()
+      if (prior) this.set('latest-daily-run', prior.batch)
+    }
     this.db.exec(`CREATE TABLE IF NOT EXISTS recommended_songs(title TEXT,artist TEXT,PRIMARY KEY(title,artist));
       INSERT OR IGNORE INTO recommended_songs SELECT i.title,i.artist FROM items i
       JOIN recommended_items r ON r.item=i.id WHERE i.status != '已在曲库'`)
@@ -373,17 +394,19 @@ export class MusicStore {
       hasLibrary: !!this.get('root'),
     }
   }
-  expireRecommendations(today = day()) {
-    if (this.lastExpiryDay === today) return
+  expireRecommendations(today = day(), replaceDaily = false) {
+    if (!replaceDaily && this.lastExpiryDay === today) return
+    const expired = replaceDaily ? 'b.id IN (SELECT batch FROM recommendation_runs)' : 'b.day < ?'
+    const args = replaceDaily ? [] : [today]
     const stale = this.db
       .prepare(
         `SELECT i.id,t.id AS local,l.file AS savedFile
       FROM items i JOIN batches b ON b.id=i.batch
       LEFT JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local
       LEFT JOIN library l ON l.track=i.track
-      WHERE b.day < ?`,
+      WHERE ${expired}`,
       )
-      .all(today)
+      .all(...args)
     this.db.exec('BEGIN IMMEDIATE')
     try {
       const replacements = new Map()
@@ -426,11 +449,9 @@ export class MusicStore {
         )
       }
       this.db
-        .prepare(
-          'DELETE FROM recommendation_runs WHERE batch IN (SELECT id FROM batches WHERE day < ?)',
-        )
-        .run(today)
-      this.db.prepare('DELETE FROM batches WHERE day < ?').run(today)
+        .prepare(`DELETE FROM batches WHERE id IN (SELECT b.id FROM batches b WHERE ${expired})`)
+        .run(...args)
+      this.db.exec('DELETE FROM recommendation_runs WHERE batch NOT IN (SELECT id FROM batches)')
       if (stale.length)
         this.db.exec(`DELETE FROM online_recordings WHERE
         NOT EXISTS(SELECT 1 FROM items WHERE items.track=online_recordings.track) AND
@@ -467,6 +488,7 @@ export class MusicStore {
         this.db
           .prepare("INSERT INTO recommendation_runs VALUES(?,?,'running','正在准备推荐')")
           .run(batch, targetCount)
+      if (targetCount) this.set('latest-daily-run', batch)
       for (const row of accepted) {
         const id = randomUUID()
         this.db

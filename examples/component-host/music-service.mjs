@@ -1,6 +1,13 @@
 import { desktopLyrics } from './desktop-lyrics.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
-import { localLines, ownedLyrics } from './music-lyrics.mjs'
+import { localLines } from './music-lyrics.mjs'
+import {
+  forgetLocal,
+  recoverTrash,
+  recyclableLyrics,
+  retireDownloads,
+  trashAudio,
+} from './daily-lifecycle.mjs'
 import {
   inLibrary,
   artistMatches,
@@ -10,8 +17,8 @@ import {
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
-import { lstat, readdir, realpath } from 'node:fs/promises'
-import { audioTypes, openAudio, pathKey, regularFile } from './music/local-files.mjs'
+import { lstat, realpath } from 'node:fs/promises'
+import { openAudio, pathKey, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
@@ -27,6 +34,7 @@ export function musicService(
   let store,
     pending,
     generationFinished,
+    recoveringTrash,
     taste,
     updateTimer,
     choosing,
@@ -37,6 +45,7 @@ export function musicService(
     if (!store) {
       const root = path.join(profile, 'fitbay-music')
       store = new MusicStore(root)
+      recoveringTrash = recoverTrash(store, forgetTracks, (file) => shell.trashItem(file))
       taste = new MusicTaste(store, root, (data, signal) =>
         requestMusicModel(store, safeStorage, 'profile', data, signal),
       )
@@ -52,12 +61,14 @@ export function musicService(
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   let musicView
+  const archiveJobs = new Set()
   const bind = (name, fn) =>
     ipcMain.handle('music:' + name, async (event, ...args) => {
       if (!isSender(event)) throw Error('DENIED')
       try {
         musicView = event.sender
         ensureStore()
+        await recoveringTrash
         shortcuts.activate(event.sender, store)
         return await fn(...args)
       } catch (e) {
@@ -188,36 +199,15 @@ export function musicService(
     if (!ids.length) throw Error('请选择歌曲')
     return [...new Set(ids.map(text))]
   }
-  const forgetTracks = (ids) =>
-    updateLibrary(() => {
-      for (const id of ids) {
-        store.library.row(id)
-        store.library.remove(id)
-      }
-      return ids
-    })
+  function forgetTracks(ids) {
+    const removed = forgetLocal(store, ids)
+    if (removed.has(grant?.id) || removed.has(grant?.libraryId)) grant = null
+    if (musicView && !musicView.isDestroyed()) musicView.send('music:library-changed', [...removed])
+    return removed
+  }
   bind('removeLocal', (value) => {
     forgetTracks(trackIds(value))
   })
-  async function recyclableLyrics(audio) {
-    const lyric = await ownedLyrics(store.db, audio)
-    if (!lyric) return null
-    const current = path.parse(audio)
-    try {
-      const entries = await readdir(current.dir)
-      const shared = entries.some((name) => {
-        const entry = path.parse(name)
-        return (
-          name.toLowerCase() !== current.base.toLowerCase() &&
-          entry.name.toLowerCase() === current.name.toLowerCase() &&
-          Object.hasOwn(audioTypes, entry.ext.toLowerCase())
-        )
-      })
-      return shared ? null : lyric
-    } catch {
-      return null
-    }
-  }
   bind('trashLocal', async (value) => {
     const rows = trackIds(value).map((id) => store.library.row(id))
     if (rows.some((row) => row.awaitingLocation)) throw Error('请先重新定位音频')
@@ -226,7 +216,8 @@ export function musicService(
     const epoch = viewEpoch
     try {
       const targets = []
-      for (const row of rows) targets.push({ row, lyric: await recyclableLyrics(row.file) })
+      for (const row of rows)
+        targets.push({ row, lyric: await recyclableLyrics(store.db, row.file) })
       const answer = await dialog.showMessageBox({
         type: 'warning',
         title: '移至系统回收站',
@@ -240,22 +231,23 @@ export function musicService(
       })
       if (answer.response !== 1 || epoch !== viewEpoch) return false
       for (const { row, lyric } of targets) {
-        if (epoch !== viewEpoch) throw Error('窗口已关闭，尚未处理的歌曲已保留')
-        if (store.library.row(row.id).file !== row.file || !(await regularFile(row.file)))
-          throw Error('文件已变化，曲库记录已保留')
         try {
-          await shell.trashItem(row.file)
-        } catch {
-          throw Error('无法移至系统回收站，曲库记录已保留')
-        }
-        forgetTracks([row.id])
-        if (lyric && lyric === (await recyclableLyrics(row.file))) {
-          try {
-            await shell.trashItem(lyric)
-          } catch {
-            throw Error('音频已回收，歌词文件回收失败')
-          }
-          store.db.prepare('DELETE FROM lyric_files WHERE file=?').run(lyric)
+          if (epoch !== viewEpoch) throw Error('窗口已关闭，尚未处理的歌曲已保留')
+          if (store.library.row(row.id).file !== row.file || !(await regularFile(row.file)))
+            throw Error('文件已变化，曲库记录已保留')
+          await trashAudio(store, row, lyric, (file) => shell.trashItem(file), forgetTracks)
+        } catch (error) {
+          const remaining = targets.filter(({ row }) =>
+            store.db.prepare('SELECT 1 FROM local_tracks WHERE id=?').get(row.id),
+          ).length
+          throw Error(
+            error.message +
+              '（已回收 ' +
+              (targets.length - remaining) +
+              ' / ' +
+              targets.length +
+              ' 首）',
+          )
         }
       }
       return true
@@ -452,18 +444,59 @@ export function musicService(
     return generateTask(async (signal) => {
       const label = preference.trim() || (mode === 'artist' ? '按歌手推荐' : '按风格推荐')
       clearTimeout(updateTimer)
-      if (!store.get('music-recommend-dir') && !(await chooseMusicDirectory('recommend', signal)))
-        return null
-      signal.throwIfAborted()
+      const previous = store.get('latest-daily-run')
+      store.expireRecommendations(undefined, true)
       const batch = store.saveSuggestions(label, [], '待处理', undefined, targetCount)
+      let cleanupMessage = ''
       const update = (state, message) =>
         store.db
           .prepare('UPDATE recommendation_runs SET state=?,message=? WHERE batch=?')
-          .run(state, message, batch)
+          .run(state, message + cleanupMessage, batch)
       try {
-        await lx.synchronizeSources(signal)
-        if (musicView && !musicView.isDestroyed()) musicView.send('music:sources-changed')
-        if (!store.get('lx-source')) throw Error('目录和已导入的音乐源均不可用，请在设置中检查音乐源')
+        const { archive, failures } = await retireDownloads(
+          store,
+          previous,
+          {
+            forget: forgetTracks,
+            trash: (file) => shell.trashItem(file),
+            model: (payload, abort) =>
+              requestMusicModel(store, safeStorage, 'classify', payload, abort),
+            chooseRoot: async () => {
+              if (localDialog) return
+              const epoch = viewEpoch
+              localDialog = true
+              try {
+                const result = await dialog.showOpenDialog({
+                  title: '选择收藏歌曲分类根目录',
+                  properties: ['openDirectory', 'createDirectory'],
+                })
+                if (!result.canceled && epoch === viewEpoch) return result.filePaths[0]
+              } finally {
+                localDialog = false
+              }
+            },
+            onMove: (id, file) => {
+              if ((grant?.libraryId ?? grant?.id) === id) grant.file = file
+              if (musicView && !musicView.isDestroyed()) musicView.send('music:library-changed', [])
+            },
+          },
+          signal,
+        )
+        if (failures) cleanupMessage = ' · 上轮有 ' + failures + ' 首未能完整回收'
+        const generation = pending
+        archiveJobs.add(generation)
+        void archive()
+          .catch(() => {})
+          .finally(() => archiveJobs.delete(generation))
+        if (
+          !store.get('music-recommend-dir') &&
+          !(await chooseMusicDirectory('recommend', signal))
+        ) {
+          update('cancelled', '未选择推荐下载目录')
+          return null
+        }
+        signal.throwIfAborted()
+        if (!store.get('lx-source')) throw Error('请先在设置中导入音乐源')
         const profile = await taste.refresh(signal)
         signal.throwIfAborted()
         const seen = []
@@ -725,6 +758,7 @@ export function musicService(
       }
     },
     dispose() {
+      for (const generation of archiveJobs) generation.abort()
       overlay.show(false)
       lx.close()
       clearTimeout(updateTimer)

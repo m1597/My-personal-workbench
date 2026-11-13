@@ -128,6 +128,7 @@ declare global {
       chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
       configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
       onLyricsSaved(listener: () => void): () => void
+      onLibraryChanged(listener: (removed: string[]) => void): () => void
       onSourcesChanged(listener: () => void): () => void
       lxSources(): Promise<SourceInventory>
       lxRefreshCatalog(): Promise<SourceInventory>
@@ -295,6 +296,11 @@ function Music() {
     epoch = useRef(0),
     url = useRef('')
   const refresh = async () => setState(await host.state())
+  const libraryChanged = useEffectEvent(async (removed: string[]) => {
+    if (removed.includes(current.current)) await end(false)
+    await refresh()
+  })
+  useEffect(() => host.onLibraryChanged((removed) => void libraryChanged(removed)), [])
   const heard = useEffectEvent((src: string) => {
     if (src.startsWith('fitbay-audio:'))
       void host
@@ -855,11 +861,13 @@ function Music() {
                     if (!(await host.trashLocal(id))) return
                   } catch (error) {
                     const playing = current.current
-                    if (Array.isArray(id) && id.includes(playing)) {
+                    if (playing) {
                       const latest = await host.state()
                       if (
                         current.current === playing &&
-                        !latest.localTracks.some((row) => row.id === playing)
+                        !latest.current &&
+                        !latest.localTracks.some((row) => row.id === playing) &&
+                        !latest.items.some((row) => row.id === playing && row.localId)
                       )
                         await end(false)
                     }
