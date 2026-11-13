@@ -273,6 +273,26 @@ export function musicService(
     }
   })
   let playbackEpoch = 0
+  bind('analysisRecording', async (id) => {
+    if (typeof id !== 'string' || !id.startsWith('local-')) return null
+    const row = store.library.row(id)
+    if (!row.duration || row.duration > 900 || !(await store.library.verify(row))) return null
+    const file = await openAudio(row.file)
+    try {
+      const stat = await file.stat()
+      if (stat.size > 24 * 1024 * 1024) return null
+      const bytes = Buffer.alloc(stat.size)
+      let offset = 0
+      while (offset < bytes.length) {
+        const read = await file.read(bytes, offset, bytes.length - offset, offset)
+        if (!read.bytesRead) return null
+        offset += read.bytesRead
+      }
+      return bytes
+    } finally {
+      await file.close()
+    }
+  })
   function releaseGrant() {
     playbackEpoch++
     grant?.controller?.abort()

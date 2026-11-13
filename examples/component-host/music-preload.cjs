@@ -59,6 +59,7 @@ const names = [
   'deletePlaylist',
   'relocateLocal',
   'localSource',
+  'analysisRecording',
   'mediaFailed',
   'playQueue',
   'setQueue',

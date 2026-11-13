@@ -4,6 +4,8 @@ import { Cover, type Album } from './AlbumBrowser'
 import { NowPlaying, type LyricLine } from './NowPlaying'
 import { guideSteps, MusicGuide } from './MusicGuide'
 import { observeListening } from './listening'
+import { listeningCues } from './listeningClips'
+import { QuickListenControls } from './QuickListenControls'
 import type { SourceInventory } from './MusicSourcesSettings'
 import {
   MusicSettings,
@@ -131,110 +133,112 @@ type Presentation = 'full' | 'bar' | 'background'
 type Mode = { mode: string; presentation: Presentation }
 declare global {
   interface Window {
-    music: LibraryToolsAPI & ReleaseAPI & {
-      albums(): Promise<Album[]>
-      albumCover(id: string): Promise<string | null>
-      trackCover(id: string): Promise<string | null>
-      musicGuide(): Promise<{ seen: boolean; script: string }>
-      markMusicGuide(): Promise<void>
-      setMusicQuality(quality: string): Promise<void>
-      setMusicOutput(volume: number, muted: boolean): Promise<void>
-      setMusicShortcut(action: TransportAction, key: string): Promise<void>
-      setMusicMediaKeys(enabled: boolean): Promise<void>
-      chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
-      configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
-      onLyricsSaved(listener: () => void): () => void
-      onLibraryChanged(listener: (removed: string[]) => void): () => void
-      onSourcesChanged(listener: () => void): () => void
-      lxSources(): Promise<SourceInventory>
-      lxRefreshCatalog(): Promise<SourceInventory>
-      lxImportSelected(ids: string[]): Promise<{ origin: string; id?: string; error?: string }[]>
-      lxSelectSource(id: string): Promise<void>
-      lxInfo(): Promise<string>
-      lxImport(link?: string): Promise<void>
-      lxCancel(scope?: 'import'): Promise<void>
-      lxSearch(
-        query: string | { title: string; artist: string },
-        platform?: string,
-      ): Promise<Versions>
-      lxPreview(id: string, key: string, quality: string): Promise<string>
-      lxDownload(key: string, quality: string): Promise<string>
-      lxDownload(
-        key: string,
-        quality: string,
-        detailed: true,
-      ): Promise<'' | { file: string; sources: string[] }>
-      moveSidebarItem(
-        group: 'folders' | 'playlists',
-        id: string,
-        target: string,
-        after: boolean,
-      ): Promise<void>
-      createPlaylist(name: string): Promise<string>
-      setPlaylistSort: PlaylistSorting['setPlaylistSort']
-      movePlaylistTrack: PlaylistSorting['movePlaylistTrack']
-      setMembership(
-        playlist: string,
-        track: string | string[],
-        added: boolean,
-      ): Promise<MembershipRemoval | null>
-      undoMembership(token: string): Promise<void>
-      exportPlaylist(id: string): Promise<boolean>
-      importLocal(mode: 'folder' | 'files'): Promise<void>
-      cancelImport(): Promise<void>
-      refreshLocal(): Promise<void>
-      lyrics(id: string): Promise<LyricLine[]>
-      showLyrics(on: boolean): Promise<void>
-      unlockLyrics(): Promise<void>
-      onLyricLocked(listener: (locked: boolean) => void): () => void
-      lyricLine(line: string): Promise<void>
-      removeLocal(id: string | string[]): Promise<void>
-      trashLocal(id: string | string[]): Promise<boolean>
-      openFolder(id: string): Promise<void>
-      removeFolder(id: string): Promise<string[]>
-      renamePlaylist(id: string, name: string): Promise<void>
-      deletePlaylist(id: string): Promise<void>
-      relocateLocal(id: string): Promise<void>
-      mediaFailed(id: string, url: string): Promise<void>
-      localSource(id: string): Promise<string>
-      rememberOnline(key: string, quality?: string): Promise<string>
-      downloadSelection(ids: string[]): Promise<SelectionDownload[]>
-      dismissRecommendation(id: string): Promise<void>
-      setRepeatOne(enabled: boolean): Promise<void>
-      setQueue(ids: string[], occurrence?: number, pendingAlbum?: string[]): Promise<void>
-      playQueue(
-        id: string,
-        ids: string[],
-        position: number,
-        occurrence?: number,
-        pendingAlbum?: string[],
-      ): Promise<void>
-      state(): Promise<State>
-      draft(s: string): Promise<void>
-      getTasteStatus(): Promise<TasteStatus>
-      setTasteConsent(value: boolean): Promise<TasteStatus>
-      prepareRecommendation(id: string, key?: string): Promise<void>
-      recommendationChoices(id: string): Promise<Versions['items']>
-      generate(
-        s: string,
-        mode?: 'auto' | 'style' | 'artist',
-        similar?: boolean,
-        targetCount?: number,
-      ): Promise<string | null>
-      stopGeneration(): Promise<void>
-      match(id: string): Promise<void>
-      choose(id: string, track: string): Promise<void>
-      retry(id: string): Promise<void>
-      cancel(id: string): Promise<void>
-      cancelBatch(batch: string): Promise<void>
-      bytes(id: string): Promise<Uint8Array<ArrayBuffer>>
-      progress(id: string, time: number, duration: number): Promise<void>
-      heardLocal(url: string): Promise<void>
-      release(url?: string): Promise<void>
-      clean(): Promise<void>
-      checked(id: string, on: boolean): Promise<void>
-      keep(batch: string): Promise<void>
-    }
+    music: LibraryToolsAPI &
+      ReleaseAPI & {
+        analysisRecording(id: string): Promise<Uint8Array | null>
+        albums(): Promise<Album[]>
+        albumCover(id: string): Promise<string | null>
+        trackCover(id: string): Promise<string | null>
+        musicGuide(): Promise<{ seen: boolean; script: string }>
+        markMusicGuide(): Promise<void>
+        setMusicQuality(quality: string): Promise<void>
+        setMusicOutput(volume: number, muted: boolean): Promise<void>
+        setMusicShortcut(action: TransportAction, key: string): Promise<void>
+        setMusicMediaKeys(enabled: boolean): Promise<void>
+        chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
+        configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
+        onLyricsSaved(listener: () => void): () => void
+        onLibraryChanged(listener: (removed: string[]) => void): () => void
+        onSourcesChanged(listener: () => void): () => void
+        lxSources(): Promise<SourceInventory>
+        lxRefreshCatalog(): Promise<SourceInventory>
+        lxImportSelected(ids: string[]): Promise<{ origin: string; id?: string; error?: string }[]>
+        lxSelectSource(id: string): Promise<void>
+        lxInfo(): Promise<string>
+        lxImport(link?: string): Promise<void>
+        lxCancel(scope?: 'import'): Promise<void>
+        lxSearch(
+          query: string | { title: string; artist: string },
+          platform?: string,
+        ): Promise<Versions>
+        lxPreview(id: string, key: string, quality: string): Promise<string>
+        lxDownload(key: string, quality: string): Promise<string>
+        lxDownload(
+          key: string,
+          quality: string,
+          detailed: true,
+        ): Promise<'' | { file: string; sources: string[] }>
+        moveSidebarItem(
+          group: 'folders' | 'playlists',
+          id: string,
+          target: string,
+          after: boolean,
+        ): Promise<void>
+        createPlaylist(name: string): Promise<string>
+        setPlaylistSort: PlaylistSorting['setPlaylistSort']
+        movePlaylistTrack: PlaylistSorting['movePlaylistTrack']
+        setMembership(
+          playlist: string,
+          track: string | string[],
+          added: boolean,
+        ): Promise<MembershipRemoval | null>
+        undoMembership(token: string): Promise<void>
+        exportPlaylist(id: string): Promise<boolean>
+        importLocal(mode: 'folder' | 'files'): Promise<void>
+        cancelImport(): Promise<void>
+        refreshLocal(): Promise<void>
+        lyrics(id: string): Promise<LyricLine[]>
+        showLyrics(on: boolean): Promise<void>
+        unlockLyrics(): Promise<void>
+        onLyricLocked(listener: (locked: boolean) => void): () => void
+        lyricLine(line: string): Promise<void>
+        removeLocal(id: string | string[]): Promise<void>
+        trashLocal(id: string | string[]): Promise<boolean>
+        openFolder(id: string): Promise<void>
+        removeFolder(id: string): Promise<string[]>
+        renamePlaylist(id: string, name: string): Promise<void>
+        deletePlaylist(id: string): Promise<void>
+        relocateLocal(id: string): Promise<void>
+        mediaFailed(id: string, url: string): Promise<void>
+        localSource(id: string): Promise<string>
+        rememberOnline(key: string, quality?: string): Promise<string>
+        downloadSelection(ids: string[]): Promise<SelectionDownload[]>
+        dismissRecommendation(id: string): Promise<void>
+        setRepeatOne(enabled: boolean): Promise<void>
+        setQueue(ids: string[], occurrence?: number, pendingAlbum?: string[]): Promise<void>
+        playQueue(
+          id: string,
+          ids: string[],
+          position: number,
+          occurrence?: number,
+          pendingAlbum?: string[],
+        ): Promise<void>
+        state(): Promise<State>
+        draft(s: string): Promise<void>
+        getTasteStatus(): Promise<TasteStatus>
+        setTasteConsent(value: boolean): Promise<TasteStatus>
+        prepareRecommendation(id: string, key?: string): Promise<void>
+        recommendationChoices(id: string): Promise<Versions['items']>
+        generate(
+          s: string,
+          mode?: 'auto' | 'style' | 'artist',
+          similar?: boolean,
+          targetCount?: number,
+        ): Promise<string | null>
+        stopGeneration(): Promise<void>
+        match(id: string): Promise<void>
+        choose(id: string, track: string): Promise<void>
+        retry(id: string): Promise<void>
+        cancel(id: string): Promise<void>
+        cancelBatch(batch: string): Promise<void>
+        bytes(id: string): Promise<Uint8Array<ArrayBuffer>>
+        progress(id: string, time: number, duration: number): Promise<void>
+        heardLocal(url: string): Promise<void>
+        release(url?: string): Promise<void>
+        clean(): Promise<void>
+        checked(id: string, on: boolean): Promise<void>
+        keep(batch: string): Promise<void>
+      }
     musicWindow: {
       thumbnailState(state: {
         paused: boolean
@@ -346,6 +350,14 @@ function Music() {
   const [resolving, setResolving] = useState(false)
   const [shuffled, setShuffled] = useState<string[] | null>(null)
   const [repeatOne, setRepeatOne] = useState(false)
+  const clips = useRef<{ ids: string[]; index: number; until: number; pending: boolean } | null>(
+    null,
+  )
+  const [clipStatus, setClipStatus] = useState('')
+  const quickRequest = useRef(0)
+  const transition = useRef<{ from: string; to: string; at: number; intro: number } | null>(null)
+  const fading = useRef<(() => void) | null>(null)
+  const transitioning = useRef(false)
   const switching = useRef(Promise.resolve())
   const audio = useRef<HTMLAudioElement>(null),
     current = useRef(''),
@@ -539,6 +551,10 @@ function Music() {
     ...(state?.items ?? []).filter((r) => r.online).map((r) => r.id),
   ])
   const playableQueue = queue.filter((id) => navigable.has(id))
+  const localIdentity = (id: string) => {
+    const row = state?.localTracks.find((t) => t.id === id)
+    return row ? [row.size, row.duration, row.observedAt].join('-') : ''
+  }
   function adjacentIndex(direction: number) {
     if (index < 0) return -1
     for (let step = 1; step < order.length; step++) {
@@ -593,6 +609,7 @@ function Music() {
   async function pauseTrack() {
     const el = audio.current
     if (!el) return
+    fading.current?.()
     el.pause()
     setPaused(true)
     const id = current.current
@@ -631,7 +648,10 @@ function Music() {
     pendingAlbum: string[] = [],
     startAt?: number,
     renewGrant = false,
+    context?: 'clip' | 'transition',
   ) {
+    if (context !== 'clip') clearQuick()
+    if (context !== 'transition') fading.current?.()
     const seq = ++epoch.current
     // Keep queue writes ordered while allowing a new track to interrupt a slow decoder.
     function startAudio(el: HTMLAudioElement) {
@@ -732,16 +752,17 @@ function Music() {
   async function next() {
     if (following >= 0) await navigateAt(following)
     else if (shuffled && playableQueue.length) {
-      const round = shuffleQueue(playableQueue)
-      if (round.length > 1 && round[0] === now) {
-        const swap = 1 + Math.floor(Math.random() * (round.length - 1))
-        ;[round[0], round[swap]] = [round[swap], round[0]]
-      }
+      const round = upcomingRound ?? shuffleQueue(playableQueue)
       setShuffled(round)
       await navigate(round[0], queue)
     }
   }
   async function finishTrack() {
+    if (clips.current) {
+      await quickNext()
+      return
+    }
+    if (transitioning.current) return
     if (following > index && state?.pendingAlbum.includes(order[following])) {
       await navigateAt(following)
       return
@@ -752,6 +773,8 @@ function Music() {
     } else await next()
   }
   async function end(clean = true) {
+    clearQuick()
+    fading.current?.()
     ++epoch.current
     if (resolving) await host.lxCancel()
     const el = audio.current
@@ -868,6 +891,148 @@ function Music() {
     !resolving && Boolean(following >= 0 || (shuffled && index >= 0 && playableQueue.length))
   const modeName = shuffled ? '随机播放' : repeatOne ? '单曲循环' : '顺序播放'
   const nextModeName = shuffled ? '单曲循环' : repeatOne ? '顺序播放' : '随机播放'
+  const [upcomingRound, setUpcomingRound] = useState<string[] | null>(null)
+  const roundIds = shuffled && following < 0 && index >= 0 ? JSON.stringify(playableQueue) : ''
+  useEffect(() => {
+    if (!roundIds) {
+      setUpcomingRound(null)
+      return
+    }
+    const round = shuffleQueue(JSON.parse(roundIds))
+    if (round.length > 1 && round[0] === now) {
+      const swap = 1 + Math.floor(Math.random() * (round.length - 1))
+      ;[round[0], round[swap]] = [round[swap], round[0]]
+    }
+    setUpcomingRound(round)
+  }, [roundIds, now])
+  function clearQuick() {
+    quickRequest.current++
+    clips.current = null
+    setClipStatus('')
+  }
+  async function quickAt(ids: string[], index: number) {
+    if (!ids[index]) {
+      await end(false)
+      return
+    }
+    const request = ++quickRequest.current
+    const id = ids[index]
+    clips.current = { ids, index, until: Infinity, pending: true }
+    setClipStatus('正在分析试听片段')
+    const cue = await listeningCues(id, localIdentity(id))
+    if (request !== quickRequest.current) return
+    const clip = { ids, index, until: cue?.end ?? 20, pending: true }
+    clips.current = clip
+    setClipStatus(`${index + 1}/${ids.length} · ${cue ? '代表片段' : '普通试听'}`)
+    try {
+      await play(id, ids, 0, true, [], cue?.start ?? 0, false, 'clip')
+    } catch (error) {
+      if (clips.current === clip) clearQuick()
+      throw error
+    } finally {
+      clip.pending = false
+    }
+  }
+  async function quickNext() {
+    const clip = clips.current
+    if (clip && !clip.pending) await quickAt(clip.ids, clip.index + 1)
+  }
+  const blendTarget =
+    shuffled && !state?.pendingAlbum.length && !clipStatus
+      ? (order[following] ?? upcomingRound?.[0] ?? '')
+      : ''
+  const fromIdentity = localIdentity(now),
+    toIdentity = localIdentity(blendTarget)
+  useEffect(() => {
+    transition.current = null
+    let alive = true
+    if (fromIdentity && toIdentity && now !== blendTarget) {
+      void Promise.all([
+        listeningCues(now, fromIdentity),
+        listeningCues(blendTarget, toIdentity),
+      ]).then(([a, b]) => {
+        if (alive && a && b && a.last - a.first > 3 && b.last - b.first > 3)
+          transition.current = { from: now, to: blendTarget, at: a.last - 1.2, intro: b.first }
+      })
+    }
+    return () => {
+      alive = false
+      transition.current = null
+    }
+  }, [now, blendTarget, fromIdentity, toIdentity])
+  async function blend(el: HTMLAudioElement) {
+    const pair = transition.current
+    if (
+      !pair ||
+      transitioning.current ||
+      el.paused ||
+      pair.from !== current.current ||
+      pair.to !== blendTarget ||
+      el.currentTime < pair.at
+    )
+      return
+    transition.current = null
+    transitioning.current = true
+    const tail = new Audio(el.src)
+    tail.muted = el.muted
+    tail.volume = el.volume
+    tail.currentTime = el.currentTime
+    const level = el.volume
+    let timer: ReturnType<typeof setInterval> | undefined
+    let live = true
+    const stop = () => {
+      live = false
+      clearInterval(timer)
+      tail.pause()
+      tail.removeAttribute('src')
+      tail.load()
+      if (el.volume === applied) el.volume = level
+      fading.current = null
+      transitioning.current = false
+    }
+    let applied = level
+    fading.current = stop
+    try {
+      await tail.play()
+      if (!live) return
+      applied = 0
+      el.volume = applied
+      if (following < 0 && upcomingRound) setShuffled(upcomingRound)
+      await play(
+        pair.to,
+        queue,
+        following < 0 ? 0 : occurrenceAt(order, following),
+        true,
+        [],
+        pair.intro,
+        false,
+        'transition',
+      )
+      if (!live) return
+      const start = performance.now()
+      timer = setInterval(() => {
+        if (el.paused || el.muted !== tail.muted || el.volume !== applied) {
+          stop()
+          return
+        }
+        const progress = Math.min(1, (performance.now() - start) / 850)
+        applied = level * progress
+        el.volume = applied
+        tail.volume = level * (1 - progress)
+        if (progress === 1) stop()
+      }, 30)
+    } catch {
+      if (live) stop()
+      if (el.ended && current.current === pair.from) void act(next)
+    }
+  }
+  useEffect(
+    () => () => {
+      fading.current?.()
+      quickRequest.current++
+    },
+    [],
+  )
   useEffect(() => {
     window.musicWindow.thumbnailState({
       paused,
@@ -1209,6 +1374,32 @@ function Music() {
                       </small>
                     )}
                     {rows.some((r) => r.daily) && (
+                      <QuickListenControls
+                        status={clipStatus}
+                        disabled={!downloaded.length}
+                        ready={!!clips.current && !clips.current.pending}
+                        favorite={
+                          !!state?.localTracks.find(
+                            (row) => row.id === clips.current?.ids[clips.current.index],
+                          )?.favorite
+                        }
+                        start={() => void act(() => quickAt(downloaded, 0))}
+                        save={() =>
+                          void act(async () => {
+                            const clip = clips.current
+                            if (clip) await host.setFavorite(clip.ids[clip.index], true)
+                          })
+                        }
+                        skip={() => void act(quickNext)}
+                        full={() =>
+                          void act(async () => {
+                            const clip = clips.current
+                            if (clip) await play(clip.ids[clip.index], clip.ids, 0, true, [], 0)
+                          })
+                        }
+                      />
+                    )}
+                    {rows.some((r) => r.daily) && (
                       <Button
                         className="music-play-batch"
                         size="small"
@@ -1463,6 +1654,7 @@ function Music() {
               )
             }
             onClick={() => {
+              fading.current?.()
               void host.setRepeatOne(!!shuffled).catch((e) => setError(String(e)))
               setRepeatOne(!!shuffled)
               setShuffled(
@@ -1592,6 +1784,16 @@ function Music() {
           onPause={() => setPaused(true)}
           onTimeUpdate={(e) => {
             setTime(e.currentTarget.currentTime)
+            const clip = clips.current
+            if (
+              clip &&
+              !clip.pending &&
+              !e.currentTarget.paused &&
+              current.current === clip.ids[clip.index] &&
+              e.currentTarget.currentTime >= clip.until
+            )
+              void act(quickNext)
+            else if (!clip) void blend(e.currentTarget)
             if (current.current)
               void host.progress(
                 current.current,
