@@ -283,7 +283,7 @@ export async function retireDownloads(
       signal.throwIfAborted()
       if (fresh.favorite) favorites.push(row)
       else await trashAudio(store, row, lyric, trash, forget)
-    } catch (e) {
+    } catch {
       signal.throwIfAborted()
       failures++
     }
