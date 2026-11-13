@@ -381,20 +381,20 @@ export function musicService(
     )
       throw Error('播放队列无效')
     validateQueue(ids)
+    validateOccurrence(occurrence)
     store.db.exec('BEGIN')
     try {
       store.set('play-queue', JSON.stringify(ids))
+      store.set('queue-occurrence', String(occurrence))
       store.checkpoint(id, position)
       store.db.exec('COMMIT')
     } catch (e) {
       store.db.exec('ROLLBACK')
       throw e
     }
-    validateOccurrence(occurrence)
   })
   bind('state', () => ({
     ...store.snapshot(),
-      store.set('queue-occurrence', String(occurrence))
     models: modelInfo(store),
     prefs: {
       ...getMusicPreferences(store),
