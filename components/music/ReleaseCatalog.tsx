@@ -7,7 +7,13 @@ import './release-catalog.css'
 type Artist = { id: string; name: string; detail: string }
 type Edition = { id: string; title: string; artist: string; detail: string }
 const labelEdition = (c: Edition) => [c.title, c.artist, c.detail].filter(Boolean).join(' · ')
-type ReleaseTrack = { disc: number; number: string; title: string; artist: string }
+type ReleaseTrack = {
+  position: number | null
+  disc: number
+  number: string
+  title: string
+  artist: string
+}
 type News = { id: string; title: string; artist: string; date: string }
 export interface ReleaseAPI {
   findArtists(term: string): Promise<Artist[]>
@@ -150,6 +156,22 @@ export function ArtistReleases({ search }: { search: (query: string) => void }) 
   )
 }
 const normalize = (v: string) => v.trim().normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ')
+function collectedTracks(tracks: ReleaseTrack[], local: LocalTrack[]) {
+  const matched = new Set<ReleaseTrack>()
+  for (const row of local) {
+    if (!row.available) continue
+    const options = tracks.filter(
+      (t) =>
+        normalize(row.title) === normalize(t.title) &&
+        normalize(row.artist) === normalize(t.artist) &&
+        (row.discNumber == null || row.discNumber === t.disc) &&
+        (row.trackNumber == null || row.trackNumber === t.position),
+    )
+    // An ambiguous file may be a duplicate of an already matched recording.
+    if (options.length === 1) matched.add(options[0])
+  }
+  return matched
+}
 export function AlbumEditions({
   album,
   local,
@@ -181,7 +203,7 @@ export function AlbumEditions({
       setBusy(false)
     }
   }
-  const remaining = [...local]
+  const collected = collectedTracks(tracks ?? [], local)
   return (
     <section className="music-album-editions" aria-label="发行版本曲目">
       <Button size="small" disabled={busy} onClick={() => void request()}>
@@ -219,13 +241,6 @@ export function AlbumEditions({
       {!!tracks?.length && (
         <ol>
           {tracks.map((t) => {
-            const index = remaining.findIndex(
-              (row) =>
-                row.available &&
-                normalize(row.title) === normalize(t.title) &&
-                normalize(row.artist) === normalize(t.artist),
-            )
-            if (index >= 0) remaining.splice(index, 1)
             return (
               <li key={t.disc + ':' + t.number + ':' + t.title}>
                 <div>
@@ -234,7 +249,7 @@ export function AlbumEditions({
                   </strong>
                   <small>{t.artist}</small>
                 </div>
-                {index >= 0 ? (
+                {collected.has(t) ? (
                   <small>已收录</small>
                 ) : (
                   <Button size="small" onClick={() => search(t.title + ' ' + t.artist)}>

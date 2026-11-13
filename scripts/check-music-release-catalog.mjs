@@ -21,8 +21,22 @@ store.library.upsert({
   artist: '青禾',
   album: '山色',
   albumArtist: '青禾',
+  discNumber: 2,
+  trackNumber: 1,
   duration: 1,
 })
+for (const title of ['无编号', '唯一曲目']) {
+  const file = path.join(root, title + '.mp3')
+  await fs.copyFile(tone, file)
+  store.library.upsert({
+    file,
+    title,
+    artist: '青禾',
+    album: '山色',
+    albumArtist: '青禾',
+    duration: 1,
+  })
+}
 store.db.close()
 await fs.writeFile(
   source,
@@ -161,10 +175,21 @@ async function launch() {
         return Response.json({
           'artist-credit': artistCredit,
           media: [
-            { position: 1, tracks: [{ title: '远山', number: '1' }] },
+            {
+              position: 1,
+              tracks: [
+                { title: '远山', number: '1' },
+                { title: '无编号', number: '2' },
+                { title: '唯一曲目', number: '3' },
+              ],
+            },
             {
               position: 2,
-              tracks: [{ title: entity === first ? '初版曲' : '缺少曲', number: '1' }],
+              tracks: [
+                { title: '远山', number: '1' },
+                { title: entity === first ? '初版曲' : '缺少曲', number: '2' },
+                { title: '无编号', number: '3' },
+              ],
             },
           ],
         })
@@ -249,13 +274,19 @@ try {
   await expect(page.getByRole('listbox')).toBeVisible()
   await page.screenshot({ path: path.join(root, 'edition-menu.png') })
   await page.getByRole('option', { name: /普通版/ }).click()
-  await expect(editions.getByText('2.1 初版曲')).toBeVisible()
+  await expect(editions.getByText('2.2 初版曲')).toBeVisible()
   await choose.click()
   await page.getByRole('option', { name: /豪华版/ }).click()
-  await expect(editions.getByText('2.1 缺少曲')).toBeVisible()
-  await expect(editions.getByText('已收录', { exact: true })).toBeVisible()
+  await expect(editions.getByText('2.2 缺少曲')).toBeVisible()
+  const trackRow = (name) =>
+    editions.getByRole('listitem').filter({ has: page.getByText(name, { exact: true }) })
+  await expect(trackRow('1.1 远山').getByRole('button', { name: '搜索缺曲' })).toBeVisible()
+  await expect(trackRow('2.1 远山').getByText('已收录', { exact: true })).toBeVisible()
+  for (const title of ['1.2 无编号', '2.3 无编号'])
+    await expect(trackRow(title).getByRole('button', { name: '搜索缺曲' })).toBeVisible()
+  await expect(trackRow('1.3 唯一曲目').getByText('已收录', { exact: true })).toBeVisible()
   await page.screenshot({ path: path.join(root, 'editions.png') })
-  await editions.getByRole('button', { name: '搜索缺曲' }).click()
+  await trackRow('2.2 缺少曲').getByRole('button', { name: '搜索缺曲' }).click()
   await expect(page.getByRole('textbox', { name: '搜索关键词' })).toHaveValue('缺少曲 青禾')
   await expect(
     page.getByRole('region', { name: '搜索音乐' }).getByText('缺少曲', { exact: true }),

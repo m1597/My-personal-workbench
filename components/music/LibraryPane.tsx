@@ -53,6 +53,8 @@ export type LocalTrack = {
   folder: FolderEntry | null
   album: string
   duration: number
+  discNumber: number | null
+  trackNumber: number | null
   recommendationSource?: string
   notInterested?: boolean
   listed: number
@@ -516,15 +518,6 @@ export function LibraryPane({
                     }
                   />
                   <small role="status">已选 {selectedIds.length} 首</small>
-                  {rows.some((r) => r.origin === 'online') && (
-                    <Button
-                      size="small"
-                      disabled={batchBusy || !downloadable}
-                      onClick={() => void download()}
-                    >
-                      下载所选
-                    </Button>
-                  )}
                   {!!downloads.length && (
                     <small role="status">
                       已下载 {downloads.filter((r) => r.status === 'saved').length} 首 · 已跳过{' '}
@@ -572,7 +565,16 @@ export function LibraryPane({
                     加入收藏
                   </Button>
                   {currentFolder && (
+                    {rows.some((r) => r.origin === 'online') && (
                     <Button
+                      size="small"
+                      disabled={batchBusy || !downloadable}
+                      onClick={() => void download()}
+                    >
+                      下载所选
+                    </Button>
+                  )}
+                  <Button
                       size="small"
                       disabled={batchBusy || !selectedIds.length}
                       icon={<Trash2 size={15} />}

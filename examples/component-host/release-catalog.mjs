@@ -155,6 +155,7 @@ export function registerReleaseCatalog(bind, getStore) {
       (m.tracks ?? []).map((t) => ({
         disc: m.position,
         number: t.number,
+        position: t.position ?? (/^\d+$/.test(t.number) ? Number(t.number) : null),
         title: name(t.title ?? t.recording?.title),
         artist: credit(
           t['artist-credit'] ?? t.recording?.['artist-credit'] ?? data['artist-credit'],
