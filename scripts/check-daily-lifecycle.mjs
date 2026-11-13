@@ -112,12 +112,13 @@ const launch = () =>
   })
 const favoriteSession = await launch()
 try {
+  const page = await favoriteSession.firstWindow()
+  await page.waitForSelector('.music-shell')
   await favoriteSession.evaluate(({ BaseWindow }) =>
     BaseWindow.getAllWindows()
       .find((window) => window.getTitle() === 'Music')
       .setContentSize(1060, 700),
   )
-  const page = await favoriteSession.firstWindow()
   await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByRole('button', { name: '试听已有分类', exact: true }).click()
   const heart = page.getByRole('button', { name: '收藏当前歌曲' })
