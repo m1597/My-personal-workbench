@@ -159,10 +159,11 @@ try {
   store.checkpoint(saved.id, 0.8)
   assert.equal(store.get('current'), localId)
   assert.equal(Number(store.get('position')), 0.8)
-  assert.ok(later.playlists.some((p) => p.name === '歌曲推荐' && p.tracks.includes(localId)))
+  assert.ok(later.localTracks.some((t) => t.id === localId))
+  assert.deepEqual(later.playlists.find((p) => p.system)?.tracks, [])
   assert.ok(fs.existsSync(permanentFile) && !fs.existsSync(store.file(missed.id, '.mp3')))
   assert.deepEqual(store.feedbackIds(), feedback)
-  console.log('PASS 跨日过期清理、已保存歌单及队列迁移、未下载条目无负反馈')
+  console.log('PASS 跨日过期清理、旧成员退出系统歌单、永久文件及队列保留、未下载条目无负反馈')
   console.log(
     'PASS 并发、取消、失效选择、同版本本地命中、缺失重取、目标卷 ENOSPC 注入、重复入库、复制后中断恢复。缓存卷 ' +
       path.parse(root).root +
