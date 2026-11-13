@@ -13,16 +13,22 @@ export async function regularFile(file) {
   return (await audioFileSize(file)) !== null
 }
 export async function audioFileSize(file) {
+  const stat = await audioFileStat(file)
+  return stat ? Number(stat.size) : null
+}
+export async function audioFileStat(file) {
   if (!Object.hasOwn(audioTypes, path.extname(file).toLowerCase())) return null
   try {
-    const info = await lstat(file)
-    return info.size > 0 && info.isFile() && pathKey(await realpath(file)) === pathKey(file)
-      ? info.size
+    const info = await lstat(file, { bigint: true })
+    return info.size > 0n && info.isFile() && pathKey(await realpath(file)) === pathKey(file)
+      ? info
       : null
   } catch {
     return null
   }
 }
+export const fileIdentity = (stat) =>
+  stat?.ino ? [stat.dev, stat.ino, stat.birthtimeNs].join(':') : null
 
 // ENOENT can also mean an unavailable drive or a dangling directory link.
 export async function confirmedMissing(file) {

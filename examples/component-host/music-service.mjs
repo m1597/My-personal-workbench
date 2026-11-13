@@ -1,3 +1,4 @@
+import { reconcileRecycled } from './recycled-tracks.mjs'
 import { desktopLyrics } from './desktop-lyrics.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
 import { localLines } from './music-lyrics.mjs'
@@ -156,7 +157,10 @@ export function musicService(
   )
   bind('cancelImport', () => store.library.cancel())
   bind('relocateLocal', (id) => selectLocal('files', text(id)))
-  bind('refreshLocal', () => store.library.refresh())
+  bind('refreshLocal', async () => {
+    await store.library.refresh()
+    await reconcileRecycled(store, forgetTracks)
+  })
   registerLibraryTools(
     bind,
     () => store,

@@ -2,7 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads'
 import { opendir, lstat, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { parseStream } from 'music-metadata'
-import { audioTypes, pathKey, openAudio } from './local-files.mjs'
+import { fileIdentity, audioTypes, pathKey, openAudio } from './local-files.mjs'
 const text = (s) => (typeof s === 'string' ? s.trim().slice(0, 2048) : '')
 let rows = [],
   failed = 0
@@ -15,7 +15,8 @@ async function file(entry) {
   let handle, stream
   try {
     handle = await openAudio(entry)
-    const { size } = await handle.stat()
+    const stat = await handle.stat({ bigint: true })
+    const size = Number(stat.size)
     stream = handle.createReadStream({ autoClose: false })
     const { common, format } = await parseStream(
       stream,
@@ -25,6 +26,7 @@ async function file(entry) {
     if (!Number.isFinite(format.duration) || format.duration <= 0) throw Error()
     rows.push({
       file: entry,
+      identity: fileIdentity(stat),
       title: text(common.title) || path.basename(entry, path.extname(entry)),
       artist: text(common.artist) || '未知艺人',
       album: text(common.album),
