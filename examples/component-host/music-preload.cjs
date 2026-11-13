@@ -13,6 +13,7 @@ const names = [
   'lxInfo',
   'lxImport',
   'lxSearch',
+  'rememberOnline',
   'lxDownload',
   'lxPreview',
   'lxCancel',

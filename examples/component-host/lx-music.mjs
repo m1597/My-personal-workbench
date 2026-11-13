@@ -564,6 +564,41 @@ function recordingId(src, row) {
     row.meta?.[src.platform]?.id
   return ['number', 'string'].includes(typeof id) && String(id).trim() ? String(id) : null
 }
+// Persist LX recording identifiers only. A provider may put signed URLs in arbitrary search fields.
+function durableRecording(src, row) {
+  const out = {
+    source: src.platform,
+    name: text(row.name),
+    singer: text(row.singer),
+    albumName: text(row.albumName),
+  }
+  const identifier = (v) =>
+    (typeof v === 'number' && Number.isFinite(v)) ||
+    (typeof v === 'string' && /^[\p{L}\p{N}._:-]{1,256}$/u.test(v))
+  for (const key of [
+    'id',
+    'songmid',
+    'songId',
+    'strMediaMid',
+    'albumId',
+    'albumMid',
+    'albumAudioId',
+    'hash',
+    'interval',
+    'durationSeconds',
+    '_interval',
+  ])
+    if (identifier(row[key])) out[key] = row[key]
+  const metaId = row.meta?.[src.platform]?.id
+  if (identifier(metaId)) out.meta = { [src.platform]: { id: metaId } }
+  if (Array.isArray(row.types)) {
+    out.types = row.types
+      .filter((t) => src.quality.includes(t?.type))
+      .map((t) => (identifier(t.hash) ? { type: t.type, hash: t.hash } : { type: t.type }))
+    out._types = Object.fromEntries(out.types.map(({ type, ...info }) => [type, info]))
+  }
+  return out
+}
 function versionInfo(src, row, quality) {
   const id = recordingId(src, row)
   if (id === null) return null
@@ -741,6 +776,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         matches.set(key, {
           sourceCode: src.code,
           platform: src.platform,
+          query: { title: track.title, artist: track.artist },
           row,
           auditionId: typeof id === 'string' && !id.startsWith('local-') ? id : null,
         })
@@ -755,6 +791,66 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       return { items, quality: src.quality, partial }
     }),
   )
+  const onlineRows = new Map()
+  function onlineDatabase() {
+    const { db } = getStore()
+    db.exec(`CREATE TABLE IF NOT EXISTS online_recording_sources (
+      id TEXT PRIMARY KEY, source TEXT NOT NULL, platform TEXT NOT NULL, recording TEXT NOT NULL,
+      quality TEXT NOT NULL, query TEXT NOT NULL, identifiers TEXT NOT NULL)`)
+    return db
+  }
+  bind('rememberOnline', (key, quality) => {
+    const match = matches.get(key)
+    const selected = source()
+    if (!match || match.auditionId || selected?.code !== match.sourceCode)
+      throw Error('请重新搜索并选择录音')
+    const src = { ...selected, ...selected.platforms?.[match.platform] }
+    const row = match.row
+    const recording = recordingId(src, row)
+    const qualities = recordingQualities(src, row)
+    if (quality === undefined) {
+      const preferred = getMusicPreferences(getStore()).quality
+      quality = qualities.includes(preferred) ? preferred : qualities[0]
+    }
+    if (!recording || !/^[\p{L}\p{N}._:-]{1,256}$/u.test(recording) || !qualities.includes(quality))
+      throw Error('此版本没有可用的录音标识或音质')
+    const sourceId = catalog().list().active
+    if (!sourceId) throw Error('请重新选择音乐源')
+    const id =
+      'online-recording-' +
+      createHash('sha256')
+        .update(JSON.stringify([sourceId, src.platform, recording]))
+        .digest('hex')
+    const db = onlineDatabase()
+    db.exec('BEGIN')
+    try {
+      db.prepare(`INSERT INTO online_recording_sources VALUES(?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET quality=excluded.quality,query=excluded.query,identifiers=excluded.identifiers`).run(
+        id,
+        sourceId,
+        src.platform,
+        recording,
+        quality,
+        JSON.stringify(match.query),
+        JSON.stringify(durableRecording(src, row)),
+      )
+      getStore().library.rememberOnline({
+        id,
+        title: text(row.name),
+        artist: text(row.singer),
+        album: text(row.albumName),
+        duration: Number.isFinite(row.durationSeconds) ? row.durationSeconds : 0,
+      })
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+    onlineRows.delete(id)
+    onlineRows.set(id, row)
+    if (onlineRows.size > 64) onlineRows.delete(onlineRows.keys().next().value)
+    return id
+  })
   async function transfer(signal, key, quality, auditionId, detailed = false) {
     const selected = source()
     const match = matches.get(key)
@@ -1443,6 +1539,38 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   })
   let generation = 0
   return {
+    onlineAddress(id) {
+      const db = onlineDatabase()
+      const record = db.prepare('SELECT * FROM online_recording_sources WHERE id=?').get(id)
+      const installed =
+        record &&
+        db
+          .prepare("SELECT payload FROM music_sources WHERE id=? AND disabled=''")
+          .get(record.source)
+      if (!installed) throw Error('录音的原音乐源不可用，请重新搜索')
+      const source = JSON.parse(installed.payload)
+      const platform =
+        source.platforms?.[record.platform] ?? (source.platform === record.platform ? source : null)
+      if (!platform?.quality.includes(record.quality)) throw Error('原音乐源已不支持此音质')
+      const src = { ...source, ...platform }
+      let row = onlineRows.get(id)
+      return async (signal) => {
+        if (!row) {
+          try {
+            const saved = JSON.parse(record.identifiers)
+            const url = await recordingAddress(src, saved, record.quality, signal)
+            row = saved
+            return url
+          } catch {
+            signal.throwIfAborted()
+          }
+          const { rows } = await downloadResults(src, JSON.parse(record.query), signal)
+          row = rows.find((candidate) => recordingId(src, candidate) === record.recording)
+          if (!row) throw Error('音乐源中已找不到该录音，请重新搜索')
+        }
+        return recordingAddress(src, row, record.quality, signal)
+      }
+    },
     synchronizeSources(signal) {
       const bank = catalog()
       // Independent user scripts can work immediately. Repository-managed sources wait for the check.

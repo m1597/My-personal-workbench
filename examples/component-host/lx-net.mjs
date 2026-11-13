@@ -70,6 +70,7 @@ async function openRedirect(input, options, redirects, peers) {
     peers.set(hostname, peer)
   }
   const headers = {}
+  if (options.mediaRange) headers.Range = options.mediaRange
   for (const [name, value] of Object.entries(options.headers ?? {})) {
     if (
       /^(accept|content-type|user-agent|referer|origin)$/i.test(name) &&
@@ -80,7 +81,7 @@ async function openRedirect(input, options, redirects, peers) {
   }
   const request = url.protocol === 'https:' ? https.request : http.request
   const method = options.method ?? 'GET'
-  if (!['GET', 'POST'].includes(method)) throw Error('不支持该请求方法')
+  if (!['GET', 'POST', 'HEAD'].includes(method)) throw Error('不支持该请求方法')
   const response = await new Promise((resolve, reject) => {
     const req = request(
       url,
@@ -102,7 +103,7 @@ async function openRedirect(input, options, redirects, peers) {
     response.destroy()
     return openRedirect(
       new URL(response.headers.location, url),
-      { ...options, method: 'GET', body: undefined },
+      { ...options, method: method === 'HEAD' ? 'HEAD' : 'GET', body: undefined },
       redirects + 1,
       peers,
     )
@@ -113,7 +114,9 @@ async function openRedirect(input, options, redirects, peers) {
 export async function sourceRequest(url, options) {
   const timeout = Math.min(20000, Math.max(1000, Number(options.timeout) || 15000))
   const res = await openPublic(url, {
-    ...options,
+    method: options.method,
+    headers: options.headers,
+    body: options.body,
     signal: options.signal
       ? AbortSignal.any([options.signal, AbortSignal.timeout(timeout)])
       : AbortSignal.timeout(timeout),

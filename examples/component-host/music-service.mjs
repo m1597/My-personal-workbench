@@ -27,6 +27,7 @@ import { ipcMain, dialog, nativeImage, safeStorage, shell } from 'electron'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
 import { localStream } from './local-stream.mjs'
+import { onlineStream } from './online-stream.mjs'
 export function musicService(
   profile,
   isSender,
@@ -123,7 +124,7 @@ export function musicService(
   bind('unlockLyrics', () => overlay.unlock())
   bind('lyricLine', (line) => overlay.update(typeof line === 'string' ? line.slice(0, 500) : ''))
   bind('lyrics', async (id) => {
-    if (!text(id)) return []
+    if (!text(id) || id.startsWith('online-recording-')) return []
     if (grant?.id === id) {
       const track = grant.audition
         ? store.metadata(store.item(id).track)
@@ -269,8 +270,27 @@ export function musicService(
       localDialog = false
     }
   })
+  let playbackEpoch = 0
+  function releaseGrant() {
+    playbackEpoch++
+    grant?.controller?.abort()
+    grant = null
+  }
   bind('localSource', async (id) => {
+    releaseGrant()
+    const play = playbackEpoch
     const epoch = viewEpoch
+    if (text(id).startsWith('online-recording-')) {
+      const address = lx.onlineAddress(id)
+      store.release()
+      grant = {
+        id,
+        address,
+        controller: new AbortController(),
+        url: 'fitbay-audio://track/' + randomUUID(),
+      }
+      return grant.url
+    }
     if (!text(id).startsWith('local-')) {
       const entry = store.db.prepare('SELECT local FROM recommended_items WHERE item=?').get(id)
       if (entry) {
@@ -280,7 +300,7 @@ export function musicService(
           store.status(id, '待重试')
           throw Error('本地录音不可用，请重试')
         }
-        if (epoch !== viewEpoch) throw Error('窗口已关闭')
+        if (epoch !== viewEpoch || play !== playbackEpoch) throw Error('播放请求已结束')
         store.release()
         grant = {
           id,
@@ -310,7 +330,7 @@ export function musicService(
           throw Error('试听缓存缺失或校验失败，请重新获取')
         }
       }
-      if (viewEpoch !== epoch) throw Error('窗口已关闭')
+      if (viewEpoch !== epoch || play !== playbackEpoch) throw Error('播放请求已结束')
       store.release()
       store.active = id
       grant = {
@@ -323,7 +343,7 @@ export function musicService(
     }
     const row = store.library.row(text(id))
     if (!(await store.library.verify(row))) throw Error('文件不可用，请重新定位')
-    if (viewEpoch !== epoch) throw Error('窗口已关闭')
+    if (viewEpoch !== epoch || play !== playbackEpoch) throw Error('播放请求已结束')
     store.release()
     grant = {
       url: 'fitbay-audio://track/' + randomUUID(),
@@ -335,6 +355,10 @@ export function musicService(
   })
   bind('mediaFailed', (id, url) => {
     if (grant && grant.id === id && grant.url === url) {
+      if (grant.controller) {
+        releaseGrant()
+        return
+      }
       if (grant.audition) {
         store.status(id, '文件缺失')
         store.release()
@@ -351,7 +375,7 @@ export function musicService(
     if (!Array.isArray(ids)) throw Error('播放队列无效')
     const known = new Set(
       store.db
-        .prepare('SELECT id FROM items UNION ALL SELECT id FROM local_tracks')
+        .prepare('SELECT id FROM items UNION ALL SELECT id FROM playlist_recordings')
         .all()
         .map((row) => row.id),
     )
@@ -736,7 +760,7 @@ export function musicService(
   })
   bind('bytes', (id) => {
     const bytes = store.bytes(text(id))
-    grant = null
+    releaseGrant()
     return bytes
   })
   bind('progress', (id, time, duration) => {
@@ -750,11 +774,12 @@ export function musicService(
       store.checkpoint(id, time)
   })
   bind('heardLocal', (url) => {
-    if (!grant || grant.url !== text(url) || grant.audition) return
+    if (!grant || grant.url !== text(url) || grant.audition || grant.controller) return
     store.library.heard(grant.libraryId ?? grant.id)
   })
-  bind('release', () => {
-    grant = null
+  bind('release', (url) => {
+    if (url !== undefined && grant?.url !== url) return
+    releaseGrant()
     store.release()
   })
   bind('clean', () => store.cleanup(true))
@@ -807,7 +832,9 @@ export function musicService(
     },
     register(session) {
       if (!sessions.has(session)) {
-        session.protocol.handle('fitbay-audio', (req) => localStream(req, grant, store?.library))
+        session.protocol.handle('fitbay-audio', (req) =>
+          grant?.controller ? onlineStream(req, grant) : localStream(req, grant, store?.library),
+        )
         sessions.add(session)
       }
     },
@@ -818,7 +845,7 @@ export function musicService(
       clearTimeout(updateTimer)
       taste?.controller?.abort()
       viewEpoch++
-      grant = null
+      releaseGrant()
       store?.library.cancel()
       pending?.abort()
       if (store) {
