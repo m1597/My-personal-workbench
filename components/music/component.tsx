@@ -1453,7 +1453,7 @@ function Music() {
               )
             }}
           >
-            <span>{modeName}</span>
+            {presentation !== 'bar' && <span>{modeName}</span>}
           </Button>
           <Button
             size="small"
@@ -1480,6 +1480,11 @@ function Music() {
             {lyricsLocked && '解锁'}
           </Button>
           <PlaybackQueue
+            onOpen={
+              presentation === 'bar'
+                ? () => void act(() => window.musicWindow.present('full'))
+                : undefined
+            }
             active={active}
             tracks={recordings}
             items={state?.items}
@@ -1530,6 +1535,7 @@ function Music() {
             <Button
               appearance="subtle"
               size="small"
+              className="music-expand"
               aria-label="展开 Music"
               title="展开 Music"
               icon={<PanelTopOpen size={17} />}
@@ -1551,7 +1557,14 @@ function Music() {
             }}
           />
           <span>{clock(duration)}</span>
-          {state && <VolumeControls initial={state.prefs} audio={audio} onError={setError} />}
+          {state && (
+            <VolumeControls
+              compact={presentation === 'bar'}
+              initial={state.prefs}
+              audio={audio}
+              onError={setError}
+            />
+          )}
         </div>
         <audio
           ref={audio}

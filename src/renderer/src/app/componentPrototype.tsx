@@ -416,7 +416,7 @@ export function MusicPlayerBar() {
     <section
       aria-label={t('Music 播放栏', 'Music player bar')}
       ref={slot}
-      style={{ flex: '0 0 100px', position: 'relative' }}
+      style={{ flex: '0 0 40px', position: 'relative' }}
     >
       <ComponentBackdrop host={window.musicDock} />
     </section>

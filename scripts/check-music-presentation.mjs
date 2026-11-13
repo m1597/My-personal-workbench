@@ -128,8 +128,39 @@ try {
     await expect(hide).toBeVisible()
     await expect(reveal).toHaveCount(0)
     await shell.keyboard.press('Escape')
+    const volume = music.getByRole('button', { name: '调节音量' })
+    await expect(music.getByRole('slider', { name: '音量', exact: true })).toBeHidden()
+    await volume.click()
     for (const name of ['播放进度', '音量'])
       await expect(music.getByRole('slider', { name, exact: true })).toBeInViewport()
+    const level = music.getByRole('slider', { name: '音量', exact: true })
+    await level.focus()
+    await level.press('Home')
+    await level.press('ArrowRight')
+    await expect(level).toHaveValue('1')
+    await level.press('Escape')
+    await expect(level).toBeHidden()
+    const geometry = await music.locator('.music-player').evaluate((footer) => {
+      const controls = [...footer.querySelectorAll('button, input[type=range]')].filter(
+        (control) => control.getClientRects().length,
+      )
+      const rect = footer.getBoundingClientRect()
+      return {
+        height: rect.height,
+        viewport: innerHeight,
+        width: innerWidth,
+        singleRow: controls.every((el) => {
+          const box = el.getBoundingClientRect()
+          return (
+            box.top >= rect.top - 1 && box.bottom <= rect.bottom + 1 && box.right <= innerWidth + 1
+          )
+        }),
+      }
+    })
+    expect(geometry.height).toBe(40)
+    if (docked) expect(geometry.viewport).toBe(40)
+    expect(geometry.singleRow).toBe(true)
+    console.log('迷你栏实际尺寸', geometry)
     for (const name of [
       '展开 Music',
       '当前顺序播放，切换为随机播放',
@@ -143,8 +174,14 @@ try {
       await expect(music.getByRole('button', { name, exact: true })).toBeInViewport()
     await music.getByRole('button', { name: '播放队列' }).click()
     await expect(music.locator('.music-queue')).toBeVisible()
+    await expect(music.getByRole('button', { name: '只显示播放栏' })).toBeVisible()
     await music.keyboard.press('Escape')
+    await music.getByRole('button', { name: '只显示播放栏' }).click()
     await music.getByRole('button', { name: '暂停', exact: true }).click()
+    const progress = music.getByRole('slider', { name: '播放进度' })
+    const slider = await progress.boundingBox()
+    await progress.click({ position: { x: slider.width * 0.52, y: slider.height / 2 } })
+    await expect.poll(clock).toBeGreaterThan(8)
     const paused = await clock()
     await music.evaluate(() => {
       document.documentElement.style.backgroundColor = getComputedStyle(
@@ -155,6 +192,10 @@ try {
       scale: 'css',
       path: path.join(evidence, docked ? '停靠播放栏.png' : '独立播放栏.png'),
     })
+    await music.getByRole('button', { name: '打开歌词页' }).click()
+    await expect(music.getByRole('region', { name: '播放页' })).toBeVisible()
+    await music.getByRole('button', { name: '返回' }).click()
+    await music.getByRole('button', { name: '只显示播放栏' }).click()
     await music.getByRole('button', { name: '展开 Music' }).click()
     await expect(music.getByRole('tab', { name: '本地曲库' })).toBeVisible()
     if (docked) await expect(tab).toHaveAttribute('aria-selected', 'true')

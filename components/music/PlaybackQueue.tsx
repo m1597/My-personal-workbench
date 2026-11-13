@@ -3,6 +3,7 @@ import { Button, Popover, PopoverSurface, PopoverTrigger } from '@fluentui/react
 import { ListMusic } from 'lucide-react'
 type Song = { id: string; title: string; artist: string }
 export function PlaybackQueue({
+  onOpen,
   active,
   tracks,
   items,
@@ -10,6 +11,7 @@ export function PlaybackQueue({
   index,
   navigable,
 }: {
+  onOpen?: () => void
   active?: Song
   tracks?: Song[]
   items?: Song[]
@@ -25,7 +27,14 @@ export function PlaybackQueue({
     : []
   const seen = new Set<string>()
   return (
-    <Popover positioning="above" open={open} onOpenChange={(_, d) => setOpen(d.open)}>
+    <Popover
+      positioning="above"
+      open={open}
+      onOpenChange={(_, d) => {
+        if (d.open) onOpen?.()
+        setOpen(d.open)
+      }}
+    >
       <PopoverTrigger disableButtonEnhancement>
         <Button
           size="small"

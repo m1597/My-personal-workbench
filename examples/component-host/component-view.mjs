@@ -108,7 +108,7 @@ export function componentView({
           fullWindowMaximized = standalone.isMaximized()
           fullWindowBounds = standalone.getNormalBounds()
           if (fullWindowMaximized) standalone.unmaximize()
-          standalone.setContentSize(Math.max(560, standalone.getContentSize()[0]), 100)
+          standalone.setContentSize(Math.max(560, standalone.getContentSize()[0]), 40)
         } else if (fullWindowBounds) {
           standalone.setBounds(fullWindowBounds)
           if (fullWindowMaximized) standalone.maximize()
