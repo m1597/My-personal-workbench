@@ -648,7 +648,7 @@ export function musicService(
               similar: mode === 'artist' && similar,
               // Keep alternates in memory on refills. The reservation limit below still
               // admits only the requested number of recordings to matching and saving.
-              count: Math.min(5, round > 1 ? remaining + 2 : remaining),
+              count: Math.min(5, round > 1 ? Math.max(targetCount, remaining + 2) : remaining),
               ...(profile ? { profile } : {}),
               ...(catalogChoices.length ? { catalogChoices } : {}),
               ...(excluded.length ? { excluded } : {}),
