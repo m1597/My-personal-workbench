@@ -370,6 +370,7 @@ function Music() {
     queueIds: string[]
   }>()
   const [infrequentDays, setInfrequentDays] = useState(90)
+  const [recentImports, setRecentImports] = useState(false)
   const [resolving, setResolving] = useState(false)
   const [shuffled, setShuffled] = useState<string[] | null>(null)
   const [repeatOne, setRepeatOne] = useState(false)
@@ -554,6 +555,10 @@ function Music() {
       value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
     ),
   )
+  if (collection === 'all' && recentImports)
+    localRows.sort((a, b) =>
+      a.origin !== 'online' && b.origin !== 'online' ? b.observedAt - a.observedAt : 0,
+    )
   const queueable = (row: Item) => playable(row) || row.online
   const visibleQueue = libraryPage
     ? localRows.filter((row) => row.available).map((row) => row.id)
@@ -1262,6 +1267,9 @@ function Music() {
               return ok ? added : null
             }}
             rows={localRows}
+            members={categoryRows}
+            recentImports={recentImports}
+            setRecentImports={setRecentImports}
             downloadSelected={async (ids) => {
               let result: SelectionDownload[] = []
               await act(async () => {

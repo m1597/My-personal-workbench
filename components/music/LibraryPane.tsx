@@ -8,6 +8,7 @@ import { PlaylistSortMenu, type Playlist, type PlaylistSorting } from './Playlis
 export type { Playlist } from './PlaylistSortMenu'
 import { TrackMenu } from './TrackMenu'
 import { AlbumBrowser } from './AlbumBrowser'
+import { PlaylistCover } from './PlaylistCover'
 import { InfrequentTracks } from './InfrequentTracks'
 import { RecentHistory } from './LibraryTools'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -52,6 +53,7 @@ export type LocalTrack = {
   artist: string
   folder: FolderEntry | null
   album: string
+  albumArtist?: string | null
   duration: number
   discNumber: number | null
   trackNumber: number | null
@@ -95,6 +97,9 @@ interface Props extends SidebarSorting, PlaylistSorting {
   addFavorites: (ids: string[]) => Promise<number | null>
   downloadSelected: (ids: string[]) => Promise<SelectionDownload[]>
   rows: PlaylistTrack[]
+  members: PlaylistTrack[]
+  recentImports: boolean
+  setRecentImports: (value: boolean) => void
   tracks: LocalTrack[]
   playlists: Playlist[]
   collection: string
@@ -145,6 +150,9 @@ export function LibraryPane({
   create,
   membership,
   rows,
+  members,
+  recentImports,
+  setRecentImports,
   total,
   search,
   setSearch,
@@ -286,6 +294,8 @@ export function LibraryPane({
   const currentPlaylist = playlists.find((p) => p.id === collection)
   const currentFolder = folders.find((f) => f.id === collection)
   const heading = currentPlaylist?.name ?? currentFolder?.name ?? '全部歌曲'
+  const playlistPage = scope === 'playlists'
+  const playableMembers = playlistPage ? members.filter((t) => t.available).map((t) => t.id) : []
   const choose = (id: string) => {
     setAlbumView(false)
     setSelection(null)
@@ -478,13 +488,42 @@ export function LibraryPane({
           ) : (
             <>
               <div className="library-title">
+                {playlistPage && (
+                  <PlaylistCover members={members} tracks={tracks} revision={albumRevision} />
+                )}
                 <div>
                   <h2>
                     {currentFolder ? '文件夹 / ' : scope === 'playlists' ? '歌单 / ' : ''}
                     {collection === 'favorites' ? '我的收藏' : heading}
                   </h2>
                   <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
+                  {playlistPage && (
+                    <small>
+                      总时长 {formatTime(members.reduce((sum, row) => sum + row.duration, 0))}
+                    </small>
+                  )}
                 </div>
+                {playlistPage && (
+                  <Button
+                    size="small"
+                    appearance="primary"
+                    icon={<Play size={15} />}
+                    disabled={!playableMembers.length}
+                    onClick={() => playAlbum(playableMembers[0], playableMembers, true)}
+                  >
+                    播放全部
+                  </Button>
+                )}
+                {collection === 'all' && (
+                  <Button
+                    size="small"
+                    appearance={recentImports ? 'primary' : 'secondary'}
+                    aria-pressed={recentImports}
+                    onClick={() => setRecentImports(!recentImports)}
+                  >
+                    最近入库
+                  </Button>
+                )}
                 {currentPlaylist && (
                   <PlaylistSortMenu playlist={currentPlaylist} setPlaylistSort={setPlaylistSort} />
                 )}

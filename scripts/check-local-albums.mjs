@@ -26,15 +26,10 @@ function frame(name, bytes) {
   header.writeUInt32BE(bytes.length, 4)
   return Buffer.concat([header, bytes])
 }
-for (const [title, artist, albumArtist, disc, track, picture] of [
-  ['Nightfall', 'Northern Trio', 'Northern Trio', 2, 1, false],
-  ['Overture', 'Guest', 'Northern Trio', 1, 1, false],
-  ['Interlude', 'Northern Trio', 'Northern Trio', 1, 2, true],
-  ['Low Tide', 'South Duo', '', 1, 1, false],
-]) {
+async function writeTrack(dir, title, artist, album, albumArtist, disc, track, picture) {
   const fields = {
     TIT2: title,
-    TALB: 'Echo',
+    TALB: album,
     TPE1: artist,
     TPOS: String(disc),
     TRCK: String(track),
@@ -44,11 +39,21 @@ for (const [title, artist, albumArtist, disc, track, picture] of [
     frame(name, Buffer.concat([Buffer.from([0]), Buffer.from(value, 'latin1')])),
   )
   if (picture)
-    frames.push(frame('APIC', Buffer.concat([Buffer.from('\0image/png\0\x03\0', 'latin1'), cover])))
+    frames.push(
+      frame('APIC', Buffer.concat([Buffer.from('\0image/png\0\x03\0', 'latin1'), picture])),
+    )
   const tags = Buffer.concat(frames)
   const header = Buffer.from([73, 68, 51, 3, 0, 0, 0, 0, 0, 0])
   for (let i = 0; i < 4; i++) header[9 - i] = (tags.length >>> (7 * i)) & 127
-  await writeFile(path.join(library, title + '.mp3'), Buffer.concat([header, tags, audio]))
+  await writeFile(path.join(dir, title + '.mp3'), Buffer.concat([header, tags, audio]))
+}
+for (const [title, artist, albumArtist, disc, track, picture] of [
+  ['Nightfall', 'Northern Trio', 'Northern Trio', 2, 1, false],
+  ['Overture', 'Guest', 'Northern Trio', 1, 1, false],
+  ['Interlude', 'Northern Trio', 'Northern Trio', 1, 2, true],
+  ['Low Tide', 'South Duo', '', 1, 1, false],
+]) {
+  await writeTrack(library, title, artist, 'Echo', albumArtist, disc, track, picture && cover)
 }
 const app = await electron.launch({
   args: [
@@ -170,6 +175,77 @@ try {
   await page.getByRole('button', { name: '专辑', exact: true }).click()
   await duoCard.click()
   await expect(detail.locator('.album-art img')).toHaveAttribute('src', './default-cover.png')
+  const extra = path.join(root, 'covers')
+  await mkdir(extra)
+  const names = ['Daybreak', 'Noon', 'Dusk', 'Midnight']
+  for (const [i, name] of names.entries()) {
+    const picture = await page.evaluate(
+      ([name, i]) => {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 128
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = ['#264966', '#8b542d', '#5c3d63', '#283b50'][i]
+        ctx.fillRect(0, 0, 128, 128)
+        ctx.fillStyle = '#faf2d8'
+        ctx.beginPath()
+        ctx.arc(35 + i * 18, 35, 16, 0, 2 * Math.PI)
+        ctx.fill()
+        ctx.font = '16px serif'
+        ctx.fillText(name, 10, 108)
+        return canvas.toDataURL().split(',')[1]
+      },
+      [name, i],
+    )
+    await writeTrack(extra, name, 'Seasons', name, '', 1, 1, Buffer.from(picture, 'base64'))
+  }
+  await app.evaluate(({ dialog, BaseWindow }, dir) => {
+    BaseWindow.getAllWindows()[0].setContentSize(1040, 720)
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
+  }, extra)
+  await openMusicSettings(page)
+  await page.getByRole('button', { name: '添加文件夹' }).click()
+  await expect.poll(async () => (await state()).localTracks.length).toBe(8)
+  const byTitle = new Map((await state()).localTracks.map((t) => [t.title, t.id]))
+  const ids = ['Overture', 'Nightfall', 'Low Tide', ...names].map((name) => byTitle.get(name))
+  await page.evaluate(async (ids) => {
+    await window.music.createPlaylist('四季', ids)
+    await window.music.createPlaylist('单封面', ids.slice(0, 2))
+    await window.music.createPlaylist('无封面', [ids[2]])
+    await window.music.createPlaylist('双封面', ids.slice(0, 4))
+  }, ids)
+  await page.reload()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
+  const choose = (name) => page.getByRole('button', { name, exact: true }).click()
+  const images = page.locator('.playlist-cover img')
+  for (const [list, expected] of [
+    ['无封面', [null]],
+    ['单封面', [ids[0]]],
+    ['双封面', [ids[0], ids[3], null, null]],
+    ['四季', [ids[0], ...ids.slice(3, 6)]],
+  ]) {
+    await choose(list)
+    await expect(images).toHaveCount(expected.length)
+    for (const [i, id] of expected.entries()) {
+      const src = id
+        ? await page.evaluate((track) => window.music.trackCover(track), id)
+        : './default-cover.png'
+      await expect(images.nth(i)).toHaveAttribute('src', src)
+    }
+    await page.screenshot({
+      path: path.join(root, list + '.png'),
+      style: ':root {background:var(--base) !important}',
+    })
+  }
+  await page.getByRole('searchbox', { name: '搜索本地歌曲' }).fill('Noon')
+  await expect(page.locator('.library-title')).toContainText('1 / 7 首歌曲')
+  const seconds = (await state()).localTracks
+    .filter((t) => ids.includes(t.id))
+    .reduce((sum, t) => sum + t.duration, 0)
+  await expect(page.locator('.library-title')).toContainText(
+    '总时长 ' + Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0'),
+  )
+  await choose('播放全部')
+  await expect.poll(async () => (await state()).queue).toEqual(ids)
   assert.deepEqual(await app.evaluate(() => globalThis.albumNetworkAttempts), [])
   assert.deepEqual(externalRequests, [])
   console.log(

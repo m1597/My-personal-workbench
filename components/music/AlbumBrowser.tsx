@@ -22,9 +22,9 @@ export type Album = {
 }
 
 const pendingCovers = new Map<string, Promise<string | null>>()
-const defaultCover = './default-cover.png'
+export const defaultCover = './default-cover.png'
 
-function requestCover(id: string, track: boolean, revision: number) {
+export function requestCover(id: string, track: boolean, revision: number) {
   const key = [revision, track ? 'track' : 'album', id].join(':')
   let request = pendingCovers.get(key)
   if (!request) {

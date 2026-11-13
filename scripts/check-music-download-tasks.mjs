@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, writeFile, readdir } from 'node:fs/promises'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
 import { offlineSourceRepository } from './music-source-fixture.mjs'
+import { openMusicSettings } from './music-settings-fixture.mjs'
 
 await mkdir('tmp', { recursive: true })
 const root = await mkdtemp(path.resolve('tmp/music-task-panel-'))
@@ -149,6 +150,39 @@ try {
   await app.evaluate(() => globalThis.finishTestDownload())
   await expect(panel).toContainText('已入库')
   assert.equal((await readdir(dir)).filter((name) => name.endsWith('.mp3')).length, 1)
+  await page.keyboard.press('Escape')
+  await tab('曲库')
+  await press('最近入库')
+  const titles = page.locator('.library-row .library-name strong')
+  const downloaded = await page.evaluate(async () =>
+    (await window.music.state()).localTracks.find((track) => track.origin === 'download'),
+  )
+  assert.ok(downloaded)
+  await expect(titles).toHaveText([downloaded.title, '晨光'])
+  const captureOrder = (file) =>
+    page.screenshot({
+      path: path.join(root, file),
+      style: ':root {background:var(--base) !important}',
+    })
+  await captureOrder('new-download-order.png')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, path.resolve('tests/fixtures/local-music/tone.flac'))
+  await openMusicSettings(page)
+  await press('添加文件')
+  await tab('曲库')
+  await expect(titles).toHaveCount(3)
+  const imported = await page.evaluate(async () =>
+    (await window.music.state()).localTracks.find(
+      (track) => track.origin === 'local' && track.title !== '晨光',
+    ),
+  )
+  assert.ok(imported)
+  await expect(titles).toHaveText([imported.title, downloaded.title, '晨光'])
+  await captureOrder('new-import-order.png')
+  await press('最近入库')
+  await expect(button('最近入库')).toHaveAttribute('aria-pressed', 'false')
+  await press('下载任务')
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })

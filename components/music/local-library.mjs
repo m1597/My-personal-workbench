@@ -292,7 +292,7 @@ export class LocalLibrary {
   list() {
     const rows = this.db
       .prepare(
-        `SELECT id,title,artist,album,discNumber,trackNumber,duration,available,listed,file,observedAt,lastHeardAt,hiddenFromRecent,size,favorite,
+        `SELECT id,title,artist,album,albumArtist,discNumber,trackNumber,duration,available,listed,file,observedAt,lastHeardAt,hiddenFromRecent,size,favorite,
         (SELECT COUNT(*) FROM local_play_history h WHERE h.track=local_tracks.id) AS playCount,
         COALESCE((SELECT CASE MAX(v.automatic) WHEN 1 THEN 'daily' WHEN 0 THEN 'download' END FROM recording_copies v WHERE v.local=local_tracks.id),importedOrigin) AS origin,
         (SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,
