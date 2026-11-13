@@ -591,6 +591,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   })
   await app.evaluate(() => globalThis.releaseTransfer())
   await expect(page.getByText(/已下载 5\/5/)).toBeVisible()
+  await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled()
   assert.deepEqual(
     await page.evaluate(async () => (await window.music.state()).queue),
     expectedQueue,

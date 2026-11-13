@@ -157,18 +157,18 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
               return req
             }
           }
-          req.end = () =>
-            setTimeout(
-              () =>
-                receive(
-                  Object.assign(fs.createReadStream(recordings[song] ?? audio), {
-                    statusCode: 200,
-                    headers: {},
-                    setTimeout() {},
-                  }),
-                ),
-              song === '慢传追加' ? 8000 : song === '滚动一' ? 4500 : 650,
+          const respond = () =>
+            receive(
+              Object.assign(fs.createReadStream(recordings[song] ?? audio), {
+                statusCode: 200,
+                headers: {},
+                setTimeout() {},
+              }),
             )
+          req.end = () => {
+            if (song === '慢传追加') globalThis.releaseSlowTransfer = respond
+            else setTimeout(respond, song === '滚动一' ? 4500 : 650)
+          }
           return req
         }
         globalThis.fetch = async (_url, options) => {
@@ -334,8 +334,9 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   })
   await page.getByLabel('推荐首数').fill('5')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.locator('.music-list li strong')).toHaveCount(4, { timeout: 11000 })
-  await expect(progress).toContainText('已下载 4/5，正在下载《慢传追加》')
+  await expect(progress).toContainText('已下载 4/5，正在下载《慢传追加》', { timeout: 30000 })
+  await expect(page.locator('.music-list li strong')).toHaveCount(4)
+  await app.evaluate(() => globalThis.releaseSlowTransfer())
   await expect(progress).toContainText('已下载 5/5，已达到目标首数', { timeout: 14000 })
   const counts = await app.evaluate(() => {
     const counts = globalThis.requestedCounts
