@@ -517,13 +517,21 @@ try {
     .filter({ has: shell.getByRole('tab', { name: '示例组件', exact: true }) })
   await expect(slotGroup).toHaveCSS('background-color', panelColor)
   await shell.screenshot({ path: path.join(evidence, 'workbench-dom.png') })
-  // Compare the standalone surface with the actual shell pixel beneath the embedded view.
+  // Compare panel tints over an identical backdrop. The unmodified shell capture above
+  // includes the workbench's independently adjustable material and grain.
+  const clearShell = await shell.addStyleTag({
+    content:
+      '.workbench, .workbench::before, .workbench::after { background: transparent !important; }',
+  })
+  const layerFile = path.join(evidence, 'workbench-panel-layer.png')
+  await shell.screenshot({ path: layerFile })
+  await clearShell.evaluate((el) => el.remove())
   const shellWidth = await shell.evaluate(() => innerWidth)
   const pixels = await app.evaluate(
-    ({ BrowserWindow, nativeImage }, { evidence, shellWidth }) => {
+    ({ BrowserWindow, nativeImage }, { evidence, shellWidth, layerFile }) => {
       const host = BrowserWindow.getAllWindows()[0]
       const view = host.contentView.children.at(-1).getBounds()
-      const hostImage = nativeImage.createFromPath(evidence + '/workbench-dom.png')
+      const hostImage = nativeImage.createFromPath(layerFile)
       const scale = hostImage.getSize().width / shellWidth
       const pixel = (image, x, y) => [...image.crop({ x, y, width: 1, height: 1 }).toBitmap()]
       return {
@@ -536,7 +544,7 @@ try {
         overlay: pixel(nativeImage.createFromPath(evidence + '/component-docked.png'), 8, 8),
       }
     },
-    { evidence, shellWidth },
+    { evidence, shellWidth, layerFile },
   )
   expect(pixels.docked).toEqual(pixels.standalone)
   expect(pixels.overlay[3]).toBe(0)

@@ -214,14 +214,12 @@ try {
   const musicItem = shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true })
   await expect(shell.getByRole('button', { name: /^(Music|示例组件)$/ })).toHaveCount(0)
   await windowMenu.click()
-  await expect(shell.locator('[role="menuitem"], [role="menuitemcheckbox"]')).toHaveText([
-    '模块 1',
-    '模块 2',
-    '模块 3',
-    '模块 4',
-    'Music',
-    '布局',
-  ])
+  const items = shell.locator('[role="menuitem"], [role="menuitemcheckbox"]')
+  await expect
+    .poll(() =>
+      items.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label') || n.textContent)),
+    )
+    .toEqual(['模块 1', '模块 2', '模块 3', '模块 4', 'Music', '隐藏 Music', '布局'])
   // Off-screen capture cannot composite the Windows acrylic background.
   await shell.evaluate(() => {
     delete document.documentElement.dataset.backdrop

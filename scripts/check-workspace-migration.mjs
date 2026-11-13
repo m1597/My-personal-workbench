@@ -56,10 +56,12 @@ try {
   await expect(empty).toBeVisible()
   const menu = shell.getByRole('button', { name: '窗口', exact: true })
   await menu.click()
-  await expect(shell.locator('[role="menuitem"], [role="menuitemcheckbox"]')).toHaveText([
-    'Music',
-    '布局',
-  ])
+  const items = shell.locator('[role="menuitem"], [role="menuitemcheckbox"]')
+  await expect
+    .poll(() =>
+      items.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label') || n.textContent)),
+    )
+    .toEqual(['Music', '隐藏 Music', '布局'])
   await shell.screenshot({ path: path.join(profile, 'window-menu.png') })
   await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
   await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
