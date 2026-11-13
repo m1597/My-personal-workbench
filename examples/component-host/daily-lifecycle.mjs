@@ -161,6 +161,7 @@ async function classify(store, row, model, chooseRoot, signal) {
       title: metadata(row.title),
       artist: metadata(row.artist),
       album: metadata(row.album),
+      ...(metadata(row.language) ? { language: metadata(row.language) } : {}),
       categories: options.map(({ id, name }) => ({ id, name })),
     },
     signal,
@@ -259,7 +260,7 @@ export async function retireDownloads(
   signal,
 ) {
   const rows = store.db
-    .prepare(`SELECT d.*,t.title,t.artist,t.album,t.favorite,t.id FROM daily_downloads d
+    .prepare(`SELECT d.*,t.title,t.artist,t.album,t.language,t.favorite,t.id FROM daily_downloads d
     JOIN local_tracks t ON d.local=t.id AND d.file=t.file WHERE d.batch=? AND t.awaitingLocation=0
     AND NOT EXISTS(SELECT 1 FROM recording_copies c WHERE c.local=t.id AND c.automatic=0)`)
     .all(previous)

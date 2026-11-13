@@ -50,7 +50,14 @@ for (const title of [
   await copyFile(original, file)
   store.saveSuggestions('第一轮', [{ title, artist: '艺人', reason: '测试' }], '待处理', batch)
   const item = store.db.prepare('SELECT id FROM items WHERE title=?').get(title).id
-  store.library.upsert({ file, title, artist: '艺人', album: '', duration: 4 })
+  store.library.upsert({
+    file,
+    title,
+    artist: '艺人',
+    album: '',
+    language: title === '已有分类' ? 'jpn' : undefined,
+    duration: 4,
+  })
   const id = store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file).id
   store.db.prepare("UPDATE items SET status='已入库' WHERE id=?").run(item)
   store.db.prepare('UPDATE recommended_items SET local=? WHERE item=?').run(id, item)
@@ -162,7 +169,12 @@ try {
   const fixture = await app.evaluate(() => globalThis.fixture)
   assert.equal(fixture.roots, 1)
   for (const request of fixture.requests) {
-    assert.deepEqual(Object.keys(request).sort(), ['album', 'artist', 'categories', 'title'])
+    const fields = ['album', 'artist', 'categories', 'title']
+    if (request.title === '已有分类') {
+      assert.equal(request.language, 'jpn')
+      fields.push('language')
+    }
+    assert.deepEqual(Object.keys(request).sort(), fields.sort())
     for (const cat of request.categories) assert.deepEqual(Object.keys(cat).sort(), ['id', 'name'])
     assert.ok(!JSON.stringify(request).includes(root))
   }

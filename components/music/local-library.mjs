@@ -84,6 +84,8 @@ export class LocalLibrary {
               WHERE NOT EXISTS (SELECT 1 FROM recommended_items r WHERE r.local=s.track)
           ) AS members WHERE NOT EXISTS (SELECT 1 FROM removed_recommendation_members x WHERE x.track=members.track);
       `)
+      if (!trackColumns.some((column) => column.name === 'language'))
+        this.db.exec('ALTER TABLE local_tracks ADD COLUMN language TEXT')
       if (!trackColumns.some((column) => column.name === 'fileIdentity'))
         this.db.exec('ALTER TABLE local_tracks ADD COLUMN fileIdentity TEXT')
       if (!trackColumns.some((column) => column.name === 'hiddenFromRecent'))
@@ -182,17 +184,25 @@ export class LocalLibrary {
     const key = pathKey(row.file)
     const existing = this.db.prepare('SELECT id FROM local_tracks WHERE path_key=?').get(key)
     if (replacing && existing && existing.id !== replacing) throw Error('所选文件已经在曲库中')
-    const values = [key, row.file, row.title, row.artist, row.album, row.duration]
+    const values = [
+      key,
+      row.file,
+      row.title,
+      row.artist,
+      row.album,
+      row.duration,
+      typeof row.language === 'string' ? row.language.trim().slice(0, 80) : null,
+    ]
     if (replacing || existing)
       this.db
         .prepare(
-          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,size=?,fileIdentity=?,available=1,unplayable=0,listed=1,awaitingLocation=0 WHERE id=?',
+          'UPDATE local_tracks SET path_key=?,file=?,title=?,artist=?,album=?,duration=?,language=?,size=?,fileIdentity=?,available=1,unplayable=0,listed=1,awaitingLocation=0 WHERE id=?',
         )
         .run(...values, row.size ?? null, row.identity ?? null, replacing ?? existing.id)
     else
       this.db
         .prepare(
-          'INSERT INTO local_tracks(path_key,file,title,artist,album,duration,id,observedAt,size,fileIdentity) VALUES(?,?,?,?,?,?,?,?,?,?)',
+          'INSERT INTO local_tracks(path_key,file,title,artist,album,duration,language,id,observedAt,size,fileIdentity) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
         )
         .run(...values, 'local-' + randomUUID(), Date.now(), row.size ?? null, row.identity ?? null)
     this.changed?.()

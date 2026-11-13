@@ -30,6 +30,7 @@ async function file(entry) {
       title: text(common.title) || path.basename(entry, path.extname(entry)),
       artist: text(common.artist) || '未知艺人',
       album: text(common.album),
+      language: text(common.language),
       duration: format.duration,
       size,
     })

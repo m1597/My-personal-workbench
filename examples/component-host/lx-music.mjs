@@ -488,6 +488,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
       artist: (dailyId && info.singer) || text(common.artist) || info.singer || '未知艺人',
       album: (dailyId && text(info.albumName)) || text(common.album) || text(info.albumName),
       duration: format.duration,
+      language: text(common.language),
     }
 
     if (auditionId) store.cacheOnline(auditionId, temp, metadata, extension(format))
