@@ -15,9 +15,9 @@ await writeFile(tone, recording('fitbay-tone-1'))
 await writeFile(
   file,
   `// @name 在线歌单夹具
-lx.on('request',({action})=>action==='search' ? [{name:'测试在线歌曲',singer:'艺人',id:'persistent',durationSeconds:20}] :
-  'https://1.1.1.1/online-tone.wav?session='+Date.now());
-lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+lx.on('request',({action,info})=>action==='search' ? [{name:'测试在线歌曲',singer:'艺人',id:'persistent',durationSeconds:20}] :
+  'https://1.1.1.1/online-tone.wav?quality='+info.type+'&session='+Date.now());
+lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k','128k']}}})`,
 )
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
 const list = store.library.createPlaylist('混合歌单')
@@ -54,7 +54,22 @@ for (const restart of [false, true]) {
         const original = https.request
         https.request = (url, options, done) => {
           if (url.pathname !== '/online-tone.wav') return original(url, options, done)
+          globalThis.testOnlineQuality = url.searchParams.get('quality')
           const request = new EventEmitter()
+          if (globalThis.delayOnlineRecording) {
+            request.end = () => {
+              globalThis.delayOnlineRecording = 'waiting'
+              options.signal.addEventListener(
+                'abort',
+                () => {
+                  globalThis.delayOnlineRecording = 'aborted'
+                  request.emit('error', options.signal.reason)
+                },
+                { once: true },
+              )
+            }
+            return request
+          }
           request.end = () =>
             done(
               Object.assign(fs.createReadStream(tone), {
@@ -92,6 +107,17 @@ for (const restart of [false, true]) {
       await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
       onlineId = await page.evaluate(async () => (await window.music.state()).current)
       assert.match(onlineId, /^online-recording-[a-f0-9]{64}$/)
+      previousGrant = await audio.evaluate((a) => a.src)
+      const nextQuality = await app.evaluate(() =>
+        globalThis.testOnlineQuality === '320k' ? '128k' : '320k',
+      )
+      await pane.getByRole('combobox').click()
+      await pane.getByRole('option', { name: nextQuality }).click()
+      await pane.getByRole('button', { name: '播放', exact: true }).click()
+      await expect.poll(() => app.evaluate(() => globalThis.testOnlineQuality)).toBe(nextQuality)
+      await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
+      assert.notEqual(await audio.evaluate((a) => a.src), previousGrant)
+      assert.equal(await page.evaluate(async () => (await window.music.state()).current), onlineId)
       previousGrant = await audio.evaluate((a) => a.src)
       await audio.evaluate((a) => {
         a.currentTime = 3
@@ -131,6 +157,17 @@ for (const restart of [false, true]) {
         delete document.documentElement.dataset.backdrop
       })
       await page.screenshot({ path: path.join(root, 'mixed-playlist.png') })
+      await button('暂停').click()
+      await expect.poll(() => audio.evaluate((a) => !a.getAttribute('src'))).toBe(true)
+      await app.evaluate(() => {
+        globalThis.delayOnlineRecording = true
+      })
+      await button('播放测试在线歌曲').click()
+      await expect.poll(() => app.evaluate(() => globalThis.delayOnlineRecording)).toBe('waiting')
+      await button('下一首').click()
+      await expect.poll(() => app.evaluate(() => globalThis.delayOnlineRecording)).toBe('aborted')
+      await expect(page.locator('.music-transport strong')).toHaveText('本地歌曲')
+      await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
     }
   } finally {
     await app.close()

@@ -622,15 +622,23 @@ function Music() {
     restart = false,
     pendingAlbum: string[] = [],
     startAt?: number,
+    renewGrant = false,
   ) {
     const seq = ++epoch.current
+    // Keep queue writes ordered while allowing a new track to interrupt a slow decoder.
+    function startAudio(el: HTMLAudioElement) {
+      if (seq !== epoch.current) return
+      void el.play().catch((error) => {
+        if (seq === epoch.current && error.name !== 'AbortError') setError(String(error))
+      })
+    }
     const run = async () => {
       const el = audio.current
       if (!el || seq !== epoch.current) return
-      if (current.current === id) {
+      if (current.current === id && !renewGrant) {
         if (startAt !== undefined || restart) el.currentTime = startAt ?? 0
         await host.playQueue(id, ids, el.currentTime, occurrence, pendingAlbum)
-        await el.play()
+        startAudio(el)
         return
       }
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
@@ -666,7 +674,7 @@ function Music() {
       el.currentTime = startAt ?? resume
       setTime(el.currentTime)
       await host.playQueue(id, ids, el.currentTime, occurrence, pendingAlbum)
-      await el.play()
+      startAudio(el)
     }
     const operation = switching.current.then(run)
     switching.current = operation.catch(() => {})
@@ -690,7 +698,8 @@ function Music() {
     const ids = queue.includes(id) ? queue : [...queue, id]
     if (shuffled && !shuffled.includes(id)) setShuffled([...shuffled, id])
     try {
-      await play(id, ids)
+      const position = current.current === id ? audio.current?.currentTime : undefined
+      await play(id, ids, 0, false, [], position, true)
     } finally {
       await refresh()
     }
