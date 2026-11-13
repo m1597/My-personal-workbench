@@ -452,6 +452,7 @@ export function musicService(
       store.expireRecommendations(undefined, true)
       const batch = store.saveSuggestions(label, [], '待处理', undefined, targetCount)
       let cleanupMessage = ''
+      let catalogSync
       const update = (state, message) =>
         store.db
           .prepare('UPDATE recommendation_runs SET state=?,message=? WHERE batch=?')
@@ -500,8 +501,10 @@ export function musicService(
           return null
         }
         signal.throwIfAborted()
-        await lx.synchronizeSources(signal)
-        if (musicView && !musicView.isDestroyed()) musicView.send('music:sources-changed')
+        const catalog = lx.synchronizeSources(signal)
+        catalogSync = catalog.finish
+        await catalog.ready
+        signal.throwIfAborted()
         if (!store.get('lx-source'))
           throw Error('目录和已导入的音乐源均不可用，请在设置中检查音乐源')
         const profile = await taste.refresh(signal)
@@ -541,6 +544,8 @@ export function musicService(
         let refilling
         let refillError
         const sourceHealth = {
+          catalogSync,
+          lyricTasks: [],
           unreachable: 0,
           queries: new Map(),
           cooldown: new Map(),
@@ -669,6 +674,12 @@ export function musicService(
               : String(error.message),
         )
       }
+      try {
+        await catalogSync?.()
+      } catch (error) {
+        if (!signal.aborted) throw error
+      }
+      if (musicView && !musicView.isDestroyed()) musicView.send('music:sources-changed')
       return batch
     })
   })

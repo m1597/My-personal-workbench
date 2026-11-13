@@ -386,12 +386,14 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
   try {
     const connection = new AbortController()
     const deadline = AbortSignal.timeout(240000)
-    const connectionTimer = setTimeout(() => connection.abort(), 8000)
+    const connectionTimer = setTimeout(() => connection.abort(), 12000)
     const res = await openPublic(url, {
       signal: AbortSignal.any([signal, connection.signal, deadline]),
     })
       .catch((error) => {
         signal.throwIfAborted()
+        if (connection.signal.aborted || deadline.aborted)
+          throw new TransferDeadline('连接音频服务器超时')
         throw new SourceDownloadError(error.message)
       })
       .finally(() => clearTimeout(connectionTimer))
@@ -610,7 +612,7 @@ function markSaved(store, id, local) {
   store.status(id, '已入库')
 }
 export function registerLx(bind, getStore, dialog, lyricsSaved) {
-  const transferRates = new Map()
+  let transferRates
   const sourceKey = (src) => JSON.stringify([src.name, src.platform])
   let active = null
   let activeScope
@@ -909,6 +911,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     dailyId,
     preparedUrl,
     canRetry = true,
+    lyricTasks,
   ) {
     for (let attempt = 0; ; attempt++) {
       const url =
@@ -935,10 +938,16 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           if (bytes > 0) {
             const key = sourceKey(src)
             const rate = bytes / Math.max(1, performance.now() - started)
+            transferRates ??= new Map(JSON.parse(getStore().get('lx-transfer-rates') || '[]'))
             const previous = transferRates.get(key)
+            transferRates.delete(key)
             transferRates.set(key, previous ? (previous + rate) / 2 : rate)
+            if (transferRates.size > 64) transferRates.delete(transferRates.keys().next().value)
+            getStore().set('lx-transfer-rates', JSON.stringify([...transferRates]))
           }
-          await saveRecordingLyrics(src, row, path.join(dir, filename), signal)
+          const lyrics = () => saveRecordingLyrics(src, row, path.join(dir, filename), signal)
+          if (lyricTasks) lyricTasks.push(lyrics)
+          else await lyrics()
         }
         return filename
       } catch (e) {
@@ -1020,7 +1029,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       const choicesForItem = new Map()
       await bank.upgrade()
       attemptSources = bank.configuration(activeSource.code)
-      const installed = bank.discoverySources(activeSource)
+      const independent = !!health?.catalogSync && bank.independentManual()
+      const installed = bank.discoverySources(activeSource, independent)
       const catalogKey = (src) => (src.search ? src.code + '\0' + src.platform : src.platform)
       if (health) {
         const recent = store.db
@@ -1034,6 +1044,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           const platform = recent.findIndex((r) => r.platform === src.platform)
           return platform >= 0 ? recent.length + platform : Infinity
         }
+        transferRates ??= new Map(JSON.parse(store.get('lx-transfer-rates') || '[]'))
         installed.sort((a, b) => {
           const aRate = transferRates.get(sourceKey(a)) ?? 0
           const bRate = transferRates.get(sourceKey(b)) ?? 0
@@ -1225,7 +1236,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             return
           }
           markSaved(store, id, cached.id)
-          await saveRecordingLyrics(src, pick, cached.file, signal)
+          const lyrics = () => saveRecordingLyrics(src, pick, cached.file, signal)
+          if (health?.lyricTasks) health.lyricTasks.push(lyrics)
+          else await lyrics()
         } else {
           if (!prefs.recommendDir) throw new RecordingError('storage', '请在设置中选择推荐下载目录')
           store.status(id, '正在保存')
@@ -1239,6 +1252,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             id,
             preparedUrl,
             canRetry,
+            health?.lyricTasks,
           )
         }
       }
@@ -1275,6 +1289,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         return candidate
       }
       let sources = saved ? [saved.src] : installed
+      const checkedSources = health?.catalogSync
+      // Prefer an independent active script while repository-managed candidates are being verified.
+      const initialSources = sources
+      const deferredDeep = []
+      let expandedCatalog = false
       const timedOutUrls = new Set()
       let deferredTransfer
       while (sources.length) {
@@ -1316,7 +1335,28 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
               expand.push(src)
           }
         }
-        sources = expand
+        if (!expandedCatalog && checkedSources && !saved) {
+          expandedCatalog = true
+          await checkedSources()
+          signal.throwIfAborted()
+          const current = await currentSource(signal, true)
+          const discovered = current
+            ? bank
+                .discoverySources(current)
+                .filter(
+                  (src) =>
+                    !initialSources.some(
+                      (first) => first.code === src.code && first.platform === src.platform,
+                    ),
+                )
+            : []
+          if (discovered.length) {
+            deferredDeep.push(...expand)
+            sources = discovered
+            continue
+          }
+        }
+        sources = [...deferredDeep.splice(0), ...expand]
         phase = 'deep'
       }
       if (deferredTransfer) {
@@ -1401,7 +1441,26 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   let generation = 0
   return {
     synchronizeSources(signal) {
-      return catalog().synchronize(signal)
+      const bank = catalog()
+      // Independent user scripts can work immediately. Repository-managed sources wait for the check.
+      if (!bank.independentManual()) {
+        const ready = bank.synchronize(signal)
+        return { ready, finish: () => ready }
+      }
+      let release
+      const gate = new Promise((resolve) => {
+        release = resolve
+      })
+      const finished = bank.synchronize(signal, () => gate)
+      // Cancellation can arrive before the caller joins the catalog import.
+      void finished.catch(() => {})
+      return {
+        ready: Promise.resolve(),
+        finish: () => {
+          release()
+          return finished
+        },
+      }
     },
     async sourceTool(name, args, signal) {
       const bank = catalog()
@@ -1480,6 +1539,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       const controller = new AbortController()
       const work = AbortSignal.any([signal, controller.signal])
       let fatal
+      const initialWorkers =
+        catalog().independentManual() && catalog().independentCount() === 1 ? 5 : 3
+      let activeWorkers = initialWorkers
+      const workers = []
       const worker = async () => {
         try {
           while (epoch === generation) {
@@ -1498,6 +1561,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
               choices.delete(id)
               sourceHealth.unreachable =
                 outcome === 'unreachable' ? sourceHealth.unreachable + 1 : 0
+              if (activeWorkers < 5 && getStore().item(id)?.status === '已入库') {
+                activeWorkers++
+                workers.push(worker())
+              }
               const issue = getStore()
                 .db.prepare('SELECT diagnosis,summary FROM recommended_items WHERE item=?')
                 .get(id)
@@ -1510,11 +1577,22 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         }
       }
       try {
-        await Promise.all(Array.from({ length: 3 }, worker))
+        workers.push(...Array.from({ length: initialWorkers }, worker))
+        for (const completion of workers) await completion
         if (fatal) throw fatal
         if (sourceHealth.unreachable >= 3)
           throw Error('连续多首歌曲的所有匹配来源均无法访问，请检查网络或音源状态')
       } finally {
+        if (sourceHealth?.lyricTasks && !work.aborted) {
+          const jobs = sourceHealth.lyricTasks.values()
+          const write = async () => {
+            for (const job of jobs) {
+              if (work.aborted) break
+              await job()
+            }
+          }
+          await Promise.all([write(), write()])
+        }
         if (work.aborted)
           getStore()
             .db.prepare("UPDATE items SET status='待重试' WHERE batch=? AND status='待处理'")

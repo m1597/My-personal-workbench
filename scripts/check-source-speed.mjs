@@ -79,7 +79,12 @@ try {
           if (!payload) return
           const start = performance.now()
           this.once('message', () =>
-            samples.push({ stage: payload.action, ms: Math.round(performance.now() - start) }),
+            samples.push({
+              stage: payload.action,
+              ms: Math.round(performance.now() - start),
+              oldRevision:
+                !!globalThis.newRevision && !!opts.workerData?.code.includes('@name 慢速源'),
+            }),
           )
         }
       }
@@ -102,9 +107,14 @@ try {
             else if (url.pathname.includes('/git/trees/')) bytes = Buffer.from('{"tree":[]}')
             else if (url.pathname.endsWith('health-state.json'))
               bytes = Buffer.from('{"sources":{"fish":"可用","lx":"可用"}}')
-            else if (url.pathname.endsWith('latest.js'))
-              bytes = Buffer.from(sources[url.pathname.includes('/fish/') ? 0 : 1])
-            else throw Error('夹具意外请求 ' + url.pathname)
+            else if (url.pathname.endsWith('latest.js')) {
+              const code = sources[url.pathname.includes('/fish/') ? 0 : 1]
+              bytes = Buffer.from(
+                globalThis.newRevision && url.pathname.includes('/lx/')
+                  ? code.replace('慢速源', '更新后的源')
+                  : code,
+              )
+            } else throw Error('夹具意外请求 ' + url.pathname)
             const audio = url.pathname.startsWith('/audio/')
             const stream = Readable.from(
               (async function* () {
@@ -141,12 +151,23 @@ try {
     { root, songs, artists, sources },
   )
   for (const [i, code] of sources.entries()) {
+    if (process.argv[3] === '--managed' && i === 1) continue
     const file = path.join(root, i + '.js')
     await fs.writeFile(file, code)
     await app.evaluate(({ dialog }, file) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
     }, file)
     await page.evaluate(() => window.music.lxImport())
+  }
+  if (process.argv[3] === '--managed') {
+    await page.evaluate(() =>
+      window.music.lxImport(
+        'https://raw.githubusercontent.com/pdone/lx-music-source/main/lx/latest.js',
+      ),
+    )
+    await app.evaluate(() => {
+      globalThis.newRevision = true
+    })
   }
   await page.evaluate(() => window.music.configureModel('deepseek', 'fixture', 'fixture', false))
   const start = performance.now()
@@ -185,6 +206,18 @@ try {
     5,
     JSON.stringify(db.prepare('SELECT state,message FROM recommendation_runs').all()),
   )
+  const inventory = await page.evaluate(() => window.music.lxSources())
+  if (process.argv[3] === '--managed') {
+    assert.equal(inventory.installed.find((src) => src.id === inventory.active)?.name, '更新后的源')
+    assert.ok(
+      !(await app.evaluate(() => samples)).some((row) => row.stage === 'search' && row.oldRevision),
+    )
+  }
+  if (process.argv[3] === '--expect-sync') {
+    assert.ok(inventory.installed.some((src) => src.origins.includes('fish')))
+    assert.ok(inventory.installed.some((src) => src.origins.includes('lx')))
+    assert.ok(await app.evaluate(() => globalThis.repositoryMs > 0))
+  }
   console.log(
     JSON.stringify({
       catalogMs,

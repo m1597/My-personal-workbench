@@ -276,7 +276,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     single.calls.find((call) => call.endsWith('/musicUrl')),
     '健康源/musicUrl',
   )
-  assert.equal(single.files.filter((f) => !f.endsWith('.lrc')).length, 2)
+  assert.equal(single.files.filter((f) => !f.endsWith('.lrc')).length, 1)
   await app.evaluate(() => {
     globalThis.songs = [['后页歌曲', '丙']]
   })

@@ -400,7 +400,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     else db.prepare("DELETE FROM state WHERE key='lx-source'").run()
   }
   const verifiedManual = new Set()
-  async function synchronize(signal) {
+  async function synchronize(signal, onChecked) {
     migrate()
     for (const row of db
       .prepare("SELECT id,payload FROM music_sources WHERE manual=1 AND disabled=''")
@@ -423,8 +423,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
           })
       }
     }
-    const budget = AbortSignal.any([signal, AbortSignal.timeout(15000)])
-    const read = (file, ms) => loadFile(file, AbortSignal.any([budget, AbortSignal.timeout(ms)]))
+    const read = (file, ms) => loadFile(file, AbortSignal.any([signal, AbortSignal.timeout(ms)]))
     const [index, report, tree] = await Promise.all([
       read('README.md', 4500)
         .then(parseSourceIndex)
@@ -469,6 +468,9 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
       (row) =>
         !dead(row.id) && (!health?.[row.id] || health[row.id] === '可用' || byOrigin(row.id)),
     )
+    await onChecked?.()
+    signal.throwIfAborted()
+    const budget = AbortSignal.any([signal, AbortSignal.timeout(15000)])
     let next = 0
     async function worker() {
       while (next < pending.length && !budget.aborted) {
@@ -488,7 +490,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
         )
           continue
         try {
-          const code = await read(file, 5500)
+          const code = await loadFile(file, AbortSignal.any([budget, AbortSignal.timeout(5500)]))
           if (!code.trim() || /^\s*(?:<!doctype|<html)/i.test(code)) continue
           if (old?.code === code) continue
           const cached = db
@@ -523,10 +525,34 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
       if (active) sources.add(active)
       return fingerprint(JSON.stringify([active, [...sources].sort()]))
     },
-    discoverySources(current) {
+    independentManual() {
+      migrate()
+      const active = JSON.parse(get('lx-source') || 'null')
+      return (
+        active &&
+        verifiedManual.has(fingerprint(active.code)) &&
+        db
+          .prepare(
+            "SELECT 1 FROM music_sources WHERE digest=? AND manual=1 AND origin IS NULL AND disabled=''",
+          )
+          .get(fingerprint(active.code)) &&
+        active.permissionsVersion === 1 &&
+        active.catalogVersion === 2
+      )
+    },
+    independentCount() {
+      return db
+        .prepare(
+          "SELECT count(*) AS n FROM music_sources WHERE manual=1 AND origin IS NULL AND disabled=''",
+        )
+        .get().n
+    },
+    discoverySources(current, manualOnly = false) {
       const others = db
-        .prepare("SELECT payload FROM music_sources WHERE disabled='' ORDER BY rowid")
-        .all()
+        .prepare(
+          "SELECT payload FROM music_sources WHERE disabled='' AND (?=0 OR (manual=1 AND origin IS NULL)) ORDER BY rowid",
+        )
+        .all(Number(manualOnly))
         .map(({ payload }) => JSON.parse(payload))
         .filter((src) => src.code !== current.code)
       return [current, ...others].flatMap((src) =>
