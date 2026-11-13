@@ -46,7 +46,7 @@ const launch = () =>
 const evidence = {}
 let app = await launch()
 async function openHistory(page) {
-  const tab = page.getByRole('tab', { name: '本地曲库' })
+  const tab = page.getByRole('tab', { name: '曲库' })
   await tab.click()
   const nav = page.getByRole('button', { name: '曲库导航', exact: true })
   if (await nav.isVisible()) await nav.click()
@@ -62,7 +62,8 @@ try {
       ?.setContentSize(1000, 740),
   )
   const button = (name) => page.getByRole('button', { name, exact: true })
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  const playlistTab = page.getByRole('tab', { name: '歌单', exact: true })
+  await playlistTab.click()
   await button('重听验收').click()
   const playbackCount = async () =>
     page.evaluate(
@@ -95,6 +96,7 @@ try {
     path: path.join(root, '两次完整播放.png'),
     style: ':root {background: var(--base) !important}',
   })
+  await playlistTab.click()
   await button('重听验收').click()
   await button('从曲库移除短歌').click()
   await button('仅从当前歌单移除').click()
