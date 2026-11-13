@@ -10,7 +10,7 @@ import {
   MenuItem,
   MenuDivider,
 } from '@fluentui/react-components'
-import { ChevronDown, Check, Eye, Plus, PanelsTopLeft } from 'lucide-react'
+import { ChevronDown, Check, Eye, EyeOff, Plus, PanelsTopLeft } from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { modules } from './moduleRegistry'
 import { openModule } from './workspace'
@@ -22,6 +22,8 @@ export function WindowMenu() {
   const t = useTranslation()
   const music = useMusicHostState()
   const running = music?.phase === 'ready' || music?.phase === 'attaching'
+  const hidden = music?.presentation === 'background'
+  const visibilityLabel = hidden ? t('显示 Music', 'Show Music') : t('隐藏 Music', 'Hide Music')
   const workspace = useContext(WorkspaceContext)
   const [musicError, setMusicError] = useState('')
   const [layoutsOpen, setLayoutsOpen] = useState(false)
@@ -75,15 +77,14 @@ export function WindowMenu() {
                 >
                   Music
                 </MenuItem>
-                {music?.phase === 'ready' && music.presentation === 'background' && (
-                  <MenuItem
-                    className="music-menu-reveal"
-                    aria-label={t('显示 Music', 'Show Music')}
-                    title={t('显示 Music', 'Show Music')}
-                    icon={<Eye size={16} />}
-                    onClick={() => void window.musicDock?.reveal()}
-                  />
-                )}
+                <MenuItem
+                  className="music-menu-reveal"
+                  aria-label={visibilityLabel}
+                  title={visibilityLabel}
+                  disabled={music?.phase !== 'ready'}
+                  icon={hidden ? <EyeOff size={16} /> : <Eye size={16} />}
+                  onClick={() => void window.musicDock?.toggleVisibility()}
+                />
               </MenuSplitGroup>
             )}
             <MenuDivider />

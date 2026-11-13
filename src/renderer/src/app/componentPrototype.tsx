@@ -25,7 +25,7 @@ type HostState = {
 const attachingGroups = new WeakMap<IDockviewPanelProps['api'], string>()
 declare global {
   interface Window {
-    musicDock?: NonNullable<Window['componentHost']> & { reveal(): Promise<void> }
+    musicDock?: NonNullable<Window['componentHost']> & { toggleVisibility(): Promise<void> }
     componentHost?: {
       sampleEnabled?: boolean
       dropZone(value: Region[] | null): void

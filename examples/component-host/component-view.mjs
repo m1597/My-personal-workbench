@@ -398,9 +398,9 @@ export function componentView({
           setPresentation(next)
         })
       if (music) {
-        ipcMain.handle('music-prototype:reveal', (event) => {
+        ipcMain.handle('music-prototype:toggle-visibility', (event) => {
           if (!isShell(event)) throw Error('DENIED')
-          if (presentation === 'background') setPresentation('full')
+          setPresentation(presentation === 'background' ? 'full' : 'background')
         })
         ipcMain.handle('music-prototype:close', (event) => {
           if (!isShell(event)) throw Error('DENIED')

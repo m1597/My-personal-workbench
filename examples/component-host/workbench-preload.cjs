@@ -27,7 +27,7 @@ function componentBridge(prefix) {
     ...(prefix === 'music-prototype'
       ? {
           close: () => ipcRenderer.invoke('music-prototype:close'),
-          reveal: () => ipcRenderer.invoke('music-prototype:reveal'),
+          toggleVisibility: () => ipcRenderer.invoke('music-prototype:toggle-visibility'),
         }
       : {}),
     overlayFrame: () => ipcRenderer.invoke(`${prefix}:overlay-frame`),

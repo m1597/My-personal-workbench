@@ -36,11 +36,13 @@ try {
     name: '显示 Music',
     exact: true,
   })
+  const hide = shell.getByRole('menuitem', { name: '隐藏 Music', exact: true })
   const tab = shell.getByRole('tab', { name: 'Music', exact: true })
   const bar = shell.locator('[aria-label="Music 播放栏"]')
   async function checked(running, click = false) {
     await menu.click()
     await expect(musicItem).toHaveAttribute('aria-checked', String(running))
+    if (!running) await expect(hide).toBeDisabled()
     if (click) await musicItem.click()
     else await shell.keyboard.press('Escape')
   }
@@ -87,7 +89,19 @@ try {
       return (await window.music.state()).queue
     })
     const fullHeight = docked ? await shellHeight() : (await native()).height
-    await checked(true)
+    await menu.click()
+    await expect(musicItem).toBeChecked()
+    await expect(hide).toBeVisible()
+    await shell.screenshot({
+      path: path.join(evidence, docked ? '停靠窗口菜单.png' : '独立窗口菜单.png'),
+    })
+    await hide.click()
+    await expect.poll(async () => (await native())[docked ? 'docked' : 'standalone']).toBe(false)
+    await playing()
+    await menu.click()
+    await expect(musicItem).toBeChecked()
+    await reveal.click()
+    await expect.poll(async () => (await native())[docked ? 'docked' : 'standalone']).toBe(true)
     await music.getByRole('button', { name: '只显示播放栏' }).click()
     await expect(music.locator('.music-navigation')).toBeHidden()
     if (docked) {
@@ -109,6 +123,7 @@ try {
     const stopBox = await stop.boundingBox()
     expect((await expand.boundingBox()).x).toBeGreaterThanOrEqual(stopBox.x + stopBox.width)
     await menu.click()
+    await expect(hide).toBeVisible()
     await expect(reveal).toHaveCount(0)
     await shell.keyboard.press('Escape')
     for (const name of ['播放进度', '音量'])
