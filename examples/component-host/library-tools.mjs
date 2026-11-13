@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { open, writeFile, rename, rm, lstat } from 'node:fs/promises'
-import { pathKey, openAudio } from './music/local-files.mjs'
+import { pathKey, openAudio, regularFile } from './music/local-files.mjs'
 import {
   exportLibrary,
   restoreLibrary,
@@ -186,6 +186,59 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
       )
       .all(before?.playedAt ?? Number.MAX_SAFE_INTEGER, before?.event ?? '')
   })
+  bind(
+    'exportPlaylist',
+    action(async (id) => {
+      if (typeof id !== 'string' || id.length > 100) throw Error('歌单无效')
+      const db = getStore().db
+      const playlist = getStore()
+        .library.playlists()
+        .find((list) => list.id === id)
+      if (!playlist) throw Error('未找到我的歌单')
+      const rows = db
+        .prepare(
+          'SELECT t.file,t.awaitingLocation,t.unplayable FROM json_each(?) p JOIN local_tracks t ON t.id=p.value ORDER BY p.key',
+        )
+        .all(JSON.stringify(playlist.tracks))
+      const files = []
+      for (const { file, awaitingLocation, unplayable } of rows)
+        if (
+          !awaitingLocation &&
+          !unplayable &&
+          path.isAbsolute(file) &&
+          !/[\r\n]/u.test(file) &&
+          (await regularFile(file))
+        )
+          files.push(file)
+      const missing = rows.length - files.length
+      if (missing) {
+        const { response } = await dialog.showMessageBox({
+          type: 'info',
+          title: '导出歌单',
+          message: `缺失或不可用 ${missing} 首，将导出 ${files.length} 首。`,
+          buttons: ['取消', '继续导出'],
+          defaultId: 1,
+          cancelId: 0,
+        })
+        if (response !== 1) return false
+      }
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        title: '导出歌单',
+        defaultPath: playlist.name.replace(/[<>:"/\\|?*\p{Cc}]/gu, '_') + '.m3u8',
+        filters: [{ name: 'UTF-8 播放列表', extensions: ['m3u8'] }],
+      })
+      if (canceled) return false
+      if (path.extname(filePath).toLowerCase() !== '.m3u8') throw Error('请选择 M3U8 文件')
+      const temp = filePath + '.' + randomUUID() + '.tmp'
+      try {
+        await writeFile(temp, ['#EXTM3U', ...files, ''].join('\r\n'), { flag: 'wx' })
+        await rename(temp, filePath)
+      } finally {
+        await rm(temp, { force: true })
+      }
+      return true
+    }),
+  )
   bind(
     'exportLibrary',
     action(async () => {

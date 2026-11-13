@@ -105,6 +105,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   error: string
   remove: (id: string | string[], trash: boolean) => Promise<boolean>
   renameList: (id: string, name: string) => Promise<boolean>
+  exportList: (id: string) => Promise<boolean>
   deleteList: (id: string) => Promise<boolean>
   openFolder: (id: string) => void
   removeFolder: (id: string) => Promise<boolean>
@@ -144,6 +145,7 @@ export function LibraryPane({
   dismiss,
   renameList,
   deleteList,
+  exportList,
   removeFolder,
   openFolder,
 }: Props) {
@@ -368,23 +370,27 @@ export function LibraryPane({
               {list.name}
             </Button>
           )
-          if (list.system) return trigger
           return (
             <Menu key={list.id} openOnContext>
               <MenuTrigger disableButtonEnhancement>{trigger}</MenuTrigger>
               <MenuPopover className="component-popup">
                 <MenuList>
-                  <MenuItem
-                    onClick={() => {
-                      setEditName(list.name)
-                      setAction({ kind: 'rename', ...list })
-                    }}
-                  >
-                    重命名歌单
-                  </MenuItem>
-                  <MenuItem onClick={() => setAction({ kind: 'deleteList', ...list })}>
-                    删除歌单
-                  </MenuItem>
+                  {!list.system && (
+                    <>
+                      <MenuItem
+                        onClick={() => {
+                          setEditName(list.name)
+                          setAction({ kind: 'rename', ...list })
+                        }}
+                      >
+                        重命名歌单
+                      </MenuItem>
+                      <MenuItem onClick={() => setAction({ kind: 'deleteList', ...list })}>
+                        删除歌单
+                      </MenuItem>
+                    </>
+                  )}
+                  <MenuItem onClick={() => void exportList(list.id)}>导出为 M3U8</MenuItem>
                 </MenuList>
               </MenuPopover>
             </Menu>

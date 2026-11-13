@@ -465,6 +465,7 @@ export class LocalLibrary {
     if (!system && !this.db.prepare('SELECT 1 FROM playlists WHERE id=?').get(playlist))
       throw Error('未找到歌单')
     const data = JSON.stringify(ids)
+    let removal
     this.db.exec('BEGIN IMMEDIATE')
     try {
       if (
@@ -475,6 +476,27 @@ export class LocalLibrary {
           .get(data)
       )
         throw Error('歌曲已移除')
+      if (!added) {
+        const list = this.playlists().find((row) => row.id === playlist)
+        const selected = new Set(ids)
+        const entries = system
+          ? (list?.additions.filter(([id]) => selected.has(id)) ?? [])
+          : this.db
+              .prepare(
+                'SELECT track,addedAt,rowid FROM playlist_tracks WHERE playlist=? AND track IN (SELECT value FROM json_each(?)) ORDER BY addedAt,rowid',
+              )
+              .all(playlist, data)
+              .map(({ track, addedAt, rowid }) => [track, addedAt, rowid])
+        if (entries.length)
+          removal = {
+            playlist,
+            order: list.tracks,
+            entries,
+            run: this.store.get('latest-daily-run'),
+            token: randomUUID(),
+            expires: Date.now() + 10_000,
+          }
+      }
       if (system)
         this.db
           .prepare(
@@ -507,6 +529,68 @@ export class LocalLibrary {
       this.db.exec('ROLLBACK')
       throw error
     }
+    this.changed?.()
+    if (removal) {
+      this.lastRemoval = removal
+      return { token: removal.token, count: removal.entries.length, expires: removal.expires }
+    }
+    return null
+  }
+  undoMembership(token) {
+    const saved = this.lastRemoval
+    if (!saved || saved.token !== token || Date.now() >= saved.expires) throw Error('撤销时间已过')
+    const { playlist, entries } = saved
+    const system = playlist === 'system-recommendations'
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const current = this.playlists().find((row) => row.id === playlist)?.tracks
+      if (!current || (system && saved.run !== this.store.get('latest-daily-run')))
+        throw Error('原歌单已更新')
+      const present = new Set(current)
+      const restored = new Set()
+      const insert = this.db.prepare(
+        'INSERT OR IGNORE INTO playlist_tracks(rowid,playlist,track,position,addedAt) SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM playlist_tracks WHERE rowid=?) THEN ? END,?,id,0,? FROM local_tracks WHERE id=?',
+      )
+      const unhide = this.db.prepare('DELETE FROM removed_recommendation_members WHERE track=?')
+      for (const [id, addedAt, originalRow] of entries) {
+        if (present.has(id)) continue
+        const result = system
+          ? unhide.run(id)
+          : insert.run(originalRow, originalRow, playlist, addedAt, id)
+        if (result.changes) restored.add(id)
+      }
+      // Keep current members in their current order. Anchor each restored group
+      // to its nearest surviving successor, or to the last surviving predecessor.
+      const before = new Map()
+      let pending = [],
+        last
+      for (const id of saved.order) {
+        if (restored.has(id)) pending.push(id)
+        else if (present.has(id)) {
+          if (pending.length) before.set(id, pending)
+          pending = []
+          last = id
+        }
+      }
+      const order = last ? [] : [...pending]
+      for (const id of current) {
+        for (const restoredId of before.get(id) ?? []) order.push(restoredId)
+        order.push(id)
+        if (id === last) for (const restoredId of pending) order.push(restoredId)
+      }
+      if (system) this.store.set('recommendation-track-order', JSON.stringify(order))
+      else {
+        const update = this.db.prepare(
+          'UPDATE playlist_tracks SET position=? WHERE playlist=? AND track=?',
+        )
+        for (const [position, id] of order.entries()) update.run(position, playlist, id)
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+    this.lastRemoval = null
     this.changed?.()
   }
   row(id) {

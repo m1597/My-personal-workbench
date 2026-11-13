@@ -164,6 +164,7 @@ export function musicService(
   bind('setMembership', (playlist, track, added) =>
     store.library.setMembership(playlist, track, added),
   )
+  bind('undoMembership', (token) => store.library.undoMembership(text(token)))
   bind('cancelImport', () => store.library.cancel())
   bind('relocateLocal', (id) => selectLocal('files', text(id)))
   bind('refreshLocal', async () => {

@@ -168,7 +168,13 @@ declare global {
       createPlaylist(name: string): Promise<string>
       setPlaylistSort: PlaylistSorting['setPlaylistSort']
       movePlaylistTrack: PlaylistSorting['movePlaylistTrack']
-      setMembership(playlist: string, track: string | string[], added: boolean): Promise<void>
+      setMembership(
+        playlist: string,
+        track: string | string[],
+        added: boolean,
+      ): Promise<MembershipRemoval | null>
+      undoMembership(token: string): Promise<void>
+      exportPlaylist(id: string): Promise<boolean>
       importLocal(mode: 'folder' | 'files'): Promise<void>
       cancelImport(): Promise<void>
       refreshLocal(): Promise<void>
@@ -257,7 +263,17 @@ function shuffleQueue(ids: string[], first?: string) {
   if (first && ids.includes(first)) result.unshift(first)
   return result
 }
+type MembershipRemoval = { token: string; count: number; expires: number }
 function Music() {
+  const [removal, setRemoval] = useState<MembershipRemoval | null>(null)
+  useEffect(() => {
+    if (!removal) return
+    const timer = window.setTimeout(
+      () => setRemoval(null),
+      Math.max(0, removal.expires - Date.now()),
+    )
+    return () => window.clearTimeout(timer)
+  }, [removal])
   const [guide, setGuide] = useState<number | null>(null)
   const guideOrigin = useRef({ tab: 'library', category: 'library' as SettingsCategory })
   function visitGuide(step: number) {
@@ -897,6 +913,20 @@ function Music() {
       {guide !== null && state && (
         <MusicGuide key={guide} step={guide} close={closeGuide} change={visitGuide} />
       )}
+      {removal && (
+        <div className="playlist-undo" role="status">
+          <span>已从歌单移除 {removal.count} 首</span>
+          <Button
+            size="small"
+            onClick={() => {
+              setRemoval(null)
+              void act(() => host.undoMembership(removal.token))
+            }}
+          >
+            撤销
+          </Button>
+        </div>
+      )}
       <main key={tab} className="music-scroll">
         {showPlayer ? (
           <NowPlaying
@@ -960,7 +990,13 @@ function Music() {
                 setSearch('')
               })
             }
-            membership={(list, id, added) => act(() => host.setMembership(list, id, added))}
+            membership={(list, id, added) =>
+              act(async () => {
+                const receipt = await host.setMembership(list, id, added)
+                if (receipt) setRemoval(receipt)
+              })
+            }
+            exportList={(id) => act(() => host.exportPlaylist(id))}
             search={search}
             setSearch={setSearch}
             job={state?.importJob}
