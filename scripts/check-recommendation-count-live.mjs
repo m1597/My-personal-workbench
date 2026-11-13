@@ -5,6 +5,7 @@ import path from 'node:path'
 import { backup, DatabaseSync } from 'node:sqlite'
 import { _electron as electron, expect } from '@playwright/test'
 import { inLibrary } from '../examples/component-host/music-discovery.mjs'
+import { isolateRecommendationProfile } from './isolate-recommendation-profile.mjs'
 
 // Explicit live acceptance. Uses the current provider and sources and may incur model charges.
 const target = 5
@@ -38,9 +39,7 @@ try {
       if (e.code !== 'ENOENT') throw e
     })
   db = new DatabaseSync(path.join(directory, 'music.sqlite'))
-  // A copied legacy save journal can replay publication beside the user's originals at startup.
-  db.exec(`DELETE FROM saves;
-    DELETE FROM state WHERE key IN ('root','music-manual-dir','music-recommend-dir') OR key LIKE 'shortcut-%';`)
+  isolateRecommendationProfile(db, directory)
   const set = db.prepare('INSERT OR REPLACE INTO state(key,value) VALUES(?,?)')
   set.run('music-media-keys', 'off')
   set.run('music-muted', 'on')

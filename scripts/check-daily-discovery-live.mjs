@@ -4,6 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { _electron as electron, expect } from '@playwright/test'
 import { inLibrary } from '../examples/component-host/music-discovery.mjs'
+import { isolateRecommendationProfile } from './isolate-recommendation-profile.mjs'
 
 const original = path.resolve('local/desktop-profile')
 const root = await fs.mkdtemp(path.resolve('tmp/daily-discovery-'))
@@ -36,8 +37,8 @@ try {
       if (e.code !== 'ENOENT') throw e
     })
   db = new DatabaseSync(path.join(directory, 'music.sqlite'))
+  isolateRecommendationProfile(db, directory)
   const set = db.prepare('INSERT OR REPLACE INTO state(key,value) VALUES(?,?)')
-  db.prepare("DELETE FROM state WHERE key='music-recommend-dir'").run()
   set.run('music-media-keys', 'off')
   set.run('music-muted', 'on')
   const old = new Set(
@@ -81,10 +82,15 @@ try {
         return fetch(...args)
       }
       const show = dialog.showOpenDialog.bind(dialog)
-      dialog.showOpenDialog = (options) => {
+      dialog.showOpenDialog = async (options) => {
         if (options.title !== '选择推荐下载目录') throw Error('意外的原生对话框')
         count++
-        if (native) return show({ ...options, defaultPath: output })
+        if (native) {
+          const result = await show({ ...options, defaultPath: output })
+          if (!result.canceled && (result.filePaths.length !== 1 || result.filePaths[0] !== output))
+            throw Error('验收只允许选择本次创建的隔离下载目录')
+          return result
+        }
         return Promise.resolve(
           count === 1
             ? { canceled: true, filePaths: [] }
