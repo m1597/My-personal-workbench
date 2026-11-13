@@ -577,6 +577,7 @@ function Music() {
     occurrence = 0,
     restart = false,
     pendingAlbum: string[] = [],
+    startAt?: number,
   ) {
     const seq = ++epoch.current
     const run = async () => {
@@ -586,7 +587,6 @@ function Music() {
         if (startAt !== undefined || restart) el.currentTime = startAt ?? 0
         await host.playQueue(id, ids, el.currentTime, occurrence, pendingAlbum)
         await el.play()
-    startAt?: number,
         return
       }
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
@@ -907,6 +907,18 @@ function Music() {
             revision={state?.albumRevision}
             lines={now ? lines : []}
             activeLine={activeLine}
+            seek={(at) =>
+              void act(() =>
+                play(
+                  now,
+                  queue,
+                  state?.queueOccurrence,
+                  false,
+                  state?.pendingAlbum,
+                  Math.max(0, at),
+                ),
+              )
+            }
             back={() => setTab(previousTab.current)}
           />
         ) : tab === 'library' ? (
@@ -925,18 +937,6 @@ function Music() {
             tracks={state?.localTracks ?? []}
             sidebarOrder={state?.sidebarOrder}
             moveSidebarItem={(group, id, target, after) =>
-            seek={(at) =>
-              void act(() =>
-                play(
-                  now,
-                  queue,
-                  state?.queueOccurrence,
-                  false,
-                  state?.pendingAlbum,
-                  Math.max(0, at),
-                ),
-              )
-            }
               act(() => host.moveSidebarItem(group, id, target, after))
             }
             playlists={state?.playlists ?? []}
