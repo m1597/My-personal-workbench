@@ -12,8 +12,8 @@ const db = new MusicStore(path.join(profile, 'fitbay-music'))
 db.set('music-guide-v1', 1)
 db.set('music-media-keys', 'off')
 const ids = []
-const batch = db.saveSuggestions('快速试听', [], '待处理', undefined, 3)
-for (const [i, title] of ['主段落', '普通试听', '有声开头'].entries()) {
+const batch = db.saveSuggestions('快速试听', [], '待处理', undefined, 5)
+for (const [i, title] of ['主段落', '普通试听', '有声开头', '第四首', '第五首'].entries()) {
   const file = path.join(root, title + '.wav')
   const sample = Buffer.from(recording('fitbay-tone-1'))
   const rate = sample.readUInt32LE(24)
@@ -83,7 +83,7 @@ try {
     await page.evaluate(() => window.unblockDecoder())
     await check('分析中' + action, async () => {
       await expect(page.getByText('正在分析试听片段')).toHaveCount(0, { timeout: 2000 })
-      await expect(page.getByText('1/3 · 代表片段')).toHaveCount(0, { timeout: 1000 })
+      await expect(page.getByText('1/5 · 代表片段')).toHaveCount(0, { timeout: 1000 })
       if (action === '下一首')
         await expect
           .poll(() => page.evaluate(async () => (await window.music.state()).current))
@@ -94,7 +94,7 @@ try {
   await page.reload()
   await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
   await press('快速听这批')
-  await expect(page.getByText('1/3 · 代表片段')).toBeVisible()
+  await expect(page.getByText('1/5 · 代表片段')).toBeVisible()
   await expect.poll(at).toBeGreaterThan(7)
   await press('收藏这首')
   await expect
@@ -106,15 +106,19 @@ try {
     )
     .toBe(1)
   await press('跳过片段')
-  await expect(page.getByText('2/3 · 普通试听')).toBeVisible()
+  await expect(page.getByText('2/5 · 普通试听')).toBeVisible()
   await expect.poll(at).toBeLessThan(2)
   await media.evaluate((a) => {
     a.currentTime = 20.2
   })
-  await expect(page.getByText('3/3 · 代表片段')).toBeVisible()
+  await expect(page.getByText('3/5 · 代表片段')).toBeVisible()
+  for (const number of [4, 5]) {
+    await press('跳过片段')
+    await expect(page.getByText(number + '/5 · 代表片段')).toBeVisible()
+  }
   await press('从头播放')
   await expect.poll(at).toBeLessThan(2)
-  await expect(page.getByText('3/3 · 代表片段')).toHaveCount(0)
+  await expect(page.getByText('5/5 · 代表片段')).toHaveCount(0)
   await press('播放本次推荐')
   await media.evaluate((a) => {
     a.currentTime = 38.4
@@ -179,7 +183,7 @@ try {
   await expect.poll(at).toBeGreaterThan(7)
   await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
   await press('快速听这批')
-  await expect(page.getByText('1/3 · 代表片段')).toBeVisible()
+  await expect(page.getByText('1/5 · 代表片段')).toBeVisible()
   // The hidden Windows compositor omits the native backdrop from captures.
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
