@@ -1,3 +1,4 @@
+import { Script } from 'node:vm'
 import { createHash } from 'node:crypto'
 import { openPublic } from './lx-net.mjs'
 import { runSource } from './lx-runtime.mjs'
@@ -31,8 +32,15 @@ export async function fetchSource(link, signal, headers) {
     throw error
   }
 }
+class InvalidSource extends Error {}
 export async function inspectSource(code, signal, preferredPlatform) {
   if (typeof code !== 'string' || Buffer.byteLength(code) > 1024 * 1024) throw Error('源文件过大')
+  try {
+    new Script(code)
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new InvalidSource('音乐源脚本语法损坏')
+    throw error
+  }
   const declared = await runSource(code, null, signal)
   const platforms = {}
   for (const platform of ['wy', 'kw', 'tx', 'kg', 'mg']) {
@@ -54,7 +62,7 @@ export async function inspectSource(code, signal, preferredPlatform) {
     }
   }
   const first = platforms[preferredPlatform] ?? Object.values(platforms)[0]
-  if (!first) throw Error('此源缺少可用的搜索平台、取址操作或音质')
+  if (!first) throw new InvalidSource('此源缺少可用的搜索平台、取址操作或音质')
   return {
     ...first,
     catalogVersion: 2,
@@ -102,13 +110,53 @@ export function catalogId(link) {
   const match = /^([a-z0-9_-]+)\/latest\.js$/.exec(normalized.slice(rawRoot.length))
   return match && slug.test(match[1]) ? match[1] : null
 }
+// Only fixed GitHub repository URLs reach Chromium's system networking stack.
+async function readRepositoryUrl(url, signal, headers) {
+  if (
+    process.versions.electron &&
+    ['raw.githubusercontent.com', 'api.github.com'].includes(new URL(url).hostname)
+  ) {
+    try {
+      const { net } = await import('electron')
+      const response = await net.fetch(url, {
+        headers,
+        credentials: 'omit',
+        redirect: 'error',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(4500)]),
+      })
+      if (!response.ok) {
+        await response.body?.cancel()
+        throw Error('仓库请求失败')
+      }
+      const chunks = []
+      let bytes = 0
+      for await (const chunk of response.body) {
+        bytes += chunk.length
+        if (bytes > 1024 * 1024) throw Error('仓库文件过大')
+        chunks.push(chunk)
+      }
+      return Buffer.concat(chunks).toString('utf8')
+    } catch {
+      signal.throwIfAborted()
+    }
+  }
+  return fetchSource(url, signal, headers)
+}
 async function fetchRepositoryFile(file, signal) {
+  if (file === 'health-state.json')
+    return readRepositoryUrl(rawRoot.replace('/main/', '/health-status/') + file, signal)
+  if (file === 'tree')
+    return readRepositoryUrl(
+      'https://api.github.com/repos/pdone/lx-music-source/git/trees/main?recursive=1',
+      signal,
+      { 'user-agent': 'FitBay-Music' },
+    )
   try {
-    return await fetchSource(rawRoot + file, signal)
+    return await readRepositoryUrl(rawRoot + file, signal)
   } catch {
     signal.throwIfAborted()
     try {
-      return await fetchSource(
+      return await readRepositoryUrl(
         'https://api.github.com/repos/pdone/lx-music-source/contents/' + file + '?ref=main',
         signal,
         {
@@ -119,7 +167,7 @@ async function fetchRepositoryFile(file, signal) {
     } catch {
       signal.throwIfAborted()
       if (file === 'README.md') throw Error('无法读取上游目录')
-      return fetchSource(mirror + (rawRoot + file).slice(8), signal)
+      return readRepositoryUrl(mirror + (rawRoot + file).slice(8), signal)
     }
   }
 }
@@ -165,6 +213,16 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
   db.exec(
     'CREATE TABLE IF NOT EXISTS music_source_origins (origin TEXT PRIMARY KEY, source TEXT NOT NULL)',
   )
+  const columns = db
+    .prepare('PRAGMA table_info(music_sources)')
+    .all()
+    .map((row) => row.name)
+  if (!columns.includes('manual')) {
+    db.exec('ALTER TABLE music_sources ADD COLUMN manual INTEGER NOT NULL DEFAULT 0')
+    db.exec("UPDATE music_sources SET manual=1 WHERE origin IS NULL OR id LIKE 'sha256:%'")
+  }
+  if (!columns.includes('disabled'))
+    db.exec("ALTER TABLE music_sources ADD COLUMN disabled TEXT NOT NULL DEFAULT ''")
   const byOrigin = (origin) =>
     db.prepare('SELECT source FROM music_source_origins WHERE origin=?').get(origin)?.source
   const get = (key) => db.prepare('SELECT value FROM state WHERE key=?').get(key)?.value
@@ -173,18 +231,24 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
   const entries = () => JSON.parse(get('lx-source-index') || JSON.stringify(initialEntries))
   const byDigest = (digest) =>
     db.prepare('SELECT id FROM music_sources WHERE digest=?').get(digest)?.id
-  const add = (src, origin) => {
+  const add = (src, origin, activate = false) => {
     const digest = fingerprint(src.code)
     const existing = byDigest(digest)
-    const id =
-      (origin && byOrigin(origin)) || existing || (origin ? 'pdone:' + origin : 'sha256:' + digest)
-    if (existing && existing !== id) {
-      db.prepare('UPDATE music_source_origins SET source=? WHERE source=?').run(id, existing)
-      db.prepare('DELETE FROM music_sources WHERE id=?').run(existing)
-    }
+    const prior = origin && byOrigin(origin)
+    const replace =
+      prior &&
+      !existing &&
+      db
+        .prepare(
+          'SELECT 1 FROM music_sources WHERE id=? AND (manual=0 OR ?=1) AND (SELECT count(*) FROM music_source_origins WHERE source=?)=1',
+        )
+        .get(prior, Number(activate), prior)
+    let id = existing || (replace && prior) || (origin ? 'pdone:' + origin : 'sha256:' + digest)
+    if (!existing && !replace && db.prepare('SELECT 1 FROM music_sources WHERE id=?').get(id))
+      id = 'pdone:' + origin + ':' + digest
     db.prepare(
-      'INSERT INTO music_sources(id,origin,digest,payload) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET origin=COALESCE(music_sources.origin,excluded.origin),digest=excluded.digest,payload=excluded.payload',
-    ).run(id, origin ?? null, digest, JSON.stringify(src))
+      "INSERT INTO music_sources(id,origin,digest,payload,manual) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET origin=COALESCE(music_sources.origin,excluded.origin),digest=excluded.digest,payload=excluded.payload,manual=max(music_sources.manual,excluded.manual),disabled=''",
+    ).run(id, origin ?? null, digest, JSON.stringify(src), Number(!origin))
     if (origin)
       db.prepare('INSERT OR REPLACE INTO music_source_origins(origin,source) VALUES(?,?)').run(
         origin,
@@ -213,11 +277,27 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     transaction(() => {
       migrate()
       const before = get('lx-source')
-      const id = add(src, origin)
-      if (activate || !before || JSON.parse(before).code === src.code)
+      const selected = before && byDigest(fingerprint(JSON.parse(before).code))
+      const prior = origin && byOrigin(origin)
+      const id = add(src, origin, activate)
+      if (
+        activate ||
+        !before ||
+        selected === id ||
+        (prior &&
+          selected === prior &&
+          !db.prepare('SELECT manual FROM music_sources WHERE id=?').get(prior)?.manual)
+      )
         set('lx-source', JSON.stringify(src))
+      if (!origin) verifiedManual.add(fingerprint(src.code))
+      if (prior && prior !== id) removeOrphan(prior)
       return id
     })
+  function removeOrphan(id) {
+    db.prepare(
+      'DELETE FROM music_sources WHERE id=? AND manual=0 AND NOT EXISTS (SELECT 1 FROM music_source_origins WHERE source=?)',
+    ).run(id, id)
+  }
   const list = () =>
     transaction(() => {
       migrate()
@@ -225,11 +305,12 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
       const active = current ? byDigest(fingerprint(JSON.parse(current).code)) : null
       const aliases = db.prepare('SELECT origin,source FROM music_source_origins').all()
       const installed = db
-        .prepare('SELECT id,origin,payload FROM music_sources ORDER BY rowid')
+        .prepare('SELECT id,origin,payload,disabled FROM music_sources ORDER BY rowid')
         .all()
         .map((row) => ({
           id: row.id,
           origin: row.origin,
+          disabled: row.disabled,
           origins: aliases.filter((entry) => entry.source === row.id).map((entry) => entry.origin),
           ...capabilities(JSON.parse(row.payload)),
         }))
@@ -264,7 +345,8 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
   function select(id) {
     return transaction(() => {
       const row =
-        typeof id === 'string' && db.prepare('SELECT payload FROM music_sources WHERE id=?').get(id)
+        typeof id === 'string' &&
+        db.prepare("SELECT payload FROM music_sources WHERE id=? AND disabled=''").get(id)
       if (!row) throw Error('未知的已导入音乐源')
       migrate()
       set('lx-source', row.payload)
@@ -274,7 +356,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
   let upgrading
   async function upgradeInstalled() {
     migrate()
-    for (const row of db.prepare('SELECT id,payload FROM music_sources').all()) {
+    for (const row of db.prepare("SELECT id,payload FROM music_sources WHERE disabled=''").all()) {
       const old = JSON.parse(row.payload)
       if (old.catalogVersion === 2) continue
       let next
@@ -292,12 +374,148 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
       })
     }
   }
+  function retire(origin, reason) {
+    const id = byOrigin(origin)
+    if (!id) return
+    db.prepare('DELETE FROM music_source_origins WHERE origin=?').run(origin)
+    if (db.prepare('SELECT 1 FROM music_source_origins WHERE source=?').get(id)) return
+    db.prepare('UPDATE music_sources SET disabled=? WHERE id=? AND manual=1').run(reason, id)
+    removeOrphan(id)
+  }
+  function repairSelection() {
+    const active = JSON.parse(get('lx-source') || 'null')
+    if (
+      active &&
+      db
+        .prepare("SELECT 1 FROM music_sources WHERE digest=? AND disabled=''")
+        .get(fingerprint(active.code))
+    )
+      return
+    const first = db
+      .prepare(
+        "SELECT payload FROM music_sources WHERE disabled='' ORDER BY manual DESC,rowid LIMIT 1",
+      )
+      .get()
+    if (first) set('lx-source', first.payload)
+    else db.prepare("DELETE FROM state WHERE key='lx-source'").run()
+  }
+  const verifiedManual = new Set()
+  async function synchronize(signal) {
+    migrate()
+    for (const row of db
+      .prepare("SELECT id,payload FROM music_sources WHERE manual=1 AND disabled=''")
+      .all()) {
+      const src = JSON.parse(row.payload)
+      try {
+        if (verifiedManual.has(fingerprint(src.code))) continue
+        await inspectSource(src.code, signal, src.platform)
+        verifiedManual.add(fingerprint(src.code))
+      } catch (error) {
+        signal.throwIfAborted()
+        if (error instanceof InvalidSource)
+          transaction(() => {
+            db.prepare('UPDATE music_sources SET disabled=? WHERE id=? AND payload=?').run(
+              error.message,
+              row.id,
+              row.payload,
+            )
+            repairSelection()
+          })
+      }
+    }
+    const budget = AbortSignal.any([signal, AbortSignal.timeout(15000)])
+    const read = (file, ms) => loadFile(file, AbortSignal.any([budget, AbortSignal.timeout(ms)]))
+    const [index, report, tree] = await Promise.all([
+      read('README.md', 4500)
+        .then(parseSourceIndex)
+        .catch(() => null),
+      read('health-state.json', 4500)
+        .then((raw) => JSON.parse(raw).sources)
+        .catch(() => null),
+      read('tree', 3000)
+        .then((raw) => JSON.parse(raw))
+        .catch(() => null),
+    ])
+    signal.throwIfAborted()
+    if (!index) return
+    const completeTree =
+      Array.isArray(tree?.tree) &&
+      tree.truncated === false &&
+      tree.tree.some((row) => row.path === 'README.md' && row.type === 'blob')
+    const gitBlobs = new Map(
+      (Array.isArray(tree?.tree) && !tree.truncated ? tree.tree : [])
+        .filter((row) => row.type === 'blob' && /^[a-f0-9]{40}$/.test(row.sha))
+        .map((row) => [row.path, row.sha]),
+    )
+    const validReport =
+      report &&
+      !Array.isArray(report) &&
+      typeof report === 'object' &&
+      Object.entries(report).every(([id, status]) => slug.test(id) && typeof status === 'string')
+    const health = validReport ? report : JSON.parse(get('lx-source-health') || 'null')
+    const included = new Set(index.map((row) => row.id))
+    const removed = (origin) =>
+      !included.has(origin) && completeTree && !gitBlobs.has(origin + '/latest.js')
+    const retained = entries().filter((row) => !included.has(row.id) && !removed(row.id))
+    const dead = (origin) => ['失效', '停用', '已停用'].includes(health?.[origin])
+    transaction(() => {
+      if (validReport) set('lx-source-health', JSON.stringify(report))
+      set('lx-source-index', JSON.stringify([...index, ...retained].filter((row) => !dead(row.id))))
+      for (const { origin } of db.prepare('SELECT origin FROM music_source_origins').all())
+        if (removed(origin) || dead(origin)) retire(origin, '仓库已停用')
+      repairSelection()
+    })
+    const pending = index.filter(
+      (row) =>
+        !dead(row.id) && (!health?.[row.id] || health[row.id] === '可用' || byOrigin(row.id)),
+    )
+    let next = 0
+    async function worker() {
+      while (next < pending.length && !budget.aborted) {
+        const { id: origin } = pending[next++]
+        const file = origin + '/latest.js'
+        const prior = db
+          .prepare('SELECT payload FROM music_sources WHERE id=?')
+          .get(byOrigin(origin) ?? null)
+        const old = prior && JSON.parse(prior.payload)
+        if (
+          old &&
+          gitBlobs.get(file) ===
+            createHash('sha1')
+              .update('blob ' + Buffer.byteLength(old.code) + '\0')
+              .update(old.code)
+              .digest('hex')
+        )
+          continue
+        try {
+          const code = await read(file, 5500)
+          if (!code.trim() || /^\s*(?:<!doctype|<html)/i.test(code)) continue
+          if (old?.code === code) continue
+          const cached = db
+            .prepare("SELECT payload FROM music_sources WHERE digest=? AND disabled=''")
+            .get(fingerprint(code))
+          const src = cached ? JSON.parse(cached.payload) : await inspectSource(code, budget)
+          budget.throwIfAborted()
+          install(src, origin, false)
+        } catch (error) {
+          signal.throwIfAborted()
+          if (error instanceof InvalidSource)
+            transaction(() => {
+              retire(origin, error.message)
+              repairSelection()
+            })
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, pending.length) }, worker))
+    signal.throwIfAborted()
+  }
   return {
     configuration(code = JSON.parse(get('lx-source') || 'null')?.code) {
       const active = code ? fingerprint(code) : ''
       const sources = new Set(
         db
-          .prepare('SELECT digest FROM music_sources')
+          .prepare("SELECT digest FROM music_sources WHERE disabled=''")
           .all()
           .map((row) => row.digest),
       )
@@ -307,7 +525,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     },
     discoverySources(current) {
       const others = db
-        .prepare('SELECT payload FROM music_sources ORDER BY rowid')
+        .prepare("SELECT payload FROM music_sources WHERE disabled='' ORDER BY rowid")
         .all()
         .map(({ payload }) => JSON.parse(payload))
         .filter((src) => src.code !== current.code)
@@ -322,7 +540,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     alternatives(platform, quality, currentCode) {
       const result = []
       for (const { payload } of db
-        .prepare('SELECT payload FROM music_sources ORDER BY rowid')
+        .prepare("SELECT payload FROM music_sources WHERE disabled='' ORDER BY rowid")
         .all()) {
         const src = JSON.parse(payload)
         const supported = src.platforms?.[platform]
@@ -339,6 +557,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
       return upgrading
     },
     list,
+    synchronize,
     importSelected,
     select,
     install,

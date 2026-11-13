@@ -1,3 +1,4 @@
+import { offlineSourceRepository } from './music-source-fixture.mjs'
 import { writeFixtureRecording } from './music-recording-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
@@ -149,6 +150,7 @@ const launch = () =>
   })
 const app = await launch()
 try {
+  await offlineSourceRepository(app)
   const page = await app.firstWindow()
   await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByLabel('描述你想听什么').fill('雨天的爵士乐')

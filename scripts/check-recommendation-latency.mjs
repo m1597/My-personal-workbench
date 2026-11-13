@@ -1,3 +1,4 @@
+import { offlineSourceRepository } from './music-source-fixture.mjs'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -93,8 +94,9 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     recordings[name] = path.join(root, name + '.wav')
     await writeFixtureRecording(recordings[name], 718 + index * 151)
   }
-  const mockRequests = () =>
-    app.evaluate(
+  const mockRequests = async () => {
+    await offlineSourceRepository(app)
+    return app.evaluate(
       ({ app, BaseWindow }, { audio, recordings }) => {
         if (
           !app.commandLine.hasSwitch('mute-audio') ||
@@ -206,6 +208,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
       },
       { audio: path.resolve('tests/fixtures/local-music/tone.mp3'), recordings },
     )
+  }
   await mockRequests()
   await page.evaluate(() => window.music.configureModel('deepseek', 'fixture', 'fixture', false))
   await page.getByRole('tab', { name: '每日推荐' }).click()

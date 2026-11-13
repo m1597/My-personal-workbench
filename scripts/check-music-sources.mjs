@@ -98,6 +98,77 @@ for (const [name, args] of [
   ['select_source', { id: '../anything' }],
 ])
   assert.equal(validCall(name, args), false)
+{
+  const db = new DatabaseSync(':memory:')
+  db.exec('CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
+  let health = { fish: '可用', huibq: '可用' }
+  let offline = false
+  let transient = false
+  let script = code('目录 A')
+  let partial = false
+  let tree = { tree: [] }
+  const reads = []
+  const bank = sourceCatalog(db, async (file) => {
+    reads.push(file)
+    if (offline) throw Error('仓库不可达')
+    if (file === 'tree') return JSON.stringify(tree)
+    if (file === 'README.md') return partial ? markdown.split('### Huibq')[0] : markdown
+    if (file === 'health-state.json') return JSON.stringify({ sources: health })
+    if (file === 'fish/latest.js' && transient) throw Error('下载超时')
+    if (file === 'fish/latest.js') return script
+    if (file === 'huibq/latest.js') return code('手动 B')
+    throw Error('未知文件')
+  })
+  const manual = bank.install(await inspectSource(code('手动 B'), signal), null, true)
+  await bank.synchronize(signal)
+  assert.equal(bank.list().installed.length, 2)
+  const findFish = () => bank.list().installed.find((s) => s.origins.includes('fish'))
+  const first = findFish().id
+  script = code('目录 A2')
+  await bank.synchronize(signal)
+  assert.equal(findFish().id, first)
+  assert.equal(findFish().name, '目录 A2')
+  health = { fish: '异常', huibq: '失效' }
+  transient = true
+  await bank.synchronize(signal)
+  assert.equal(findFish().id, first)
+  assert.ok(bank.describe(manual).disabled)
+  assert.throws(() => bank.select(manual))
+  assert.equal(bank.list().active, first)
+  transient = false
+  script = 'const invalid = ;'
+  await bank.synchronize(signal)
+  assert.equal(findFish(), undefined)
+  assert.equal(bank.list().active, null)
+  health = { fish: '可用', huibq: '可用' }
+  script = code('目录 A3')
+  await bank.synchronize(signal)
+  assert.equal(findFish().name, '目录 A3')
+  assert.equal(bank.describe(manual).disabled, '')
+  offline = true
+  const stable = bank.list()
+  await bank.synchronize(signal)
+  assert.deepEqual(bank.list(), stable)
+  assert.equal(reads.filter((f) => f === 'README.md').length, 6)
+  offline = false
+  partial = true
+  tree = {
+    truncated: false,
+    tree: ['README.md', 'huibq/latest.js'].map((path) => ({
+      path,
+      type: 'blob',
+      sha: '0'.repeat(40),
+    })),
+  }
+  await bank.synchronize(signal)
+  assert.ok(!bank.describe(manual).disabled)
+  assert.ok(bank.list().catalog.some((s) => s.id === 'huibq'))
+  tree.tree.pop()
+  await bank.synchronize(signal)
+  assert.ok(bank.describe(manual).disabled)
+  assert.ok(!bank.list().catalog.some((s) => s.id === 'huibq'))
+  db.close()
+}
 await mkdir('tmp', { recursive: true })
 const profile = await mkdtemp(path.resolve('tmp/source-permissions-'))
 const endpoint = await sourceEndpoint(profile, 'publish')

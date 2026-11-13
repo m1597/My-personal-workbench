@@ -4,6 +4,7 @@ import { Button, Checkbox, Dropdown, Field, Input, Option } from '@fluentui/reac
 type CatalogEntry = { id: string; name: string }
 type Installed = CatalogEntry & {
   origin: string | null
+  disabled?: string
   origins: string[]
   platform: string
   searchPlatforms?: string[]
@@ -94,8 +95,9 @@ export function MusicSourcesSettings({
             }}
           >
             {data.installed.map((item) => (
-              <Option key={item.id} value={item.id} text={item.name}>
+              <Option key={item.id} value={item.id} text={item.name} disabled={!!item.disabled}>
                 {item.name}
+                {item.disabled ? '（已停用：' + item.disabled + '）' : ''}
               </Option>
             ))}
           </Dropdown>

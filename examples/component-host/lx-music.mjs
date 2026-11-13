@@ -111,7 +111,7 @@ async function* availableSources(sources, probe, signal, parallel) {
       if (next < sources.length && pending.size < parallel)
         contenders.push(
           new Promise((resolve) => {
-            timer = setTimeout(resolve, 300)
+            timer = setTimeout(resolve, 150)
           }),
         )
       let result
@@ -364,7 +364,7 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
   try {
     const connection = new AbortController()
     const deadline = AbortSignal.timeout(240000)
-    const connectionTimer = dailyId && setTimeout(() => connection.abort(), 8000)
+    const connectionTimer = setTimeout(() => connection.abort(), 8000)
     const res = await openPublic(url, {
       signal: AbortSignal.any([signal, connection.signal, deadline]),
     })
@@ -762,32 +762,41 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }
     signal.throwIfAborted()
     if (auditionId) return fetchRecording(src, row, quality, dir, signal, auditionId)
-    const tried = []
-    async function attempt(candidate) {
-      signal.throwIfAborted()
-      tried.push(candidate.name)
-      const file = await fetchRecording(candidate, row, quality, dir, signal)
-      return detailed ? { file, sources: tried } : file
-    }
-    let failure
-    try {
-      return await attempt(src)
-    } catch (error) {
-      signal.throwIfAborted()
-      if (
-        !(error instanceof SourceDownloadError) ||
-        !recordingId(src, row) ||
-        ['denied', 'preview'].includes(permission(src, row))
-      )
-        throw error
-      failure = error
-    }
     await catalog().upgrade()
-    const reasons = [src.name + '：' + failure.message]
-    for (const candidate of catalog().alternatives(src.platform, quality, src.code)) {
-      if (['denied', 'preview'].includes(permission(candidate, row))) continue
+    const eligible = recordingId(src, row) && !['denied', 'preview'].includes(permission(src, row))
+    const candidates = [
+      src,
+      ...(eligible
+        ? catalog()
+            .alternatives(src.platform, quality, src.code)
+            .filter((candidate) => !['denied', 'preview'].includes(permission(candidate, row)))
+        : []),
+    ]
+    const tried = []
+    const reasons = []
+    const resolve = async (candidate, probeSignal) => {
+      tried.push(candidate.name)
+      return recordingAddress(candidate, row, quality, probeSignal)
+    }
+    for await (const { src: candidate, candidate: url, error } of availableSources(
+      candidates,
+      resolve,
+      signal,
+      2,
+    )) {
       try {
-        return await attempt(candidate)
+        if (error) throw error
+        const file = await fetchRecording(
+          candidate,
+          row,
+          quality,
+          dir,
+          signal,
+          undefined,
+          undefined,
+          url,
+        )
+        return detailed ? { file, sources: tried } : file
       } catch (error) {
         signal.throwIfAborted()
         if (!(error instanceof SourceDownloadError)) throw error
@@ -845,11 +854,14 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           source: src.platform,
           info: { type: quality, musicInfo: row },
         },
-        dailyId ? AbortSignal.any([signal, addressDeadline]) : signal,
+        AbortSignal.any([signal, addressDeadline]),
       )
     } catch (error) {
       signal.throwIfAborted()
-      if (dailyId && addressDeadline.aborted) throw new RecordingError('network', '音乐源取址超时')
+      if (addressDeadline.aborted) {
+        if (dailyId) throw new RecordingError('network', '音乐源取址超时')
+        throw new SourceDownloadError('音乐源取址超时')
+      }
       if (!(error instanceof SourceRequestError)) throw error
       throw new SourceDownloadError(
         src.name +
@@ -897,14 +909,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           dailyId,
         )
         if (filename && !auditionId) {
-          if (dailyId) {
-            const bytes = (await lstat(path.join(dir, filename)).catch(() => null))?.size
-            if (bytes > 0) {
-              const key = sourceKey(src)
-              const rate = bytes / Math.max(1, performance.now() - started)
-              const previous = transferRates.get(key)
-              transferRates.set(key, previous ? (previous + rate) / 2 : rate)
-            }
+          const bytes = (await lstat(path.join(dir, filename)).catch(() => null))?.size
+          if (bytes > 0) {
+            const key = sourceKey(src)
+            const rate = bytes / Math.max(1, performance.now() - started)
+            const previous = transferRates.get(key)
+            transferRates.set(key, previous ? (previous + rate) / 2 : rate)
           }
           await saveRecordingLyrics(src, row, path.join(dir, filename), signal)
         }
@@ -1368,6 +1378,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   })
   let generation = 0
   return {
+    synchronizeSources(signal) {
+      return catalog().synchronize(signal)
+    },
     async sourceTool(name, args, signal) {
       const bank = catalog()
       await bank.upgrade()

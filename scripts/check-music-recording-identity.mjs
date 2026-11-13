@@ -1,3 +1,4 @@
+import { offlineSourceRepository } from './music-source-fixture.mjs'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
@@ -96,6 +97,7 @@ const app = await electron.launch({
   env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
 })
 try {
+  await offlineSourceRepository(app)
   const page = await app.firstWindow()
   await app.evaluate(
     ({ dialog }, { source, files, titles }) => {
