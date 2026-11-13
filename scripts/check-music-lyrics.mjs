@@ -2,12 +2,13 @@ import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { mkdtemp, writeFile, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile, readFile } from 'node:fs/promises'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
 import { recording } from '../components/music/offline-source.mjs'
 import {
   saveLyrics,
+  lyricLines,
   ownedLyrics,
   localLines,
   lyricPath,
@@ -23,6 +24,7 @@ for (const [title, file] of [
   ['A', a],
   ['B', b],
   ['No Lyrics', silent],
+  ['Plain', path.join(root, 'Plain.wav')],
   ['C', path.join(root, 'C.wav')],
   ['D', path.join(root, 'D.wav')],
 ]) {
@@ -35,17 +37,18 @@ for (const [title, file] of [
     duration: 20,
   })
 }
+const tail = Array.from({ length: 9 }, (_, i) => [10 + i, '旋律继续 · ' + (i + 1)])
+const plain = ['风吹过寂静的街口', '远处的灯火依然明亮', '沿着回家的路', '风吹过寂静的街口']
+await writeFile(lyricPath(path.join(root, 'Plain.wav')), '[ar:测试]\n' + plain.join('\n'))
+assert.deepEqual(lyricLines('[ar:测试]\n[ti:A]'), [])
 await saveLyrics(
   store.db,
   a,
   async () =>
-    '[offset:500]\n[00:00.50]第一句\n[00:00.50]First line\n[00:04.50][00:09.50]第二句\n[00:04.50]Second line',
+    '[offset:500]\n[00:00.50]第一句\n[00:00.50]First line\n[00:04.50][00:09.50]第二句\n[00:04.50]Second line' +
+    tail.map(([at, text]) => '\n[00:' + at + '.50]' + text).join(''),
 )
-assert.deepEqual(await localLines(a), [
-  [0, '第一句'],
-  [4, '第二句'],
-  [9, '第二句'],
-])
+assert.deepEqual(await localLines(a), [[0, '第一句'], [4, '第二句'], [9, '第二句'], ...tail])
 assert.equal(await ownedLyrics(store.db, a), lyricPath(a))
 const tagged = path.join(root, 'Tagged.wav')
 for (const [tags, expected] of [
@@ -93,8 +96,8 @@ try {
   })
   const button = (name) => page.getByRole('button', { name, exact: true })
   await expect(button('桌面歌词')).toHaveAttribute('aria-pressed', 'false')
-  for (const title of ['B', 'A', 'No Lyrics']) {
-    await page.locator('.library-name strong', { hasText: title }).click({ button: 'right' })
+  for (const title of ['B', 'A', 'No Lyrics', 'Plain']) {
+    await page.locator('.library-name').getByText(title, { exact: true }).click({ button: 'right' })
     await page.getByRole('menuitem', { name: '加入队列', exact: true }).click()
   }
   await button('播放').click()
@@ -109,7 +112,9 @@ try {
   await expect(overlay.locator('button')).toHaveCSS('opacity', '1')
   await button('下一首').click()
   await expect(overlay.locator('strong')).toHaveText('第一句')
-  await button('A').click()
+  await expect(page.locator('.music-heading strong')).toHaveText('A')
+  await expect(button('A')).toHaveCount(0)
+  await button('打开歌词页').click()
   const playerPage = page.getByRole('region', { name: '播放页' })
   const currentLine = playerPage.locator('[aria-current="true"]')
   await expect(currentLine).toHaveText('第一句')
@@ -181,8 +186,107 @@ try {
   await expect(playerPage.getByRole('status')).toHaveText('暂无歌词')
   await expect(currentLine).toHaveCount(0)
   await page.screenshot({ path: path.join(root, 'now-playing-empty.png') })
+  await button('下一首').click()
+  const plainPane = playerPage.getByRole('region', { name: '歌词文本' })
+  await expect(plainPane.locator('p')).toHaveText(plain)
+  await expect(plainPane.getByRole('button')).toHaveCount(0)
+  await button('暂停').click()
+  const pausedTime = await page.locator('audio').evaluate((a) => a.currentTime)
+  await plainPane.locator('p').first().click()
+  assert.deepEqual(await page.locator('audio').evaluate((a) => [a.currentTime, a.paused]), [
+    pausedTime,
+    true,
+  ])
+  await page.screenshot({ path: path.join(root, 'plain-lyrics.png') })
+  await button('上一首').click()
   await button('上一首').click()
   await expect(overlay.locator('strong')).toHaveText('第一句')
+  await expect(currentLine).toHaveText('第一句')
+  await button('暂停').click()
+  const pane = playerPage.getByRole('region', { name: '同步歌词' })
+  const client = await page.context().newCDPSession(page)
+  const bounds = await pane.boundingBox()
+  async function wheel(deltaY) {
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseWheel',
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+      deltaX: 0,
+      deltaY,
+    })
+  }
+  await wheel(290)
+  await expect(button('回到当前歌词')).toBeVisible()
+  await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBeGreaterThan(180)
+  await page.screenshot({ path: path.join(root, 'manual-lyrics.png') })
+  const browsed = await pane.evaluate((el) => el.scrollTop)
+  await page.locator('audio').evaluate((a) => {
+    a.currentTime = 4.5
+  })
+  await expect(currentLine).toHaveText('第二句')
+  assert.equal(await pane.evaluate((el) => el.scrollTop), browsed)
+  await button('回到当前歌词').click()
+  await expect(button('回到当前歌词')).toHaveCount(0)
+  const centered = () =>
+    currentLine.evaluate((el) => {
+      const p = el.parentElement
+      return Math.abs(el.offsetTop - p.scrollTop - (p.clientHeight - el.offsetHeight) / 2)
+    })
+  await expect.poll(centered).toBeLessThan(2)
+  await page.screenshot({ path: path.join(root, 'resumed-lyrics.png') })
+  await wheel(260)
+  await expect(button('回到当前歌词')).toBeVisible()
+  await pane.getByRole('button', { name: tail[0][1], exact: true }).click()
+  await expect(button('回到当前歌词')).toHaveCount(0)
+  await expect(button('暂停')).toBeVisible()
+  await expect(currentLine).toHaveText(tail[0][1])
+  const at = await page.locator('audio').evaluate((a) => a.currentTime)
+  assert.ok(at >= 10 && at < 11)
+  await page.screenshot({ path: path.join(root, 'seek-lyrics.png') })
+  const framesDir = path.join(root, 'frames')
+  await mkdir(framesDir)
+  // Sample consecutive rendered frames through three natural audio-clock transitions.
+  const frames = pane.evaluate(
+    (el) =>
+      new Promise((resolve) => {
+        const records = []
+        function frame(now) {
+          const active = el.querySelector('[aria-current]')
+          records.push({
+            now,
+            line: active.textContent,
+            top: el.scrollTop,
+            opacity: Number(getComputedStyle(active).opacity),
+            previous: active.previousElementSibling
+              ? Number(getComputedStyle(active.previousElementSibling).opacity)
+              : null,
+          })
+          if (records.length > 1 && now - records[0].now >= 4200) resolve(records)
+          else requestAnimationFrame(frame)
+        }
+        requestAnimationFrame(frame)
+      }),
+  )
+  const start = Date.now()
+  let i = 0
+  while (Date.now() - start < 4150) {
+    await page.screenshot({ path: path.join(framesDir, String(++i).padStart(3, '0') + '.png') })
+  }
+  const samples = await frames
+  await writeFile(path.join(root, 'animation-frames.json'), JSON.stringify(samples))
+  for (const [, text] of tail.slice(1, 4)) {
+    const states = samples.filter((record) => record.line === text)
+    assert.ok(new Set(states.map((r) => r.top)).size >= 4, '须有多个中间滚动位置：' + text)
+    assert.ok(
+      states.some(
+        (r) => r.opacity > 0.58 && r.opacity < 0.98 && r.previous > 0.58 && r.previous < 0.98,
+      ),
+      '前后两句同时渐变：' + text,
+    )
+  }
+  console.log('三次连续换行已验证', samples.length, '个渲染帧，', i, '张截图')
+  await pane.getByRole('button', { name: '第一句', exact: true }).click()
+  await button('暂停').click()
   await expect(currentLine).toHaveText('第一句')
   await playerPage.getByRole('button', { name: '返回' }).click()
   await expect(overlay.locator('button')).toBeHidden()

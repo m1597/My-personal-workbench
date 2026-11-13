@@ -1,7 +1,7 @@
 import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
 import { TrackMenu } from './TrackMenu'
 import { Cover, type Album } from './AlbumBrowser'
-import { NowPlaying } from './NowPlaying'
+import { NowPlaying, type LyricLine } from './NowPlaying'
 import { guideSteps, MusicGuide } from './MusicGuide'
 import { observeListening } from './listening'
 import type { SourceInventory } from './MusicSourcesSettings'
@@ -172,7 +172,7 @@ declare global {
       importLocal(mode: 'folder' | 'files'): Promise<void>
       cancelImport(): Promise<void>
       refreshLocal(): Promise<void>
-      lyrics(id: string): Promise<[number, string][]>
+      lyrics(id: string): Promise<LyricLine[]>
       showLyrics(on: boolean): Promise<void>
       unlockLyrics(): Promise<void>
       onLyricLocked(listener: (locked: boolean) => void): () => void
@@ -583,9 +583,10 @@ function Music() {
       const el = audio.current
       if (!el || seq !== epoch.current) return
       if (current.current === id) {
-        if (restart) el.currentTime = 0
+        if (startAt !== undefined || restart) el.currentTime = startAt ?? 0
         await host.playQueue(id, ids, el.currentTime, occurrence, pendingAlbum)
         await el.play()
+    startAt?: number,
         return
       }
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
@@ -610,9 +611,9 @@ function Music() {
           ? state.position
           : 0
       el.src = src
-      el.currentTime = resume
-      setTime(resume)
-      await host.playQueue(id, ids, resume, occurrence, pendingAlbum)
+      el.currentTime = startAt ?? resume
+      setTime(el.currentTime)
+      await host.playQueue(id, ids, el.currentTime, occurrence, pendingAlbum)
       await el.play()
     }
     const operation = switching.current.then(run)
@@ -713,7 +714,7 @@ function Music() {
   useEffect(() => host.onLyricLocked(setLyricsLocked), [])
   const [lyrics, setLyrics] = useState<{
     id: string
-    lines: [number, string][]
+    lines: LyricLine[]
   }>()
   useEffect(() => {
     if (!needLyrics || !now) return
@@ -740,7 +741,7 @@ function Music() {
   let activeLine = -1
   if (lines) {
     for (const [index, [at]] of lines.entries()) {
-      if (at > elapsed) break
+      if (at === null || at > elapsed) break
       activeLine = index
     }
   }
@@ -924,6 +925,18 @@ function Music() {
             tracks={state?.localTracks ?? []}
             sidebarOrder={state?.sidebarOrder}
             moveSidebarItem={(group, id, target, after) =>
+            seek={(at) =>
+              void act(() =>
+                play(
+                  now,
+                  queue,
+                  state?.queueOccurrence,
+                  false,
+                  state?.pendingAlbum,
+                  Math.max(0, at),
+                ),
+              )
+            }
               act(() => host.moveSidebarItem(group, id, target, after))
             }
             playlists={state?.playlists ?? []}
@@ -1296,22 +1309,20 @@ function Music() {
       </main>
       <footer className="music-player">
         <div className="music-transport">
-          <div className="music-disc">
-            <Cover key={state?.albumRevision} id={coverId} track />
-          </div>
+          <button
+            type="button"
+            className="music-disc music-cover-button"
+            aria-label="打开歌词页"
+            title="打开歌词页"
+            onClick={openPlayer}
+          >
+            <Cover revision={state?.albumRevision} id={coverId} track />
+          </button>
           <div className="music-heading">
-            {active ? (
-              <button
-                type="button"
-                className="music-title-link"
-                onClick={openPlayer}
-                title="打开播放页"
-              >
-                <strong>{active.title}</strong>
-              </button>
-            ) : (
-              <strong>尚未播放</strong>
-            )}
+            <div className="music-title-row">
+              <strong>{active?.title ?? '尚未播放'}</strong>
+              {favoriteButton}
+            </div>
             <small>{active?.artist ?? '试听播放器'}</small>
           </div>
           <Button

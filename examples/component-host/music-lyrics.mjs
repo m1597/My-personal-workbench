@@ -21,7 +21,12 @@ export function lyricLines(raw) {
       if (!result.get(at)) result.set(at, tags[2].trim())
     }
   }
-  return [...result].sort((a, b) => a[0] - b[0])
+  if (result.size) return [...result].sort((a, b) => a[0] - b[0])
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^\[(?:[a-z]+:|\d+:)/i.test(line))
+    .map((line) => [null, line])
 }
 async function content(file) {
   const stat = await lstat(file)
