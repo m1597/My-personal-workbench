@@ -260,6 +260,12 @@ async function freeDownloadQualities(ids, signal) {
   }
   return result
 }
+function durationSeconds(row) {
+  const sec = Number(row.durationSeconds ?? row._interval)
+  if (Number.isFinite(sec) && sec > 0) return sec
+  const time = typeof row.interval === 'string' && /^(\d+):([0-5]\d)$/.exec(row.interval)
+  return time ? Number(time[1]) * 60 + Number(time[2]) : undefined
+}
 function searchRows(page) {
   const rows = Array.isArray(page) ? page : (page?.items ?? page?.list ?? page?.songs)
   if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
@@ -800,6 +806,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           title: text(row.name),
           artist: text(row.singer),
           album: text(row.albumName),
+          duration: durationSeconds(row),
           quality: recordingQualities(src, row),
         })
       }

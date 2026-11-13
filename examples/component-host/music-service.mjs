@@ -1,4 +1,5 @@
 import { reconcileRecycled } from './recycled-tracks.mjs'
+import { registerReleaseCatalog } from './release-catalog.mjs'
 import { desktopLyrics } from './desktop-lyrics.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
 import { localLines } from './music-lyrics.mjs'
@@ -81,6 +82,7 @@ export function musicService(
         throw e
       }
     })
+  registerReleaseCatalog(bind, () => store)
   bind('musicGuide', () => ({
     seen: Boolean(store.get('music-guide-v1')),
     script: mcpScript,

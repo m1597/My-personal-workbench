@@ -11,6 +11,7 @@ import {
 import { ArrowLeft, ArrowDownUp, Play, Search } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatTime, type LocalTrack } from './LibraryPane'
+import { AlbumEditions } from './ReleaseCatalog'
 import './albums.css'
 
 export type Album = {
@@ -81,6 +82,7 @@ export function Cover({
 }
 
 type Props = {
+  searchRelease: (query: string) => void
   revision: number
   tracks: LocalTrack[]
   active: string
@@ -91,7 +93,7 @@ type Props = {
 const sortLabels = { name: '专辑名称', descending: '曲数从多到少', ascending: '曲数从少到多' }
 type AlbumSort = keyof typeof sortLabels
 
-export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Props) {
+export function AlbumBrowser({ searchRelease, revision, tracks, active, play, queueNext }: Props) {
   const [albums, setAlbums] = useState<Album[]>()
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -191,6 +193,12 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
             </Button>
           </div>
         </header>
+        <AlbumEditions
+          key={selected.id}
+          album={selected}
+          local={selected.tracks.flatMap((id) => trackMap.get(id) ?? [])}
+          search={searchRelease}
+        />
         <ol className="album-tracks">
           {selected.tracks.map((id) => {
             const row = trackMap.get(id)

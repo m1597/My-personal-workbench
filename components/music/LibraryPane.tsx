@@ -86,6 +86,7 @@ export type PlaylistTrack = LocalTrack | OnlineTrack
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 interface Props extends SidebarSorting, PlaylistSorting {
+  searchRelease: (query: string) => void
   albumRevision: number
   favorite: (id: string, value: boolean) => Promise<unknown>
   addFavorites: (ids: string[]) => Promise<number | null>
@@ -122,6 +123,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   removeFolder: (id: string) => Promise<boolean>
 }
 export function LibraryPane({
+  searchRelease,
   albumRevision,
   favorite,
   addFavorites,
@@ -457,6 +459,7 @@ export function LibraryPane({
           )}
           {showAlbums ? (
             <AlbumBrowser
+              searchRelease={searchRelease}
               revision={albumRevision}
               tracks={tracks}
               active={active}

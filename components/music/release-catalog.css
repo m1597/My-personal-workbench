@@ -1,0 +1,54 @@
+.music-release-news,
+.music-album-editions {
+  display: grid;
+  gap: var(--space-8);
+  margin: var(--space-12) auto;
+  max-width: 860px;
+  padding: var(--space-12);
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: var(--panel-radius);
+}
+.music-release-news header,
+.artist-management form,
+.music-album-editions label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+.artist-management {
+  display: grid;
+  gap: var(--space-8);
+}
+.music-release-news ul,
+.music-album-editions ol {
+  margin: 0;
+  padding: 0;
+}
+.music-release-news li,
+.music-album-editions li {
+  justify-content: space-between;
+}
+.music-release-news li small,
+.music-album-editions li small {
+  display: block;
+}
+.music-album-editions > button {
+  justify-self: start;
+}
+.edition-select {
+  max-width: 100%;
+  min-width: 0;
+}
+.lx-panel .version-group details {
+  width: 100%;
+}
+.lx-panel .version-group summary {
+  cursor: pointer;
+  padding: var(--space-8);
+}
+.lx-panel .version-group ul {
+  padding-inline-start: var(--space-12);
+  min-height: 0;
+}

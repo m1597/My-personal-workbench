@@ -100,6 +100,7 @@ type Item = {
   checked: number
   candidates: Track[]
 }
+import { ArtistReleases, type ReleaseAPI } from './ReleaseCatalog'
 import { RecommendationComposer } from './RecommendationComposer'
 import type { ModelInfo } from './ModelSettings'
 import { DownloadPane } from './LxPanel'
@@ -130,7 +131,7 @@ type Presentation = 'full' | 'bar' | 'background'
 type Mode = { mode: string; presentation: Presentation }
 declare global {
   interface Window {
-    music: LibraryToolsAPI & {
+    music: LibraryToolsAPI & ReleaseAPI & {
       albums(): Promise<Album[]>
       albumCover(id: string): Promise<string | null>
       trackCover(id: string): Promise<string | null>
@@ -327,6 +328,11 @@ function Music() {
     setSettingsCategory(category)
     setTab('settings')
     requestAnimationFrame(() => document.querySelector('.music-scroll')?.scrollTo(0, 0))
+  }
+  const [releaseSearch, setReleaseSearch] = useState('')
+  function searchRelease(query: string) {
+    setReleaseSearch(query)
+    setTab('download')
   }
   const [tab, setTab] = useState('library'),
     [requestedCollection, setCollection] = useState('all'),
@@ -934,6 +940,7 @@ function Music() {
           selectedValue={tab}
           onTabSelect={(_, data) => {
             setGuide(null)
+            setReleaseSearch('')
             setTab(String(data.value))
           }}
         >
@@ -1020,6 +1027,7 @@ function Music() {
           />
         ) : tab === 'library' ? (
           <LibraryPane
+            searchRelease={searchRelease}
             albumRevision={state?.albumRevision ?? 0}
             favorite={(id, on) => act(() => host.setFavorite(id, on))}
             addFavorites={async (ids) => {
@@ -1145,6 +1153,7 @@ function Music() {
           )
         ) : tab === 'download' ? (
           <DownloadPane
+            initialQuery={releaseSearch || undefined}
             preferredQuality={state?.prefs.quality}
             playlists={state?.playlists.filter((list) => !list.system) ?? []}
             onPlay={playSearchResult}
@@ -1164,6 +1173,7 @@ function Music() {
                 refresh={refresh}
               />
             )}
+            <ArtistReleases search={searchRelease} />
             <section className="music-list">
               <div className="music-section-head">
                 <h2>本次推荐</h2>
