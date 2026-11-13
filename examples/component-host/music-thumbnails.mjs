@@ -12,8 +12,11 @@ export function musicThumbnails(send) {
       const sheet = nativeImage.createFromPath(
         fileURLToPath(new URL('./transport-icons.png', import.meta.url)),
       )
+      // HICON conversion expects tightly packed rows; a cropped image retains the sheet stride.
       icons = ['previous', 'play', 'pause', 'next'].map((_, i) =>
-        sheet.crop({ x: i * 32, y: 0, width: 32, height: 32 }),
+        nativeImage.createFromBuffer(
+          sheet.crop({ x: i * 32, y: 0, width: 32, height: 32 }).toPNG(),
+        ),
       )
     }
     const target = owner

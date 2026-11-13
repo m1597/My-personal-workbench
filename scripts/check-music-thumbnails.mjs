@@ -29,8 +29,12 @@ try {
   await app.evaluate(({ BaseWindow }) => {
     const register = BaseWindow.prototype.setThumbarButtons
     globalThis.registrations = new Map()
+    globalThis.thumbnailImages = new Map()
+    globalThis.iconProbe = new BaseWindow({ show: false, skipTaskbar: true, x: -16000, y: 0 })
+    globalThis.iconProbe.setBounds({ x: -16000, y: 0, width: 64, height: 64 })
     BaseWindow.prototype.setThumbarButtons = function (buttons) {
       const ok = register.call(this, buttons)
+      for (const button of buttons) globalThis.thumbnailImages.set(button.tooltip, button.icon)
       globalThis.registrations.set(
         this.id,
         buttons.map((b) => ({
@@ -82,6 +86,21 @@ try {
       ])
       for (const b of controls) {
         expect(b.icon.length).toBeGreaterThan(0)
+        if (!icons.has(b.label)) {
+          const hwnd = await app.evaluate((_, label) => {
+            const probe = globalThis.iconProbe
+            probe.setIcon(globalThis.thumbnailImages.get(label))
+            return probe.getNativeWindowHandle().readUInt32LE(0)
+          }, b.label)
+          execFileSync(
+            'python',
+            ['scripts/win32-thumbnail-icon.py', String(hwnd), b.label, profile],
+            {
+              windowsHide: true,
+              env: { ...process.env, PYTHONUTF8: '1' },
+            },
+          )
+        }
         icons.set(b.label, b.icon)
       }
       const result = execFileSync('python', ['scripts/win32-thumbnail-command.py', id, label], {
