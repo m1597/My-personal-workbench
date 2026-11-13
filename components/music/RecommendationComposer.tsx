@@ -6,7 +6,10 @@ type Props = {
   onGenerating(busy: boolean): void
   activeTarget?: number | null
   running: boolean
-  initialDraft: string
+  description: string
+  edit(value: string): void
+  count: string
+  setCount(value: string): void
   currentSong?: { title: string; artist: string }
   refresh(): Promise<void>
   openSettings(): void
@@ -15,21 +18,18 @@ export function RecommendationComposer({
   models,
   activeTarget,
   running,
-  initialDraft,
+  description,
+  edit,
+  count,
+  setCount,
   currentSong,
   refresh,
   openSettings,
   onGenerating,
 }: Props) {
-  const [description, setDescription] = useState(initialDraft)
   const input = useRef<HTMLInputElement>(null)
-  function edit(value: string) {
-    setDescription(value)
-    void window.music.draft(value).catch((e) => setError(String(e)))
-  }
   const [stopping, setStopping] = useState(false)
   const [submitting, setBusy] = useState(false)
-  const [count, setCount] = useState('5')
   const target = Number(count)
   const validCount = /^\d+$/.test(count) && Number.isSafeInteger(target) && target > 0
   const busy = submitting || running

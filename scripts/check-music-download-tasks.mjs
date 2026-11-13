@@ -15,6 +15,7 @@ const tone = path.resolve('tests/fixtures/local-music/tone.mp3')
 store.set('music-guide-v1', 1)
 store.set('music-media-keys', 'off')
 store.set('music-manual-dir', dir)
+store.set('draft', '上次保存的草稿')
 store.set('music-recommend-dir', dir)
 store.library.upsert({
   file: tone,
@@ -102,12 +103,20 @@ try {
   await expect.poll(() => page.locator('audio').evaluate((a) => !a.paused)).toBe(true)
   await tab('AI 推荐')
   const description = page.getByLabel('想让 AI 推荐什么？（选填）')
+  await expect(description).toHaveValue('上次保存的草稿')
+  await expect(page.getByLabel('推荐首数')).toHaveValue('5')
   await description.fill('草稿')
   await page.getByLabel('推荐首数').fill('3')
   await press('用当前歌曲')
   await expect(description).toHaveValue('晨光 · 林声')
   await expect(description).toBeFocused()
   await description.fill('晨光 · 林声，想听木吉他')
+  for (const destination of ['动态', '动态']) {
+    await tab(destination)
+    await tab('AI 推荐')
+    await expect(description).toHaveValue('晨光 · 林声，想听木吉他')
+    await expect(page.getByLabel('推荐首数')).toHaveValue('3')
+  }
   await expect(page.getByLabel('推荐首数')).toHaveValue('3')
   assert.equal(await app.evaluate(() => globalThis.testModelCalls.length), 0)
   assert.equal(await page.evaluate(async () => (await window.music.state()).batches[0].id), old)

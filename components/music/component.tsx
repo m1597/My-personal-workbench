@@ -156,7 +156,9 @@ declare global {
         lxSelectSource(id: string): Promise<void>
         lxInfo(): Promise<string>
         lxImport(link?: string): Promise<void>
-        lxCancel(scope?: 'import'): Promise<void>
+        lxCancel(scope?: 'import' | 'search' | 'download'): Promise<void>
+        downloadTasks(): Promise<{ id: string; title: string; status: string; detail: string }[]>
+        cancelDownloadTask(id: string): Promise<void>
         lxSearch(
           query: string | { title: string; artist: string },
           platform?: string,
@@ -317,6 +319,12 @@ function Music() {
       })
       .catch((e) => alive && setError(String(e)))
     return () => {
+  const [recommendationDraft, setRecommendationDraft] = useState<string>()
+  const [recommendationCount, setRecommendationCount] = useState('5')
+  function editRecommendation(value: string) {
+    setRecommendationDraft(value)
+    void host.draft(value).catch((e) => setError(String(e)))
+  }
       alive = false
     }
   }, [])
@@ -1340,7 +1348,10 @@ function Music() {
                 running={running}
                 models={state.models}
                 openSettings={() => openSettings('model')}
-                initialDraft={state.draft}
+                description={recommendationDraft ?? state.draft}
+                edit={editRecommendation}
+                count={recommendationCount}
+                setCount={setRecommendationCount}
                 onGenerating={setGenerating}
                 refresh={refresh}
               />
@@ -1389,6 +1400,7 @@ function Music() {
                           !!state?.localTracks.find(
                             (row) => row.id === clips.current?.ids[clips.current.index],
                           )?.favorite
+                currentSong={active}
                         }
                         start={() => void act(() => quickAt(downloaded, 0))}
                         save={() =>
