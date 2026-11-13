@@ -222,7 +222,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   await page.evaluate(() => window.music.configureModel('deepseek', 'fixture', 'fixture', false))
   await page.getByRole('tab', { name: '每日推荐' }).click()
   await page.getByLabel('推荐首数').fill('2')
-  await page.getByLabel('描述你想听什么').fill('测试两首音乐')
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('测试两首音乐')
   // Offscreen capture cannot composite the Windows acrylic surface.
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop

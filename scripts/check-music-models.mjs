@@ -153,7 +153,11 @@ try {
   await offlineSourceRepository(app)
   const page = await app.firstWindow()
   await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByLabel('描述你想听什么').fill('雨天的爵士乐')
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('雨天的爵士乐')
+  await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveAttribute(
+    'placeholder',
+    '歌手名、歌名，或一句想法都行',
+  )
   await app.evaluate(() => {
     globalThis.providerFixtures = true
     globalThis.modelCalls = []
@@ -224,7 +228,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       await page.getByRole('button', { name: '生成推荐' }).click()
       await expect.poll(() => app.evaluate(() => globalThis.folderRequests.length)).toBe(1)
       await expect(page.getByRole('button', { name: '生成推荐' })).toBeEnabled()
-      await expect(page.getByLabel('描述你想听什么')).toHaveValue('雨天的爵士乐')
+      await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveValue('雨天的爵士乐')
       assert.equal(await app.evaluate(() => globalThis.modelCalls.length), 0)
       const cancelled = await page.evaluate(() => window.music.state())
       assert.equal(cancelled.batches.length, 1)
@@ -233,6 +237,8 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       assert.deepEqual(await fs.readdir(output), [])
     }
     const previous = await page.evaluate(async () => (await window.music.state()).batches[0]?.id)
+    const description = ['雨天的爵士乐', 'AC/DC', '找和《夜曲》风格相似的歌', '雨天的爵士乐'][index]
+    await page.getByLabel('想让 AI 推荐什么？（选填）').fill(description)
     await page.getByRole('button', { name: '生成推荐' }).click()
     await expect
       .poll(() => page.evaluate(async () => (await window.music.state()).batches[0]?.id))
@@ -264,7 +270,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       call.headers.Authorization ?? call.headers['x-api-key'] ?? call.headers['x-goog-api-key'],
       (['openai', 'deepseek'].includes(id) ? 'Bearer ' : '') + 'fixture-' + id,
     )
-    assert.ok(JSON.stringify(call.body).includes('雨天的爵士乐'))
+    assert.ok(JSON.stringify(call.body).includes(description))
     assert.ok(!JSON.stringify(call.body).includes('summary'))
     await expect(page.locator('.music-list ol li')).toHaveCount(0)
   }
@@ -377,7 +383,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       !last.includes(root),
   )
   const before = (await calls()).length
-  await page.getByLabel('描述你想听什么').fill('')
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('')
   await page.getByRole('button', { name: '生成推荐' }).click()
   await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4, {
     timeout: 15000,

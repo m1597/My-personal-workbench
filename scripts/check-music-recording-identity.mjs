@@ -136,7 +136,7 @@ try {
   })
   await page.reload()
   await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByLabel('描述你想听什么').fill('只听目录艺人本人的作品')
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('只听目录艺人本人的作品')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled({
     timeout: 180000,

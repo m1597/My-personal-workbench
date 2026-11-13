@@ -191,6 +191,18 @@ try {
   const provenance = (await state()).localTracks.find(
     (t) => t.id === automatic,
   ).recommendationSource
+  await page.reload()
+  await page.getByRole('tab', { name: '本地曲库' }).click()
+  const copies = page.locator('.library-row .library-name')
+  const pair = ['允许保存', '试音 mp3'].map((title) =>
+    copies.filter({ has: page.getByText(title, { exact: true }) }),
+  )
+  for (const row of pair) {
+    await expect(row.locator('small')).toHaveCount(1)
+    await expect(row).not.toContainText('推荐来源')
+  }
+  assert.equal((await pair[0].boundingBox()).height, (await pair[1].boundingBox()).height)
+  await page.screenshot({ path: path.join(root, '推荐与手动曲目.png') })
   const local = new MusicStore(musicRoot)
   const taste = new MusicTaste(local, musicRoot, async () => '')
   // Ignore the legitimate manual import; only the original automatic copy is under test.

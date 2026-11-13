@@ -142,7 +142,10 @@ try {
   await expect(page.locator('.library-name strong')).toHaveText(['远山'])
   await button('播放远山').click()
   await playing()
-  await page.screenshot({ path: path.join(root, 'playlist-playing.png') })
+  await page.screenshot({
+    path: path.join(root, 'playlist-playing.png'),
+    style: ':root { background: var(--base) !important }',
+  })
   assert.deepEqual(await fs.readdir(downloads), [])
   assert.deepEqual(await fs.readdir(cache), [])
   await app.evaluate(({ dialog }) => {

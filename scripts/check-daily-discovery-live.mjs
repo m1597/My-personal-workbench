@@ -70,7 +70,7 @@ try {
   const preference =
     process.argv[2] ||
     '结合我的审美，发现一些库里没有的旋律性作品。今天想听独立音乐人正式公开免费下载的日系、游戏或轻电子器乐，优先免费的原创录音。'
-  await page.getByLabel('描述你想听什么').fill(preference)
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill(preference)
   const native = process.env.FITBAY_NATIVE_FOLDER === '1'
   await app.evaluate(
     ({ dialog }, { output, native }) => {
@@ -104,7 +104,7 @@ try {
   await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled({
     timeout: 30000,
   })
-  await expect(page.getByLabel('描述你想听什么')).toHaveValue(preference)
+  await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveValue(preference)
   assert.equal(await app.evaluate(() => globalThis.liveModelRequests), 0)
   assert.equal((await page.evaluate(() => window.music.state())).prefs.recommendDir, '')
   const runs = db.prepare('SELECT batch,state,message FROM recommendation_runs').all()

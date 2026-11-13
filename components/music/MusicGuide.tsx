@@ -13,7 +13,7 @@ export const guideSteps = [
     page: 'sources',
     target: 'mcp',
     title: '连接你的 Agent',
-    text: '在 MCP 客户端添加 stdio 服务，使用「MCP 连接方法」中的启动命令。连接后可查看和切换音源。',
+    text: '按「MCP 连接方法」添加 stdio 服务，便可让 Agent 导入或切换音源。展开该说明还可查看如何授权 Agent 整理本地歌曲。',
   },
   {
     page: 'model',
@@ -25,7 +25,7 @@ export const guideSteps = [
     page: 'audition',
     target: 'recommend',
     title: '写下今天想听什么',
-    text: '例如「适合雨天散步的民谣」。输入偏好后，点生成按钮查看推荐。',
+    text: '填歌手名，或写「想听和这首歌风格相似的作品」。留空也可以按已有偏好生成推荐。',
   },
 ] as const
 

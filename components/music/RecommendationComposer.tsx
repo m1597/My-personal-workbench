@@ -48,12 +48,12 @@ export function RecommendationComposer({
   }
   return (
     <section className="music-compose">
-      <label htmlFor="music-description">描述你想听什么</label>
+      <label htmlFor="music-description">想让 AI 推荐什么？（选填）</label>
       <div className="music-input">
         <Input
           data-guide-anchor="recommend"
           id="music-description"
-          placeholder="比如：想听点适合夜里散步的歌"
+          placeholder="歌手名、歌名，或一句想法都行"
           maxLength={1000}
           disabled={busy}
           value={description}

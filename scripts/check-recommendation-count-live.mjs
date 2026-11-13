@@ -122,7 +122,7 @@ try {
   const count = page.getByLabel('推荐首数')
   await expect(count).toHaveValue(String(target))
   await count.fill(String(target))
-  const preference = page.getByLabel('描述你想听什么')
+  const preference = page.getByLabel('想让 AI 推荐什么？（选填）')
   if (process.argv[2]) await preference.fill(process.argv[2])
   const rows = page.locator('.music-list ol li')
   const initialTitles = await rows.locator('strong').allTextContents()
