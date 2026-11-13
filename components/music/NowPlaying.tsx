@@ -1,7 +1,7 @@
 import { Button } from '@fluentui/react-components'
 import { ArrowLeft } from 'lucide-react'
-import { useLayoutEffect, useRef, useState } from 'react'
-import { Cover } from './AlbumBrowser'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { defaultCover, requestCover } from './AlbumBrowser'
 import './now-playing.css'
 
 const readingKeys = new Set(['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'])
@@ -9,6 +9,7 @@ const readingKeys = new Set(['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home
 export type LyricLine = [number | null, string]
 
 type Props = {
+  trackId: string
   title: string
   artist: string
   coverId?: string
@@ -19,7 +20,56 @@ type Props = {
   back: () => void
 }
 
+function RecordArt({ id, revision = 0 }: { id?: string; revision?: number }) {
+  const [art, setArt] = useState({ front: defaultCover, previous: '' })
+  useEffect(() => {
+    let live = true
+    const load = async () => {
+      const src = (id && (await requestCover(id, true, revision).catch(() => null))) || defaultCover
+      const image = new Image()
+      image.src = src
+      const front = await image.decode().then(
+        () => src,
+        () => defaultCover,
+      )
+      if (live)
+        setArt((current) =>
+          current.front === front ? current : { front, previous: current.front },
+        )
+    }
+    void load()
+    return () => {
+      live = false
+    }
+  }, [id, revision])
+  return (
+    <div className="record-art" aria-hidden="true">
+      {art.previous && (
+        <div className="record-art-layer">
+          <img src={art.previous} alt="" />
+          <img src={art.previous} alt="" />
+        </div>
+      )}
+      <div
+        key={art.front}
+        className="record-art-layer record-art-current"
+        onAnimationEnd={() =>
+          setArt((current) =>
+            current.front === art.front ? { ...current, previous: '' } : current,
+          )
+        }
+      >
+        <img src={art.front} alt="" />
+        <span className="album-art">
+          <img src={art.front} alt="" />
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function NowPlaying({
+  trackId,
   title,
   artist,
   coverId,
@@ -34,6 +84,11 @@ export function NowPlaying({
   const timed = lines?.[0]?.[0] != null
   const initialized = useRef(false)
   const frame = useRef(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each new recording starts in follow mode.
+  useLayoutEffect(() => {
+    initialized.current = false
+    setFollowing(true)
+  }, [trackId])
   function browse() {
     cancelAnimationFrame(frame.current)
     setFollowing(false)
@@ -91,56 +146,58 @@ export function NowPlaying({
       </div>
       <div className="now-playing-body">
         <div className="now-playing-record">
-          <Cover revision={revision} id={coverId} track />
+          <RecordArt revision={revision} id={coverId} />
           <h2>{title}</h2>
           {artist && <p>{artist}</p>}
         </div>
-        {lines?.length ? (
-          <section
-            className="now-playing-lyrics"
-            data-timed={timed}
-            ref={viewport}
-            aria-label={timed ? '同步歌词' : '歌词文本'}
-            onKeyDown={(e) => {
-              if (timed && readingKeys.has(e.key)) browse()
-            }}
-            onFocus={(e) => {
-              if (timed && e.target.matches('button:focus-visible:not([aria-current])')) {
-                browse()
-              }
-            }}
-            onWheel={(e) => {
-              if (timed && e.deltaY) browse()
-            }}
-            onTouchMove={() => {
-              if (timed) browse()
-            }}
-          >
-            {lines.map(([at, text], index) =>
-              at === null ? (
-                // A plain transcript is immutable and may repeat the same line.
-                // biome-ignore lint/suspicious/noArrayIndexKey: text rows have no stable timestamp or local state.
-                <p key={index}>{text}</p>
-              ) : (
-                <button
-                  type="button"
-                  key={at}
-                  aria-current={index === activeLine ? 'true' : undefined}
-                  onClick={() => {
-                    setFollowing(true)
-                    seek(at)
-                  }}
-                >
-                  {text}
-                </button>
-              ),
-            )}
-          </section>
-        ) : (
-          <p className="now-playing-empty" role="status">
-            {lines ? '暂无歌词' : '正在读取歌词…'}
-          </p>
-        )}
+        <div className="now-playing-lyric-glass">
+          {lines?.length ? (
+            <section
+              className="now-playing-lyrics"
+              data-timed={timed}
+              ref={viewport}
+              aria-label={timed ? '同步歌词' : '歌词文本'}
+              onKeyDown={(e) => {
+                if (timed && readingKeys.has(e.key)) browse()
+              }}
+              onFocus={(e) => {
+                if (timed && e.target.matches('button:focus-visible:not([aria-current])')) {
+                  browse()
+                }
+              }}
+              onWheel={(e) => {
+                if (timed && e.deltaY) browse()
+              }}
+              onTouchMove={() => {
+                if (timed) browse()
+              }}
+            >
+              {lines.map(([at, text], index) =>
+                at === null ? (
+                  // A plain transcript is immutable and may repeat the same line.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: text rows have no stable timestamp or local state.
+                  <p key={index}>{text}</p>
+                ) : (
+                  <button
+                    type="button"
+                    key={at}
+                    aria-current={index === activeLine ? 'true' : undefined}
+                    onClick={() => {
+                      setFollowing(true)
+                      seek(at)
+                    }}
+                  >
+                    {text}
+                  </button>
+                ),
+              )}
+            </section>
+          ) : (
+            <p className="now-playing-empty" role="status">
+              {lines ? '暂无歌词' : '正在读取歌词…'}
+            </p>
+          )}
+        </div>
       </div>
     </section>
   )

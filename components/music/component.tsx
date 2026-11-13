@@ -1232,7 +1232,7 @@ function Music() {
       <main key={tab} className="music-scroll">
         {showPlayer ? (
           <NowPlaying
-            key={now}
+            trackId={now}
             title={active?.title ?? '尚未播放'}
             artist={active?.artist ?? ''}
             coverId={coverId}
