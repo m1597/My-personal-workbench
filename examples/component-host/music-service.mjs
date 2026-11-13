@@ -155,6 +155,12 @@ export function musicService(
     store.moveSidebarItem(group, id, target, after),
   )
   bind('createPlaylist', (name) => store.library.createPlaylist(name))
+  bind('setPlaylistSort', (id, sort, descending) =>
+    store.library.setPlaylistSort(id, sort, descending),
+  )
+  bind('movePlaylistTrack', (id, track, target, after) =>
+    store.library.movePlaylistTrack(id, track, target, after),
+  )
   bind('setMembership', (playlist, track, added) =>
     store.library.setMembership(playlist, track, added),
   )

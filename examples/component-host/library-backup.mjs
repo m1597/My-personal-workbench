@@ -22,6 +22,7 @@ export function exportLibrary(store, taste) {
     }))
   const allLists = store.library.playlists()
   const playlists = allLists.filter((p) => !p.system)
+  const recommended = allLists.find((p) => p.system)
   return {
     format,
     version: 1,
@@ -36,7 +37,12 @@ export function exportLibrary(store, taste) {
           )
           .all()
       : [],
-    recommendations: allLists.find((p) => p.system)?.tracks ?? [],
+    recommendations: recommended?.tracks ?? [],
+    recommendationOrder: recommended && {
+      sort: recommended.sort,
+      descending: recommended.descending,
+      additions: recommended.additions,
+    },
     history: store.db
       .prepare('SELECT event,track,playedAt FROM local_play_history ORDER BY playedAt,event')
       .all(),
@@ -56,6 +62,24 @@ const list = (value, max) => Array.isArray(value) && value.length <= max
 // Match the built-in SQLite NOCASE collation used by both playlist tables.
 const playlistKey = (name) => name.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
 const time = (value) => Number.isSafeInteger(value) && value >= 0 && value <= 8640000000000000
+function validateOrder(order, tracks) {
+  if (order.sort === undefined && order.descending === undefined && order.additions === undefined)
+    return
+  const remaining = new Set(tracks)
+  requireValue(
+    ['custom', 'title', 'artist', 'added'].includes(order.sort) &&
+      typeof order.descending === 'boolean' &&
+      list(order.additions, tracks.length) &&
+      order.additions.length === tracks.length &&
+      order.additions.every(
+        (entry) =>
+          Array.isArray(entry) &&
+          entry.length === 2 &&
+          remaining.delete(entry[0]) &&
+          time(entry[1]),
+      ),
+  )
+}
 export function validateBackup(value) {
   requireValue(
     value?.format === format &&
@@ -136,6 +160,11 @@ export function validateBackup(value) {
     )
     names.add(playlistKey(p.name))
     lists.add(p.id)
+    validateOrder(p, p.tracks)
+  }
+  if (value.recommendationOrder !== undefined) {
+    requireValue(value.recommendationOrder && value.recommendationOrder.sort !== undefined)
+    validateOrder(value.recommendationOrder, value.recommendations)
   }
   for (const h of value.history) {
     requireValue(
@@ -218,8 +247,33 @@ export function restoreLibrary(store, taste, value) {
       }
       remap.set(t.id, id)
     }
-    for (const track of value.recommendations)
-      db.prepare('INSERT OR IGNORE INTO restored_recommendations VALUES(?)').run(remap.get(track))
+    const recommendationOrder = value.recommendationOrder
+    for (const [track, joinedAt] of recommendationOrder?.additions ??
+      value.recommendations.map((id) => [id, 0]))
+      db.prepare('INSERT OR IGNORE INTO restored_recommendations(track,joinedAt) VALUES(?,?)').run(
+        remap.get(track),
+        joinedAt,
+      )
+    if (
+      recommendationOrder &&
+      !store.get('latest-daily-run') &&
+      !db.prepare('SELECT 1 FROM batches LIMIT 1').get()
+    ) {
+      store.library.setPlaylistSort(
+        'system-recommendations',
+        recommendationOrder.sort,
+        recommendationOrder.descending,
+      )
+      store.set(
+        'recommendation-track-order',
+        JSON.stringify([
+          ...new Set([
+            ...value.recommendations.map((id) => remap.get(id)),
+            ...(store.library.playlists().find((p) => p.system)?.tracks ?? []),
+          ]),
+        ]),
+      )
+    }
     if (value.smartLists.length) {
       db.exec(
         'CREATE TABLE IF NOT EXISTS smart_playlists(id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE, source TEXT NOT NULL, days INTEGER, comparison TEXT, plays INTEGER NOT NULL)',
@@ -239,14 +293,30 @@ export function restoreLibrary(store, taste, value) {
       const id =
         exists?.id ??
         (db.prepare('SELECT 1 FROM playlists WHERE id=?').get(p.id) ? randomUUID() : p.id)
-      if (!exists) db.prepare('INSERT INTO playlists VALUES(?,?)').run(id, p.name)
+      if (!exists) db.prepare('INSERT INTO playlists(id,name) VALUES(?,?)').run(id, p.name)
       const old = db
-        .prepare('SELECT track FROM playlist_tracks WHERE playlist=? ORDER BY rowid')
+        .prepare(
+          'SELECT track,position,addedAt FROM playlist_tracks WHERE playlist=? ORDER BY addedAt,rowid',
+        )
         .all(id)
-      const order = new Set([...p.tracks.map((i) => remap.get(i)), ...old.map((r) => r.track)])
+      const additions = new Map(
+        (p.additions ?? p.tracks.map((track) => [track, 0])).map(([track, addedAt]) => [
+          remap.get(track),
+          addedAt,
+        ]),
+      )
+      for (const row of old) if (!additions.has(row.track)) additions.set(row.track, row.addedAt)
+      const order = new Set([
+        ...p.tracks.map((i) => remap.get(i)),
+        ...old.sort((a, b) => a.position - b.position).map((r) => r.track),
+      ])
+      const positions = new Map([...order].map((track, index) => [track, index]))
       db.prepare('DELETE FROM playlist_tracks WHERE playlist=?').run(id)
-      for (const track of order)
-        db.prepare('INSERT INTO playlist_tracks VALUES(?,?)').run(id, track)
+      const insert = db.prepare(
+        'INSERT INTO playlist_tracks(playlist,track,position,addedAt) VALUES(?,?,?,?)',
+      )
+      for (const [track, addedAt] of additions) insert.run(id, track, positions.get(track), addedAt)
+      if (p.sort) store.library.setPlaylistSort(id, p.sort, p.descending)
     }
     for (const h of value.history) {
       const track = remap.get(h.track)

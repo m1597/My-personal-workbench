@@ -701,9 +701,11 @@ li[data-active="true"] .music-track-icon,
   max-height: calc(100dvh - var(--space-12));
   overflow-y: auto;
 }
+.library-row[data-insert],
 .library-sidebar button[data-insert] {
   position: relative;
 }
+.library-row[data-insert]::after,
 .library-sidebar button[data-insert]::after {
   content: "";
   position: absolute;
@@ -712,9 +714,11 @@ li[data-active="true"] .music-track-icon,
   background: var(--accent);
   pointer-events: none;
 }
+.library-row[data-insert="before"]::after,
 .library-sidebar button[data-insert="before"]::after {
   top: 0;
 }
+.library-row[data-insert="after"]::after,
 .library-sidebar button[data-insert="after"]::after {
   bottom: 0;
 }

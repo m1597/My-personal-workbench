@@ -29,6 +29,8 @@ const names = [
   'moveSidebarItem',
   'createPlaylist',
   'setMembership',
+  'setPlaylistSort',
+  'movePlaylistTrack',
   'importLocal',
   'cancelImport',
   'refreshLocal',

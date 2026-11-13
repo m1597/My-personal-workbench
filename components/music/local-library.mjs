@@ -35,6 +35,18 @@ export class LocalLibrary {
       `)
       if (
         !this.db
+          .prepare('PRAGMA table_info(playlist_tracks)')
+          .all()
+          .some((c) => c.name === 'position')
+      ) {
+        this.db.exec(`ALTER TABLE playlist_tracks ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE playlist_tracks ADD COLUMN addedAt INTEGER NOT NULL DEFAULT 0;
+          UPDATE playlist_tracks SET position=rowid;
+          ALTER TABLE playlists ADD COLUMN sort TEXT NOT NULL DEFAULT 'custom';
+          ALTER TABLE playlists ADD COLUMN descending INTEGER NOT NULL DEFAULT 0;`)
+      }
+      if (
+        !this.db
           .prepare('PRAGMA table_info(local_tracks)')
           .all()
           .some((col) => col.name === 'listed')
@@ -77,13 +89,25 @@ export class LocalLibrary {
       this.db.exec(
         'CREATE TABLE IF NOT EXISTS restored_recommendations(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE)',
       )
+      if (
+        !this.db
+          .prepare('PRAGMA table_info(recommended_items)')
+          .all()
+          .some((c) => c.name === 'joinedAt')
+      ) {
+        this.db.exec(`ALTER TABLE recommended_items ADD COLUMN joinedAt INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE restored_recommendations ADD COLUMN joinedAt INTEGER NOT NULL DEFAULT 0;
+          CREATE TRIGGER recommendation_joined AFTER UPDATE OF local ON recommended_items
+          WHEN NEW.local IS NOT NULL AND OLD.local IS NOT NEW.local
+          BEGIN UPDATE recommended_items SET joinedAt=CAST(unixepoch('subsec')*1000 AS INTEGER) WHERE item=NEW.item; END;`)
+      }
       this.db.exec(`
         CREATE INDEX IF NOT EXISTS recommended_local_track ON recommended_items(local);
         CREATE TABLE IF NOT EXISTS removed_recommendation_members(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE);
         DROP VIEW IF EXISTS recommendation_playlist_members;
         CREATE VIEW recommendation_playlist_members AS
-          SELECT track, source, position FROM (
-            SELECT r.local AS track, 0 AS source, MIN(r.rowid) AS position
+          SELECT track, source, position,joinedAt FROM (
+            SELECT r.local AS track, 0 AS source, MIN(r.rowid) AS position, MIN(r.joinedAt) AS joinedAt
               FROM recommended_items r JOIN local_tracks t ON t.id=r.local
               JOIN items i ON i.id=r.item JOIN batches b ON b.id=i.batch
               WHERE i.status='已入库' AND b.id=COALESCE(
@@ -91,7 +115,7 @@ export class LocalLibrary {
                 (SELECT id FROM batches ORDER BY rowid DESC LIMIT 1))
               GROUP BY r.local
             UNION ALL
-            SELECT s.track, 1 AS source, s.rowid AS position FROM restored_recommendations s
+            SELECT s.track, 1 AS source, s.rowid AS position,s.joinedAt FROM restored_recommendations s
               WHERE NOT EXISTS (SELECT 1 FROM state WHERE key='latest-daily-run')
               AND NOT EXISTS (SELECT 1 FROM batches)
               AND NOT EXISTS (SELECT 1 FROM recommended_items r WHERE r.local=s.track)
@@ -281,17 +305,34 @@ export class LocalLibrary {
     return members
   }
   playlists() {
-    const lists = this.db.prepare('SELECT id,name FROM playlists ORDER BY rowid').all()
-    const byId = new Map(lists.map((list) => [list.id, { ...list, tracks: [] }]))
-    for (const row of this.db
-      .prepare('SELECT playlist,track FROM playlist_tracks ORDER BY rowid')
-      .all()) {
-      byId.get(row.playlist).tracks.push(row.track)
-    }
-    const systemTracks = this.db
-      .prepare('SELECT track FROM recommendation_playlist_members ORDER BY source, position')
+    const lists = this.db
+      .prepare('SELECT id,name,sort,descending FROM playlists ORDER BY rowid')
       .all()
-      .map((row) => row.track)
+    const byId = new Map(
+      lists.map((list) => [
+        list.id,
+        { ...list, descending: !!list.descending, tracks: [], additions: [] },
+      ]),
+    )
+    for (const row of this.db
+      .prepare('SELECT playlist,track FROM playlist_tracks ORDER BY position,rowid')
+      .all())
+      byId.get(row.playlist).tracks.push(row.track)
+    for (const row of this.db
+      .prepare('SELECT playlist,track,addedAt FROM playlist_tracks ORDER BY addedAt,rowid')
+      .all())
+      byId.get(row.playlist).additions.push([row.track, row.addedAt])
+    const members = this.db
+      .prepare(
+        'SELECT track,joinedAt FROM recommendation_playlist_members ORDER BY source,position',
+      )
+      .all()
+    const current = new Set(members.map((row) => row.track))
+    const systemOrder = this.store.get('recommendation-track-order')
+    const systemTracks = systemOrder
+      ? JSON.parse(systemOrder).filter((id) => current.delete(id))
+      : []
+    for (const track of current) systemTracks.push(track)
     return [
       ...(systemTracks.length ||
       this.db.prepare("SELECT 1 FROM state WHERE key='latest-daily-run'").get() ||
@@ -302,6 +343,11 @@ export class LocalLibrary {
               name: '歌曲推荐',
               system: true,
               tracks: systemTracks,
+              additions: members
+                .sort((a, b) => a.joinedAt - b.joinedAt)
+                .map((row) => [row.track, row.joinedAt]),
+              sort: this.store.get('recommendation-track-sort') || 'custom',
+              descending: this.store.get('recommendation-track-descending') === '1',
             },
           ]
         : []),
@@ -325,6 +371,63 @@ export class LocalLibrary {
         .run(playlistName(name), id).changes
     )
       throw Error('已有同名歌单或歌单已移除')
+  }
+  setPlaylistSort(id, sort, descending) {
+    if (
+      typeof id !== 'string' ||
+      !['custom', 'added', 'title', 'artist'].includes(sort) ||
+      typeof descending !== 'boolean'
+    )
+      throw Error('歌单排序无效')
+    if (id === 'system-recommendations') {
+      this.store.set('recommendation-track-sort', sort)
+      this.store.set('recommendation-track-descending', Number(sort !== 'custom' && descending))
+      return
+    }
+    if (
+      !this.db
+        .prepare('UPDATE playlists SET sort=?,descending=? WHERE id=?')
+        .run(sort, Number(sort !== 'custom' && descending), id).changes
+    )
+      throw Error('请选择自建歌单')
+  }
+  movePlaylistTrack(id, track, target, after) {
+    if (
+      [id, track, target].some((key) => typeof key !== 'string') ||
+      typeof after !== 'boolean' ||
+      track === target
+    )
+      throw Error('歌单拖动无效')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const system =
+        id === 'system-recommendations' ? this.playlists().find((p) => p.system) : undefined
+      if (
+        (system?.sort ?? this.db.prepare('SELECT sort FROM playlists WHERE id=?').get(id)?.sort) !==
+        'custom'
+      )
+        throw Error('请切换到自定义顺序')
+      const rows =
+        system?.tracks ??
+        this.db
+          .prepare('SELECT track FROM playlist_tracks WHERE playlist=? ORDER BY position,rowid')
+          .all(id)
+          .map((row) => row.track)
+      if (!rows.includes(track) || !rows.includes(target)) throw Error('歌曲已移除')
+      rows.splice(rows.indexOf(track), 1)
+      rows.splice(rows.indexOf(target) + Number(after), 0, track)
+      if (system) this.store.set('recommendation-track-order', JSON.stringify(rows))
+      else {
+        const update = this.db.prepare(
+          'UPDATE playlist_tracks SET position=? WHERE playlist=? AND track=?',
+        )
+        for (const [i, key] of rows.entries()) update.run(i, id, key)
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
   deletePlaylist(id) {
     if (!this.db.prepare('DELETE FROM playlists WHERE id=?').run(id).changes)
@@ -381,9 +484,18 @@ export class LocalLibrary {
       else if (added)
         this.db
           .prepare(
-            'INSERT OR IGNORE INTO playlist_tracks SELECT ?, value FROM json_each(?) ORDER BY key',
+            'INSERT OR IGNORE INTO playlist_tracks(playlist,track,position,addedAt) SELECT ?, value, ? + key, ? FROM json_each(?) ORDER BY key',
           )
-          .run(playlist, data)
+          .run(
+            playlist,
+            this.db
+              .prepare(
+                'SELECT COALESCE(MAX(position)+1,0) AS next FROM playlist_tracks WHERE playlist=?',
+              )
+              .get(playlist).next,
+            Date.now(),
+            data,
+          )
       else
         this.db
           .prepare(

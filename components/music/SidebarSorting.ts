@@ -22,26 +22,33 @@ export function orderedSidebarItems<T extends { id: string }>(items: T[], order?
 }
 
 export function useSidebarSorting(move: Move) {
-  const source = useRef<{ group: Group; id: string } | null>(null)
+  return useGroupSorting(move, 'application/x-fitbay-sidebar')
+}
+
+export function useGroupSorting<G extends string>(
+  move: (group: G, id: string, target: string, after: boolean) => Promise<unknown>,
+  mime: string,
+) {
+  const source = useRef<{ group: G; id: string } | null>(null)
   const [marker, setMarker] = useState<{ id: string; after: boolean } | null>(null)
   function clear() {
     source.current = null
     setMarker(null)
   }
-  function belowMiddle(event: DragEvent<HTMLButtonElement>) {
+  function belowMiddle(event: DragEvent<HTMLElement>) {
     const rect = event.currentTarget.getBoundingClientRect()
     return event.clientY >= rect.top + rect.height / 2
   }
-  return (group: Group, id: string) => ({
+  return (group: G, id: string) => ({
     draggable: true,
     'data-insert': marker?.id === id ? (marker.after ? 'after' : 'before') : undefined,
-    onDragStart(event: DragEvent<HTMLButtonElement>) {
+    onDragStart(event: DragEvent<HTMLElement>) {
       source.current = { group, id }
       event.dataTransfer.effectAllowed = 'move'
-      event.dataTransfer.setData('application/x-fitbay-sidebar', id)
+      event.dataTransfer.setData(mime, id)
       event.stopPropagation()
     },
-    onDragOver(event: DragEvent<HTMLButtonElement>) {
+    onDragOver(event: DragEvent<HTMLElement>) {
       if (source.current?.group !== group || source.current.id === id) return
       event.preventDefault()
       event.stopPropagation()
@@ -51,12 +58,12 @@ export function useSidebarSorting(move: Move) {
         previous?.id === id && previous.after === after ? previous : { id, after },
       )
     },
-    onDragLeave(event: DragEvent<HTMLButtonElement>) {
+    onDragLeave(event: DragEvent<HTMLElement>) {
       if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))
         return
       setMarker((previous) => (previous?.id === id ? null : previous))
     },
-    onDrop(event: DragEvent<HTMLButtonElement>) {
+    onDrop(event: DragEvent<HTMLElement>) {
       const from = source.current
       if (from?.group !== group || from.id === id) return
       event.preventDefault()

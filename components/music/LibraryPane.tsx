@@ -1,4 +1,11 @@
-import { useSidebarSorting, orderedSidebarItems, type SidebarSorting } from './SidebarSorting'
+import {
+  useSidebarSorting,
+  useGroupSorting,
+  orderedSidebarItems,
+  type SidebarSorting,
+} from './SidebarSorting'
+import { PlaylistSortMenu, type Playlist, type PlaylistSorting } from './PlaylistSortMenu'
+export type { Playlist } from './PlaylistSortMenu'
 import { TrackMenu } from './TrackMenu'
 import { AlbumBrowser } from './AlbumBrowser'
 import { InfrequentTracks } from './InfrequentTracks'
@@ -39,7 +46,6 @@ import {
   History,
 } from 'lucide-react'
 type FolderEntry = { id: string; name: string }
-export type Playlist = { id: string; name: string; tracks: string[]; system?: boolean }
 export type LocalTrack = {
   id: string
   title: string
@@ -69,7 +75,7 @@ export type ImportJob = {
 }
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
-type Props = SidebarSorting & {
+interface Props extends SidebarSorting, PlaylistSorting {
   albumRevision: number
   favorite: (id: string, value: boolean) => Promise<unknown>
   addFavorites: (ids: string[]) => Promise<number | null>
@@ -111,6 +117,8 @@ export function LibraryPane({
   playlists,
   sidebarOrder,
   moveSidebarItem,
+  setPlaylistSort,
+  movePlaylistTrack,
   collection,
   days,
   changeDays,
@@ -224,9 +232,10 @@ export function LibraryPane({
     return [...entries.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [tracks])
   const sortable = useSidebarSorting(moveSidebarItem)
+  const sortableTrack = useGroupSorting(movePlaylistTrack, 'application/x-fitbay-playlist-track')
+  const currentPlaylist = playlists.find((p) => p.id === collection)
   const currentFolder = folders.find((f) => f.id === collection)
-  const heading =
-    playlists.find((p) => p.id === collection)?.name ?? currentFolder?.name ?? '全部歌曲'
+  const heading = currentPlaylist?.name ?? currentFolder?.name ?? '全部歌曲'
   const choose = (id: string) => {
     setAlbumView(false)
     setSelection(null)
@@ -426,6 +435,9 @@ export function LibraryPane({
                   <h2>{collection === 'favorites' ? '我的收藏' : heading}</h2>
                   <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
                 </div>
+                {currentPlaylist && (
+                  <PlaylistSortMenu playlist={currentPlaylist} setPlaylistSort={setPlaylistSort} />
+                )}
                 <Button
                   size="small"
                   disabled={batchBusy || (!selection && !rows.length)}
@@ -561,6 +573,9 @@ export function LibraryPane({
                         dismissed={t.notInterested}
                       >
                         <li
+                          {...(currentPlaylist?.sort === 'custom' && !selection
+                            ? sortableTrack(collection, t.id)
+                            : {})}
                           data-active={active === t.id}
                           className="library-row"
                           onDoubleClick={(e) => {

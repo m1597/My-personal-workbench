@@ -1,3 +1,4 @@
+import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
 import { TrackMenu } from './TrackMenu'
 import { Cover, type Album } from './AlbumBrowser'
 import { NowPlaying } from './NowPlaying'
@@ -162,6 +163,8 @@ declare global {
         after: boolean,
       ): Promise<void>
       createPlaylist(name: string): Promise<string>
+      setPlaylistSort: PlaylistSorting['setPlaylistSort']
+      movePlaylistTrack: PlaylistSorting['movePlaylistTrack']
       setMembership(playlist: string, track: string | string[], added: boolean): Promise<void>
       importLocal(mode: 'folder' | 'files'): Promise<void>
       cancelImport(): Promise<void>
@@ -450,7 +453,7 @@ function Music() {
   const memberIds = new Set(playlist?.tracks)
   const trackById = new Map((state?.localTracks ?? []).map((track) => [track.id, track]))
   const categoryRows = playlist
-    ? playlist.tracks.flatMap((id) => trackById.get(id) ?? [])
+    ? playlistRows(playlist, trackById)
     : (state?.localTracks ?? []).filter(
         (row) =>
           (collection === 'all' && !!row.listed) ||
@@ -872,6 +875,12 @@ function Music() {
               act(() => host.moveSidebarItem(group, id, target, after))
             }
             playlists={state?.playlists ?? []}
+            setPlaylistSort={(id, sort, descending) =>
+              act(() => host.setPlaylistSort(id, sort, descending))
+            }
+            movePlaylistTrack={(id, track, target, after) =>
+              act(() => host.movePlaylistTrack(id, track, target, after))
+            }
             collection={collection}
             days={infrequentDays}
             changeDays={setInfrequentDays}

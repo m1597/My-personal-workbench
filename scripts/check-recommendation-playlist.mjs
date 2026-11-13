@@ -46,7 +46,7 @@ async function checkBatchUpgrade() {
     const historicId = db.db
       .prepare('SELECT id FROM local_tracks WHERE file=?')
       .get(historicFile).id
-    db.db.prepare('INSERT INTO restored_recommendations VALUES(?)').run(historicId)
+    db.db.prepare('INSERT INTO restored_recommendations(track) VALUES(?)').run(historicId)
     assert.deepEqual(
       db.snapshot().items.filter((i) => i.batch === legacyBatch),
       [],
@@ -60,7 +60,8 @@ async function checkBatchUpgrade() {
       await writeFile(file, wave)
       db.library.upsert({ file, title, artist: '验收', album: '', duration: 20 })
       const { id } = db.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file)
-      if (n < 5) db.db.prepare('INSERT OR IGNORE INTO restored_recommendations VALUES(?)').run(id)
+      if (n < 5)
+        db.db.prepare('INSERT OR IGNORE INTO restored_recommendations(track) VALUES(?)').run(id)
       else {
         db.saveSuggestions('本轮', [{ title, artist: '验收', reason: '' }], '待处理', current)
         const item = db.db.prepare('SELECT id FROM items WHERE title=?').get(title).id
@@ -189,7 +190,7 @@ try {
     store.db.prepare('UPDATE recommended_items SET local=? WHERE item=?').run(id, item.id)
     store.status(item.id, '已入库')
     if ([0, 2, 4].includes(i))
-      store.db.prepare('INSERT INTO restored_recommendations VALUES(?)').run(id)
+      store.db.prepare('INSERT INTO restored_recommendations(track) VALUES(?)').run(id)
   }
 } finally {
   store.db.close()
