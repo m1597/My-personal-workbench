@@ -71,3 +71,64 @@
   margin: 0;
   padding: 0;
 }
+
+.followed-artists {
+  display: grid;
+  gap: var(--space-12);
+  padding-top: var(--space-16);
+  margin-top: var(--space-8);
+  border-top: 1px solid var(--stroke);
+}
+.music-release-news header {
+  justify-content: space-between;
+}
+.followed-artist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(88px, 100%), 1fr));
+  gap: var(--space-8);
+}
+.followed-artist-grid button {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: var(--space-8);
+  min-width: 0;
+  padding: var(--space-8);
+  color: var(--text);
+  font: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--panel-radius);
+  cursor: pointer;
+}
+.followed-artist-grid button:hover,
+.followed-artist-grid button[aria-pressed="true"] {
+  background: var(--control);
+  border-color: var(--stroke);
+}
+.followed-artist-grid button:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.followed-artist-grid button > .album-art,
+.followed-artist-grid button > img {
+  width: min(100%, 60px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.followed-artist-grid button > span:last-child {
+  overflow-wrap: anywhere;
+}
+.release-event-head > .album-art {
+  flex: none;
+  width: 48px;
+}
+.release-event-head > div {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.artist-discography {
+  display: grid;
+  gap: var(--space-8);
+}

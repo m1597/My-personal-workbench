@@ -125,28 +125,47 @@ export class AlbumLibrary {
     for (const album of albums) this.groups.set(album.id, album.tracks)
     return albums
   }
-  async picture(row, nativeImage) {
+  async artistPortrait(artist, nativeImage) {
+    const rows = this.db
+      .prepare(
+        'SELECT * FROM local_tracks WHERE listed=1 AND available=1 AND awaitingLocation=0 AND fitbay_album_name(artist)=? ORDER BY rowid',
+      )
+      .all(normalized(artist))
+    for (const row of rows) {
+      const portrait = await this.picture(row, nativeImage, true)
+      if (portrait) return portrait
+    }
+    return null
+  }
+  async picture(row, nativeImage, portrait = false) {
     if (!row?.available || row.awaitingLocation || !localFile(row.file)) return null
     const stat = await audioFileStat(row.file)
     if (!stat) return null
     const stamp = [row.file, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':')
-    if (this.noCover.get(row.id) === stamp) return null
-    this.noCover.delete(row.id)
-    const cached = this.coverCache.get(row.id)
+    const key = portrait ? 'portrait:' + row.id : row.id
+    if (this.noCover.get(key) === stamp) return null
+    this.noCover.delete(key)
+    const cached = this.coverCache.get(key)
     if (cached?.stamp === stamp) return cached.result
-    const result = this.readPicture(row, nativeImage)
-    this.coverCache.set(row.id, { stamp, result })
+    const result = this.readPicture(row, nativeImage, portrait)
+    this.coverCache.set(key, { stamp, result })
     if (this.coverCache.size > 32) this.coverCache.delete(this.coverCache.keys().next().value)
-    if (!(await result) && this.coverCache.get(row.id)?.stamp === stamp) {
-      this.coverCache.delete(row.id)
-      this.noCover.set(row.id, stamp)
+    if (!(await result) && this.coverCache.get(key)?.stamp === stamp) {
+      this.coverCache.delete(key)
+      this.noCover.set(key, stamp)
       if (this.noCover.size > 4096) this.noCover.delete(this.noCover.keys().next().value)
     }
     return result
   }
-  async readPicture(row, nativeImage) {
+  async readPicture(row, nativeImage, portrait) {
     const common = await readCommon(row.file, false).catch(() => null)
-    const pictures = common?.picture ?? []
+    const pictures = (common?.picture ?? []).filter(
+      (p) =>
+        !portrait ||
+        ['Lead artist/lead performer/soloist', 'Artist/performer', 'Band/Orchestra'].includes(
+          p.type,
+        ),
+    )
     for (const picture of [...pictures].sort(
       (a, b) => Number(b.type === 'Cover (front)') - Number(a.type === 'Cover (front)'),
     )) {

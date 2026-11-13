@@ -31,7 +31,7 @@ async function fetchMetadata(entity, params) {
     throw Error('MusicBrainz 暂时无法访问，请稍后重试')
   }
 }
-export function registerReleaseCatalog(bind, getStore) {
+export function registerReleaseCatalog(bind, getStore, nativeImage) {
   const responses = new Map()
   async function metadata(entity, params, refresh = false) {
     const key = JSON.stringify([entity, params])
@@ -75,6 +75,11 @@ export function registerReleaseCatalog(bind, getStore) {
     return found
   })
   bind('followedArtists', followed)
+  bind('artistPortrait', async (id) => {
+    const artist = mbid.test(id) && followed().find((a) => a.id === id)
+    if (!artist) throw Error('请先关注艺人')
+    return getStore().library.albums.artistPortrait(artist.name, nativeImage)
+  })
   bind('followArtist', (id, on) => {
     if (!mbid.test(id) || typeof on !== 'boolean') throw Error('无效艺人')
     const list = followed()
@@ -87,6 +92,47 @@ export function registerReleaseCatalog(bind, getStore) {
     getStore().set('followed-musicbrainz-artists', JSON.stringify(next))
     cachedNews = undefined
     return next
+  })
+  async function readGroups(ids, query, refresh = false, from = '', until = '') {
+    const rows = new Map()
+    for (let offset = 0; ; offset += 100) {
+      const data = await metadata(
+        'release-group',
+        { query, limit: '100', offset: String(offset) },
+        refresh,
+      )
+      const groups = data['release-groups'] ?? []
+      for (const g of groups) {
+        const date = g['first-release-date'] ?? ''
+        if (
+          !mbid.test(g.id) ||
+          !(g['artist-credit'] ?? []).some((c) => ids.includes(c.artist?.id)) ||
+          (from && date < from) ||
+          (until && date > until)
+        )
+          continue
+        const type = (g['secondary-types'] ?? []).includes('Soundtrack')
+          ? '原声带'
+          : { Album: '专辑', Single: '单曲', EP: 'EP' }[g['primary-type']]
+        if (!type) continue
+        newsGroups.add(g.id)
+        rows.set(g.id, {
+          id: g.id,
+          type,
+          title: name(g.title),
+          artist: credit(g['artist-credit']),
+          date,
+        })
+      }
+      if (groups.length < 100 || offset + 100 >= data.count) break
+    }
+    return [...rows.values()]
+  }
+  const newest = (a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title)
+  bind('artistReleases', async (id) => {
+    if (!mbid.test(id) || !followed().some((artist) => artist.id === id))
+      throw Error('请先关注艺人')
+    return (await readGroups([id], 'arid:' + id + ' AND status:official')).sort(newest)
   })
   bind('releaseNews', async (refresh = false) => {
     if (typeof refresh !== 'boolean') throw Error('无效请求')
@@ -107,46 +153,9 @@ export function registerReleaseCatalog(bind, getStore) {
         ' TO ' +
         today +
         ']'
-      for (let offset = 0; ; offset += 100) {
-        const data = await metadata(
-          'release-group',
-          {
-            query,
-            limit: '100',
-            offset: String(offset),
-          },
-          refresh,
-        )
-        const groups = data['release-groups'] ?? []
-        for (const g of groups) {
-          const date = g['first-release-date']
-          if (
-            !mbid.test(g.id) ||
-            !(g['artist-credit'] ?? []).some((c) => ids.includes(c.artist?.id)) ||
-            !date ||
-            date < from ||
-            date > today
-          )
-            continue
-          const type = (g['secondary-types'] ?? []).includes('Soundtrack')
-            ? '原声带'
-            : { Album: '专辑', Single: '单曲', EP: 'EP' }[g['primary-type']]
-          if (!type) continue
-          newsGroups.add(g.id)
-          rows.set(g.id, {
-            id: g.id,
-            type,
-            title: name(g.title),
-            artist: credit(g['artist-credit']),
-            date,
-          })
-        }
-        if (groups.length < 100 || offset + 100 >= data.count) break
-      }
+      for (const row of await readGroups(ids, query, refresh, from, today)) rows.set(row.id, row)
     }
-    const result = [...rows.values()].sort(
-      (a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title),
-    )
+    const result = [...rows.values()].sort(newest)
     cachedNews = { key, rows: result, expires: Date.now() + 3600000 }
     return result
   })

@@ -82,7 +82,7 @@ export function musicService(
         throw e
       }
     })
-  registerReleaseCatalog(bind, () => store)
+  registerReleaseCatalog(bind, () => store, nativeImage)
   bind('musicGuide', () => ({
     seen: Boolean(store.get('music-guide-v1')),
     script: mcpScript,

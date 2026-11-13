@@ -1,7 +1,7 @@
 import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { LocalTrack } from './LibraryPane'
-import type { Album } from './AlbumBrowser'
+import { Cover, defaultCover, type Album } from './AlbumBrowser'
 import './release-catalog.css'
 
 type Artist = { id: string; name: string; detail: string }
@@ -20,6 +20,8 @@ export interface ReleaseAPI {
   followedArtists(): Promise<Artist[]>
   followArtist(id: string, on: boolean): Promise<Artist[]>
   releaseNews(refresh?: boolean): Promise<News[]>
+  artistPortrait(id: string): Promise<string | null>
+  artistReleases(id: string): Promise<News[]>
   newsEditions(id: string): Promise<Edition[]>
   albumEditions(id: string): Promise<Edition[]>
   editionTracks(id: string): Promise<ReleaseTrack[]>
@@ -124,8 +126,105 @@ function NewsTracks({ group, search }: { group: News; search: (q: string) => voi
     </div>
   )
 }
-export function ArtistReleases({ search }: { search: (query: string) => void }) {
+function ArtistPortrait({ id }: { id: string }) {
+  const [image, setImage] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    void window.music
+      .artistPortrait(id)
+      .then((src) => {
+        if (live) setImage(src)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [id])
+  return (
+    <img src={image || defaultCover} alt="" onError={image ? () => setImage(null) : undefined} />
+  )
+}
+function ReleaseList({
+  rows,
+  search,
+  albums,
+}: {
+  rows: News[]
+  search: (q: string) => void
+  albums: Album[]
+}) {
   const [openGroup, setOpenGroup] = useState('')
+  if (!rows.length) return null
+  return (
+    <ul>
+      {rows.map((r) => (
+        <li key={r.id} className="release-event">
+          <div className="release-event-head">
+            <Cover
+              id={
+                albums.find(
+                  (album) =>
+                    normalize(album.title) === normalize(r.title) &&
+                    normalize(album.artist) === normalize(r.artist),
+                )?.id
+              }
+            />
+            <div>
+              <strong>{r.title}</strong>
+              <small>
+                {r.artist} · {r.date} · {r.type}
+              </small>
+            </div>
+            <Button
+              size="small"
+              aria-expanded={openGroup === r.id}
+              onClick={() => setOpenGroup(openGroup === r.id ? '' : r.id)}
+            >
+              {openGroup === r.id ? '收起曲目' : '查看曲目'}
+            </Button>
+          </div>
+          {openGroup === r.id && <NewsTracks group={r} search={search} />}
+        </li>
+      ))}
+    </ul>
+  )
+}
+export function ArtistReleases({ search }: { search: (query: string) => void }) {
+  const [selected, setSelected] = useState<Artist>()
+  const [discography, setDiscography] = useState<News[]>()
+  const [artistError, setArtistError] = useState('')
+  const [artistRetry, setArtistRetry] = useState(0)
+  const [albums, setAlbums] = useState<Album[]>([])
+  useEffect(() => {
+    let live = true
+    void window.music
+      .albums()
+      .then((rows) => {
+        if (live) setAlbums(rows)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry explicitly reloads the selected artist.
+  useEffect(() => {
+    let live = true
+    setDiscography(undefined)
+    setArtistError('')
+    if (selected)
+      void window.music
+        .artistReleases(selected.id)
+        .then((rows) => {
+          if (live) setDiscography(rows)
+        })
+        .catch((e) => {
+          if (live) setArtistError(message(e))
+        })
+    return () => {
+      live = false
+    }
+  }, [selected, artistRetry])
   const [followed, setFollowed] = useState<Artist[]>([])
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<Artist[]>()
@@ -164,6 +263,7 @@ export function ArtistReleases({ search }: { search: (query: string) => void }) 
   function toggle(id: string, on: boolean) {
     void act(async () => {
       const list = await window.music.followArtist(id, on)
+      if (!on && selected?.id === id) setSelected(undefined)
       setNews(undefined)
       await load(list)
     })
@@ -172,61 +272,12 @@ export function ArtistReleases({ search }: { search: (query: string) => void }) 
     <section className="music-release-news" aria-label="关注歌手的新发行">
       <header>
         <h2>关注歌手的新发行</h2>
-        <Button size="small" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-          管理关注
-        </Button>
         {!!followed.length && (
           <Button size="small" disabled={busy} onClick={() => void act(() => load(followed, true))}>
             刷新发行
           </Button>
         )}
       </header>
-      {expanded && (
-        <div className="artist-management">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (query.trim() && !busy)
-                void act(async () => {
-                  setMatches(await window.music.findArtists(query.trim()))
-                })
-            }}
-          >
-            <Input
-              aria-label="要关注的歌手"
-              maxLength={160}
-              value={query}
-              placeholder="输入歌手名"
-              onChange={(_, d) => {
-                setQuery(d.value)
-                setMatches(undefined)
-              }}
-            />
-            <Button size="small" type="submit" disabled={busy || !query.trim()}>
-              查找歌手
-            </Button>
-          </form>
-          {matches?.length === 0 && <p>没有找到匹配的歌手</p>}
-          {matches
-            ?.filter((a) => !followed.some((f) => f.id === a.id))
-            .map((a) => (
-              <div key={a.id}>
-                {a.name} <small>{a.detail}</small>{' '}
-                <Button size="small" disabled={busy} onClick={() => toggle(a.id, true)}>
-                  关注{a.name}
-                </Button>
-              </div>
-            ))}
-          {followed.map((a) => (
-            <div key={a.id}>
-              {a.name} <small>{a.detail}</small>{' '}
-              <Button size="small" disabled={busy} onClick={() => toggle(a.id, false)}>
-                取消关注{a.name}
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
       {busy && <small role="status">正在读取发行资料…</small>}
       {status && <p role="alert">{status}</p>}
       {!busy &&
@@ -236,30 +287,100 @@ export function ArtistReleases({ search }: { search: (query: string) => void }) 
         ) : (
           news?.length === 0 && <p>近 90 天暂无新发行。</p>
         ))}
-      {!!news?.length && (
-        <ul>
-          {news.map((r) => (
-            <li key={r.id} className="release-event">
-              <div className="release-event-head">
-                <div>
-                  <strong>{r.title}</strong>
-                  <small>
-                    {r.artist} · {r.date} · {r.type}
-                  </small>
+      <ReleaseList rows={news ?? []} albums={albums} search={search} />
+      <section className="followed-artists" aria-label="我关注的歌手">
+        <header>
+          <h2>我关注的歌手</h2>
+          <Button size="small" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+            管理关注
+          </Button>
+        </header>
+        <div className="followed-artist-grid">
+          {followed.map((artist) => (
+            <button
+              type="button"
+              key={artist.id}
+              aria-pressed={selected?.id === artist.id}
+              onClick={() => setSelected(selected?.id === artist.id ? undefined : artist)}
+            >
+              <ArtistPortrait id={artist.id} />
+              <span>{artist.name}</span>
+            </button>
+          ))}
+        </div>
+        {selected && (
+          <section aria-label={selected.name + '的发行'} className="artist-discography">
+            <header>
+              <h3>{selected.name}的发行</h3>
+              <Button size="small" onClick={() => setSelected(undefined)}>
+                收起发行
+              </Button>
+            </header>
+            {artistError ? (
+              <p role="alert">
+                {artistError}{' '}
+                <Button size="small" onClick={() => setArtistRetry((n) => n + 1)}>
+                  重试
+                </Button>
+              </p>
+            ) : discography ? (
+              discography.length ? (
+                <ReleaseList rows={discography} albums={albums} search={search} />
+              ) : (
+                <p>暂无发行资料。</p>
+              )
+            ) : (
+              <small role="status">正在读取歌手发行…</small>
+            )}
+          </section>
+        )}
+        {expanded && (
+          <div className="artist-management">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (query.trim() && !busy)
+                  void act(async () => {
+                    setMatches(await window.music.findArtists(query.trim()))
+                  })
+              }}
+            >
+              <Input
+                aria-label="要关注的歌手"
+                maxLength={160}
+                value={query}
+                placeholder="输入歌手名"
+                onChange={(_, d) => {
+                  setQuery(d.value)
+                  setMatches(undefined)
+                }}
+              />
+              <Button size="small" type="submit" disabled={busy || !query.trim()}>
+                查找歌手
+              </Button>
+            </form>
+            {matches?.length === 0 && <p>没有找到匹配的歌手</p>}
+            {matches
+              ?.filter((a) => !followed.some((f) => f.id === a.id))
+              .map((a) => (
+                <div key={a.id}>
+                  {a.name} <small>{a.detail}</small>{' '}
+                  <Button size="small" disabled={busy} onClick={() => toggle(a.id, true)}>
+                    关注{a.name}
+                  </Button>
                 </div>
-                <Button
-                  size="small"
-                  aria-expanded={openGroup === r.id}
-                  onClick={() => setOpenGroup(openGroup === r.id ? '' : r.id)}
-                >
-                  {openGroup === r.id ? '收起曲目' : '查看曲目'}
+              ))}
+            {followed.map((a) => (
+              <div key={a.id}>
+                {a.name} <small>{a.detail}</small>{' '}
+                <Button size="small" disabled={busy} onClick={() => toggle(a.id, false)}>
+                  取消关注{a.name}
                 </Button>
               </div>
-              {openGroup === r.id && <NewsTracks group={r} search={search} />}
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+          </div>
+        )}
+      </section>
     </section>
   )
 }
