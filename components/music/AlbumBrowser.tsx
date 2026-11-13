@@ -6,7 +6,15 @@ import './albums.css'
 
 export type Album = { id: string; title: string; artist: string; tracks: string[] }
 
-export function Cover({ id, track = false }: { id?: string; track?: boolean }) {
+export function Cover({
+  id,
+  track = false,
+  fallback,
+}: {
+  id?: string
+  track?: boolean
+  fallback?: string
+}) {
   const frame = useRef<HTMLSpanElement>(null)
   const [image, setImage] = useState<{ id: string; url: string }>()
   useEffect(() => {
@@ -33,6 +41,8 @@ export function Cover({ id, track = false }: { id?: string; track?: boolean }) {
     <span ref={frame} className="album-art" aria-hidden="true">
       {image && image.id === id ? (
         <img src={image.url} alt="" onError={() => setImage(undefined)} />
+      ) : fallback ? (
+        <img src={fallback} alt="" />
       ) : (
         <Disc3 />
       )}

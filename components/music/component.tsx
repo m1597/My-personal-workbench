@@ -1,5 +1,6 @@
 import { TrackMenu } from './TrackMenu'
 import { Cover, type Album } from './AlbumBrowser'
+import { NowPlaying } from './NowPlaying'
 import { guideSteps, MusicGuide } from './MusicGuide'
 import { observeListening } from './listening'
 import type { SourceInventory } from './MusicSourcesSettings'
@@ -622,6 +623,16 @@ function Music() {
   const localMode = active ? 'duration' in active : tab === 'library'
   const elapsed = current.current ? time : (state?.position ?? 0)
   const [lyricsOpen, setLyricsOpen] = useState(false)
+  const previousTab = useRef('library')
+  const showPlayer = tab === 'playing'
+  const needLyrics = lyricsOpen || showPlayer
+  const coverId = (active && ('duration' in active ? active.id : active.localId)) || undefined
+  function openPlayer() {
+    if (!showPlayer) previousTab.current = tab
+    setGuide(null)
+    setTab('playing')
+    if (presentation === 'bar') void act(() => window.musicWindow.present('full'))
+  }
   const [lyricsLocked, setLyricsLocked] = useState(false)
   useEffect(() => host.onLyricLocked(setLyricsLocked), [])
   const [lyrics, setLyrics] = useState<{
@@ -629,7 +640,7 @@ function Music() {
     lines: [number, string][]
   }>()
   useEffect(() => {
-    if (!lyricsOpen || !now) return
+    if (!needLyrics || !now) return
     let revision = 0
     function refreshLyrics() {
       const request = ++revision
@@ -638,7 +649,9 @@ function Music() {
         .then((lines) => {
           if (request === revision) setLyrics({ id: now, lines })
         })
-        .catch(() => {})
+        .catch(() => {
+          if (request === revision) setLyrics({ id: now, lines: [] })
+        })
     }
     const unsubscribe = host.onLyricsSaved(refreshLyrics)
     refreshLyrics()
@@ -646,14 +659,16 @@ function Music() {
       revision++
       unsubscribe()
     }
-  }, [lyricsOpen, now])
-  let lyric = ''
-  if (lyrics?.id === now) {
-    for (const [at, value] of lyrics.lines) {
+  }, [needLyrics, now])
+  const lines = lyrics?.id === now ? lyrics.lines : undefined
+  let activeLine = -1
+  if (lines) {
+    for (const [index, [at]] of lines.entries()) {
       if (at > elapsed) break
-      lyric = value
+      activeLine = index
     }
   }
+  const lyric = lines?.[activeLine]?.[1] ?? ''
   useEffect(() => {
     if (lyricsOpen) void host.lyricLine(lyric).catch(() => {})
   }, [lyric, lyricsOpen])
@@ -739,13 +754,15 @@ function Music() {
           <div className="music-heading">
             <h1>Music</h1>
             <small>
-              {tab === 'download'
-                ? '在线下载'
-                : tab === 'library'
-                  ? '本地音乐'
-                  : tab === 'settings'
-                    ? '设置'
-                    : '每日推荐'}
+              {showPlayer
+                ? '正在播放'
+                : tab === 'download'
+                  ? '在线下载'
+                  : tab === 'library'
+                    ? '本地音乐'
+                    : tab === 'settings'
+                      ? '设置'
+                      : '每日推荐'}
             </small>
           </div>
         </header>
@@ -804,7 +821,18 @@ function Music() {
         <MusicGuide key={guide} step={guide} close={closeGuide} change={visitGuide} />
       )}
       <main key={tab} className="music-scroll">
-        {tab === 'library' ? (
+        {showPlayer ? (
+          <NowPlaying
+            key={now}
+            title={active?.title ?? '尚未播放'}
+            artist={active?.artist ?? ''}
+            coverId={coverId}
+            revision={state?.albumRevision}
+            lines={now ? lines : []}
+            activeLine={activeLine}
+            back={() => setTab(previousTab.current)}
+          />
+        ) : tab === 'library' ? (
           <LibraryPane
             albumRevision={state?.albumRevision ?? 0}
             favorite={(id, on) => act(() => host.setFavorite(id, on))}
@@ -1186,14 +1214,21 @@ function Music() {
       <footer className="music-player">
         <div className="music-transport">
           <div className="music-disc">
-            <Cover
-              key={state?.albumRevision}
-              id={(active && ('duration' in active ? active.id : active.localId)) || undefined}
-              track
-            />
+            <Cover key={state?.albumRevision} id={coverId} track />
           </div>
           <div className="music-heading">
-            <strong>{active?.title ?? '尚未播放'}</strong>
+            {active ? (
+              <button
+                type="button"
+                className="music-title-link"
+                onClick={openPlayer}
+                title="打开播放页"
+              >
+                <strong>{active.title}</strong>
+              </button>
+            ) : (
+              <strong>尚未播放</strong>
+            )}
             <small>{active?.artist ?? '试听播放器'}</small>
           </div>
           <Button

@@ -46,6 +46,7 @@ for (const [source, output] of [
   })
   for (const file of ['index.html', 'component.json'])
     await cp(`${source}/${file}`, `${root}/${output}/${file}`)
+  if (output === 'music') await cp(`${source}/default-cover.png`, `${root}/music/default-cover.png`)
 }
 await cp('out/renderer', `${root}/workbench`, { recursive: true })
 // Discard only the previous release's generated plugin artifacts.

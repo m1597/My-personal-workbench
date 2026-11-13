@@ -85,6 +85,12 @@ let app = await launch()
 try {
   let page = await app.firstWindow()
   await page.getByRole('button', { name: '跳过', exact: true }).click()
+  await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(960, 680))
+  await page.evaluate(() => {
+    document.documentElement.style.backgroundColor = getComputedStyle(
+      document.documentElement,
+    ).getPropertyValue('--base')
+  })
   const button = (name) => page.getByRole('button', { name, exact: true })
   await expect(button('桌面歌词')).toHaveAttribute('aria-pressed', 'false')
   for (const title of ['B', 'A', 'No Lyrics']) {
@@ -103,6 +109,18 @@ try {
   await expect(overlay.locator('button')).toHaveCSS('opacity', '1')
   await button('下一首').click()
   await expect(overlay.locator('strong')).toHaveText('第一句')
+  await button('A').click()
+  const playerPage = page.getByRole('region', { name: '播放页' })
+  const currentLine = playerPage.locator('[aria-current="true"]')
+  await expect(currentLine).toHaveText('第一句')
+  const artwork = playerPage.locator('.album-art img')
+  await expect(artwork).toHaveAttribute('src', './default-cover.png')
+  await expect
+    .poll(() => artwork.evaluate((img) => img.complete && img.naturalWidth > 0))
+    .toBe(true)
+  const imageBounds = await artwork.boundingBox()
+  const lyricsBounds = await currentLine.boundingBox()
+  assert.ok(imageBounds.x + imageBounds.width <= lyricsBounds.x)
   const handle =
     process.platform === 'win32' &&
     (await app.evaluate(({ BrowserWindow }) =>
@@ -140,11 +158,33 @@ try {
     el.currentTime = 6
   })
   await expect(overlay.locator('strong')).toHaveText('第二句')
+  await expect(currentLine).toHaveText('第二句')
+  await expect
+    .poll(() =>
+      currentLine.evaluate((line) => {
+        const pane = line.parentElement
+        return Math.abs(
+          line.offsetTop - pane.scrollTop - (pane.clientHeight - line.offsetHeight) / 2,
+        )
+      }),
+    )
+    .toBeLessThan(2)
+  await expect(currentLine).toHaveCSS(
+    'color',
+    await playerPage.locator('h2').evaluate((el) => getComputedStyle(el).color),
+  )
+  await page.screenshot({ scale: 'css', path: path.join(root, 'now-playing-lyrics.png') })
   await overlay.screenshot({ path: path.join(root, 'desktop-lyrics.png') })
   await button('下一首').click()
   await expect(overlay.locator('strong')).toBeEmpty()
+  await expect(playerPage.getByRole('heading')).toHaveText('No Lyrics')
+  await expect(playerPage.getByRole('status')).toHaveText('暂无歌词')
+  await expect(currentLine).toHaveCount(0)
+  await page.screenshot({ path: path.join(root, 'now-playing-empty.png') })
   await button('上一首').click()
   await expect(overlay.locator('strong')).toHaveText('第一句')
+  await expect(currentLine).toHaveText('第一句')
+  await playerPage.getByRole('button', { name: '返回' }).click()
   await expect(overlay.locator('button')).toBeHidden()
   await button('解锁桌面歌词').click()
   await expect(overlay.locator('body')).toHaveCSS('-webkit-app-region', 'drag')

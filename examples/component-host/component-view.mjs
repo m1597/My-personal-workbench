@@ -220,6 +220,7 @@ export function componentView({
         (file) => pathToFileURL(path.join(root, file)).href,
       ),
     )
+    if (music) allowed.add(pathToFileURL(path.join(root, 'default-cover.png')).href)
     isolated.webRequest.onBeforeRequest((details, callback) =>
       callback({
         cancel:

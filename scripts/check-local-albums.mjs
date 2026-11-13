@@ -144,6 +144,12 @@ try {
   await page.getByRole('button', { name: '歌曲', exact: true }).click()
   await expect(page.locator('.library-row')).toHaveCount(4)
   assert.deepEqual((await state()).queue, trio.tracks)
+  await page.getByRole('button', { name: '播放Overture', exact: true }).click()
+  await page.locator('.music-title-link').click()
+  const playerPage = page.getByRole('region', { name: '播放页' })
+  await expect(playerPage.locator('.album-art img')).toHaveAttribute('src', embedded)
+  await expect(playerPage.getByRole('status')).toHaveText('暂无歌词')
+  await page.screenshot({ scale: 'css', path: path.join(root, 'now-playing-embedded.png') })
   assert.deepEqual(await app.evaluate(() => globalThis.albumNetworkAttempts), [])
   assert.deepEqual(externalRequests, [])
   console.log(
