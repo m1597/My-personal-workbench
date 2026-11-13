@@ -107,7 +107,7 @@ for (const restart of [false, true]) {
     if (!restart) {
       await button('跳过').click()
       await page.evaluate(() => window.music.lxImport())
-      await page.getByRole('tab', { name: '搜索音乐' }).click()
+      await page.getByRole('tab', { name: '在线找歌' }).click()
       const pane = page.getByRole('region', { name: '搜索音乐' })
       await pane.getByRole('textbox').fill('测试在线歌曲')
       await pane.getByRole('textbox').press('Enter')
@@ -150,7 +150,8 @@ for (const restart of [false, true]) {
         [local],
       )
       assert.deepEqual(state.playlists.find((p) => p.id === list).tracks, [onlineId, local])
-      await button('曲库导航').click()
+      await page.getByRole('tab', { name: '歌单', exact: true }).click()
+      await button('歌单导航').click()
       await button('混合歌单').click()
       await expect(page.locator('.library-row')).toHaveCount(2)
       await expect(
@@ -196,8 +197,8 @@ for (const restart of [false, true]) {
         return ids
       }, list)
       assert.equal(extra.length, 3)
-      await page.getByRole('tab', { name: '搜索音乐' }).click()
-      await page.getByRole('tab', { name: '本地曲库' }).click()
+      await page.getByRole('tab', { name: '在线找歌' }).click()
+      await page.getByRole('tab', { name: '歌单' }).click()
       const rows = page.locator('.library-row')
       await expect(rows).toHaveCount(5)
       await button('多选').click()

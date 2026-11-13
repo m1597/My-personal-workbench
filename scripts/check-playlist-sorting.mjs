@@ -57,7 +57,7 @@ for (const restart of [false, true]) {
         .find((w) => w.getTitle() === 'Music')
         .setContentSize(960, 720),
     )
-    await page.getByRole('tab', { name: '本地曲库' }).click()
+    await page.getByRole('tab', { name: '歌单' }).click()
     const button = (name) => page.getByRole('button', { name, exact: true })
     const names = page.locator('.library-name strong')
     const choose = async (label) => {

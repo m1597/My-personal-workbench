@@ -394,15 +394,35 @@ export class LocalLibrary {
       ...byId.values(),
     ]
   }
-  createPlaylist(name) {
-    const id = randomUUID()
+  createPlaylist(name, tracks = []) {
     if (
-      !this.db
-        .prepare('INSERT OR IGNORE INTO playlists(id,name) VALUES(?,?)')
-        .run(id, playlistName(name)).changes
+      !Array.isArray(tracks) ||
+      tracks.length > 200000 ||
+      tracks.some((id) => typeof id !== 'string' || id.length > 120)
     )
-      throw Error('已有同名歌单')
-    return id
+      throw Error('歌单曲目无效')
+    const members = [...new Set(tracks)]
+    const id = randomUUID()
+    this.db.exec('SAVEPOINT new_playlist')
+    try {
+      if (
+        !this.db
+          .prepare('INSERT OR IGNORE INTO playlists(id,name) VALUES(?,?)')
+          .run(id, playlistName(name)).changes
+      )
+        throw Error('已有同名歌单')
+      const inserted = this.db
+        .prepare(`INSERT INTO playlist_tracks(playlist,track,position,addedAt)
+        SELECT ?,t.id,j.key,? FROM json_each(?) j JOIN local_tracks t ON t.id=j.value
+        WHERE t.listed=1 ORDER BY j.key`)
+        .run(id, Date.now(), JSON.stringify(members))
+      if (inserted.changes !== members.length) throw Error('所选本地曲目已移除，请刷新后重试')
+      this.db.exec('RELEASE new_playlist')
+      return id
+    } catch (error) {
+      this.db.exec('ROLLBACK TO new_playlist; RELEASE new_playlist')
+      throw error
+    }
   }
   renamePlaylist(id, name) {
     if (

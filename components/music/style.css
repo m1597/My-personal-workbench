@@ -361,6 +361,20 @@ li[data-active="true"] .music-track-icon,
   gap: var(--space-8);
   min-width: 0;
 }
+.new-playlist-content,
+.new-playlist-members {
+  display: grid;
+  gap: var(--space-8);
+}
+.new-playlist-content summary {
+  cursor: pointer;
+  margin-block: var(--space-8);
+}
+.new-playlist-members {
+  max-height: min(38vh, 280px);
+  overflow-y: auto;
+  margin-top: var(--space-8);
+}
 .library-track-title .library-track-location {
   flex: none;
   font-size: var(--font-size-caption);

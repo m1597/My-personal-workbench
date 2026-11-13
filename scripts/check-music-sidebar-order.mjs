@@ -34,8 +34,7 @@ const launch = () =>
 let app = await launch()
 try {
   let page = await app.firstWindow()
-  const row = (name) =>
-    page.getByRole('complementary', { name: '曲库分类' }).getByRole('button', { name, exact: true })
+  const row = (name) => page.locator('.library-sidebar').getByRole('button', { name, exact: true })
   const order = () => page.locator('.library-sidebar [draggable=true]').allTextContents()
   const drag = async (from, to, after) => {
     const a = await row(from).boundingBox(),
@@ -50,15 +49,19 @@ try {
   await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(1040, 800))
   await expect(row('A')).toBeVisible()
   await drag('C', 'A', false)
-  await expect.poll(order).toEqual(['C', 'A', 'B', '歌单A', '歌单B', '歌单C'])
+  await expect.poll(order).toEqual(['C', 'A', 'B'])
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await drag('歌单A', '歌单C', true)
-  const final = ['C', 'A', 'B', '歌单B', '歌单C', '歌单A']
+  const final = ['歌单B', '歌单C', '歌单A']
   await expect.poll(order).toEqual(final)
-  await row('B').dragTo(row('歌单A'))
+  await expect(row('B')).toHaveCount(0)
   assert.deepEqual(await order(), final)
   await app.close()
   app = await launch()
   page = await app.firstWindow()
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
+  await expect.poll(order).toEqual(['C', 'A', 'B'])
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await expect.poll(order).toEqual(final)
   console.log('PASS 两组上下插入指示、实际拖放、跨组拒绝和冷启动恢复', root)
 } finally {

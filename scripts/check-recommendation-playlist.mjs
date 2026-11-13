@@ -100,14 +100,21 @@ async function checkBatchUpgrade() {
     db.db.close()
     try {
       await launch(upgradeProfile, false)
-      await page.getByRole('tab', { name: '每日推荐' }).click()
+      await page.getByRole('tab', { name: 'AI 推荐' }).click()
       const currentTitles = files.slice(10).map((file) => path.basename(file, '.wav'))
       await expect(page.locator('.music-track strong')).toHaveText(currentTitles)
-      await page.getByRole('tab', { name: '本地曲库' }).click()
+      await page.getByRole('tab', { name: '曲库' }).click()
       const folderButton = page.locator('button[title="歌曲推荐"]')
       await folderButton.click()
+      await expect(
+        page.getByRole('heading', { name: '文件夹 / 歌曲推荐', exact: true }),
+      ).toBeVisible()
       await expect(rows()).toHaveCount(15)
+      await page.getByRole('tab', { name: '歌单', exact: true }).click()
       await button('歌曲推荐').and(page.locator('button:not([title="歌曲推荐"])')).click()
+      await expect(
+        page.getByRole('heading', { name: '歌单 / 歌曲推荐', exact: true }),
+      ).toBeVisible()
       await expect
         .poll(async () => (await rows().allTextContents()).sort())
         .toEqual(currentTitles.sort())
@@ -124,11 +131,12 @@ async function checkBatchUpgrade() {
         const snapshot = await page.evaluate(() => window.music.state())
         assert.equal(snapshot.batches[0].state, state)
         assert.deepEqual(snapshot.playlists.find((p) => p.system).tracks, [])
-        await page.getByRole('tab', { name: '每日推荐' }).click()
+        await page.getByRole('tab', { name: 'AI 推荐' }).click()
         await expect(page.locator('.music-track strong')).toHaveCount(0)
-        await page.getByRole('tab', { name: '本地曲库' }).click()
+        await page.getByRole('tab', { name: '曲库' }).click()
         await folderButton.click()
         await expect(rows()).toHaveCount(15)
+        await page.getByRole('tab', { name: '歌单', exact: true }).click()
         await button('歌曲推荐').and(page.locator('button:not([title="歌曲推荐"])')).click()
         await expect(rows()).toHaveCount(0)
       }
@@ -236,7 +244,7 @@ async function launch(userData = profile, openPlaylist = true) {
     }),
   )
   if (openPlaylist) {
-    await page.getByRole('tab', { name: '本地曲库' }).click()
+    await page.getByRole('tab', { name: '歌单' }).click()
     await button('歌曲推荐').click()
   }
 }
@@ -293,8 +301,10 @@ try {
   await button('从当前歌单移除').click()
   output.afterRemoval = await checkMembers(titles.slice(2))
   assert.ok((await readFile(paths[0])).equals(wave))
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('全部歌曲').click()
   assert.deepEqual((await rows().allTextContents()).sort(), [...titles].sort())
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button(customName).click()
   assert.deepEqual((await rows().allTextContents()).sort(), [...titles].sort())
   await unlink(paths[2])

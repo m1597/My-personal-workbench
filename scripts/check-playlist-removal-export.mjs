@@ -73,7 +73,7 @@ try {
   )
   const button = (name) => page.getByRole('button', { name, exact: true })
   const click = (locator) => locator.dispatchEvent('click')
-  await click(page.getByRole('tab', { name: '本地曲库' }))
+  await click(page.getByRole('tab', { name: '歌单' }))
   const names = page.locator('.library-name strong')
   for (const [name, sequence] of [
     ['出门 歌单', initial],

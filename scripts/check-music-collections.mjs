@@ -1,9 +1,9 @@
+import { openMusicSettings } from './music-settings-fixture.mjs'
 import { mkdir, mkdtemp, writeFile, stat, rm } from 'node:fs/promises'
 import path from 'node:path'
 import assert from 'node:assert/strict'
 import { _electron as electron, expect } from '@playwright/test'
 import { recording } from '../components/music/offline-source.mjs'
-import { dragMusicIn } from './music-drag-fixture.mjs'
 
 const evidence = await mkdtemp(path.resolve('tmp/music-collections-'))
 const root = path.join(evidence, '我的音乐')
@@ -42,21 +42,44 @@ try {
   await app.evaluate(({ dialog }, root) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] })
   }, root)
-  await page.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件夹' }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await expect(page.locator('.library-row')).toHaveCount(3)
   const button = (name) => page.getByRole('button', { name, exact: true })
   await expect(button('我的音乐')).toHaveCount(0)
   await expect(button('录音')).toHaveCount(0)
   await button('春天').click()
+  await expect(page.getByRole('heading', { name: '文件夹 / 春天' })).toBeVisible()
+  await expect(button('我的收藏')).toHaveCount(0)
   await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   for (const name of ['通勤', '收藏']) {
     await button('新建歌单').click()
     await page.getByLabel('歌单名称').fill(name)
+    if (name === '收藏') {
+      await page.locator('summary').filter({ hasText: '添加本地歌曲（可选）' }).click()
+      await page.getByLabel('筛选本地歌曲').fill('晨间')
+      await page.getByRole('dialog').getByRole('checkbox', { name: /晨间/ }).check()
+      await page.screenshot({
+        path: path.join(evidence, 'new-playlist-members.png'),
+        style: ':root {background:var(--base) !important}',
+      })
+    }
     await button('创建').click()
-    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '歌单 / ' + name, exact: true })).toBeVisible()
   }
+  await expect(page.locator('.library-row strong')).toHaveText(['晨间'])
+  await expect(page.locator('.library-sidebar button[aria-pressed]').first()).toHaveText('我的收藏')
+  await expect(button('春天')).toHaveCount(0)
+  await page.evaluate(async () => {
+    try {
+      await window.music.createPlaylist('失败创建夹具', ['missing-id'])
+    } catch {}
+    if ((await window.music.state()).playlists.some((list) => list.name === '失败创建夹具'))
+      throw Error('失效成员导致空歌单残留')
+  })
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('全部歌曲').click()
   await button('多选').click()
   await expect(button('加入歌单')).toBeDisabled()
@@ -71,8 +94,10 @@ try {
   await page.getByRole('checkbox', { name: '全选当前列表' }).check()
   await button('加入歌单').click()
   await page.getByRole('menuitem', { name: '通勤' }).click()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button('通勤').click()
   await expect(page.locator('.library-name strong')).toHaveText(['海边'])
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('全部歌曲').click()
   await button('多选').click()
   await page.getByRole('checkbox', { name: '全选当前列表' }).check()
@@ -107,6 +132,7 @@ try {
   await button('加入歌单').click()
   await page.screenshot({ path: path.join(evidence, 'batch-playlist.png'), animations: 'disabled' })
   await page.getByRole('menuitem', { name: '通勤' }).click()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button('我的收藏').click()
   await expect(page.locator('.library-row')).toHaveCount(3)
   await page.evaluate(async (ids) => {
@@ -120,12 +146,14 @@ try {
       throw Error('失效的歌曲应中止整批收藏操作')
     await window.music.setFavorite(ids, false)
   }, favoriteIds)
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button('通勤').click()
   await expect(page.locator('.library-row')).toHaveCount(3)
   await button('多选').click()
   await page.getByRole('checkbox', { name: '全选当前列表' }).check()
   await button('从当前歌单移除').click()
   await expect(page.locator('.library-row')).toHaveCount(0)
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('全部歌曲').click()
   await expect(page.locator('.library-row')).toHaveCount(3)
   const atomic = await page.evaluate(async () => {
@@ -151,6 +179,7 @@ try {
     for (const list of lists) await page.getByLabel(list, { exact: true }).check()
     await page.keyboard.press('Escape')
   }
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button('通勤').click()
   await expect(page.locator('.library-name strong')).toHaveText(['晨间', '雨夜'])
   await button('播放晨间').click()
@@ -162,9 +191,11 @@ try {
   await button('播放晨间').click()
   await expect.poll(() => audio.evaluate((el) => el.currentTime)).toBeGreaterThan(pausedAt)
   for (const label of ['全部歌曲', '春天', '通勤']) {
+    await page.getByRole('tab', { name: label === '通勤' ? '歌单' : '曲库', exact: true }).click()
     await expect(button(label)).toHaveCSS('font-size', '16px')
   }
   for (const name of ['文件夹', '我的歌单']) {
+    await page.getByRole('tab', { name: name === '文件夹' ? '曲库' : '歌单', exact: true }).click()
     const heading = page.getByRole('heading', { name, exact: true })
     await expect(heading).toHaveCSS('font-size', '18px')
     const gap = await heading.evaluate((el) => {
@@ -191,11 +222,14 @@ try {
   assert.ok(spacing >= 3.9, String(spacing))
   await page.screenshot({ path: path.join(evidence, 'standalone.png') })
   await resize(400)
-  await expect(button('曲库导航')).toBeVisible()
+  await expect(button('歌单导航')).toBeVisible()
   await expect(page.locator('.library-sidebar')).not.toBeVisible()
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
   await page.screenshot({ path: path.join(evidence, 'narrow.png') })
-  await dragMusicIn(app)
+  await page.evaluate(() => window.musicWindow.transfer('attach'))
+  await expect
+    .poll(() => page.evaluate(async () => (await window.musicWindow.status()).mode))
+    .toBe('docked')
   const shell = app.windows().find((p) => p.url().includes('/renderer/index.html'))
   await expect(page.locator('[data-surface="embedded"]')).toBeVisible()
   await expect(page.getByRole('heading', { name: '通勤' })).toBeVisible()
@@ -243,13 +277,14 @@ try {
     w.setMinimumSize(380, 480)
     w.setContentSize(440, 620)
   })
-  await expect(button('曲库导航')).toBeVisible()
+  await expect(button('歌单导航')).toBeVisible()
   await expect(page.locator('.music-player')).toBeInViewport()
   await captureDock('narrow-dock')
   await app.close()
   app = await launch()
   page = await app.firstWindow()
-  await button('曲库导航').click()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
+  await button('歌单导航').click()
   await button('收藏').click()
   await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
   await resize(1040)
@@ -264,6 +299,7 @@ try {
   await page.getByRole('textbox', { name: '新歌单名称' }).fill('通勤精选')
   await button('保存名称').click()
   await expect(button('通勤精选')).toBeVisible()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button('通勤精选').click()
   await button('从曲库移除晨间').click()
   const trashButton = button('移至系统回收站')
@@ -280,6 +316,7 @@ try {
   await expect(page.locator('.library-name strong')).toHaveText(['雨夜'])
   await button('收藏').click()
   await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('春天').click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '打开文件所在位置' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: '从曲库移除文件夹' })).toBeVisible()
@@ -290,8 +327,11 @@ try {
   await button('夏天').click({ button: 'right' })
   await page.getByRole('menuitem', { name: '从曲库移除文件夹' }).click()
   await button('确认移除文件夹').click()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
+  await button('收藏').click()
   await page.locator('.library-name strong').dblclick()
   await expect(button('暂停晨间')).toBeVisible()
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('全部歌曲').click()
   await expect(page.locator('.library-name strong')).toHaveText(['雨夜'])
   await page.locator('.library-name strong').click()
@@ -305,6 +345,7 @@ try {
   await page.screenshot({ path: path.join(evidence, 'remove-track.png'), animations: 'disabled' })
   await button('仅从 FitBay 移除').click()
   await expect(page.locator('.library-row')).toHaveCount(0)
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button('通勤精选').click()
   await expect(page.locator('.library-row')).toHaveCount(0)
   await button('通勤精选').click({ button: 'right' })
@@ -322,8 +363,8 @@ try {
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).importJob.running))
     .toBe(false)
-  await page.getByRole('tab', { name: '搜索音乐' }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '在线找歌' }).click()
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('全部歌曲').click()
   await expect(page.locator('.library-name strong')).toHaveText(['海边'])
   const trash = async () => {
@@ -359,6 +400,7 @@ try {
   await button('移至系统回收站').click()
   await expect(page.locator('.library-row')).toHaveCount(0)
   await assert.rejects(stat(file), { code: 'ENOENT' })
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button('收藏').click()
   await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
   const retryDir = path.join(root, '部分回收')
@@ -374,9 +416,9 @@ try {
       return { response: 1 }
     }
   }, retryFiles)
-  await page.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(page)
   await button('添加文件').click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await button('部分回收').click()
   await button('播放A').click()
   await expect(button('暂停A')).toBeVisible()

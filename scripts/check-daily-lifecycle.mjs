@@ -119,14 +119,14 @@ try {
       .find((window) => window.getTitle() === 'Music')
       .setContentSize(1060, 700),
   )
-  await page.getByRole('tab', { name: '每日推荐' }).click()
+  await page.getByRole('tab', { name: 'AI 推荐' }).click()
   await page.getByRole('button', { name: '试听已有分类', exact: true }).click()
   const heart = page.getByRole('button', { name: '收藏当前歌曲' })
   await expect(heart).toHaveAttribute('aria-pressed', 'false')
   await heart.click()
   await expect(heart).toHaveAttribute('aria-pressed', 'true')
-  await page.getByRole('tab', { name: '本地曲库' }).click()
-  const navigation = page.getByRole('button', { name: '曲库导航' })
+  await page.getByRole('tab', { name: '歌单' }).click()
+  const navigation = page.getByRole('button', { name: '歌单导航' })
   if (await navigation.isVisible()) await navigation.click()
   await page.getByRole('button', { name: '我的收藏', exact: true }).click()
   const row = page

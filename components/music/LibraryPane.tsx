@@ -88,6 +88,7 @@ export type PlaylistTrack = LocalTrack | OnlineTrack
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 interface Props extends SidebarSorting, PlaylistSorting {
+  scope: 'library' | 'playlists'
   searchRelease: (query: string) => void
   albumRevision: number
   favorite: (id: string, value: boolean) => Promise<unknown>
@@ -100,7 +101,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   days: number
   changeDays: (days: number) => void
   select: (id: string) => void
-  create: (name: string) => Promise<boolean>
+  create: (name: string, tracks?: string[]) => Promise<boolean>
   membership: (list: string, ids: string | string[], added: boolean) => Promise<boolean>
   total: number
   search: string
@@ -125,6 +126,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   removeFolder: (id: string) => Promise<boolean>
 }
 export function LibraryPane({
+  scope,
   searchRelease,
   albumRevision,
   favorite,
@@ -233,6 +235,19 @@ export function LibraryPane({
   const [sidebar, setSidebar] = useState(false)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
+  const [initialMembers, setInitialMembers] = useState<string[]>([])
+  const [memberQuery, setMemberQuery] = useState('')
+  const [memberLimit, setMemberLimit] = useState(100)
+  const initialSelection = new Set(initialMembers)
+  const candidates = creating
+    ? tracks.filter(
+        (t) =>
+          t.listed &&
+          [t.title, t.artist, t.album].some((v) =>
+            v.toLocaleLowerCase().includes(memberQuery.trim().toLocaleLowerCase()),
+          ),
+      )
+    : []
   const [action, setAction] = useState<{
     kind: 'rename' | 'deleteList' | 'folder' | 'song' | 'batch'
     ids?: string[]
@@ -289,146 +304,138 @@ export function LibraryPane({
         aria-expanded={sidebar}
         onClick={() => setSidebar(!sidebar)}
       >
-        曲库导航
+        {scope === 'library' ? '曲库导航' : '歌单导航'}
       </Button>
-      <aside className="library-sidebar" data-open={sidebar} aria-label="曲库分类">
-        <Button
-          appearance="subtle"
-          aria-pressed={collection === 'all'}
-          size="small"
-          icon={<Music2 size={16} />}
-          onClick={() => choose('all')}
-        >
-          全部歌曲
-        </Button>
-        <Button
-          appearance="subtle"
-          aria-pressed={collection === 'infrequent'}
-          size="small"
-          icon={<ListMusic size={16} />}
-          onClick={() => choose('infrequent')}
-        >
-          不常听
-        </Button>
-        <Button
-          appearance="subtle"
-          aria-pressed={collection === 'recent'}
-          size="small"
-          icon={<History size={16} />}
-          onClick={() => choose('recent')}
-        >
-          最近播放
-        </Button>
-        <Button
-          appearance="subtle"
-          aria-pressed={collection === 'favorites'}
-          size="small"
-          icon={<Heart size={16} />}
-          onClick={() => choose('favorites')}
-        >
-          我的收藏
-        </Button>
-        <h3>文件夹</h3>
-        {orderedSidebarItems(folders, sidebarOrder?.folders).map((node) => (
-          <Menu key={node.id} openOnContext>
-            <MenuTrigger disableButtonEnhancement>
+      <aside
+        className="library-sidebar"
+        data-open={sidebar}
+        aria-label={scope === 'library' ? '曲库分类' : '歌单分类'}
+      >
+        {scope === 'library' ? (
+          <>
+            <Button
+              appearance="subtle"
+              aria-pressed={collection === 'all'}
+              size="small"
+              icon={<Music2 size={16} />}
+              onClick={() => choose('all')}
+            >
+              全部歌曲
+            </Button>
+            <Button
+              appearance="subtle"
+              aria-pressed={collection === 'infrequent'}
+              size="small"
+              icon={<ListMusic size={16} />}
+              onClick={() => choose('infrequent')}
+            >
+              不常听
+            </Button>
+            <Button
+              appearance="subtle"
+              aria-pressed={collection === 'recent'}
+              size="small"
+              icon={<History size={16} />}
+              onClick={() => choose('recent')}
+            >
+              最近播放
+            </Button>
+            <h3>文件夹</h3>
+            {orderedSidebarItems(folders, sidebarOrder?.folders).map((node) => (
+              <Menu key={node.id} openOnContext>
+                <MenuTrigger disableButtonEnhancement>
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    {...sortable('folders', node.id)}
+                    title={node.name}
+                    aria-pressed={collection === node.id}
+                    icon={<Folder size={16} />}
+                    onClick={() => choose(node.id)}
+                  >
+                    {node.name}
+                  </Button>
+                </MenuTrigger>
+                <MenuPopover className="component-popup">
+                  <MenuList>
+                    <MenuItem onClick={() => openFolder(node.id)}>打开文件所在位置</MenuItem>
+                    <MenuItem onClick={() => setAction({ kind: 'folder', ...node })}>
+                      从曲库移除文件夹
+                    </MenuItem>
+                  </MenuList>
+                </MenuPopover>
+              </Menu>
+            ))}
+          </>
+        ) : (
+          <>
+            <Button
+              appearance="subtle"
+              aria-pressed={collection === 'favorites'}
+              size="small"
+              icon={<Heart size={16} />}
+              onClick={() => choose('favorites')}
+            >
+              我的收藏
+            </Button>
+            <div className="playlist-heading">
+              <h3>我的歌单</h3>
               <Button
                 appearance="subtle"
                 size="small"
-                {...sortable('folders', node.id)}
-                title={node.name}
-                aria-pressed={collection === node.id}
-                icon={<Folder size={16} />}
-                onClick={() => choose(node.id)}
-              >
-                {node.name}
-              </Button>
-            </MenuTrigger>
-            <MenuPopover className="component-popup">
-              <MenuList>
-                <MenuItem onClick={() => openFolder(node.id)}>打开文件所在位置</MenuItem>
-                <MenuItem onClick={() => setAction({ kind: 'folder', ...node })}>
-                  从曲库移除文件夹
-                </MenuItem>
-              </MenuList>
-            </MenuPopover>
-          </Menu>
-        ))}
-        <div className="playlist-heading">
-          <h3>我的歌单</h3>
-          <Button
-            appearance="subtle"
-            size="small"
-            icon={<Plus size={16} />}
-            aria-label="新建歌单"
-            onClick={() => setCreating(!creating)}
-          />
-        </div>
-        {creating && (
-          <form
-            className="playlist-form"
-            onSubmit={async (e) => {
-              e.preventDefault()
-              if (name.trim() && (await create(name))) {
-                setSelection(null)
-                setName('')
-                setCreating(false)
-              }
-            }}
-          >
-            <Input
-              size="small"
-              placeholder="歌单名称"
-              aria-label="歌单名称"
-              maxLength={80}
-              value={name}
-              onChange={(_, v) => setName(v.value)}
-            />
-            <Button size="small" type="submit" disabled={!name.trim()}>
-              创建
-            </Button>
-          </form>
+                icon={<Plus size={16} />}
+                aria-label="新建歌单"
+                onClick={() => {
+                  setName('')
+                  setInitialMembers([])
+                  setMemberQuery('')
+                  setMemberLimit(100)
+                  setCreating(true)
+                }}
+              />
+            </div>
+            {orderedSidebarItems(playlists, sidebarOrder?.playlists).map((list) => {
+              const trigger = (
+                <Button
+                  key={list.id}
+                  {...sortable('playlists', list.id)}
+                  appearance="subtle"
+                  size="small"
+                  aria-pressed={collection === list.id}
+                  icon={<ListMusic size={16} />}
+                  onClick={() => choose(list.id)}
+                >
+                  {list.name}
+                </Button>
+              )
+              return (
+                <Menu key={list.id} openOnContext>
+                  <MenuTrigger disableButtonEnhancement>{trigger}</MenuTrigger>
+                  <MenuPopover className="component-popup">
+                    <MenuList>
+                      {!list.system && (
+                        <>
+                          <MenuItem
+                            onClick={() => {
+                              setEditName(list.name)
+                              setAction({ kind: 'rename', ...list })
+                            }}
+                          >
+                            重命名歌单
+                          </MenuItem>
+                          <MenuItem onClick={() => setAction({ kind: 'deleteList', ...list })}>
+                            删除歌单
+                          </MenuItem>
+                        </>
+                      )}
+                      <MenuItem onClick={() => void exportList(list.id)}>导出为 M3U8</MenuItem>
+                    </MenuList>
+                  </MenuPopover>
+                </Menu>
+              )
+            })}
+          </>
         )}
-        {orderedSidebarItems(playlists, sidebarOrder?.playlists).map((list) => {
-          const trigger = (
-            <Button
-              key={list.id}
-              {...sortable('playlists', list.id)}
-              appearance="subtle"
-              size="small"
-              aria-pressed={collection === list.id}
-              icon={<ListMusic size={16} />}
-              onClick={() => choose(list.id)}
-            >
-              {list.name}
-            </Button>
-          )
-          return (
-            <Menu key={list.id} openOnContext>
-              <MenuTrigger disableButtonEnhancement>{trigger}</MenuTrigger>
-              <MenuPopover className="component-popup">
-                <MenuList>
-                  {!list.system && (
-                    <>
-                      <MenuItem
-                        onClick={() => {
-                          setEditName(list.name)
-                          setAction({ kind: 'rename', ...list })
-                        }}
-                      >
-                        重命名歌单
-                      </MenuItem>
-                      <MenuItem onClick={() => setAction({ kind: 'deleteList', ...list })}>
-                        删除歌单
-                      </MenuItem>
-                    </>
-                  )}
-                  <MenuItem onClick={() => void exportList(list.id)}>导出为 M3U8</MenuItem>
-                </MenuList>
-              </MenuPopover>
-            </Menu>
-          )
-        })}
       </aside>
       {collection === 'recent' ? (
         <RecentHistory tracks={tracks} play={play} />
@@ -472,7 +479,10 @@ export function LibraryPane({
             <>
               <div className="library-title">
                 <div>
-                  <h2>{collection === 'favorites' ? '我的收藏' : heading}</h2>
+                  <h2>
+                    {currentFolder ? '文件夹 / ' : scope === 'playlists' ? '歌单 / ' : ''}
+                    {collection === 'favorites' ? '我的收藏' : heading}
+                  </h2>
                   <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
                 </div>
                 {currentPlaylist && (
@@ -547,7 +557,7 @@ export function LibraryPane({
                             </MenuItem>
                           ))
                         ) : (
-                          <MenuItem disabled>请先在曲库导航中新建歌单</MenuItem>
+                          <MenuItem disabled>请先在「歌单」中新建歌单</MenuItem>
                         )}
                       </MenuList>
                     </MenuPopover>
@@ -743,7 +753,7 @@ export function LibraryPane({
                                         />
                                       ))
                                   ) : (
-                                    <small>在曲库导航中点「＋」新建歌单。</small>
+                                    <small>在「歌单」中点「＋」新建歌单。</small>
                                   )}
                                 </PopoverSurface>
                               </Popover>
@@ -808,6 +818,95 @@ export function LibraryPane({
             </>
           )}
         </section>
+      )}
+      {creating && (
+        <Dialog
+          open
+          onOpenChange={(_, v) => {
+            if (!v.open && !saving.current) setCreating(false)
+          }}
+        >
+          <DialogSurface className="component-popup library-action-dialog">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                if (!name.trim() || saving.current) return
+                saving.current = true
+                setSubmitting(true)
+                try {
+                  if (await create(name, initialMembers)) {
+                    setCreating(false)
+                    setSelection(null)
+                    setSidebar(false)
+                  }
+                } finally {
+                  saving.current = false
+                  setSubmitting(false)
+                }
+              }}
+            >
+              <DialogBody>
+                <DialogTitle>新建歌单</DialogTitle>
+                <DialogContent className="new-playlist-content">
+                  <Input
+                    aria-label="歌单名称"
+                    placeholder="歌单名称"
+                    maxLength={80}
+                    value={name}
+                    onChange={(_, v) => setName(v.value)}
+                  />
+                  <details>
+                    <summary>
+                      添加本地歌曲（可选）
+                      {initialMembers.length ? ' · 已选 ' + initialMembers.length + ' 首' : ''}
+                    </summary>
+                    <Input
+                      aria-label="筛选本地歌曲"
+                      placeholder="搜索歌名、艺人或专辑"
+                      value={memberQuery}
+                      onChange={(_, v) => {
+                        setMemberQuery(v.value)
+                        setMemberLimit(100)
+                      }}
+                    />
+                    <div className="new-playlist-members">
+                      {candidates.slice(0, memberLimit).map((t) => (
+                        <Checkbox
+                          key={t.id}
+                          disabled={submitting}
+                          checked={initialSelection.has(t.id)}
+                          label={[t.title, t.artist].filter(Boolean).join(' · ')}
+                          onChange={(_, v) =>
+                            setInitialMembers((prev) =>
+                              v.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id),
+                            )
+                          }
+                        />
+                      ))}
+                      {!candidates.length && (
+                        <small>{memberQuery ? '没有匹配歌曲' : '曲库还没有本地歌曲'}</small>
+                      )}
+                      {candidates.length > memberLimit && (
+                        <Button size="small" onClick={() => setMemberLimit((n) => n + 100)}>
+                          显示更多
+                        </Button>
+                      )}
+                    </div>
+                  </details>
+                  {error && <p role="alert">{error}</p>}
+                </DialogContent>
+                <DialogActions>
+                  <Button disabled={submitting} onClick={() => setCreating(false)}>
+                    取消
+                  </Button>
+                  <Button appearance="primary" type="submit" disabled={!name.trim() || submitting}>
+                    创建
+                  </Button>
+                </DialogActions>
+              </DialogBody>
+            </form>
+          </DialogSurface>
+        </Dialog>
       )}
       {action && (
         <Dialog

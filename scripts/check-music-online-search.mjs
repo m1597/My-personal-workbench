@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { _electron as electron, expect } from '@playwright/test'
 import { offlineSourceRepository } from './music-source-fixture.mjs'
-import { selectMusicSettings } from './music-settings-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 
 await fs.mkdir('tmp', { recursive: true })
 const root = await fs.mkdtemp(path.resolve('tmp/music-online-search-'))
@@ -90,7 +90,7 @@ try {
   const result = () =>
     page.getByRole('listitem').filter({ has: page.getByText('远山', { exact: true }) })
   const search = async () => {
-    await tab('搜索音乐').click()
+    await tab('在线找歌').click()
     const input = page.getByRole('textbox', { name: '搜索关键词' })
     await input.fill('远山 青禾')
     await input.press('Enter')
@@ -111,11 +111,11 @@ try {
     await expect(page.locator('.music-player')).toContainText('远山')
   }
   await button('跳过').click()
-  await tab('本地曲库').click()
+  await tab('歌单').click()
   await button('新建歌单').click()
   await page.getByLabel('歌单名称').fill('路上听')
   await button('创建').click()
-  await tab('设置').click()
+  await openMusicSettings(page)
   await selectMusicSettings(page, '音乐源')
   await choose(app, source)
   await button('本地导入').click()
@@ -137,7 +137,7 @@ try {
   await app.close()
   app = await launch()
   page = await app.firstWindow()
-  await tab('本地曲库').click()
+  await tab('歌单').click()
   await button('路上听').click()
   await expect(page.locator('.library-name strong')).toHaveText(['远山'])
   await button('播放远山').click()
@@ -159,7 +159,7 @@ try {
   const audio = (await fs.readdir(downloads)).filter((f) => f.endsWith('.mp3'))
   assert.equal(audio.length, 1)
   assert.deepEqual(await fs.readFile(path.join(downloads, audio[0])), await fs.readFile(tone))
-  await tab('本地曲库').click()
+  await tab('曲库').click()
   await button('全部歌曲').click()
   await expect(page.locator('.library-name strong')).toHaveText(['试音 mp3'])
   console.log('PASS 搜索页播放、加入指定歌单、重启后在线播放、设置目录手动下载及永久入库 · ' + root)
