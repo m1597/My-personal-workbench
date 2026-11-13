@@ -1,6 +1,7 @@
 # music-audition Specification
 
 ## Purpose
+
 规定 Music 的在线录音搜索、流式播放、歌单下载和发行动态浏览，以及这些操作在播放栏和各页面之间的衔接。
 
 ## Requirements
