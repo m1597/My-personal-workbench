@@ -110,17 +110,48 @@ async function checkBatchUpgrade() {
       await expect
         .poll(async () => (await rows().allTextContents()).sort())
         .toEqual(currentTitles.sort())
+      // Exercise real generation and termination while the old physical files stay indexed.
+      await app.evaluate(({ dialog }) => {
+        dialog.showOpenDialog = async () => {
+          throw Error('临时目录不可用')
+        }
+      })
+      const generate = () =>
+        page.evaluate(() => window.music.generate('临时离线验收', 'auto', false, 5))
+      await generate()
+      const verifyVisibleBatch = async (state) => {
+        const snapshot = await page.evaluate(() => window.music.state())
+        assert.equal(snapshot.batches[0].state, state)
+        assert.deepEqual(snapshot.playlists.find((p) => p.system).tracks, [])
+        await page.getByRole('tab', { name: '每日推荐' }).click()
+        await expect(page.locator('.music-track strong')).toHaveCount(0)
+        await page.getByRole('tab', { name: '本地曲库' }).click()
+        await folderButton.click()
+        await expect(rows()).toHaveCount(15)
+        await button('歌曲推荐').and(page.locator('button:not([title="歌曲推荐"])')).click()
+        await expect(rows()).toHaveCount(0)
+      }
+      await verifyVisibleBatch('blocked')
+      await app.evaluate(({ dialog }) => {
+        dialog.showOpenDialog = () =>
+          new Promise((resolve) => {
+            globalThis.closeTestPicker = () => resolve({ canceled: true, filePaths: [] })
+          })
+      })
+      const generating = generate()
+      await expect
+        .poll(() => app.evaluate(() => typeof globalThis.closeTestPicker))
+        .toBe('function')
+      const stopping = page.evaluate(() => window.music.stopGeneration())
+      await app.evaluate(() => globalThis.closeTestPicker())
+      await Promise.all([stopping, generating])
+      await verifyVisibleBatch('cancelled')
     } finally {
       await app?.close()
       app = undefined
       db = new MusicStore(legacyRoot)
     }
-    for (const result of ['blocked', 'cancelled']) {
-      db.expireRecommendations(undefined, true)
-      const next = db.saveSuggestions(result, [], '待处理', undefined, 5)
-      db.db.prepare('UPDATE recommendation_runs SET state=? WHERE batch=?').run(result, next)
-      verify([])
-    }
+    verify([])
     for (const file of files) assert.deepEqual(await readFile(file), wave)
     console.log(
       'PASS 升级前 15 个推荐成员，升级后与今日页同为 5 首；空轮与终止均为 0，同名目录保留 15 个原文件。',
