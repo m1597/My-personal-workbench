@@ -20,6 +20,115 @@ const titles = ['手动移出', '未定位移出', '外部删除', '暂时断盘
 const customName = '通勤收藏'
 const output = { root }
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
+// Upgrade a mixed library in which the old view exposed ten historical references
+// next to the five recordings downloaded by the latest generation.
+async function checkBatchUpgrade() {
+  const upgradeProfile = path.join(root, 'upgrade')
+  const legacyRoot = path.join(upgradeProfile, 'fitbay-music')
+  const folder = path.join(legacyRoot, '歌曲推荐')
+  await mkdir(folder, { recursive: true })
+  let db = new MusicStore(legacyRoot)
+  const currentIds = []
+  const files = []
+  try {
+    db.set('music-guide-v1', 1)
+    db.set('music-muted', 'on')
+    db.set('music-media-keys', 'off')
+    const legacyBatch = db.saveSuggestions('早期普通批次', [], '待处理')
+    const historicFile = path.join(folder, '升级验收0.wav')
+    db.library.upsert({
+      file: historicFile,
+      title: '升级验收0',
+      artist: '验收',
+      album: '',
+      duration: 20,
+    })
+    const historicId = db.db
+      .prepare('SELECT id FROM local_tracks WHERE file=?')
+      .get(historicFile).id
+    db.db.prepare('INSERT INTO restored_recommendations VALUES(?)').run(historicId)
+    assert.deepEqual(
+      db.snapshot().items.filter((i) => i.batch === legacyBatch),
+      [],
+    )
+    assert.deepEqual(db.library.playlists().find((p) => p.system)?.tracks ?? [], [])
+    const current = db.saveSuggestions('本轮', [], '待处理', undefined, 5)
+    for (let n = 0; n < 15; n++) {
+      const title = `升级验收${n}`
+      const file = path.join(folder, `${title}.wav`)
+      files.push(file)
+      await writeFile(file, wave)
+      db.library.upsert({ file, title, artist: '验收', album: '', duration: 20 })
+      const { id } = db.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file)
+      if (n < 5) db.db.prepare('INSERT OR IGNORE INTO restored_recommendations VALUES(?)').run(id)
+      else {
+        db.saveSuggestions('本轮', [{ title, artist: '验收', reason: '' }], '待处理', current)
+        const item = db.db.prepare('SELECT id FROM items WHERE title=?').get(title).id
+        db.status(item, '已入库')
+        db.db.prepare('UPDATE recommended_items SET local=? WHERE item=?').run(id, item)
+        if (n < 10) db.db.prepare('UPDATE items SET batch=NULL WHERE id=?').run(item)
+        else {
+          currentIds.push(id)
+          db.db
+            .prepare('INSERT INTO daily_downloads VALUES(?,?,?,?,?)')
+            .run(id, current, file, '', null)
+        }
+      }
+    }
+    // Persist the legacy view to exercise an in-place upgrade on the next open.
+    db.db.exec(`DROP VIEW recommendation_playlist_members;
+      CREATE VIEW recommendation_playlist_members AS
+      SELECT local AS track,0 AS source,rowid AS position FROM recommended_items WHERE local IS NOT NULL
+      UNION ALL SELECT track,1,rowid FROM restored_recommendations`)
+    assert.equal(
+      db.db.prepare('SELECT COUNT(*) AS n FROM recommendation_playlist_members').get().n,
+      15,
+    )
+    db.db.close()
+    db = new MusicStore(legacyRoot)
+    const verify = (expected) => {
+      const state = db.snapshot()
+      assert.deepEqual(
+        state.items.filter((i) => i.batch === state.batches[0].id).map((i) => i.localId),
+        expected,
+      )
+      assert.deepEqual(state.playlists.find((p) => p.system)?.tracks, expected)
+      assert.equal(state.localTracks.filter((t) => t.folder.name === '歌曲推荐').length, 15)
+    }
+    verify(currentIds)
+    db.db.close()
+    try {
+      await launch(upgradeProfile, false)
+      await page.getByRole('tab', { name: '每日推荐' }).click()
+      const currentTitles = files.slice(10).map((file) => path.basename(file, '.wav'))
+      await expect(page.locator('.music-track strong')).toHaveText(currentTitles)
+      await page.getByRole('tab', { name: '本地曲库' }).click()
+      const folderButton = page.locator('button[title="歌曲推荐"]')
+      await folderButton.click()
+      await expect(rows()).toHaveCount(15)
+      await button('歌曲推荐').and(page.locator('button:not([title="歌曲推荐"])')).click()
+      await expect
+        .poll(async () => (await rows().allTextContents()).sort())
+        .toEqual(currentTitles.sort())
+    } finally {
+      await app?.close()
+      app = undefined
+      db = new MusicStore(legacyRoot)
+    }
+    for (const result of ['blocked', 'cancelled']) {
+      db.expireRecommendations(undefined, true)
+      const next = db.saveSuggestions(result, [], '待处理', undefined, 5)
+      db.db.prepare('UPDATE recommendation_runs SET state=? WHERE batch=?').run(result, next)
+      verify([])
+    }
+    for (const file of files) assert.deepEqual(await readFile(file), wave)
+    console.log(
+      'PASS 升级前 15 个推荐成员，升级后与今日页同为 5 首；空轮与终止均为 0，同名目录保留 15 个原文件。',
+    )
+  } finally {
+    db.db.close()
+  }
+}
 const paths = titles.map((title, index) =>
   path.join(index === 3 ? absentDrive : audio, `${title}.wav`),
 )
@@ -33,7 +142,7 @@ try {
     artist: '验收音乐人',
     reason: '系统歌单验收',
   }))
-  const batch = store.saveSuggestions('专项验收', suggestions, '待处理')
+  const batch = store.saveSuggestions('专项验收', suggestions, '待处理', undefined, titles.length)
   for (const [i, row] of suggestions.entries()) {
     if ([0, 2, 5].includes(i)) await writeFile(paths[i], wave)
     store.library.upsert({ ...row, file: paths[i], album: '验收', duration: 20 })
@@ -46,11 +155,8 @@ try {
     const item = store.db
       .prepare('SELECT id FROM items WHERE title=? AND batch=?')
       .get(row.title, batch)
-    // Exercise both current recommendations and restored playlist memberships.
-    if (i !== 4) {
-      store.db.prepare('UPDATE recommended_items SET local=? WHERE item=?').run(id, item.id)
-      store.status(item.id, '已入库')
-    }
+    store.db.prepare('UPDATE recommended_items SET local=? WHERE item=?').run(id, item.id)
+    store.status(item.id, '已入库')
     if ([0, 2, 4].includes(i))
       store.db.prepare('INSERT INTO restored_recommendations VALUES(?)').run(id)
   }
@@ -67,14 +173,14 @@ const screenshot = (name) =>
     path: path.join(root, `${name}.png`),
     style: ':root { background: var(--base) !important }',
   })
-async function launch() {
+async function launch(userData = profile, openPlaylist = true) {
   app = await electron.launch({
     args: [
       path.resolve('dist/component-prototype/host'),
       '--mode=music',
       '--mute-audio',
       `--workbench=${path.resolve('out/renderer/index.html')}`,
-      `--user-data-dir=${profile}`,
+      `--user-data-dir=${userData}`,
     ],
     env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
   })
@@ -97,8 +203,10 @@ async function launch() {
       )
     }),
   )
-  await page.getByRole('tab', { name: '本地曲库' }).click()
-  await button('歌曲推荐').click()
+  if (openPlaylist) {
+    await page.getByRole('tab', { name: '本地曲库' }).click()
+    await button('歌曲推荐').click()
+  }
 }
 async function checkMembers(expected) {
   await expect
@@ -140,6 +248,7 @@ async function checkMembers(expected) {
   }
 }
 try {
+  await checkBatchUpgrade()
   await launch()
   output.before = await checkMembers(titles)
   await button('多选').click()

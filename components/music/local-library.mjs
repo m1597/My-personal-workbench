@@ -75,13 +75,21 @@ export class LocalLibrary {
       this.db.exec(`
         CREATE INDEX IF NOT EXISTS recommended_local_track ON recommended_items(local);
         CREATE TABLE IF NOT EXISTS removed_recommendation_members(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE);
-        CREATE VIEW IF NOT EXISTS recommendation_playlist_members AS
+        DROP VIEW IF EXISTS recommendation_playlist_members;
+        CREATE VIEW recommendation_playlist_members AS
           SELECT track, source, position FROM (
             SELECT r.local AS track, 0 AS source, MIN(r.rowid) AS position
-              FROM recommended_items r JOIN local_tracks t ON t.id=r.local GROUP BY r.local
+              FROM recommended_items r JOIN local_tracks t ON t.id=r.local
+              JOIN items i ON i.id=r.item JOIN batches b ON b.id=i.batch
+              WHERE i.status='已入库' AND b.id=COALESCE(
+                (SELECT value FROM state WHERE key='latest-daily-run'),
+                (SELECT id FROM batches ORDER BY rowid DESC LIMIT 1))
+              GROUP BY r.local
             UNION ALL
             SELECT s.track, 1 AS source, s.rowid AS position FROM restored_recommendations s
-              WHERE NOT EXISTS (SELECT 1 FROM recommended_items r WHERE r.local=s.track)
+              WHERE NOT EXISTS (SELECT 1 FROM state WHERE key='latest-daily-run')
+              AND NOT EXISTS (SELECT 1 FROM batches)
+              AND NOT EXISTS (SELECT 1 FROM recommended_items r WHERE r.local=s.track)
           ) AS members WHERE NOT EXISTS (SELECT 1 FROM removed_recommendation_members x WHERE x.track=members.track);
       `)
       if (!trackColumns.some((column) => column.name === 'language'))
@@ -277,6 +285,7 @@ export class LocalLibrary {
       .map((row) => row.track)
     return [
       ...(systemTracks.length ||
+      this.db.prepare("SELECT 1 FROM state WHERE key='latest-daily-run'").get() ||
       this.db.prepare('SELECT 1 FROM removed_recommendation_members LIMIT 1').get()
         ? [
             {
