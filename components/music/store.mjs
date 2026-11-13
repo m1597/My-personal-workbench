@@ -393,6 +393,7 @@ export class MusicStore {
       playlists: this.library.playlists(),
       importJob: this.library.job,
       queue: JSON.parse(this.get('play-queue') || '[]'),
+      queueOccurrence: Number(this.get('queue-occurrence') || 0),
       batches,
       items,
       summary: this.preferenceSummary(),

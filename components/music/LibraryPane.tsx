@@ -94,6 +94,7 @@ type Props = SidebarSorting & {
   onQueue: (id: string, next: boolean) => void
   dismiss: (id: string) => void
   playRow: (id: string) => void
+  queueAlbumNext: (ids: string[]) => void
   playAlbum: (id: string, queue: string[]) => void
   error: string
   remove: (id: string | string[], trash: boolean) => Promise<boolean>
@@ -130,6 +131,7 @@ export function LibraryPane({
   error,
   playRow,
   playAlbum,
+  queueAlbumNext,
   onQueue,
   dismiss,
   renameList,
@@ -415,6 +417,7 @@ export function LibraryPane({
               tracks={tracks}
               active={active}
               play={playAlbum}
+              queueNext={queueAlbumNext}
             />
           ) : (
             <>

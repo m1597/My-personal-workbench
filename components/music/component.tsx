@@ -115,6 +115,7 @@ type State = {
   albumRevision: number
   importJob: ImportJob
   queue: string[]
+  queueOccurrence: number
   hasLibrary: boolean
 }
 type Presentation = 'full' | 'bar' | 'background'
@@ -180,8 +181,8 @@ declare global {
       mediaFailed(id: string, url: string): Promise<void>
       localSource(id: string): Promise<string>
       dismissRecommendation(id: string): Promise<void>
-      setQueue(ids: string[]): Promise<void>
-      playQueue(id: string, ids: string[], position: number): Promise<void>
+      setQueue(ids: string[], occurrence?: number): Promise<void>
+      playQueue(id: string, ids: string[], position: number, occurrence?: number): Promise<void>
       state(): Promise<State>
       draft(s: string): Promise<void>
       getTasteStatus(): Promise<TasteStatus>
@@ -226,8 +227,16 @@ declare global {
 configureBackdrop()
 const host = window.music
 const playable = (row: Item) => ['已入库', '就绪'].includes(row.status)
+function occurrenceIndex(ids: string[], id: string, occurrence = 0) {
+  let index = ids.indexOf(id)
+  for (let i = 0; i < occurrence && index >= 0; i++) index = ids.indexOf(id, index + 1)
+  return index < 0 ? ids.indexOf(id) : index
+}
+function occurrenceAt(ids: string[], index: number) {
+  return ids.slice(0, index).filter((id) => id === ids[index]).length
+}
 function shuffleQueue(ids: string[], first?: string) {
-  const result = ids.filter((id) => id !== first)
+  const result = [...new Set(ids)].filter((id) => id !== first)
   for (let i = result.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[result[i], result[j]] = [result[j], result[i]]
@@ -477,39 +486,45 @@ function Music() {
     ...(state?.items ?? []).filter(playable).map((t) => t.id),
   ])
   const order = shuffled ?? queue
-  const index = order.indexOf(now)
+  const index = occurrenceIndex(order, now, state?.queueOccurrence)
   const navigable = new Set([
     ...available,
     ...(state?.items ?? []).filter((r) => r.online).map((r) => r.id),
   ])
   const playableQueue = queue.filter((id) => navigable.has(id))
-  const following =
-    index >= 0
-      ? (order.slice(index + 1).find((id) => navigable.has(id)) ??
-        (repeatOne && playableQueue.length > 1 ? playableQueue[0] : undefined))
-      : undefined
-  const preceding =
-    index >= 0
-      ? (order
-          .slice(0, index)
-          .reverse()
-          .find((id) => navigable.has(id)) ??
-        (repeatOne && playableQueue.length > 1 ? playableQueue.at(-1) : undefined))
-      : undefined
-  function onQueue(id: string, next: boolean) {
+  function adjacentIndex(direction: number) {
+    if (index < 0) return -1
+    for (let step = 1; step < order.length; step++) {
+      const next = index + step * direction
+      if (!repeatOne && (next < 0 || next >= order.length)) break
+      const position = (next + order.length) % order.length
+      if (navigable.has(order[position])) return position
+    }
+    return -1
+  }
+  const following = adjacentIndex(1)
+  const preceding = adjacentIndex(-1)
+  function onQueue(input: string | string[], next: boolean) {
     const update = async () => {
       const latest = await host.state()
       const currentId = current.current || latest.current
+      const added = new Set(typeof input === 'string' ? [input] : input)
+      const albumIncludesCurrent = Array.isArray(input) && added.has(currentId)
+      if (!albumIncludesCurrent) added.delete(currentId)
       function arrange(ids: string[]) {
-        if (currentId === id) return ids.includes(id) ? ids : [id, ...ids]
-        const result = ids.filter((key) => key !== id)
+        const currentIndex = occurrenceIndex(ids, currentId, latest.queueOccurrence)
+        const result = ids.filter((key, i) => i === currentIndex || !added.has(key))
         if (currentId && !result.includes(currentId)) result.unshift(currentId)
-        const position = next ? result.indexOf(currentId) + 1 : result.length
-        result.splice(position, 0, id)
+        const anchor = occurrenceIndex(
+          result,
+          currentId,
+          albumIncludesCurrent ? 0 : latest.queueOccurrence,
+        )
+        result.splice(next ? anchor + 1 : result.length, 0, ...added)
         return result
       }
       const ids = arrange(latest.queue.length ? latest.queue : legacyQueue)
-      await host.setQueue(ids)
+      await host.setQueue(ids, albumIncludesCurrent ? 0 : latest.queueOccurrence)
       setShuffled((prev) => prev && arrange(prev))
       await refresh()
     }
@@ -528,8 +543,10 @@ function Music() {
   }
   function resumeOrStart() {
     if (!primary) return Promise.resolve()
-    if (primary === now && queue.includes(primary)) return navigate(primary, queue)
-    if (queue.length && order.includes(primary)) return navigate(primary, queue)
+    if (primary === now && queue.includes(primary))
+      return navigate(primary, queue, state?.queueOccurrence)
+    if (queue.length && order.includes(primary))
+      return navigate(primary, queue, state?.queueOccurrence)
     if (shuffled) {
       const nextOrder = shuffleQueue(visibleQueue)
       setShuffled(nextOrder)
@@ -537,13 +554,14 @@ function Music() {
     }
     return navigate(primary, visibleQueue)
   }
-  function play(id: string, ids = visibleQueue) {
+  function play(id: string, ids = visibleQueue, occurrence = 0, restart = false) {
     const seq = ++epoch.current
     const run = async () => {
       const el = audio.current
       if (!el || seq !== epoch.current) return
       if (current.current === id) {
-        await host.playQueue(id, ids, el.currentTime)
+        if (restart) el.currentTime = 0
+        await host.playQueue(id, ids, el.currentTime, occurrence)
         await el.play()
         return
       }
@@ -571,20 +589,23 @@ function Music() {
       el.src = src
       el.currentTime = resume
       setTime(resume)
-      await host.playQueue(id, ids, resume)
+      await host.playQueue(id, ids, resume, occurrence)
       await el.play()
     }
     const operation = switching.current.then(run)
     switching.current = operation.catch(() => {})
     return operation
   }
-  async function navigate(id: string, ids: string[]) {
+  async function navigate(id: string, ids: string[], occurrence = 0, restart = false) {
     const row = state?.items.find((r) => r.id === id)
     if (row?.online && !playable(row)) await audition(row, undefined, undefined, ids)
-    else await play(id, ids)
+    else await play(id, ids, occurrence, restart)
+  }
+  function navigateAt(position: number) {
+    return navigate(order[position], queue, occurrenceAt(order, position), true)
   }
   async function next() {
-    if (following) await navigate(following, queue)
+    if (following >= 0) await navigateAt(following)
     else if (shuffled && playableQueue.length) {
       const round = shuffleQueue(playableQueue)
       if (round.length > 1 && round[0] === now) {
@@ -692,14 +713,14 @@ function Music() {
   }
   const transport = useEffectEvent((action: TransportAction) => {
     if (action === 'toggle') togglePlayback()
-    else if (action === 'previous' && preceding) void act(() => navigate(preceding, queue))
+    else if (action === 'previous' && preceding >= 0) void act(() => navigateAt(preceding))
     else if (action === 'next' && canNext) void act(next)
   })
   useEffect(() => window.musicWindow.onTransport((action) => transport(action)), [])
-  const canPrevious = Boolean(preceding)
+  const canPrevious = preceding >= 0
   const canToggle = Boolean(primary)
   const canNext =
-    !resolving && Boolean(following || (shuffled && index >= 0 && playableQueue.length))
+    !resolving && Boolean(following >= 0 || (shuffled && index >= 0 && playableQueue.length))
   const modeName = shuffled ? '随机播放' : repeatOne ? '单曲循环' : '顺序播放'
   const nextModeName = shuffled ? '单曲循环' : repeatOne ? '顺序播放' : '随机播放'
   useEffect(() => {
@@ -875,6 +896,7 @@ function Music() {
             play={(id, ids) => void act(() => startTrack(id, ids))}
             relocate={(id) => void act(() => host.relocateLocal(id))}
             error={error}
+            queueAlbumNext={(ids) => onQueue(ids, true)}
             onQueue={onQueue}
             dismiss={(id) => void act(() => host.dismissRecommendation(id))}
             playRow={(id) => void act(() => play(id, visibleQueue))}
@@ -1295,9 +1317,9 @@ function Music() {
             aria-label="上一首"
             title="上一首"
             icon={<SkipBack size={17} />}
-            disabled={!preceding}
+            disabled={preceding < 0}
             onClick={() => {
-              if (preceding) void act(() => navigate(preceding, queue))
+              if (preceding >= 0) void act(() => navigateAt(preceding))
             }}
           />
           <Button

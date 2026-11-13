@@ -348,18 +348,30 @@ export function musicService(
         .all()
         .map((row) => row.id),
     )
-    if (
-      ids.length > known.size ||
-      ids.some((key) => !known.has(key)) ||
-      new Set(ids).size !== ids.length
-    )
-      throw Error('播放队列无效')
+    // Each insertion can retain the current occurrence and add one in album order.
+    if (ids.length > known.size * 2) throw Error('播放队列无效')
+    const remaining = new Set(known)
+    for (const id of ids) {
+      if (!remaining.delete(id) && !known.delete(id)) throw Error('播放队列无效')
+    }
   }
-  bind('setQueue', (ids) => {
+  function validateOccurrence(occurrence) {
+    if (occurrence !== 0 && occurrence !== 1) throw Error('播放队列位置无效')
+  }
+  bind('setQueue', (ids, occurrence = 0) => {
     validateQueue(ids)
-    store.set('play-queue', JSON.stringify(ids))
+    validateOccurrence(occurrence)
+    store.db.exec('BEGIN')
+    try {
+      store.set('play-queue', JSON.stringify(ids))
+      store.set('queue-occurrence', String(occurrence))
+      store.db.exec('COMMIT')
+    } catch (error) {
+      store.db.exec('ROLLBACK')
+      throw error
+    }
   })
-  bind('playQueue', (id, ids, position) => {
+  bind('playQueue', (id, ids, position, occurrence = 0) => {
     if (
       !(store.active === id || grant?.id === id) ||
       !Array.isArray(ids) ||
@@ -378,9 +390,11 @@ export function musicService(
       store.db.exec('ROLLBACK')
       throw e
     }
+    validateOccurrence(occurrence)
   })
   bind('state', () => ({
     ...store.snapshot(),
+      store.set('queue-occurrence', String(occurrence))
     models: modelInfo(store),
     prefs: {
       ...getMusicPreferences(store),

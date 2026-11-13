@@ -23,6 +23,7 @@ export function PlaybackQueue({
   const upcoming = open
     ? order.slice(index + 1).filter((id) => navigable.has(id) && songs.has(id))
     : []
+  const seen = new Set<string>()
   return (
     <Popover positioning="above" open={open} onOpenChange={(_, d) => setOpen(d.open)}>
       <PopoverTrigger disableButtonEnhancement>
@@ -47,8 +48,10 @@ export function PlaybackQueue({
             {upcoming.map((id) => {
               const row = songs.get(id)
               if (!row) return null
+              const key = seen.has(id) ? id + ':repeat' : id
+              seen.add(id)
               return (
-                <li key={id}>
+                <li key={key}>
                   {row.title} · {row.artist}
                 </li>
               )

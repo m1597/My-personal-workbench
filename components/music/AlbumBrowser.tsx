@@ -1,6 +1,16 @@
-import { Button, Input } from '@fluentui/react-components'
-import { ArrowLeft, Disc3, Play, Search } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Button,
+  Checkbox,
+  Input,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
+  MenuItemRadio,
+} from '@fluentui/react-components'
+import { ArrowLeft, ArrowDownUp, Disc3, Play, Search } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatTime, type LocalTrack } from './LibraryPane'
 import './albums.css'
 
@@ -54,16 +64,26 @@ type Props = {
   revision: number
   tracks: LocalTrack[]
   active: string
+  queueNext: (ids: string[]) => void
   play: (id: string, queue: string[]) => void
 }
 
-export function AlbumBrowser({ revision, tracks, active, play }: Props) {
+const sortLabels = { name: '专辑名称', descending: '曲数从多到少', ascending: '曲数从少到多' }
+type AlbumSort = keyof typeof sortLabels
+const batchSize = 48
+
+export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Props) {
   const [albums, setAlbums] = useState<Album[]>()
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [chosen, setChosen] = useState('')
   const [search, setSearch] = useState('')
-  const [limit, setLimit] = useState(48)
+  const [limit, setLimit] = useState(batchSize)
+  const [sort, setSort] = useState<AlbumSort>('name')
+  const [multiple, setMultiple] = useState(false)
+  const section = useRef<HTMLElement>(null)
+  const sentinel = useRef<HTMLDivElement>(null)
+  const listOffset = useRef(0)
   const trackMap = useMemo(
     () => new Map(tracks.filter((row) => row.listed).map((row) => [row.id, row])),
     [tracks],
@@ -97,9 +117,40 @@ export function AlbumBrowser({ revision, tracks, active, play }: Props) {
   )
   const selected = listed.find((album) => album.id === chosen)
   const query = search.trim().toLocaleLowerCase()
-  const filtered = listed.filter((album) =>
-    [album.title, album.artist].some((value) => value.toLocaleLowerCase().includes(query)),
-  )
+  const filtered = useMemo(() => {
+    const result = listed.filter(
+      (album) =>
+        (!multiple || album.tracks.length >= 2) &&
+        [album.title, album.artist].some((value) => value.toLocaleLowerCase().includes(query)),
+    )
+    if (sort !== 'name')
+      result.sort((a, b) =>
+        sort === 'descending'
+          ? b.tracks.length - a.tracks.length
+          : a.tracks.length - b.tracks.length,
+      )
+    return result
+  }, [listed, multiple, query, sort])
+  const detailOpen = Boolean(selected)
+  useLayoutEffect(() => {
+    const scroll = section.current?.closest('.music-scroll')
+    scroll?.scrollTo(0, detailOpen ? 0 : listOffset.current)
+  }, [detailOpen])
+  useEffect(() => {
+    const target = sentinel.current
+    if (detailOpen || limit >= filtered.length || !target) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          observer.disconnect()
+          setLimit(limit + batchSize)
+        }
+      },
+      { root: target.closest('.music-scroll'), rootMargin: '0px 0px 400px' },
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [detailOpen, filtered.length, limit])
   if (error)
     return (
       <div role="alert">
@@ -113,7 +164,7 @@ export function AlbumBrowser({ revision, tracks, active, play }: Props) {
   if (selected) {
     const queue = selected.tracks.filter((id) => trackMap.get(id)?.available)
     return (
-      <section aria-label="专辑曲目" className="album-detail">
+      <section ref={section} aria-label="专辑曲目" className="album-detail">
         <Button
           className="album-back"
           size="small"
@@ -171,7 +222,7 @@ export function AlbumBrowser({ revision, tracks, active, play }: Props) {
     )
   }
   return (
-    <section aria-label="专辑列表" className="album-browser">
+    <section ref={section} aria-label="专辑列表" className="album-browser">
       <Input
         aria-label="搜索本地专辑"
         type="search"
@@ -180,30 +231,80 @@ export function AlbumBrowser({ revision, tracks, active, play }: Props) {
         value={search}
         onChange={(_, d) => {
           setSearch(d.value)
-          setLimit(48)
+          setLimit(batchSize)
         }}
       />
-      <small>{filtered.length} 张专辑</small>
+      <div className="album-controls">
+        <Menu checkedValues={{ sort: [sort] }}>
+          <MenuTrigger disableButtonEnhancement>
+            <Button size="small" icon={<ArrowDownUp size={15} />} aria-label="专辑排序">
+              {sortLabels[sort]}
+            </Button>
+          </MenuTrigger>
+          <MenuPopover className="component-popup">
+            <MenuList>
+              {(Object.keys(sortLabels) as AlbumSort[]).map((value) => (
+                <MenuItemRadio
+                  key={value}
+                  name="sort"
+                  value={value}
+                  onClick={() => {
+                    setSort(value)
+                    setLimit(batchSize)
+                  }}
+                >
+                  {sortLabels[value]}
+                </MenuItemRadio>
+              ))}
+            </MenuList>
+          </MenuPopover>
+        </Menu>
+        <Checkbox
+          label="只看 2 首及以上"
+          checked={multiple}
+          onChange={(_, data) => {
+            setMultiple(data.checked === true)
+            setLimit(batchSize)
+          }}
+        />
+        <small>{filtered.length} 张专辑</small>
+      </div>
       <div className="album-grid">
         {filtered.slice(0, limit).map((album) => (
-          <button
-            type="button"
-            key={album.id}
-            className="album-tile"
-            aria-label={album.title + ' · ' + album.artist}
-            onClick={() => setChosen(album.id)}
-          >
-            <Cover key={revision} id={album.id} />
-            <strong title={album.title}>{album.title}</strong>
-            <small title={album.artist}>
-              {album.artist} · {album.tracks.length} 首
-            </small>
-          </button>
+          <Menu key={album.id} openOnContext>
+            <MenuTrigger disableButtonEnhancement>
+              <button
+                type="button"
+                className="album-tile"
+                aria-label={album.title + ' · ' + album.artist}
+                onClick={() => {
+                  listOffset.current = section.current?.closest('.music-scroll')?.scrollTop ?? 0
+                  setChosen(album.id)
+                }}
+              >
+                <Cover key={revision} id={album.id} />
+                <strong title={album.title}>{album.title}</strong>
+                <small title={album.artist}>
+                  {album.artist} · {album.tracks.length} 首
+                </small>
+              </button>
+            </MenuTrigger>
+            <MenuPopover className="component-popup">
+              <MenuList>
+                <MenuItem
+                  disabled={!album.tracks.some((id) => trackMap.get(id)?.available)}
+                  onClick={() =>
+                    queueNext(album.tracks.filter((id) => trackMap.get(id)?.available))
+                  }
+                >
+                  下一首播放整张
+                </MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>
         ))}
       </div>
-      {filtered.length > limit && (
-        <Button onClick={() => setLimit((n) => n + 48)}>显示更多专辑</Button>
-      )}
+      {filtered.length > limit && <div ref={sentinel} aria-hidden="true" />}
       {!filtered.length && (
         <p className="music-empty">
           {listed.length ? '没有匹配的专辑' : '导入本地歌曲后，可在这里按专辑浏览。'}
