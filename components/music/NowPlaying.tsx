@@ -4,6 +4,8 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { Cover } from './AlbumBrowser'
 import './now-playing.css'
 
+const readingKeys = new Set(['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'])
+
 export type LyricLine = [number | null, string]
 
 type Props = {
@@ -31,13 +33,17 @@ export function NowPlaying({
   const [following, setFollowing] = useState(true)
   const timed = lines?.[0]?.[0] != null
   const initialized = useRef(false)
+  const frame = useRef(0)
+  function browse() {
+    cancelAnimationFrame(frame.current)
+    setFollowing(false)
+  }
   useLayoutEffect(() => {
     const pane = viewport.current
     if (!pane || !following || lines?.[0]?.[0] == null) return
-    let frame = 0
     function align(animate: boolean) {
       if (!pane) return
-      cancelAnimationFrame(frame)
+      cancelAnimationFrame(frame.current)
       const line = pane.children.item(activeLine) as HTMLElement | null
       const destination = line ? line.offsetTop - (pane.clientHeight - line.offsetHeight) / 2 : 0
       const start = pane.scrollTop
@@ -51,9 +57,9 @@ export function NowPlaying({
         const t = Math.min(1, (now - began) / 420)
         const eased = (1 - Math.cos(Math.PI * t)) / 2
         pane.scrollTop = start + (destination - start) * eased
-        if (t < 1) frame = requestAnimationFrame(step)
+        if (t < 1) frame.current = requestAnimationFrame(step)
       }
-      frame = requestAnimationFrame(step)
+      frame.current = requestAnimationFrame(step)
     }
     align(initialized.current)
     initialized.current = true
@@ -67,7 +73,7 @@ export function NowPlaying({
     })
     observer.observe(pane)
     return () => {
-      cancelAnimationFrame(frame)
+      cancelAnimationFrame(frame.current)
       observer.disconnect()
     }
   }, [activeLine, following, lines])
@@ -95,11 +101,19 @@ export function NowPlaying({
             data-timed={timed}
             ref={viewport}
             aria-label={timed ? '同步歌词' : '歌词文本'}
+            onKeyDown={(e) => {
+              if (timed && readingKeys.has(e.key)) browse()
+            }}
+            onFocus={(e) => {
+              if (timed && e.target.matches('button:focus-visible:not([aria-current])')) {
+                browse()
+              }
+            }}
             onWheel={(e) => {
-              if (timed && e.deltaY) setFollowing(false)
+              if (timed && e.deltaY) browse()
             }}
             onTouchMove={() => {
-              if (timed) setFollowing(false)
+              if (timed) browse()
             }}
           >
             {lines.map(([at, text], index) =>

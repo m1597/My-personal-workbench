@@ -114,7 +114,9 @@ try {
   await expect(overlay.locator('strong')).toHaveText('第一句')
   await expect(page.locator('.music-heading strong')).toHaveText('A')
   await expect(button('A')).toHaveCount(0)
-  await button('打开歌词页').click()
+  await button('打开歌词页').press('Enter')
+  await expect(button('打开歌词页')).toBeFocused()
+  await expect(button('回到当前歌词')).toHaveCount(0)
   const playerPage = page.getByRole('region', { name: '播放页' })
   const currentLine = playerPage.locator('[aria-current="true"]')
   await expect(currentLine).toHaveText('第一句')
@@ -204,6 +206,72 @@ try {
   await expect(currentLine).toHaveText('第一句')
   await button('暂停').click()
   const pane = playerPage.getByRole('region', { name: '同步歌词' })
+  const restore = button('回到当前歌词')
+  // Exercise native Chromium key scrolling while playback crosses a timestamp.
+  await currentLine.focus()
+  await currentLine.press('PageDown')
+  await expect(restore).toBeVisible()
+  await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBeGreaterThan(180)
+  async function readingPosition() {
+    return pane.evaluate(
+      (el) =>
+        new Promise((resolve) => {
+          let previous = -1
+          let still = 0
+          function sample() {
+            still = el.scrollTop === previous ? still + 1 : 0
+            previous = el.scrollTop
+            if (still >= 8) resolve(previous)
+            else requestAnimationFrame(sample)
+          }
+          requestAnimationFrame(sample)
+        }),
+    )
+  }
+  const pageDownTop = await readingPosition()
+  await page.locator('audio').evaluate((a) => {
+    a.currentTime = 4.5
+  })
+  await expect(currentLine).toHaveText('第二句')
+  assert.equal(await readingPosition(), pageDownTop)
+  await page.screenshot({ path: path.join(root, 'keyboard-page-down.png') })
+  await restore.press('Enter')
+  await expect(restore).toHaveCount(0)
+  await page.locator('audio').evaluate((a) => {
+    a.currentTime = 0
+  })
+  await expect(currentLine).toHaveText('第一句')
+  await currentLine.focus()
+  const lastLine = pane.getByRole('button').last()
+  for (let i = 1; i < (await pane.getByRole('button').count()); i++)
+    await page.keyboard.press('Tab')
+  await expect(lastLine).toBeFocused()
+  await expect(restore).toBeVisible()
+  const tabTop = await readingPosition()
+  await page.locator('audio').evaluate((a) => {
+    a.currentTime = 4.5
+  })
+  await expect(currentLine).toHaveText('第二句')
+  assert.equal(await readingPosition(), tabTop)
+  await page.screenshot({ path: path.join(root, 'keyboard-tab-reading.png') })
+  for (const key of ['Enter', 'Space']) {
+    await lastLine.press(key)
+    await expect(currentLine).toHaveText(tail.at(-1)[1])
+    await expect(restore).toHaveCount(0)
+    await button('暂停').click()
+    await page.locator('audio').evaluate((a) => {
+      a.currentTime = 0
+    })
+    await expect(currentLine).toHaveText('第一句')
+  }
+  await expect
+    .poll(() =>
+      currentLine.evaluate((line) => {
+        const p = line.parentElement
+        return Math.abs(line.offsetTop - p.scrollTop - (p.clientHeight - line.offsetHeight) / 2)
+      }),
+    )
+    .toBeLessThan(2)
   const client = await page.context().newCDPSession(page)
   const bounds = await pane.boundingBox()
   async function wheel(deltaY) {
