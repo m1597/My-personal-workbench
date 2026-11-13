@@ -9,4 +9,4 @@
 
 ## Impact
 
-涉及 Music 组件、私有数据库与宿主。沿用现有播放器和隔离 profile。原八项的验收记录见[前次清单](../manage-music-recommendations-and-library/tasks.md)。
+涉及 Music 组件、私有数据库与宿主。沿用现有播放器和隔离 profile。原八项的验收记录见[前次清单](../../manage-music-recommendations-and-library/tasks.md)。
