@@ -44,6 +44,9 @@ ShowInstDetails show
 Section "FitBay 工作台（必选）"
   SectionIn RO
   !insertmacro InstallProduct WORKBENCH "工作台" "$INSTDIR"
+  ; Keep the verified standalone installer for a later offline addition.
+  SetOutPath "$INSTDIR\resources\app"
+  File "/oname=music-offline-setup.exe" "${MUSIC}"
 SectionEnd
 
 Section /o "FitBay Music" MusicSection

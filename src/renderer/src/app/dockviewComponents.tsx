@@ -1,4 +1,5 @@
 import { useTranslation } from './preferences'
+import { FirstWorkspaceAction } from './FirstWorkspaceAction'
 import { fixtureWorkspace } from './moduleRegistry'
 import { useState, useEffect, useContext } from 'react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelProps } from 'dockview-react'
@@ -61,7 +62,7 @@ export function HeaderActions({ api, containerApi }: IDockviewHeaderActionsProps
 
 export function EmptyWorkspace() {
   const t = useTranslation()
-  const { api } = useContext(WorkspaceContext)
+  const { api, firstEntry } = useContext(WorkspaceContext)
   const dockedBar = useDockedMusicBar()
   if (!fixtureWorkspace)
     return (
@@ -72,12 +73,16 @@ export function EmptyWorkspace() {
             ? t('可在这里打开其他组件', 'Open other components here')
             : t('工作区为空', 'Your workspace is empty')}
         </h2>
-        {!dockedBar && (
-          <p>
-            {window.musicDock
-              ? t('从「窗口 → Music」打开音乐组件。', 'Open Music from the Window menu.')
-              : t('从桌面工作台打开 Music。', 'Open Music from the desktop workbench.')}
-          </p>
+        {!dockedBar && firstEntry && window.firstWorkspace ? (
+          <FirstWorkspaceAction />
+        ) : (
+          !dockedBar && (
+            <p>
+              {window.musicDock
+                ? t('从「窗口 → Music」打开音乐组件。', 'Open Music from the Window menu.')
+                : t('从桌面工作台打开 Music。', 'Open Music from the desktop workbench.')}
+            </p>
+          )
         )}
       </div>
     )

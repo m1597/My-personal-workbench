@@ -51,6 +51,10 @@ function componentBridge(prefix) {
     },
   }
 }
+contextBridge.exposeInMainWorld('firstWorkspace', {
+  musicInstalled: () => ipcRenderer.invoke('workbench:music-installed'),
+  installMusic: () => ipcRenderer.invoke('workbench:install-music'),
+})
 contextBridge.exposeInMainWorld('componentHost', {
   ...componentBridge('prototype'),
   setMaterial: (value) => ipcRenderer.send('workbench:material', value),

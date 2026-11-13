@@ -10,6 +10,7 @@ const pkg = JSON.parse(await readFile('package.json', 'utf8'))
 const commonHostFiles = [
   'main.mjs',
   'installed-products.mjs',
+  'music-installer.mjs',
   'component-view.mjs',
   'music-thumbnails.mjs',
   'transport-icons.png',

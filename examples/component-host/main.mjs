@@ -1,4 +1,5 @@
-import { installedProducts } from './installed-products.mjs'
+import { installMusic } from './music-installer.mjs'
+import { installedProducts, registeredProduct } from './installed-products.mjs'
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
 import { shellExposed, snapTarget } from './native-dock.mjs'
@@ -12,7 +13,7 @@ import {
   systemPreferences,
   Menu,
 } from 'electron'
-import { realpath } from 'node:fs/promises'
+import { access, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { componentView } from './component-view.mjs'
@@ -41,7 +42,16 @@ async function findWorkbenchFile() {
   return root && path.join(root, 'workbench', 'index.html')
 }
 async function findMusicRoot() {
-  const root = installation ? await installation.find('music') : path.dirname(here)
+  if (!installation) {
+    const local = path.join(here, '../music')
+    try {
+      await access(path.join(local, 'component.json'))
+      return local
+    } catch (failure) {
+      if (failure.code !== 'ENOENT') throw failure
+    }
+  }
+  const root = installation ? await installation.find('music') : await registeredProduct('music')
   return root && path.join(root, 'music')
 }
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621
@@ -271,6 +281,20 @@ else {
       if (fixturePanels) builtins.listen()
       Menu.setApplicationMenu(null)
       nativeTheme.themeSource = 'dark'
+      ipcMain.handle('workbench:music-installed', async (event) => {
+        if (!isShell(event)) throw Error('DENIED')
+        return Boolean(await music.discover())
+      })
+      let pendingInstall
+      ipcMain.handle('workbench:install-music', (event) => {
+        if (!isShell(event)) throw Error('DENIED')
+        pendingInstall ??= installMusic(shell, here)
+          .catch(() => 'failed')
+          .finally(() => {
+            pendingInstall = undefined
+          })
+        return pendingInstall
+      })
       ipcMain.on('workbench:material', (event, value) => {
         if (
           !isShell(event) ||
@@ -306,7 +330,7 @@ else {
           dropZone = regions
       })
       for (const item of components) item.listen()
-      const musicRoot = await findMusicRoot()
+      const musicRoot = await music.discover()
       if (musicRoot) await startMusic(musicRoot)
       await openIntent(intent)
     })

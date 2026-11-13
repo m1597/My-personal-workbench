@@ -6,12 +6,13 @@ import { WorkspaceContext, type WorkspaceState } from './WorkspaceContext'
 import { components, HeaderActions, EmptyWorkspace } from './dockviewComponents'
 import { ComponentTheme } from './ComponentTheme'
 import { WindowMenu } from './WindowMenu'
-import { restoreLayout } from './layoutStorage'
+import { finishFirstEntry, firstEntryPending, restoreLayout } from './layoutStorage'
 import {
   ComponentDropPreview,
   MusicPlayerBar,
   SettingsOpenContext,
   useComponentPrototype,
+  useMusicHostState,
 } from './componentPrototype'
 
 import { WorkbenchSettings } from './WorkbenchSettings'
@@ -40,17 +41,30 @@ export default function App() {
     ),
   }))
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
+  const [firstEntry, setFirstEntry] = useState(firstEntryPending)
   const [detached, setDetached] = useState<ModuleId[]>([])
+  const music = useMusicHostState()
+  useEffect(() => {
+    if (firstEntry && music?.mode === 'docked' && music.phase === 'ready') {
+      finishFirstEntry()
+      setFirstEntry(false)
+    }
+  }, [firstEntry, music?.mode, music?.phase])
   useComponentPrototype(workspace.api, theme.gap, setDetached)
   useEffect(() => {
     const api = workspace.api
     if (!api) return
-    const update = () =>
+    const update = () => {
+      if (api.panels.some((panel) => panel.id !== 'component-music')) {
+        finishFirstEntry()
+        setFirstEntry(false)
+      }
       setWorkspace({
         api,
         active: api.activePanel?.id,
         visible: api.panels.map((panel) => panel.id),
       })
+    }
     const subscriptions = [
       api.onDidAddPanel(update),
       api.onDidRemovePanel(update),
@@ -78,7 +92,7 @@ export default function App() {
     <LanguageContext.Provider value={preferences.language}>
       <ComponentTheme surface="workspace">
         <WorkspaceContext.Provider
-          value={{ ...workspace, visible: [...workspace.visible, ...detached] }}
+          value={{ ...workspace, firstEntry, visible: [...workspace.visible, ...detached] }}
         >
           <SettingsOpenContext.Provider value={settingsOpen}>
             <div className="workbench">

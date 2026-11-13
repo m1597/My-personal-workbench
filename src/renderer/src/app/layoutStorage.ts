@@ -3,6 +3,24 @@ import { minimumPanelSize, modules, retiredPanelIds, fixtureWorkspace } from './
 import { createDefaultLayout } from './workspace'
 
 export const layoutStorageKey = 'workbench.layout'
+const firstEntryKey = 'workbench.firstEntryPending'
+export function firstEntryPending() {
+  try {
+    if (localStorage.getItem(firstEntryKey) === '1') return true
+    if (localStorage.getItem(layoutStorageKey) !== null) return false
+    localStorage.setItem(firstEntryKey, '1')
+    return true
+  } catch {
+    return false
+  }
+}
+export function finishFirstEntry() {
+  try {
+    localStorage.removeItem(firstEntryKey)
+  } catch {
+    // Keep the current session usable if storage is unavailable.
+  }
+}
 const formatVersion = 1
 
 function record(value: unknown): value is Record<string, unknown> {

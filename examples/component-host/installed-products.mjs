@@ -21,23 +21,23 @@ function installDirectory(name) {
   return data.toString('utf16le', 0, Math.max(size[0] - 2, 0))
 }
 
+export async function registeredProduct(id) {
+  const name = names[id]
+  try {
+    const directory = installDirectory(name)
+    if (!path.isAbsolute(directory)) return undefined
+    const root = await realpath(path.join(directory, 'resources/app'))
+    const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
+    return pkg.fitbayProduct === id ? root : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export async function installedProducts(applicationRoot) {
   const { fitbayProduct: product } = JSON.parse(
     await readFile(path.join(applicationRoot, 'package.json'), 'utf8'),
   )
   if (!Object.hasOwn(names, product)) throw Error('安装包的产品标识无效')
-  async function find(id) {
-    if (id === product) return applicationRoot
-    const name = names[id]
-    try {
-      const directory = installDirectory(name)
-      if (!path.isAbsolute(directory)) return undefined
-      const root = await realpath(path.join(directory, 'resources/app'))
-      const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
-      return pkg.fitbayProduct === id ? root : undefined
-    } catch {
-      return undefined
-    }
-  }
-  return { product, find }
+  return { product, find: (id) => (id === product ? applicationRoot : registeredProduct(id)) }
 }

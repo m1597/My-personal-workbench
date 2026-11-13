@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import { build, Platform, Arch } from 'electron-builder'
 import nsis from 'app-builder-lib/out/targets/nsis/nsisUtil.js'
 import { cp, readFile, readdir, writeFile } from 'node:fs/promises'
@@ -62,16 +64,24 @@ async function writeInstallerInclude(output, appOutDir) {
     if (!relative) lines.push(`Delete "$INSTDIR\\\${UNINSTALL_FILENAME}"`)
     lines.push(`RMDir "${target}"`, `${skip}:`)
   }
+  if (path.basename(path.dirname(output)) === 'workbench') {
+    lines.push('Delete "$INSTDIR\\resources\\app\\music-offline-setup.exe"')
+  }
   await directory('')
   lines.push('!macroend', `!include "${quotePath(path.resolve('resources/fitbay-install.nsh'))}"`)
   await writeFile(output, `\ufeff${lines.join('\r\n')}\r\n`)
 }
 
-const files = []
+const files = {}
 const { version } = JSON.parse(await readFile('package.json', 'utf8'))
-for (const product of ['workbench', 'music']) {
+for (const product of ['music', 'workbench']) {
   const music = product === 'music'
   const { app, modules } = await prepareProduct(product)
+  if (!music) {
+    const hash = createHash('sha256')
+    for await (const chunk of createReadStream(files.music)) hash.update(chunk)
+    await writeFile(path.join(app, 'music-setup.sha256'), hash.digest('hex'))
+  }
   const title = music ? 'FitBay Music' : 'FitBay'
   const shortcut = music ? title : 'FitBay 工作台'
   const filename = `FitBay-${music ? 'Music' : 'Workbench'}-Setup-${version}-x64.exe`
@@ -108,6 +118,6 @@ for (const product of ['workbench', 'music']) {
       },
     },
   })
-  files.push(path.join(output, filename))
+  files[product] = path.join(output, filename)
 }
-await deliverInstallers(files[0], files[1], version)
+await deliverInstallers(files.workbench, files.music, version)
