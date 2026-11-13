@@ -107,7 +107,16 @@ try {
   await expect(page.getByLabel('描述你想听什么')).toHaveValue(preference)
   assert.equal(await app.evaluate(() => globalThis.liveModelRequests), 0)
   assert.equal((await page.evaluate(() => window.music.state())).prefs.recommendDir, '')
-  assert.equal(db.prepare('SELECT count(*) AS n FROM batches').get().n, old.size)
+  const runs = db.prepare('SELECT batch,state,message FROM recommendation_runs').all()
+  assert.equal(runs.length, 1)
+  const [cancelled] = runs
+  assert.ok(!old.has(cancelled.batch))
+  assert.equal(cancelled.state, 'cancelled')
+  assert.equal(cancelled.message, '未选择推荐下载目录')
+  assert.equal(
+    db.prepare('SELECT count(*) AS n FROM items WHERE batch=?').get(cancelled.batch).n,
+    0,
+  )
   assert.deepEqual(await fs.readdir(output), [])
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(page.getByRole('button', { name: '终止本次推荐' })).toBeHidden({
@@ -118,7 +127,7 @@ try {
   const batch = db
     .prepare('SELECT id FROM batches ORDER BY rowid DESC')
     .all()
-    .find((r) => !old.has(r.id))
+    .find((r) => !old.has(r.id) && r.id !== cancelled.batch)
   assert.ok(batch, alert.join('；') || '界面生成未创建新批次')
   const rows = db
     .prepare(
@@ -197,7 +206,7 @@ try {
   const restarted = await app.firstWindow()
   assert.equal((await restarted.evaluate(() => window.music.state())).prefs.recommendDir, output)
   const evidence = {
-    folderChoice: { native, cancellationModelRequests: 0, restoredAfterRestart: true },
+    folderChoice: { native, cancelled, cancellationModelRequests: 0, restoredAfterRestart: true },
     model: state.models.active,
     taste: taste.status,
     baseline: baseline.length,
