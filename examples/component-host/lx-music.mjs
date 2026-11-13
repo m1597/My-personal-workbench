@@ -353,7 +353,9 @@ export function publishToLibrary(temp, row, store, version, dailyId) {
         markSaved(store, dailyId, local)
         store.db
           .prepare(`INSERT INTO daily_downloads(local,batch,file,digest,identity)
-          SELECT ?,batch,?,?,? FROM items WHERE id=?`)
+          SELECT ?,batch,?,?,? FROM items WHERE id=?
+          ON CONFLICT(local) DO UPDATE SET batch=excluded.batch,file=excluded.file,
+          digest=excluded.digest,identity=excluded.identity`)
           .run(
             local,
             file,

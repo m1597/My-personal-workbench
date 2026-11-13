@@ -227,14 +227,17 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       await expect(page.getByLabel('描述你想听什么')).toHaveValue('雨天的爵士乐')
       assert.equal(await app.evaluate(() => globalThis.modelCalls.length), 0)
       const cancelled = await page.evaluate(() => window.music.state())
-      assert.equal(cancelled.batches.length, 0)
+      assert.equal(cancelled.batches.length, 1)
+      assert.equal(cancelled.batches[0].state, 'cancelled')
       assert.equal(cancelled.prefs.recommendDir, '')
       assert.deepEqual(await fs.readdir(output), [])
     }
+    const previous = await page.evaluate(async () => (await window.music.state()).batches[0]?.id)
     await page.getByRole('button', { name: '生成推荐' }).click()
     await expect
-      .poll(() => page.evaluate(async () => (await window.music.state()).batches.length))
-      .toBe(index + 1)
+      .poll(() => page.evaluate(async () => (await window.music.state()).batches[0]?.id))
+      .not.toBe(previous)
+    assert.equal(await page.evaluate(async () => (await window.music.state()).batches.length), 1)
     const requests = await app.evaluate(() => globalThis.folderRequests)
     assert.equal(requests.length, 2)
     assert.ok(
@@ -402,10 +405,13 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   )
   assert.deepEqual(artistResult, [])
   assert.equal(await app.evaluate(() => globalThis.transfers), transfers)
-  await page.evaluate(async (local) => {
-    const p = await window.music.createPlaylist('不发送的私人歌单')
-    await window.music.setMembership(p, local, true)
-  }, list.tracks[0])
+  await page.evaluate(
+    async (local) => {
+      const p = await window.music.createPlaylist('不发送的私人歌单')
+      await window.music.setMembership(p, local, true)
+    },
+    library.localTracks.find((track) => track.album === '私人专辑').id,
+  )
   await app.evaluate(() => {
     globalThis.failMode = 'auth'
   })
@@ -875,11 +881,24 @@ try {
   const p = await reopened.firstWindow()
   assert.equal((await p.evaluate(() => window.music.state())).prefs.recommendDir, output)
   assert.equal((await p.evaluate(() => window.music.getTasteStatus())).consented, false)
-  assert.ok((await p.evaluate(() => window.music.state())).localTracks.some((t) => t.notInterested))
-  assert.equal(
-    (await p.evaluate(() => window.music.state())).playlists.find((s) => s.system).tracks.length,
-    20,
+  const state = await p.evaluate(() => window.music.state())
+  assert.deepEqual(
+    state.localTracks.map((t) => t.title),
+    ['已同意的摘要'],
   )
+  assert.deepEqual(state.playlists.find((s) => s.system)?.tracks ?? [], [])
+  const persisted = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'), {
+    readOnly: true,
+  })
+  try {
+    assert.ok(
+      persisted
+        .prepare('SELECT 1 FROM recording_feedback WHERE identity=?')
+        .get(JSON.stringify(['recording', 'wy', '权限歌曲1'])),
+    )
+  } finally {
+    persisted.close()
+  }
 } finally {
   await reopened.close()
 }

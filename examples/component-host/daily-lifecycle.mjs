@@ -268,7 +268,6 @@ export async function retireDownloads(
   const favorites = []
   for (const row of rows) {
     try {
-      signal.throwIfAborted()
       if (protectedIds.has(row.id)) {
         favorites.push(row)
         continue
@@ -280,11 +279,9 @@ export async function retireDownloads(
         .get(row.id)
       if (!version || !fresh || fresh.file !== row.file || revision(stat(row.file)) !== version)
         continue
-      signal.throwIfAborted()
       if (fresh.favorite) favorites.push(row)
       else await trashAudio(store, row, lyric, trash, forget)
     } catch {
-      signal.throwIfAborted()
       failures++
     }
   }

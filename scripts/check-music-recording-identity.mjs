@@ -68,6 +68,7 @@ store.library.upsert({
   size: bytes.length,
   duration,
 })
+await store.library.refresh()
 const originalRow = store.db.prepare('SELECT * FROM local_tracks').get()
 const list = store.library.createPlaylist('保留原歌单')
 store.library.setMembership(list, originalRow.id, true)
@@ -183,6 +184,11 @@ try {
     store.db.prepare('SELECT id FROM items WHERE title=?').get(last.title).id,
   )
   assert.equal(hash(await fs.readFile(savedPath)), priorDigest)
+  const restored = await fs.stat(savedPath, { bigint: true })
+  assert.equal(
+    store.db.prepare('SELECT identity FROM daily_downloads WHERE local=?').get(last.local).identity,
+    [restored.dev, restored.ino, restored.birthtimeNs].join(':'),
+  )
   assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM local_tracks').get().n, 6)
   // Replace audio while preserving duration. The middle edit lies between two
   // detailed sample windows; its detection depends on the continuous trace.
