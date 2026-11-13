@@ -265,7 +265,7 @@ function searchRows(page) {
   if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
   return rows
 }
-async function downloadResults(source, track, signal) {
+async function downloadResults(source, track, signal, wantedRecording) {
   const results = []
   const seen = new Set()
   const pages = new Set()
@@ -293,10 +293,12 @@ async function downloadResults(source, track, signal) {
         JSON.stringify(row).length > 16384
       )
         continue
-      const identity = JSON.stringify([
-        row.source ?? source.platform,
-        recordingId(source, row) ?? row,
-      ])
+      const recording = recordingId(source, row)
+      if (wantedRecording !== undefined) {
+        if (recording === wantedRecording) return { rows: [row], partial: false }
+        continue
+      }
+      const identity = JSON.stringify([row.source ?? source.platform, recording ?? row])
       if (seen.has(identity)) continue
       seen.add(identity)
       results.push(row)
@@ -591,6 +593,14 @@ function durableRecording(src, row) {
     if (identifier(row[key])) out[key] = row[key]
   const metaId = row.meta?.[src.platform]?.id
   if (identifier(metaId)) out.meta = { [src.platform]: { id: metaId } }
+  for (const key of [
+    'trial',
+    'isPreview',
+    'allowPermanentSave',
+    'permanentDownload',
+    'downloadable',
+  ])
+    if (typeof row[key] === 'boolean') out[key] = row[key]
   if (Array.isArray(row.types)) {
     out.types = row.types
       .filter((t) => src.quality.includes(t?.type))
@@ -1556,16 +1566,25 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       let row = onlineRows.get(id)
       return async (signal) => {
         if (!row) {
-          try {
-            const saved = JSON.parse(record.identifiers)
-            const url = await recordingAddress(src, saved, record.quality, signal)
-            row = saved
-            return url
-          } catch {
-            signal.throwIfAborted()
+          // Only FitBay's own catalog adapters define the complete shape sent to musicUrl.
+          // A custom search can attach arbitrary playback policy or transient tokens to its row.
+          if (!src.search) {
+            try {
+              const saved = JSON.parse(record.identifiers)
+              const url = await recordingAddress(src, saved, record.quality, signal)
+              row = saved
+              return url
+            } catch {
+              signal.throwIfAborted()
+            }
           }
-          const { rows } = await downloadResults(src, JSON.parse(record.query), signal)
-          row = rows.find((candidate) => recordingId(src, candidate) === record.recording)
+          const { rows } = await downloadResults(
+            src,
+            JSON.parse(record.query),
+            signal,
+            record.recording,
+          )
+          row = rows[0]
           if (!row) throw Error('音乐源中已找不到该录音，请重新搜索')
         }
         return recordingAddress(src, row, record.quality, signal)

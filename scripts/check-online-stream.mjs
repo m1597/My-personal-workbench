@@ -10,6 +10,55 @@ import { setTimeout as wait } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { onlineStream } from '../examples/component-host/online-stream.mjs'
 import { writeFixtureRecording } from './music-recording-fixture.mjs'
+import { MusicStore } from '../components/music/store.mjs'
+
+async function checkRestoredTrial(profile) {
+  const { registerLx } = await import('../dist/component-prototype/host/lx-music.mjs')
+  const store = new MusicStore(path.join(profile, 'trial-library'))
+  const code = `// @name Trial identity fixture
+    lx.on('request', ({action, info}) => {
+      const row = {name:'相同歌名',singer:'艺人',id:'target-id',trial:true,isPreview:true,
+        freeTrialInfo:{start:12,end:24}, otherPrivateField:'https://example.com/temporary-secret'}
+      if(action === 'search') {
+        const others = Array.from({length:50},(_,i)=>({...row,id:'other-'+i}))
+        if(info.keyword === '原查询') return {items:[row],hasMore:false}
+        if(info.page === 1) return {items:others,hasMore:true}
+        return {items:[row],hasMore:false}
+      }
+      const r = info.musicInfo
+      return r.id === 'target-id' && r.trial && r.isPreview && r.freeTrialInfo?.end === 24
+        ? 'https://1.1.1.1/trial' : 'https://1.1.1.1/other-segment'
+    })
+    lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`
+  const src = { platform: 'wy', search: true, quality: ['320k'], permissionsVersion: 1 }
+  store.set(
+    'lx-source',
+    JSON.stringify({ ...src, platforms: { wy: src }, catalogVersion: 2, code, name: 'trial' }),
+  )
+  const handlers = new Map()
+  const newSession = () =>
+    registerLx(
+      (key, fn) => handlers.set(key, fn),
+      () => store,
+    )
+  const first = newSession()
+  const { items } = await handlers.get('lxSearch')({ title: '原查询', artist: '' }, 'wy')
+  const id = handlers.get('rememberOnline')(items[0].key, '320k')
+  const signal = new AbortController().signal
+  assert.equal(await first.onlineAddress(id)(signal), 'https://1.1.1.1/trial')
+  first.close()
+  store.db
+    .prepare('UPDATE online_recording_sources SET query=? WHERE id=?')
+    .run(JSON.stringify({ title: '重排的目录', artist: '' }), id)
+  const stored = store.db
+    .prepare('SELECT identifiers FROM online_recording_sources WHERE id=?')
+    .get(id)
+  assert.ok(!stored.identifiers.includes('temporary-secret'))
+  const restarted = newSession()
+  assert.equal(await restarted.onlineAddress(id)(signal), 'https://1.1.1.1/trial')
+  restarted.close()
+  store.db.close()
+}
 
 if (!process.versions.electron) {
   const { default: executable } = await import('electron')
@@ -97,6 +146,7 @@ if (!process.versions.electron) {
     }
     syncBuiltinESMExports()
     try {
+      await checkRestoredTrial(app.getPath('userData'))
       for (const [range, status] of [
         ['bytes=100-149', 206],
         ['bytes=999999999-', 416],
