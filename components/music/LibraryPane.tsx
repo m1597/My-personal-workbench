@@ -113,7 +113,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   dismiss: (id: string) => void
   playRow: (id: string) => void
   queueAlbumNext: (ids: string[]) => void
-  playAlbum: (id: string, queue: string[]) => void
+  playAlbum: (id: string, queue: string[], wholeAlbum?: boolean) => void
   error: string
   remove: (id: string | string[], trash: boolean) => Promise<boolean>
   renameList: (id: string, name: string) => Promise<boolean>

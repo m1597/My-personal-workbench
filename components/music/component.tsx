@@ -609,6 +609,7 @@ function Music() {
   async function pauseTrack() {
     const el = audio.current
     if (!el) return
+    if (clips.current?.pending) clearQuick()
     fading.current?.()
     el.pause()
     setPaused(true)
@@ -874,7 +875,7 @@ function Music() {
       ? '从 ' + Math.floor(elapsed) + ' 秒继续'
       : '播放'
   function togglePlayback() {
-    if (audio.current && !audio.current.paused) {
+    if (clips.current?.pending || (audio.current && !audio.current.paused)) {
       ++epoch.current
       void act(pauseTrack)
     } else void act(resumeOrStart)
@@ -1257,8 +1258,14 @@ function Music() {
             onQueue={onQueue}
             dismiss={(id) => void act(() => host.dismissRecommendation(id))}
             playRow={(id) => void act(() => play(id, visibleQueue))}
-            playAlbum={(id, ids) =>
-              void act(() => {
+            playAlbum={(id, ids, wholeAlbum) =>
+              void act(async () => {
+                if (wholeAlbum) {
+                  setShuffled(null)
+                  setRepeatOne(false)
+                  if (repeatOne) await host.setRepeatOne(false)
+                  return play(id, ids, 0, true, [], 0)
+                }
                 if (shuffled) setShuffled(shuffleQueue(ids, id))
                 return play(id, ids)
               })
@@ -1718,9 +1725,9 @@ function Music() {
             appearance="primary"
             shape="circular"
             disabled={!primary}
-            aria-label={paused ? resumeLabel : '暂停'}
-            title={paused ? resumeLabel : '暂停'}
-            icon={paused ? <Play size={16} /> : <Pause size={16} />}
+            aria-label={paused && !clips.current?.pending ? resumeLabel : '暂停'}
+            title={paused && !clips.current?.pending ? resumeLabel : '暂停'}
+            icon={paused && !clips.current?.pending ? <Play size={16} /> : <Pause size={16} />}
             onClick={togglePlayback}
           />
           <Button
@@ -1738,6 +1745,7 @@ function Music() {
             icon={<Square size={14} />}
             disabled={
               !resolving &&
+              !clips.current?.pending &&
               (localMode ? !current.current && !pausedOnline.current : !state?.items.some(playable))
             }
             onClick={() => void act(() => end(!localMode))}

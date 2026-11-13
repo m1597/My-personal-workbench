@@ -87,7 +87,7 @@ type Props = {
   tracks: LocalTrack[]
   active: string
   queueNext: (ids: string[]) => void
-  play: (id: string, queue: string[]) => void
+  play: (id: string, queue: string[], wholeAlbum?: boolean) => void
 }
 
 const sortLabels = { name: '专辑名称', descending: '曲数从多到少', ascending: '曲数从少到多' }
@@ -187,7 +187,7 @@ export function AlbumBrowser({ searchRelease, revision, tracks, active, play, qu
               appearance="primary"
               icon={<Play size={15} />}
               disabled={!queue.length}
-              onClick={() => play(queue[0], queue)}
+              onClick={() => play(queue[0], queue, true)}
             >
               播放整张
             </Button>

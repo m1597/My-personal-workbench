@@ -52,6 +52,46 @@ try {
     page.getByRole('button', { name: label, exact: true }).evaluate((b) => b.click())
   const media = page.locator('audio')
   const at = () => media.evaluate((a) => a.currentTime)
+  const failures = []
+  const check = async (name, test) => {
+    try {
+      await test()
+    } catch (e) {
+      failures.push(name + ': ' + e.message)
+      console.error(name, e.message)
+    }
+  }
+  await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
+  // Hold the real decoder after it receives the recording. Reload between checks to discard the cue cache.
+  for (const action of ['暂停', '下一首', '停止播放']) {
+    await page.reload()
+    await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
+    await press('播放本次推荐')
+    await expect.poll(() => media.evaluate((a) => !a.paused)).toBe(true)
+    await page.evaluate(() => {
+      const original = OfflineAudioContext.prototype.decodeAudioData
+      OfflineAudioContext.prototype.decodeAudioData = async function (bytes) {
+        await new Promise((resolve) => {
+          window.unblockDecoder = resolve
+        })
+        return original.call(this, bytes)
+      }
+    })
+    await press('快速听这批')
+    await expect.poll(() => page.evaluate(() => typeof window.unblockDecoder)).toBe('function')
+    await press(action)
+    await page.evaluate(() => window.unblockDecoder())
+    await check('分析中' + action, async () => {
+      await expect(page.getByText('正在分析试听片段')).toHaveCount(0, { timeout: 2000 })
+      await expect(page.getByText('1/3 · 代表片段')).toHaveCount(0, { timeout: 1000 })
+      if (action === '下一首')
+        await expect
+          .poll(() => page.evaluate(async () => (await window.music.state()).current))
+          .toBe(ids[1])
+      else assert.equal(await media.evaluate((a) => a.paused), true)
+    })
+  }
+  await page.reload()
   await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
   await press('快速听这批')
   await expect(page.getByText('1/3 · 代表片段')).toBeVisible()
@@ -145,6 +185,30 @@ try {
     delete document.documentElement.dataset.backdrop
   })
   await page.screenshot({ path: path.join(root, 'quick-listen.png') })
+  await page.getByRole('tab', { name: '本地曲库' }).evaluate((b) => b.click())
+  await press('专辑')
+  await page
+    .locator('.album-tile')
+    .first()
+    .evaluate((b) => b.click())
+  await press('播放整张')
+  await check('随机模式播放整张', async () => {
+    await expect(page.locator('.music-order')).toHaveText('顺序播放', { timeout: 1000 })
+    const album = await page.evaluate(async () => (await window.music.albums())[0].tracks)
+    await expect.poll(current).toBe(album[0])
+    assert.ok((await at()) < 3)
+    await media.evaluate((a) => {
+      a.currentTime = 40
+    })
+    await expect.poll(at).toBeGreaterThan(40.4)
+    assert.equal(await current(), album[0])
+    await media.evaluate((a) => {
+      a.currentTime = a.duration - 0.15
+    })
+    await expect.poll(current).toBe(album[1])
+    assert.ok((await at()) < 3)
+  })
+  assert.deepEqual(failures, [])
   console.log(
     'PASS 代表片段、收藏跳过、普通试听自动续首、从头播、顺序保留尾奏、随机首尾交叠与释放',
     root,
