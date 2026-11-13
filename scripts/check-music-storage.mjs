@@ -160,7 +160,10 @@ try {
   assert.equal(store.get('current'), localId)
   assert.equal(Number(store.get('position')), 0.8)
   assert.ok(later.localTracks.some((t) => t.id === localId))
-  assert.deepEqual(later.playlists.flatMap((p) => (p.system ? p.tracks : [])), [])
+  assert.deepEqual(
+    later.playlists.flatMap((p) => (p.system ? p.tracks : [])),
+    [],
+  )
   assert.ok(fs.existsSync(permanentFile) && !fs.existsSync(store.file(missed.id, '.mp3')))
   assert.deepEqual(store.feedbackIds(), feedback)
   console.log('PASS 跨日过期清理、旧成员退出系统歌单、永久文件及队列保留、未下载条目无负反馈')
