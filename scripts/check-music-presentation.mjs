@@ -92,7 +92,9 @@ try {
     await menu.click()
     await expect(musicItem).toBeChecked()
     await expect(hide).toBeVisible()
-    await shell.screenshot({
+    await shell.getByRole('menu').screenshot({
+      animations: 'disabled',
+      scale: 'css',
       path: path.join(evidence, docked ? '停靠窗口菜单.png' : '独立窗口菜单.png'),
     })
     await hide.click()
