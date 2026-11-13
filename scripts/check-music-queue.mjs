@@ -88,22 +88,16 @@ try {
   for (const start of [0, 5]) assert.deepEqual([...heard.slice(start, start + 5)].sort(), titles)
   assert.notEqual(heard[4], heard[5])
   assert.notEqual(heard[9], heard[10])
-  // Let the decoder emit a real ended event at a shuffle boundary.
+  // A blend may hand off the last audible tail before the decoder reaches its end.
   for (let i = 0; i < 2; i++) {
     await button('下一首').click()
     await expect(page.locator('.music-transport strong')).not.toHaveText(heard.at(-1))
     heard.push(await playing())
   }
   const audio = page.locator('audio')
-  const finish = () =>
-    audio.evaluate(
-      (a) =>
-        new Promise((resolve) => {
-          a.addEventListener('ended', () => resolve(), { once: true })
-          a.currentTime = a.duration - 0.2
-        }),
-    )
-  await finish()
+  await audio.evaluate((a) => {
+    a.currentTime = a.duration - 0.2
+  })
   await expect(page.locator('.music-transport strong')).not.toHaveText(heard.at(-1))
   await playing()
   await mode.click()

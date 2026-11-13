@@ -29,7 +29,7 @@ await writeFile(
 lx.on('request',({action,info})=>action==='search' ? (info.keyword==='混选夹具' ?
   ['另存在线','文件冲突','未选在线'].map(name=>({name,singer:'艺人',id:name,allowPermanentSave:true})) :
   [{name:'测试在线歌曲',singer:'艺人',id:'persistent',durationSeconds:20}]) :
-  action==='lyric' ? null : 'https://1.1.1.1/online-tone.wav?quality='+info.type+'&session='+Date.now());
+  action==='lyric' ? null : 'https://1.1.1.1/online-tone.wav?recording='+encodeURIComponent(info.musicInfo.id)+'&quality='+info.type+'&session='+Date.now());
 lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k','128k']}}})`,
 )
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
@@ -68,6 +68,7 @@ for (const restart of [false, true]) {
         const original = https.request
         https.request = (url, options, done) => {
           if (url.pathname !== '/online-tone.wav') return original(url, options, done)
+          globalThis.mixedAudioRequests?.push(url.searchParams.get('recording'))
           globalThis.testOnlineQuality = url.searchParams.get('quality')
           const request = new EventEmitter()
           if (globalThis.delayOnlineRecording) {
@@ -204,12 +205,46 @@ for (const restart of [false, true]) {
       await expect(button('下载所选')).toBeDisabled()
       for (const name of ['另存在线', '文件冲突'])
         await page.getByRole('checkbox', { name: '选择' + name }).check()
+      const labels = () =>
+        rows.evaluateAll((elements) =>
+          elements.map((row) => ({
+            title: row.querySelector('.library-name strong').textContent,
+            location: row.querySelector('.library-track-location').textContent,
+          })),
+        )
+      const beforeLabels = await labels()
+      const beforeFiles = await readdir(downloadDir)
+      assert.equal(beforeLabels.filter((row) => row.location === '本地').length, 1)
+      assert.deepEqual(beforeFiles, ['艺人 - 文件冲突.wav'])
+      await app.evaluate(() => {
+        globalThis.mixedAudioRequests = []
+      })
       await button('下载所选').click()
       await expect(page.getByText('已下载 1 首 · 已跳过 1 首 · 失败 1 首')).toBeVisible()
       const selectedRow = (name) => rows.filter({ has: page.getByText(name, { exact: true }) })
       await expect(selectedRow('另存在线').getByText('本地', { exact: true })).toBeVisible()
       await expect(selectedRow('文件冲突').getByText(/下载失败/)).toBeVisible()
       await expect(selectedRow('未选在线').getByText('在线', { exact: true })).toBeVisible()
+      const requests = await app.evaluate(() => globalThis.mixedAudioRequests)
+      assert.ok(requests.includes('另存在线'))
+      assert.ok(requests.every((id) => ['另存在线', '文件冲突'].includes(id)))
+      await writeFile(
+        path.join(root, '混选验收.json'),
+        JSON.stringify(
+          {
+            selected: ['本地歌曲', '另存在线', '文件冲突'],
+            beforeLabels,
+            afterLabels: await labels(),
+            beforeFiles,
+            afterFiles: await readdir(downloadDir),
+            audioRequests: requests,
+            localOriginal: { before: originalDigest, after: await digest(tone) },
+            conflictOriginal: { before: conflictDigest, after: await digest(conflict) },
+          },
+          null,
+          2,
+        ),
+      )
       const audit = await page.evaluate(() => window.music.state())
       assert.equal(audit.localTracks.length, 2)
       assert.equal(
@@ -234,7 +269,10 @@ for (const restart of [false, true]) {
       await expect(button('下载所选')).toBeDisabled()
       for (const name of ['文件冲突', '本地歌曲'])
         await page.getByRole('checkbox', { name: '选择' + name }).check()
-      await page.screenshot({ path: path.join(root, 'mixed-download.png') })
+      await page.screenshot({
+        path: path.join(root, 'mixed-download.png'),
+        style: ':root { background: var(--base) !important }',
+      })
       await button('退出多选').click()
       await app.evaluate(() => {
         globalThis.delayOnlineRecording = 'block network'
@@ -276,6 +314,17 @@ for (const restart of [false, true]) {
         before,
       )
       assert.deepEqual(await readdir(downloadDir), ['艺人 - 另存在线.wav'])
+      await page.getByRole('checkbox', { name: '全选当前列表' }).check()
+      await expect(page.getByText('已选 5 首')).toBeVisible()
+      await app.evaluate(() => {
+        globalThis.mixedAudioRequests = []
+      })
+      await button('下载所选').click()
+      await expect(page.getByText(/已下载 .*已跳过 2 首/)).toBeVisible()
+      const allRequests = await app.evaluate(() => globalThis.mixedAudioRequests)
+      assert.ok(allRequests.includes('未选在线'))
+      assert.ok(!allRequests.includes('另存在线'))
+      assert.equal(await digest(tone), originalDigest)
     }
   } finally {
     await app.close()

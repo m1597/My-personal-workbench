@@ -564,8 +564,7 @@ export function LibraryPane({
                   >
                     加入收藏
                   </Button>
-                  {currentFolder && (
-                    {rows.some((r) => r.origin === 'online') && (
+                  {rows.some((r) => r.origin === 'online') && (
                     <Button
                       size="small"
                       disabled={batchBusy || !downloadable}
@@ -574,7 +573,8 @@ export function LibraryPane({
                       下载所选
                     </Button>
                   )}
-                  <Button
+                  {currentFolder && (
+                    <Button
                       size="small"
                       disabled={batchBusy || !selectedIds.length}
                       icon={<Trash2 size={15} />}

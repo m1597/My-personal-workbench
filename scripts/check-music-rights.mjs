@@ -198,7 +198,8 @@ try {
     copies.filter({ has: page.getByText(title, { exact: true }) }),
   )
   for (const row of pair) {
-    await expect(row.locator('small')).toHaveCount(1)
+    await expect(row.locator(':scope > small')).toHaveCount(1)
+    await expect(row.locator('.library-track-location')).toHaveText('本地')
     await expect(row).not.toContainText('推荐来源')
   }
   assert.equal((await pair[0].boundingBox()).height, (await pair[1].boundingBox()).height)

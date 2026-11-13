@@ -1,6 +1,6 @@
 import { Button, Slider } from '@fluentui/react-components'
 import { Volume2, VolumeX } from 'lucide-react'
-import { type RefObject, useLayoutEffect, useState } from 'react'
+import { type FocusEvent, type RefObject, useLayoutEffect, useState } from 'react'
 import type { MusicPreferences } from './MusicSettings'
 
 export function VolumeControls({
@@ -29,23 +29,16 @@ export function VolumeControls({
     setOutput({ volume: level, muted: silent })
     void window.music.setMusicOutput(level, silent).catch(() => onError('音量设置未能保存'))
   }
+  function leave(event: FocusEvent<HTMLElement>) {
+    if (!event.currentTarget.closest('.music-volume')?.contains(event.relatedTarget))
+      setExpanded(false)
+  }
   return (
-    <div
-      className="music-volume"
-      data-expanded={compact && expanded}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setExpanded(false)
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && expanded) {
-          event.currentTarget.querySelector('button')?.focus()
-          setExpanded(false)
-        }
-      }}
-    >
+    <div className="music-volume" data-expanded={compact && expanded}>
       <Button
         appearance="subtle"
         size="small"
+        onBlur={leave}
         aria-label={compact ? '调节音量' : '静音'}
         aria-expanded={compact ? expanded : undefined}
         aria-pressed={compact ? undefined : muted}
@@ -55,6 +48,13 @@ export function VolumeControls({
       />
       {(!compact || expanded) && (
         <Slider
+          onBlur={leave}
+          onKeyDown={(event) => {
+            if (compact && event.key === 'Escape') {
+              event.currentTarget.closest('.music-volume')?.querySelector('button')?.focus()
+              setExpanded(false)
+            }
+          }}
           aria-label="音量"
           aria-valuetext={(muted ? 0 : volume) + '%'}
           title={'音量 ' + (muted ? 0 : volume) + '%'}
