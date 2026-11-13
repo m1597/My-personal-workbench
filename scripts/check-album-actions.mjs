@@ -138,8 +138,58 @@ try {
   await expect.poll(async () => (await state()).current).toBe(b)
   await button('下一首').click()
   await expect.poll(async () => (await state()).current).toBe(c)
+  const mode = page.locator('.music-order')
+  await mode.click()
+  await mode.click()
+  await expect(mode).toHaveText('单曲循环')
+  await button('专辑').click()
+  await page.getByRole('searchbox', { name: '搜索本地专辑' }).fill('Album 100')
+  const insert = async () => {
+    await button('Album 100 · Artist').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: '下一首播放整张' }).click()
+  }
+  await insert()
+  const other = s.localTracks.filter((row) => row.album === 'Album 100').map((row) => row.id)
+  const finish = async () => {
+    const audio = page.locator('audio')
+    await expect.poll(() => audio.evaluate((el) => !el.paused && el.currentTime > 0)).toBe(true)
+    await audio.evaluate(
+      (el) =>
+        new Promise((resolve) => {
+          el.addEventListener('ended', resolve, { once: true })
+          el.currentTime = el.duration - 0.15
+        }),
+    )
+  }
+  await expect.poll(async () => (await state()).pendingAlbum).toEqual(other)
+  await finish()
+  await expect.poll(async () => (await state()).current).toBe(other[0])
+  await expect.poll(async () => (await state()).pendingAlbum).toEqual([other[1]])
+  await app.close()
+  app = await launch()
+  page = await app.firstWindow()
+  await expect(page.locator('.music-order')).toHaveText('单曲循环')
+  await page
+    .locator('.music-transport')
+    .getByRole('button', { name: /从 .* 秒继续|^播放$/ })
+    .click()
+  await finish()
+  await expect.poll(async () => (await state()).current).toBe(other[1])
+  await expect.poll(async () => (await state()).pendingAlbum).toEqual([])
+  await finish()
+  await expect
+    .poll(() => page.locator('audio').evaluate((el) => !el.paused && el.currentTime < 2))
+    .toBe(true)
+  assert.equal((await state()).current, other[1])
+  await button('专辑').click()
+  await page.getByRole('searchbox', { name: '搜索本地专辑' }).fill('Album 100')
+  await insert()
+  await expect.poll(async () => (await state()).pendingAlbum).toEqual(other)
+  await button('Album 100 · Artist').click()
+  await button('播放整张').click()
+  await expect.poll(async () => (await state()).pendingAlbum).toEqual([])
   console.log(
-    'PASS 110 张专辑自动追加两批、返回偏移、全量排序、过滤、随机模式插播整张、重复曲目上下首及重开。',
+    'PASS 110 张专辑自动追加两批、返回偏移、全量排序、过滤、随机模式插播整张、重复曲目上下首、单曲循环自然接续与重开。',
     root,
   )
 } finally {

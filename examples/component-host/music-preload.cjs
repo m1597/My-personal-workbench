@@ -52,6 +52,7 @@ const names = [
   'mediaFailed',
   'playQueue',
   'setQueue',
+  'setRepeatOne',
   'draft',
   'generate',
   'getTasteStatus',

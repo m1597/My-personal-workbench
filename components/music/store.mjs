@@ -383,6 +383,8 @@ export class MusicStore {
             !feedback.has(recordingKey('offline', t.id)),
         ),
       }))
+    const queue = JSON.parse(this.get('play-queue') || '[]')
+    const queued = new Set(queue)
     return {
       sidebarOrder: {
         folders: this.sidebarOrder('folders'),
@@ -392,8 +394,10 @@ export class MusicStore {
       albumRevision: this.library.albums.revision,
       playlists: this.library.playlists(),
       importJob: this.library.job,
-      queue: JSON.parse(this.get('play-queue') || '[]'),
+      queue,
+      repeatOne: this.get('music-repeat-one') === '1',
       queueOccurrence: Number(this.get('queue-occurrence') || 0),
+      pendingAlbum: JSON.parse(this.get('pending-album') || '[]').filter((id) => queued.has(id)),
       batches,
       items,
       summary: this.preferenceSummary(),

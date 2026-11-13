@@ -361,23 +361,32 @@ export function musicService(
       if (!remaining.delete(id) && !known.delete(id)) throw Error('播放队列无效')
     }
   }
-  function validateOccurrence(occurrence) {
+  function validateQueuePosition(ids, occurrence, pendingAlbum) {
+    if (!Array.isArray(pendingAlbum) || pendingAlbum.length > ids.length)
+      throw Error('专辑插播无效')
+    const known = new Set(ids)
+    if (pendingAlbum.some((id) => !known.delete(id))) throw Error('专辑插播无效')
     if (occurrence !== 0 && occurrence !== 1) throw Error('播放队列位置无效')
   }
-  bind('setQueue', (ids, occurrence = 0) => {
+  bind('setRepeatOne', (enabled) => {
+    if (typeof enabled !== 'boolean') throw Error('播放模式无效')
+    store.set('music-repeat-one', enabled ? '1' : '0')
+  })
+  bind('setQueue', (ids, occurrence = 0, pendingAlbum = []) => {
     validateQueue(ids)
-    validateOccurrence(occurrence)
+    validateQueuePosition(ids, occurrence, pendingAlbum)
     store.db.exec('BEGIN')
     try {
       store.set('play-queue', JSON.stringify(ids))
       store.set('queue-occurrence', String(occurrence))
+      store.set('pending-album', JSON.stringify(pendingAlbum))
       store.db.exec('COMMIT')
     } catch (error) {
       store.db.exec('ROLLBACK')
       throw error
     }
   })
-  bind('playQueue', (id, ids, position, occurrence = 0) => {
+  bind('playQueue', (id, ids, position, occurrence = 0, pendingAlbum = []) => {
     if (
       !(store.active === id || grant?.id === id) ||
       !Array.isArray(ids) ||
@@ -387,11 +396,12 @@ export function musicService(
     )
       throw Error('播放队列无效')
     validateQueue(ids)
-    validateOccurrence(occurrence)
+    validateQueuePosition(ids, occurrence, pendingAlbum)
     store.db.exec('BEGIN')
     try {
       store.set('play-queue', JSON.stringify(ids))
       store.set('queue-occurrence', String(occurrence))
+      store.set('pending-album', JSON.stringify(pendingAlbum))
       store.checkpoint(id, position)
       store.db.exec('COMMIT')
     } catch (e) {

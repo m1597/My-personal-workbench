@@ -117,6 +117,8 @@ type State = {
   importJob: ImportJob
   queue: string[]
   queueOccurrence: number
+  pendingAlbum: string[]
+  repeatOne: boolean
   hasLibrary: boolean
 }
 type Presentation = 'full' | 'bar' | 'background'
@@ -184,8 +186,15 @@ declare global {
       mediaFailed(id: string, url: string): Promise<void>
       localSource(id: string): Promise<string>
       dismissRecommendation(id: string): Promise<void>
-      setQueue(ids: string[], occurrence?: number): Promise<void>
-      playQueue(id: string, ids: string[], position: number, occurrence?: number): Promise<void>
+      setRepeatOne(enabled: boolean): Promise<void>
+      setQueue(ids: string[], occurrence?: number, pendingAlbum?: string[]): Promise<void>
+      playQueue(
+        id: string,
+        ids: string[],
+        position: number,
+        occurrence?: number,
+        pendingAlbum?: string[],
+      ): Promise<void>
       state(): Promise<State>
       draft(s: string): Promise<void>
       getTasteStatus(): Promise<TasteStatus>
@@ -347,6 +356,7 @@ function Music() {
       .state()
       .then((s) => {
         setState(s)
+        setRepeatOne(s.repeatOne)
       })
       .catch((e) => setError(String(e)))
     const mode = (v: Mode) => {
@@ -527,7 +537,10 @@ function Music() {
         return result
       }
       const ids = arrange(latest.queue.length ? latest.queue : legacyQueue)
-      await host.setQueue(ids, albumIncludesCurrent ? 0 : latest.queueOccurrence)
+      const pending = Array.isArray(input)
+        ? input
+        : latest.pendingAlbum.filter((id) => !added.has(id))
+      await host.setQueue(ids, albumIncludesCurrent ? 0 : latest.queueOccurrence, pending)
       setShuffled((prev) => prev && arrange(prev))
       await refresh()
     }
@@ -547,9 +560,9 @@ function Music() {
   function resumeOrStart() {
     if (!primary) return Promise.resolve()
     if (primary === now && queue.includes(primary))
-      return navigate(primary, queue, state?.queueOccurrence)
+      return navigate(primary, queue, state?.queueOccurrence, false, state?.pendingAlbum)
     if (queue.length && order.includes(primary))
-      return navigate(primary, queue, state?.queueOccurrence)
+      return navigate(primary, queue, state?.queueOccurrence, false, state?.pendingAlbum)
     if (shuffled) {
       const nextOrder = shuffleQueue(visibleQueue)
       setShuffled(nextOrder)
@@ -557,14 +570,20 @@ function Music() {
     }
     return navigate(primary, visibleQueue)
   }
-  function play(id: string, ids = visibleQueue, occurrence = 0, restart = false) {
+  function play(
+    id: string,
+    ids = visibleQueue,
+    occurrence = 0,
+    restart = false,
+    pendingAlbum: string[] = [],
+  ) {
     const seq = ++epoch.current
     const run = async () => {
       const el = audio.current
       if (!el || seq !== epoch.current) return
       if (current.current === id) {
         if (restart) el.currentTime = 0
-        await host.playQueue(id, ids, el.currentTime, occurrence)
+        await host.playQueue(id, ids, el.currentTime, occurrence, pendingAlbum)
         await el.play()
         return
       }
@@ -592,20 +611,35 @@ function Music() {
       el.src = src
       el.currentTime = resume
       setTime(resume)
-      await host.playQueue(id, ids, resume, occurrence)
+      await host.playQueue(id, ids, resume, occurrence, pendingAlbum)
       await el.play()
     }
     const operation = switching.current.then(run)
     switching.current = operation.catch(() => {})
     return operation
   }
-  async function navigate(id: string, ids: string[], occurrence = 0, restart = false) {
+  async function navigate(
+    id: string,
+    ids: string[],
+    occurrence = 0,
+    restart = false,
+    pendingAlbum: string[] = [],
+  ) {
     const row = state?.items.find((r) => r.id === id)
     if (row?.online && !playable(row)) await audition(row, undefined, undefined, ids)
-    else await play(id, ids, occurrence, restart)
+    else await play(id, ids, occurrence, restart, pendingAlbum)
   }
   function navigateAt(position: number) {
-    return navigate(order[position], queue, occurrenceAt(order, position), true)
+    const pending = state?.pendingAlbum ?? []
+    const target = order[position]
+    const at = position > index ? pending.indexOf(target) : -1
+    return navigate(
+      target,
+      queue,
+      occurrenceAt(order, position),
+      true,
+      at >= 0 ? pending.slice(at + 1) : [],
+    )
   }
   async function next() {
     if (following >= 0) await navigateAt(following)
@@ -620,6 +654,10 @@ function Music() {
     }
   }
   async function finishTrack() {
+    if (following > index && state?.pendingAlbum.includes(order[following])) {
+      await navigateAt(following)
+      return
+    }
     if (repeatOne && audio.current && current.current) {
       audio.current.currentTime = 0
       await audio.current.play()
@@ -1278,6 +1316,7 @@ function Music() {
               )
             }
             onClick={() => {
+              void host.setRepeatOne(!!shuffled).catch((e) => setError(String(e)))
               setRepeatOne(!!shuffled)
               setShuffled(
                 !shuffled && !repeatOne
