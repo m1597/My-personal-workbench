@@ -115,6 +115,7 @@ try {
     )
     .toBe(1)
   assert.equal(await duoCard.locator('img').count(), 0)
+  await expect(duoCard.locator('svg')).toBeVisible()
   await page.screenshot({ scale: 'css', path: path.join(root, 'albums.png') })
   await trioCard.click()
   const detail = page.getByRole('region', { name: '专辑曲目' })
@@ -130,6 +131,7 @@ try {
   await expect.poll(async () => (await state()).queue).toEqual(trio.tracks)
   const player = page.locator('audio')
   await expect.poll(() => player.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
+  await expect(page.locator('.music-player .music-disc img')).toHaveAttribute('src', embedded)
   await page.screenshot({ scale: 'css', path: path.join(root, 'album-detail.png') })
   await player.evaluate((a) => {
     a.currentTime = a.duration - 0.12
