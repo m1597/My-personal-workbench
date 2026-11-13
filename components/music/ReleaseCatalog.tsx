@@ -191,9 +191,10 @@ export function AlbumEditions({
       {status && <p role="alert">{status}</p>}
       {choices?.length === 0 && <p>没有找到对应的发行版本。</p>}
       {!!choices?.length && (
-        <label>
+        <label htmlFor="album-edition-picker">
           发行版本{' '}
           <Dropdown
+            id="album-edition-picker"
             inlinePopup
             aria-label="发行版本"
             className="edition-select"
