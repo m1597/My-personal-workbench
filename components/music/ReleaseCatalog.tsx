@@ -30,7 +30,8 @@ function NewsTracks({ group, search }: { group: News; search: (q: string) => voi
   const [selected, setSelected] = useState('')
   const [tracks, setTracks] = useState<ReleaseTrack[]>()
   const [error, setError] = useState('')
-  const [retry, setRetry] = useState(0)
+  const [editionRetry, setEditionRetry] = useState(0)
+  const [trackRetry, setTrackRetry] = useState(0)
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry starts a fresh request after a failed lookup.
   useEffect(() => {
     let active = true
@@ -49,7 +50,7 @@ function NewsTracks({ group, search }: { group: News; search: (q: string) => voi
     return () => {
       active = false
     }
-  }, [group.id, retry])
+  }, [group.id, editionRetry])
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry also reloads the currently selected edition.
   useEffect(() => {
     let active = true
@@ -68,7 +69,7 @@ function NewsTracks({ group, search }: { group: News; search: (q: string) => voi
     return () => {
       active = false
     }
-  }, [selected, retry])
+  }, [selected, trackRetry])
   return (
     <div className="release-track-picker">
       {editions.length > 1 && (
@@ -92,7 +93,10 @@ function NewsTracks({ group, search }: { group: News; search: (q: string) => voi
       {error ? (
         <p role="alert">
           {error}{' '}
-          <Button size="small" onClick={() => setRetry((n) => n + 1)}>
+          <Button
+            size="small"
+            onClick={() => (selected ? setTrackRetry((n) => n + 1) : setEditionRetry((n) => n + 1))}
+          >
             重试
           </Button>
         </p>

@@ -187,6 +187,10 @@ async function launch() {
             },
           ],
         })
+      if (entity === second && globalThis.failEditionOnce) {
+        globalThis.failEditionOnce = false
+        return new Response(null, { status: 503 })
+      }
       if (entity === first || entity === second)
         return Response.json({
           'artist-credit': artistCredit,
@@ -275,7 +279,21 @@ try {
   await news().getByRole('button', { name: '查看曲目' }).first().click()
   const pick = news().getByRole('button', { name: '选择版本播放' }).first()
   await expect(pick).toBeVisible()
+  const selector = news().getByRole('combobox', { name: '动态发行版本' })
+  await app.evaluate(() => {
+    globalThis.failEditionOnce = true
+  })
+  await selector.click()
+  await page.getByRole('option', { name: /豪华版/ }).click()
+  await expect(news().getByRole('alert')).toContainText('暂时无法访问')
+  const failedRequests = await app.evaluate(() => globalThis.catalogRequests)
+  await news().getByRole('button', { name: '重试' }).click()
+  await expect(news().getByText('2.2 缺少曲', { exact: true })).toBeVisible()
+  await expect(selector).toContainText('豪华版')
   const requests = await app.evaluate(() => globalThis.catalogRequests)
+  assert.deepEqual(requests.slice(failedRequests.length), [
+    '/ws/2/release/00000000-0000-0000-0000-000000000002',
+  ])
   await news().getByRole('button', { name: '收起曲目' }).click()
   await news().getByRole('button', { name: '查看曲目' }).first().click()
   await expect(pick).toBeVisible()
