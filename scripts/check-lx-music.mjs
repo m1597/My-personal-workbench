@@ -29,7 +29,11 @@ const qqPage = await platformSearch(
               meta: { sum: 50 },
               body: {
                 song: {
-                  list: Array(20).fill({ mid: 'test', file: { media_mid: 'test' }, interval: 125 }),
+                  list: Array(20).fill({
+                    mid: 'test',
+                    file: { media_mid: 'test' },
+                    interval: 125,
+                  }),
                 },
               },
             },
@@ -138,13 +142,13 @@ try {
   const page = await app.firstWindow()
   const tabs = page.getByRole('tab')
   await expect(tabs).toHaveCount(4)
-  for (const [index, name] of ['本地曲库', '下载音乐', '每日推荐', '设置'].entries())
+  for (const [index, name] of ['本地曲库', '搜索音乐', '每日推荐', '设置'].entries())
     await expect(tabs.nth(index)).toHaveAccessibleName(name)
   await page
     .getByRole('complementary', { name: 'Music 使用引导' })
     .getByRole('button', { name: '跳过' })
     .click()
-  await expect(page.getByRole('button', { name: /音乐源|查找版本/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /音乐源|搜索/ })).toHaveCount(0)
   await page.getByRole('tab', { name: '设置' }).click()
   await selectMusicSettings(page, '音乐源')
   await choose(sourceFile)
@@ -216,7 +220,12 @@ try {
         if (url.href !== 'https://1.1.1.1/test-source.js') throw Error('测试地址不匹配')
         const req = new EventEmitter()
         req.end = () =>
-          done(Object.assign(Readable.from([Buffer.from(code)]), { statusCode: 200, headers: {} }))
+          done(
+            Object.assign(Readable.from([Buffer.from(code)]), {
+              statusCode: 200,
+              headers: {},
+            }),
+          )
         return req
       }
     }, code)
@@ -224,20 +233,22 @@ try {
     await page.getByRole('button', { name: '导入链接' }).click()
     await expect.poll(() => page.evaluate(() => window.music.lxInfo())).toBe('在线测试源')
   }
-  await page.getByRole('tab', { name: '下载音乐' }).click()
-  const pane = page.getByRole('region', { name: '下载音乐' })
-  const find = pane.getByRole('button', { name: '查找版本' })
+  await page.getByRole('tab', { name: '搜索音乐' }).click()
+  const pane = page.getByRole('region', { name: '搜索音乐' })
+  const find = pane.getByRole('button', { name: '搜索' })
+  const query = pane.getByRole('textbox', { name: '搜索关键词' })
   if (!live) {
     await expect(find).toBeDisabled()
-    await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('只搜艺人')
-    await find.click()
+    await expect(pane.getByRole('textbox')).toHaveCount(1)
+    await expect(pane.getByRole('combobox', { name: '从曲库选择' })).toHaveCount(0)
+    await query.fill('只搜艺人')
+    await query.press('Enter')
     await expect(pane.getByText('只搜艺人', { exact: true })).toBeVisible()
     await expect(pane.getByText('1 个版本', { exact: true })).toBeVisible()
-    await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('')
-    await pane.getByRole('textbox', { name: '歌名', exact: true }).fill('手动歌名')
+    await query.fill('手动歌名')
     await find.click()
     await expect(pane.getByText('手动歌名', { exact: true })).toBeVisible()
-    await pane.getByRole('textbox', { name: '艺人', exact: true }).fill('手动艺人')
+    await query.fill('手动歌名 手动艺人')
     await find.click()
     await pane.getByRole('button', { name: '取消', exact: true }).click()
     await find.click()
@@ -249,17 +260,15 @@ try {
     await pane.getByRole('tab', { name: 'QQ 音乐' }).click()
     await expect(pane.getByText('QQ独有版本')).toBeVisible()
     await expect(pane.getByRole('listitem')).toHaveCount(1)
-    await expect(pane.getByRole('textbox', { name: '艺人', exact: true })).toHaveValue('手动艺人')
+    await expect(query).toHaveValue('手动歌名 手动艺人')
     await pane.getByRole('tab', { name: '酷狗音乐' }).click()
     await expect(pane.getByText(/不支持酷狗音乐/)).toBeVisible()
     await expect(pane.getByRole('listitem')).toHaveCount(0)
     await pane.getByRole('tab', { name: '网易云音乐' }).click()
     await expect(pane.getByRole('listitem')).toHaveCount(50)
   }
-  await pane.getByRole('combobox', { name: '从曲库选择' }).click()
-  await pane.getByRole('option', { name: row.title + ' · ' + row.artist }).click()
-  await expect(pane.getByRole('textbox', { name: '歌名', exact: true })).toHaveValue(row.title)
-  await find.click()
+  await query.fill(row.title + ' ' + row.artist)
+  await query.press('Enter')
   const downloads = pane.getByRole('button', { name: '下载', exact: true })
   await downloads.first().waitFor({ timeout: 65000 })
   await page.evaluate(() => {
@@ -352,7 +361,7 @@ try {
       2,
     )
     console.log(
-      'PASS 四页入口、单歌名、单艺人、组合和曲库搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
+      'PASS 四页入口、单歌名、单艺人、组合关键词搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
         root,
     )
   } else {

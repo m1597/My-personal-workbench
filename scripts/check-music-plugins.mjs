@@ -69,6 +69,8 @@ try {
     if (id === 'mcp') {
       const command = page.locator('.music-mcp-connection code')
       await expect(command).toContainText('music-source-mcp.mjs')
+      await expect(page.locator('.music-mcp-connection')).toContainText('移动和重命名前后的路径')
+      await expect(page.locator('.music-mcp-connection')).toContainText('重新定位')
       await expect(command).toBeInViewport({ ratio: 0.99 })
     }
     await page.screenshot({
@@ -82,7 +84,7 @@ try {
     await checkStep(id, 'regular')
   }
   await guide().getByRole('button', { name: '完成' }).click()
-  for (const name of ['本地曲库', '下载音乐', '每日推荐', '设置']) {
+  for (const name of ['本地曲库', '搜索音乐', '每日推荐', '设置']) {
     const tab = page.getByRole('tab', { name, exact: true })
     await tab.click()
     await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)

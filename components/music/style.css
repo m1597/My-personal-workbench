@@ -404,27 +404,21 @@ li[data-active="true"] .music-track-icon,
 }
 .download-search {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-8);
 }
-.lx-panel .download-search label {
-  display: grid;
-  min-width: 0;
+.lx-panel .search-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
 }
-.download-search .fui-Combobox {
+.lx-panel li > div:first-child {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
-@media (max-width: 600px) {
-  .download-search {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .download-search label[for="download-library"],
-  .download-search > button {
-    grid-column: 1 / -1;
-  }
-  .download-search .fui-Input {
-    min-width: 0;
+@media (max-width: 480px) {
+  .lx-panel li {
+    flex-wrap: wrap;
   }
 }
 .lx-line,

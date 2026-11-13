@@ -322,7 +322,7 @@ try {
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).importJob.running))
     .toBe(false)
-  await page.getByRole('tab', { name: '下载音乐' }).click()
+  await page.getByRole('tab', { name: '搜索音乐' }).click()
   await page.getByRole('tab', { name: '本地曲库' }).click()
   await button('全部歌曲').click()
   await expect(page.locator('.library-name strong')).toHaveText(['海边'])

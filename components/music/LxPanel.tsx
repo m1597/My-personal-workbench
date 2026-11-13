@@ -1,17 +1,39 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Input, Dropdown, Option, Combobox, Tab, TabList } from '@fluentui/react-components'
-import type { LocalTrack } from './LibraryPane'
+import {
+  Button,
+  Input,
+  Dropdown,
+  Option,
+  Menu,
+  MenuTrigger,
+  MenuPopover,
+  MenuList,
+  MenuItem,
+  Tab,
+  TabList,
+} from '@fluentui/react-components'
+import type { Playlist } from './LibraryPane'
 export type Versions = {
-  items: { key: string; title: string; artist: string; album: string; quality?: string[] }[]
+  items: {
+    key: string
+    title: string
+    artist: string
+    album: string
+    quality?: string[]
+  }[]
   quality: string[]
   partial?: boolean
 }
 export function DownloadPane({
-  tracks,
+  playlists,
+  onPlay,
+  onAdd,
   refresh,
   preferredQuality = '320k',
 }: {
-  tracks: LocalTrack[]
+  playlists: Playlist[]
+  onPlay: (key: string, quality: string) => Promise<void>
+  onAdd: (playlist: string, key: string) => Promise<void>
   refresh: () => Promise<void>
   preferredQuality?: string
 }) {
@@ -19,39 +41,30 @@ export function DownloadPane({
     [result, setResult] = useState<Versions>(),
     [quality, setQuality] = useState(''),
     [status, setStatus] = useState(''),
-    [busy, setBusy] = useState(false)
-  const [title, setTitle] = useState('')
-  const [artist, setArtist] = useState('')
-  const [filter, setFilter] = useState('')
-  const [picked, setPicked] = useState('')
+    [operation, setOperation] = useState<'idle' | 'cancellable' | 'pending'>('idle')
+  const busy = operation !== 'idle'
+  const [query, setQuery] = useState('')
   const [platform, setPlatform] = useState('wy')
   const [available, setAvailable] = useState<string[]>()
   const platforms = { wy: '网易云音乐', tx: 'QQ 音乐', kg: '酷狗音乐' }
   const unsupported = available && !available.includes(platform)
-  const hasQuery = Boolean(title.trim() || artist.trim())
-  const matching: LocalTrack[] = []
-  const keyword = filter.trim().toLocaleLowerCase()
-  for (const track of tracks) {
-    if ((track.title + ' ' + track.artist).toLocaleLowerCase().includes(keyword))
-      matching.push(track)
-    if (matching.length >= 50) break
-  }
+  const hasQuery = Boolean(query.trim())
   const host = window.music
   const live = useRef(true)
-  async function act(fn: () => Promise<void>) {
-    setBusy(true)
+  async function act(fn: () => Promise<void>, cancellable = true) {
+    setOperation(cancellable ? 'cancellable' : 'pending')
     setStatus('')
     try {
       await fn()
     } catch (e) {
       if (live.current) setStatus(String(e).split('Error: ').pop() || '操作失败')
     } finally {
-      if (live.current) setBusy(false)
+      if (live.current) setOperation('idle')
     }
   }
-  async function search(query: string | { title: string; artist: string }, target = platform) {
+  async function search(target = platform) {
     setResult(undefined)
-    const found = await host.lxSearch(query, target)
+    const found = await host.lxSearch({ title: query.trim(), artist: '' }, target)
     if (!live.current) return
     setResult(found)
     setQuality(found.quality.includes(preferredQuality) ? preferredQuality : found.quality[0])
@@ -82,10 +95,10 @@ export function DownloadPane({
     }
   }, [])
   return (
-    <section className="lx-panel" aria-label="下载音乐">
+    <section className="lx-panel" aria-label="搜索音乐">
       <TabList
         size="small"
-        aria-label="下载平台"
+        aria-label="搜索平台"
         selectedValue={platform}
         onTabSelect={(_, data) => {
           const next = String(data.value)
@@ -94,7 +107,7 @@ export function DownloadPane({
           setResult(undefined)
           setStatus('')
           if (name && hasQuery && (!available || available.includes(next)))
-            void act(() => search(picked || { title: title.trim(), artist: artist.trim() }, next))
+            void act(() => search(next))
         }}
       >
         <Tab value="wy" disabled={busy}>
@@ -118,97 +131,43 @@ export function DownloadPane({
         className="download-search"
         onSubmit={(e) => {
           e.preventDefault()
-          if (!busy && name && hasQuery && !unsupported)
-            void act(() => search(picked || { title: title.trim(), artist: artist.trim() }))
+          if (!busy && name && hasQuery && !unsupported) void act(() => search())
         }}
       >
-        {tracks.length > 0 && (
-          <label htmlFor="download-library">
-            从曲库选择
-            <Combobox
-              id="download-library"
-              inlinePopup
-              aria-label="从曲库选择"
-              listbox={{ className: 'component-popup' }}
-              placeholder="输入歌名或艺人筛选"
-              value={filter}
-              disabled={busy}
-              selectedOptions={picked ? [picked] : []}
-              onChange={(e) => {
-                setFilter(e.target.value)
-                setPicked('')
-              }}
-              onOptionSelect={(_, data) => {
-                const track = matching.find((t) => t.id === data.optionValue)
-                if (!track) return
-                setPicked(track.id)
-                setTitle(track.title)
-                setArtist(track.artist)
-                setFilter('')
-                setResult(undefined)
-                setStatus('')
-              }}
-            >
-              {matching.map((t) => (
-                <Option key={t.id} value={t.id} text={t.title + ' · ' + t.artist}>
-                  {t.title + ' · ' + t.artist}
-                </Option>
-              ))}
-            </Combobox>
-          </label>
-        )}
-        <label htmlFor="download-title">
-          歌名
-          <Input
-            id="download-title"
-            aria-label="歌名"
-            value={title}
-            maxLength={256}
-            disabled={busy}
-            onChange={(_, data) => {
-              setTitle(data.value)
-              setPicked('')
-              setResult(undefined)
-              setStatus('')
-            }}
-          />
-        </label>
-        <label htmlFor="download-artist">
-          艺人
-          <Input
-            id="download-artist"
-            aria-label="艺人"
-            value={artist}
-            maxLength={256}
-            disabled={busy}
-            onChange={(_, data) => {
-              setArtist(data.value)
-              setPicked('')
-              setResult(undefined)
-              setStatus('')
-            }}
-          />
-        </label>
+        <Input
+          aria-label="搜索关键词"
+          placeholder="输入歌名、艺人或关键词"
+          value={query}
+          maxLength={256}
+          disabled={busy}
+          onChange={(_, data) => {
+            setQuery(data.value)
+            setResult(undefined)
+            setStatus('')
+          }}
+        />
         <Button
           type="submit"
           appearance="primary"
           disabled={!name || !hasQuery || busy || unsupported}
         >
-          查找版本
+          搜索
         </Button>
       </form>
       {busy ? (
         <div role="status">
           正在处理…{' '}
-          <Button size="small" onClick={() => void host.lxCancel()}>
-            取消
-          </Button>
+          {operation === 'cancellable' && (
+            <Button size="small" onClick={() => void host.lxCancel()}>
+              取消
+            </Button>
+          )}
         </div>
       ) : null}
       {result && result.items.length > 0 && (
         <>
           <label htmlFor="lx-quality">
-            下载音质{' '}
+            音质{' '}
             <Dropdown
               inlinePopup
               listbox={{ className: 'component-popup' }}
@@ -228,7 +187,8 @@ export function DownloadPane({
             </Dropdown>
           </label>
           <small>
-            {result.items.length} 个版本{result.partial && ' · 后续结果暂时不可用'}
+            {result.items.length} 个版本
+            {result.partial && ' · 后续结果暂时不可用'}
           </small>
           <ul>
             {result.items.map((item) => (
@@ -237,30 +197,71 @@ export function DownloadPane({
                   <strong>{item.title}</strong>
                   <small>{[item.artist, item.album].filter(Boolean).join(' · ')}</small>
                 </div>
-                <Button
-                  disabled={busy || (item.quality !== undefined && !item.quality.includes(quality))}
-                  title={
-                    item.quality && !item.quality.includes(quality)
-                      ? '此版本没有所选音质'
-                      : undefined
-                  }
-                  size="small"
-                  onClick={() =>
-                    void act(async () => {
-                      const result = await host.lxDownload(item.key, quality, true)
-                      if (result) {
-                        const via =
-                          result.sources.length > 1
-                            ? ' · 自动换源：' + result.sources.join(' → ')
-                            : ''
-                        setStatus('已下载并入库 · ' + result.file + via)
-                        await refresh()
-                      }
-                    })
-                  }
-                >
-                  下载
-                </Button>
+                <div className="search-result-actions">
+                  <Button
+                    size="small"
+                    disabled={
+                      busy || (item.quality !== undefined && !item.quality.includes(quality))
+                    }
+                    onClick={() => void act(() => onPlay(item.key, quality), false)}
+                  >
+                    播放
+                  </Button>
+                  <Button
+                    disabled={
+                      busy || (item.quality !== undefined && !item.quality.includes(quality))
+                    }
+                    title={
+                      item.quality && !item.quality.includes(quality)
+                        ? '此版本没有所选音质'
+                        : undefined
+                    }
+                    size="small"
+                    onClick={() =>
+                      void act(async () => {
+                        const result = await host.lxDownload(item.key, quality, true)
+                        if (result) {
+                          const via =
+                            result.sources.length > 1
+                              ? ' · 自动换源：' + result.sources.join(' → ')
+                              : ''
+                          setStatus('已下载并入库 · ' + result.file + via)
+                          await refresh()
+                        }
+                      })
+                    }
+                  >
+                    下载
+                  </Button>
+                  <Menu>
+                    <MenuTrigger disableButtonEnhancement>
+                      <Button size="small" disabled={busy}>
+                        加入歌单
+                      </Button>
+                    </MenuTrigger>
+                    <MenuPopover className="component-popup">
+                      <MenuList>
+                        {playlists.length ? (
+                          playlists.map((list) => (
+                            <MenuItem
+                              key={list.id}
+                              onClick={() =>
+                                void act(async () => {
+                                  await onAdd(list.id, item.key)
+                                  if (live.current) setStatus('已加入「' + list.name + '」')
+                                }, false)
+                              }
+                            >
+                              {list.name}
+                            </MenuItem>
+                          ))
+                        ) : (
+                          <MenuItem disabled>请先在本地曲库新建歌单</MenuItem>
+                        )}
+                      </MenuList>
+                    </MenuPopover>
+                  </Menu>
+                </div>
               </li>
             ))}
           </ul>
