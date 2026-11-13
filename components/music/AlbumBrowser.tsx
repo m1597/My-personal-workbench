@@ -1,6 +1,5 @@
 import {
   Button,
-  Checkbox,
   Input,
   Menu,
   MenuItem,
@@ -9,24 +8,48 @@ import {
   MenuTrigger,
   MenuItemRadio,
 } from '@fluentui/react-components'
-import { ArrowLeft, ArrowDownUp, Disc3, Play, Search } from 'lucide-react'
+import { ArrowLeft, ArrowDownUp, Play, Search } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatTime, type LocalTrack } from './LibraryPane'
 import './albums.css'
 
-export type Album = { id: string; title: string; artist: string; tracks: string[] }
+export type Album = {
+  id: string
+  title: string
+  artist: string
+  tracks: string[]
+}
+
+const pendingCovers = new Map<string, Promise<string | null>>()
+const defaultCover = './default-cover.png'
+
+function requestCover(id: string, track: boolean, revision: number) {
+  const key = [revision, track ? 'track' : 'album', id].join(':')
+  let request = pendingCovers.get(key)
+  if (!request) {
+    request = (track ? window.music.trackCover(id) : window.music.albumCover(id)).finally(() => {
+      pendingCovers.delete(key)
+    })
+    pendingCovers.set(key, request)
+  }
+  return request
+}
 
 export function Cover({
   id,
   track = false,
-  fallback,
+  revision = 0,
 }: {
   id?: string
   track?: boolean
-  fallback?: string
+  revision?: number
 }) {
   const frame = useRef<HTMLSpanElement>(null)
-  const [image, setImage] = useState<{ id: string; url: string }>()
+  const [image, setImage] = useState<{
+    id: string
+    revision: number
+    url: string
+  }>()
   useEffect(() => {
     const element = frame.current
     if (!id || !element) return
@@ -34,10 +57,9 @@ export function Cover({
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
       observer.disconnect()
-      const request = track ? window.music.trackCover(id) : window.music.albumCover(id)
-      void request
+      void requestCover(id, track, revision)
         .then((url) => {
-          if (alive && url) setImage({ id, url })
+          if (alive && url) setImage({ id, revision, url })
         })
         .catch(() => {})
     })
@@ -46,16 +68,14 @@ export function Cover({
       alive = false
       observer.disconnect()
     }
-  }, [id, track])
+  }, [id, track, revision])
   return (
     <span ref={frame} className="album-art" aria-hidden="true">
-      {image && image.id === id ? (
-        <img src={image.url} alt="" onError={() => setImage(undefined)} />
-      ) : fallback ? (
-        <img src={fallback} alt="" />
-      ) : (
-        <Disc3 />
-      )}
+      <img
+        src={(image?.id === id && image?.revision === revision && image.url) || defaultCover}
+        alt=""
+        onError={image ? () => setImage(undefined) : undefined}
+      />
     </span>
   )
 }
@@ -70,7 +90,6 @@ type Props = {
 
 const sortLabels = { name: '专辑名称', descending: '曲数从多到少', ascending: '曲数从少到多' }
 type AlbumSort = keyof typeof sortLabels
-const batchSize = 48
 
 export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Props) {
   const [albums, setAlbums] = useState<Album[]>()
@@ -78,11 +97,8 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
   const [attempt, setAttempt] = useState(0)
   const [chosen, setChosen] = useState('')
   const [search, setSearch] = useState('')
-  const [limit, setLimit] = useState(batchSize)
   const [sort, setSort] = useState<AlbumSort>('name')
-  const [multiple, setMultiple] = useState(false)
   const section = useRef<HTMLElement>(null)
-  const sentinel = useRef<HTMLDivElement>(null)
   const listOffset = useRef(0)
   const trackMap = useMemo(
     () => new Map(tracks.filter((row) => row.listed).map((row) => [row.id, row])),
@@ -118,10 +134,8 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
   const selected = listed.find((album) => album.id === chosen)
   const query = search.trim().toLocaleLowerCase()
   const filtered = useMemo(() => {
-    const result = listed.filter(
-      (album) =>
-        (!multiple || album.tracks.length >= 2) &&
-        [album.title, album.artist].some((value) => value.toLocaleLowerCase().includes(query)),
+    const result = listed.filter((album) =>
+      [album.title, album.artist].some((value) => value.toLocaleLowerCase().includes(query)),
     )
     if (sort !== 'name')
       result.sort((a, b) =>
@@ -130,27 +144,12 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
           : a.tracks.length - b.tracks.length,
       )
     return result
-  }, [listed, multiple, query, sort])
+  }, [listed, query, sort])
   const detailOpen = Boolean(selected)
   useLayoutEffect(() => {
     const scroll = section.current?.closest('.music-scroll')
     scroll?.scrollTo(0, detailOpen ? 0 : listOffset.current)
   }, [detailOpen])
-  useEffect(() => {
-    const target = sentinel.current
-    if (detailOpen || limit >= filtered.length || !target) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          observer.disconnect()
-          setLimit(limit + batchSize)
-        }
-      },
-      { root: target.closest('.music-scroll'), rootMargin: '0px 0px 400px' },
-    )
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [detailOpen, filtered.length, limit])
   if (error)
     return (
       <div role="alert">
@@ -175,7 +174,7 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
           返回专辑
         </Button>
         <header className="album-detail-header">
-          <Cover key={revision} id={selected.id} />
+          <Cover revision={revision} id={selected.id} />
           <div>
             <h2>{selected.title}</h2>
             <p>
@@ -229,10 +228,7 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
         placeholder="搜索专辑或专辑艺人"
         contentBefore={<Search size={16} />}
         value={search}
-        onChange={(_, d) => {
-          setSearch(d.value)
-          setLimit(batchSize)
-        }}
+        onChange={(_, d) => setSearch(d.value)}
       />
       <div className="album-controls">
         <Menu checkedValues={{ sort: [sort] }}>
@@ -244,33 +240,17 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
           <MenuPopover className="component-popup">
             <MenuList>
               {(Object.keys(sortLabels) as AlbumSort[]).map((value) => (
-                <MenuItemRadio
-                  key={value}
-                  name="sort"
-                  value={value}
-                  onClick={() => {
-                    setSort(value)
-                    setLimit(batchSize)
-                  }}
-                >
+                <MenuItemRadio key={value} name="sort" value={value} onClick={() => setSort(value)}>
                   {sortLabels[value]}
                 </MenuItemRadio>
               ))}
             </MenuList>
           </MenuPopover>
         </Menu>
-        <Checkbox
-          label="只看 2 首及以上"
-          checked={multiple}
-          onChange={(_, data) => {
-            setMultiple(data.checked === true)
-            setLimit(batchSize)
-          }}
-        />
         <small>{filtered.length} 张专辑</small>
       </div>
       <div className="album-grid">
-        {filtered.slice(0, limit).map((album) => (
+        {filtered.map((album) => (
           <Menu key={album.id} openOnContext>
             <MenuTrigger disableButtonEnhancement>
               <button
@@ -282,7 +262,7 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
                   setChosen(album.id)
                 }}
               >
-                <Cover key={revision} id={album.id} />
+                <Cover revision={revision} id={album.id} />
                 <strong title={album.title}>{album.title}</strong>
                 <small title={album.artist}>
                   {album.artist} · {album.tracks.length} 首
@@ -304,7 +284,6 @@ export function AlbumBrowser({ revision, tracks, active, play, queueNext }: Prop
           </Menu>
         ))}
       </div>
-      {filtered.length > limit && <div ref={sentinel} aria-hidden="true" />}
       {!filtered.length && (
         <p className="music-empty">
           {listed.length ? '没有匹配的专辑' : '导入本地歌曲后，可在这里按专辑浏览。'}

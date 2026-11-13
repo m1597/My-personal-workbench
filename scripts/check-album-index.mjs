@@ -74,6 +74,9 @@ try {
   assert.equal(decodes, 1)
   await writeFile(b, tagged('replacement'))
   assert.equal(await albums.trackCover('a', nativeImage), 'replacement')
+  await writeFile(a, tagged('own'))
+  assert.equal(await albums.trackCover('a', nativeImage), 'own')
+  await writeFile(a, tagged(''))
   library.upsert({
     file: c,
     title: 'Third',

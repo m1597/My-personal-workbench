@@ -114,8 +114,8 @@ try {
         .evaluateAll((images) => images.filter((i) => i.complete && i.naturalWidth > 0).length),
     )
     .toBe(1)
-  assert.equal(await duoCard.locator('img').count(), 0)
-  await expect(duoCard.locator('svg')).toBeVisible()
+  await expect(duoCard.locator('img')).toHaveAttribute('src', './default-cover.png')
+  await expect(trioCard.locator('img')).toHaveAttribute('src', embedded)
   await page.screenshot({ scale: 'css', path: path.join(root, 'albums.png') })
   await trioCard.click()
   const detail = page.getByRole('region', { name: '专辑曲目' })
@@ -145,11 +145,30 @@ try {
   await expect(page.locator('.library-row')).toHaveCount(4)
   assert.deepEqual((await state()).queue, trio.tracks)
   await page.getByRole('button', { name: '播放Overture', exact: true }).click()
-  await page.locator('.music-title-link').click()
+  await page.getByRole('button', { name: '打开歌词页' }).click()
   const playerPage = page.getByRole('region', { name: '播放页' })
   await expect(playerPage.locator('.album-art img')).toHaveAttribute('src', embedded)
   await expect(playerPage.getByRole('status')).toHaveText('暂无歌词')
-  await page.screenshot({ scale: 'css', path: path.join(root, 'now-playing-embedded.png') })
+  await page.screenshot({
+    scale: 'css',
+    path: path.join(root, 'now-playing-embedded.png'),
+  })
+  await playerPage.getByRole('button', { name: '返回', exact: true }).click()
+  await page.getByRole('button', { name: '播放Low Tide', exact: true }).click()
+  await expect(page.locator('.music-player .music-disc img')).toHaveAttribute(
+    'src',
+    './default-cover.png',
+  )
+  await page.getByRole('button', { name: '打开歌词页' }).click()
+  await expect(playerPage.locator('.album-art img')).toHaveAttribute('src', './default-cover.png')
+  await page.screenshot({
+    scale: 'css',
+    path: path.join(root, 'now-playing-default.png'),
+  })
+  await playerPage.getByRole('button', { name: '返回', exact: true }).click()
+  await page.getByRole('button', { name: '专辑', exact: true }).click()
+  await duoCard.click()
+  await expect(detail.locator('.album-art img')).toHaveAttribute('src', './default-cover.png')
   assert.deepEqual(await app.evaluate(() => globalThis.albumNetworkAttempts), [])
   assert.deepEqual(externalRequests, [])
   console.log(

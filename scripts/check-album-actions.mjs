@@ -14,7 +14,7 @@ store.set('music-muted', 'on')
 store.set('music-media-keys', 'off')
 const tone = path.join(root, 'tone.wav')
 await writeFile(tone, recording('fitbay-tone-1'))
-for (let i = 1; i <= 110; i++) {
+for (let i = 1; i <= 261; i++) {
   const album = 'Album ' + String(i).padStart(3, '0')
   for (const n of i === 110 ? [3, 2, 1] : i === 100 ? [2, 1] : [1]) {
     const title = album + '-' + n
@@ -62,18 +62,21 @@ try {
   await button('专辑').click()
   const tiles = page.locator('.album-tile')
   const scroll = page.locator('.music-scroll')
-  await expect(tiles).toHaveCount(48)
-  for (const size of [96, 110]) {
-    await scroll.evaluate((s) => (s.scrollTop = s.scrollHeight - s.clientHeight - 100))
-    await expect(tiles).toHaveCount(size)
-  }
-  await tiles.nth(91).scrollIntoViewIfNeeded()
+  await expect(tiles).toHaveCount(261)
+  await expect(page.getByText('261 张专辑', { exact: true })).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: '只看 2 首及以上' })).toHaveCount(0)
+  const initialHeight = await scroll.evaluate((s) => s.scrollHeight)
+  await scroll.evaluate((s) => (s.scrollTop = s.scrollHeight))
+  await expect(tiles.last()).toBeInViewport()
+  await expect(tiles.last()).toContainText('Album 261')
+  assert.equal(await scroll.evaluate((s) => s.scrollHeight), initialHeight)
+  await page.screenshot({ path: path.join(root, '261-albums-bottom.png') })
   const offset = await scroll.evaluate((s) => s.scrollTop)
-  await tiles.nth(91).click()
+  await tiles.last().click()
   await expect(page.getByRole('region', { name: '专辑曲目' })).toBeVisible()
   assert.equal(await scroll.evaluate((s) => s.scrollTop), 0)
   await button('返回专辑').click()
-  await expect(tiles).toHaveCount(110)
+  await expect(tiles).toHaveCount(261)
   assert.ok(Math.abs((await scroll.evaluate((s) => s.scrollTop)) - offset) <= 1)
   const sort = page.getByRole('button', { name: '专辑排序' })
   await sort.scrollIntoViewIfNeeded()
@@ -81,17 +84,19 @@ try {
   await page.getByRole('menuitemradio', { name: '曲数从多到少' }).click()
   await expect(tiles.first()).toContainText('Album 110')
   await expect(tiles.first()).toContainText('3 首')
-  const filter = page.getByRole('checkbox', { name: '只看 2 首及以上' })
-  await filter.check()
-  await expect(tiles).toHaveCount(2)
-  await sort.scrollIntoViewIfNeeded()
   await sort.click()
   await page.getByRole('menuitemradio', { name: '曲数从少到多' }).click()
-  await expect(tiles.first()).toContainText('Album 100')
-  await filter.uncheck()
   await expect(tiles.first()).toContainText('Album 001')
-  await filter.check()
-  await page.screenshot({ scale: 'css', path: path.join(root, 'album-sort.png') })
+  await expect(tiles.last()).toContainText('Album 110')
+  const search = page.getByRole('searchbox', { name: '搜索本地专辑' })
+  await search.fill('Album 261')
+  await expect(tiles).toHaveCount(1)
+  await expect(tiles.first()).toContainText('Album 261')
+  await search.fill('Album 110')
+  await page.screenshot({
+    scale: 'css',
+    path: path.join(root, 'album-sort.png'),
+  })
   const big = button('Album 110 · Artist')
   await big.click()
   await button('播放整张').click()
@@ -195,7 +200,7 @@ try {
   await button('播放整张').click()
   await expect.poll(async () => (await state()).pendingAlbum).toEqual([])
   console.log(
-    'PASS 110 张专辑自动追加两批、返回偏移、全量排序、过滤、随机模式插播整张、重复曲目上下首、单曲循环自然接续与重开。',
+    'PASS 261 张专辑首次全量、一步到底、返回偏移、全量排序和搜索、随机模式插播整张、重复曲目上下首、单曲循环自然接续与重开。',
     root,
   )
 } finally {
