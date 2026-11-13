@@ -211,11 +211,14 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
         )
           files.push(file)
       const missing = rows.length - files.length
-      if (missing) {
+      const online = playlist.tracks.length - rows.length
+      if (missing || online) {
         const { response } = await dialog.showMessageBox({
           type: 'info',
           title: '导出歌单',
-          message: `缺失或不可用 ${missing} 首，将导出 ${files.length} 首。`,
+          message:
+            (online ? `跳过在线录音 ${online} 首。` : '') +
+            `缺失或不可用 ${missing} 首，将导出 ${files.length} 首。`,
           buttons: ['取消', '继续导出'],
           defaultId: 1,
           cancelId: 0,

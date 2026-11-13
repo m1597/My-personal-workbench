@@ -40,6 +40,8 @@ import {
   LibraryPane,
   formatTime,
   type LocalTrack,
+  type OnlineTrack,
+  type PlaylistTrack,
   type ImportJob,
 } from './LibraryPane'
 import { PlaybackQueue } from './PlaybackQueue'
@@ -114,6 +116,7 @@ type State = {
   sidebarOrder: Record<'folders' | 'playlists', string[]>
   playlists: Playlist[]
   localTracks: LocalTrack[]
+  onlineTracks: OnlineTrack[]
   albumRevision: number
   importJob: ImportJob
   queue: string[]
@@ -192,6 +195,7 @@ declare global {
       relocateLocal(id: string): Promise<void>
       mediaFailed(id: string, url: string): Promise<void>
       localSource(id: string): Promise<string>
+      rememberOnline(key: string, quality?: string): Promise<string>
       dismissRecommendation(id: string): Promise<void>
       setRepeatOne(enabled: boolean): Promise<void>
       setQueue(ids: string[], occurrence?: number, pendingAlbum?: string[]): Promise<void>
@@ -223,7 +227,7 @@ declare global {
       bytes(id: string): Promise<Uint8Array<ArrayBuffer>>
       progress(id: string, time: number, duration: number): Promise<void>
       heardLocal(url: string): Promise<void>
-      release(): Promise<void>
+      release(url?: string): Promise<void>
       clean(): Promise<void>
       checked(id: string, on: boolean): Promise<void>
       keep(batch: string): Promise<void>
@@ -337,6 +341,7 @@ function Music() {
   const switching = useRef(Promise.resolve())
   const audio = useRef<HTMLAudioElement>(null),
     current = useRef(''),
+    pausedOnline = useRef<{ id: string; position: number } | null>(null),
     epoch = useRef(0),
     url = useRef('')
   const refresh = async () => setState(await host.state())
@@ -478,7 +483,11 @@ function Music() {
       ? requestedCollection
       : 'all'
   const memberIds = new Set(playlist?.tracks)
-  const trackById = new Map((state?.localTracks ?? []).map((track) => [track.id, track]))
+  const recordings: PlaylistTrack[] = [
+    ...(state?.localTracks ?? []),
+    ...(state?.onlineTracks ?? []),
+  ]
+  const trackById = new Map(recordings.map((track) => [track.id, track]))
   const categoryRows = playlist
     ? playlistRows(playlist, trackById)
     : (state?.localTracks ?? []).filter(
@@ -512,7 +521,7 @@ function Music() {
   const queue = state?.queue.length ? state.queue : legacyQueue
   const now = loadedId || state?.current || ''
   const available = new Set([
-    ...(state?.localTracks ?? []).filter((t) => t.available).map((t) => t.id),
+    ...recordings.filter((t) => t.available).map((t) => t.id),
     ...(state?.items ?? []).filter(playable).map((t) => t.id),
   ])
   const order = shuffled ?? queue
@@ -568,11 +577,30 @@ function Music() {
     if (current.current === id && audio.current) {
       ++epoch.current
       if (audio.current.paused) return audio.current.play()
-      audio.current.pause()
-      return Promise.resolve()
+      return pauseTrack()
     }
     if (shuffled) setShuffled(shuffleQueue(ids, id))
     return play(id, ids)
+  }
+  async function pauseTrack() {
+    const el = audio.current
+    if (!el) return
+    el.pause()
+    setPaused(true)
+    const id = current.current
+    if (!id.startsWith('online-recording-')) return
+    const src = el.src
+    const position = el.currentTime
+    const duration = el.duration
+    pausedOnline.current = { id, position }
+    current.current = ''
+    el.removeAttribute('src')
+    el.load()
+    try {
+      await host.progress(id, position, duration)
+    } finally {
+      await host.release(src)
+    }
   }
   function resumeOrStart() {
     if (!primary) return Promise.resolve()
@@ -606,14 +634,15 @@ function Music() {
         return
       }
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
-      const local = state?.localTracks.find((t) => t.id === id)
+      const local = trackById.get(id)
       const item = state?.items.find((r) => r.id === id)
-      const stream = local || item?.online || item?.daily
+      const stream = local || id.startsWith('online-recording-') || item?.online || item?.daily
       const src = stream
         ? await host.localSource(id)
         : URL.createObjectURL(new Blob([await host.bytes(id)], { type: 'audio/wav' }))
       if (seq !== epoch.current) {
         if (!stream) URL.revokeObjectURL(src)
+        else await host.release(src)
         return
       }
       el.pause()
@@ -621,11 +650,18 @@ function Music() {
       current.current = id
       setLoadedId(id)
       url.current = stream ? '' : src
+      const checkpoint = pausedOnline.current
+      pausedOnline.current = null
       const resume =
-        id === state?.current &&
-        state.position < (local?.duration ?? item?.audioDuration ?? 20) - 0.1
-          ? state.position
-          : 0
+        checkpoint?.id === id
+          ? checkpoint.position
+          : id === state?.current &&
+              state.position <
+                ((local?.duration || item?.audioDuration) ??
+                  (local?.origin === 'online' ? Infinity : 20)) -
+                  0.1
+            ? state.position
+            : 0
       el.src = src
       el.currentTime = startAt ?? resume
       setTime(el.currentTime)
@@ -646,6 +682,23 @@ function Music() {
     const row = state?.items.find((r) => r.id === id)
     if (row?.online && !playable(row)) await audition(row, undefined, undefined, ids)
     else await play(id, ids, occurrence, restart, pendingAlbum)
+  }
+  async function playSearchResult(key: string, quality?: string) {
+    const request = ++epoch.current
+    const id = await host.rememberOnline(key, quality)
+    if (request !== epoch.current) return
+    const ids = queue.includes(id) ? queue : [...queue, id]
+    if (shuffled && !shuffled.includes(id)) setShuffled([...shuffled, id])
+    try {
+      await play(id, ids)
+    } finally {
+      await refresh()
+    }
+  }
+  async function addSearchResult(playlistId: string, key: string) {
+    const id = await host.rememberOnline(key)
+    await host.setMembership(playlistId, id, true)
+    await refresh()
   }
   function navigateAt(position: number) {
     const pending = state?.pendingAlbum ?? []
@@ -685,8 +738,10 @@ function Music() {
     ++epoch.current
     if (resolving) await host.lxCancel()
     const el = audio.current
+    pausedOnline.current = null
     if (el) {
       el.pause()
+      setPaused(true)
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
       current.current = ''
       setLoadedId('')
@@ -698,17 +753,18 @@ function Music() {
     if (clean) await host.clean()
   }
   const selected = rows.filter((i) => i.checked)
-  const active =
-    state?.localTracks.find((i) => i.id === now) ?? state?.items.find((i) => i.id === now)
+  const active = trackById.get(now) ?? state?.items.find((i) => i.id === now)
   const localMode = active ? 'duration' in active : tab === 'library'
   const elapsed = current.current ? time : (state?.position ?? 0)
   const [lyricsOpen, setLyricsOpen] = useState(false)
   const previousTab = useRef('library')
   const showPlayer = tab === 'playing'
   const needLyrics = lyricsOpen || showPlayer
-  const coverId = (active && ('duration' in active ? active.id : active.localId)) || undefined
+  const coverId =
+    (active && ('duration' in active ? active.origin !== 'online' && active.id : active.localId)) ||
+    undefined
   const favoriteTrack = coverId ? trackById.get(coverId) : undefined
-  const favoriteButton = favoriteTrack && (
+  const favoriteButton = favoriteTrack && favoriteTrack.origin !== 'online' && (
     <Button
       appearance="subtle"
       size="small"
@@ -780,7 +836,7 @@ function Music() {
   function togglePlayback() {
     if (audio.current && !audio.current.paused) {
       ++epoch.current
-      audio.current.pause()
+      void act(pauseTrack)
     } else void act(resumeOrStart)
   }
   const transport = useEffectEvent((action: TransportAction) => {
@@ -850,7 +906,7 @@ function Music() {
               {showPlayer
                 ? '正在播放'
                 : tab === 'download'
-                  ? '在线下载'
+                  ? '在线搜索'
                   : tab === 'library'
                     ? '本地音乐'
                     : tab === 'settings'
@@ -871,7 +927,7 @@ function Music() {
           }}
         >
           <Tab value="library">本地曲库</Tab>
-          <Tab value="download">下载音乐</Tab>
+          <Tab value="download">搜索音乐</Tab>
           <Tab value="audition">每日推荐</Tab>
           <Tab value="settings">设置</Tab>
         </TabList>
@@ -1072,7 +1128,9 @@ function Music() {
         ) : tab === 'download' ? (
           <DownloadPane
             preferredQuality={state?.prefs.quality}
-            tracks={state?.localTracks ?? []}
+            playlists={state?.playlists.filter((list) => !list.system) ?? []}
+            onPlay={playSearchResult}
+            onAdd={addSearchResult}
             refresh={refresh}
           />
         ) : (
@@ -1414,7 +1472,7 @@ function Music() {
           </Button>
           <PlaybackQueue
             active={active}
-            tracks={state?.localTracks}
+            tracks={recordings}
             items={state?.items}
             order={order}
             index={index}
@@ -1453,7 +1511,10 @@ function Music() {
             aria-label={localMode ? '停止播放' : '结束试听并清理缓存'}
             title={localMode ? '停止播放' : '结束试听并清理缓存'}
             icon={<Square size={14} />}
-            disabled={!resolving && (localMode ? !current.current : !state?.items.some(playable))}
+            disabled={
+              !resolving &&
+              (localMode ? !current.current && !pausedOnline.current : !state?.items.some(playable))
+            }
             onClick={() => void act(() => end(!localMode))}
           />
           {presentation === 'bar' && (
@@ -1499,8 +1560,13 @@ function Music() {
           }}
           onError={(e) => {
             if (!current.current) return
-            setError('音频播放失败，请检查文件是否可用')
             const src = e.currentTarget.currentSrc
+            if (!src || src !== e.currentTarget.src) return
+            setError(
+              current.current.startsWith('online-recording-')
+                ? '在线音频播放失败，请重试或更换音乐源'
+                : '音频播放失败，请检查文件是否可用',
+            )
             if (src.startsWith('fitbay-audio:')) {
               const id = current.current
               current.current = ''
@@ -1508,7 +1574,7 @@ function Music() {
               void (
                 e.currentTarget.error?.code === 4 || e.currentTarget.readyState === 0
                   ? host.mediaFailed(id, src)
-                  : host.release()
+                  : host.release(src)
               )
                 .then(refresh)
                 .catch((e) => setError(String(e)))

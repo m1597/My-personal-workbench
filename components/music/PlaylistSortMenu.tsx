@@ -8,7 +8,7 @@ import {
   MenuDivider,
 } from '@fluentui/react-components'
 import { ArrowDownUp } from 'lucide-react'
-import type { LocalTrack } from './LibraryPane'
+import type { PlaylistTrack } from './LibraryPane'
 
 const labels = {
   custom: '自定义顺序',
@@ -34,7 +34,7 @@ const collator = new Intl.Collator('zh-CN', {
   numeric: true,
   sensitivity: 'base',
 })
-export function playlistRows(playlist: Playlist, byId: Map<string, LocalTrack>) {
+export function playlistRows(playlist: Playlist, byId: Map<string, PlaylistTrack>) {
   const ids = playlist.sort === 'added' ? playlist.additions.map(([id]) => id) : playlist.tracks
   const rows = ids.flatMap((id) => byId.get(id) ?? [])
   const key = playlist.sort

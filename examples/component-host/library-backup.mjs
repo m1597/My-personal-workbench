@@ -21,7 +21,14 @@ export function exportLibrary(store, taste) {
       origin,
     }))
   const allLists = store.library.playlists()
-  const playlists = allLists.filter((p) => !p.system)
+  const localIds = new Set(tracks.map((t) => t.id))
+  const playlists = allLists
+    .filter((p) => !p.system)
+    .map((p) => ({
+      ...p,
+      tracks: p.tracks.filter((id) => localIds.has(id)),
+      additions: p.additions.filter(([id]) => localIds.has(id)),
+    }))
   const recommended = allLists.find((p) => p.system)
   return {
     format,

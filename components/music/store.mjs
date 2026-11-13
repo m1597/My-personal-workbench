@@ -391,6 +391,9 @@ export class MusicStore {
         playlists: this.sidebarOrder('playlists'),
       },
       localTracks: this.library.list().map((t) => ({ ...t, notInterested: localIds.has(t.id) })),
+      onlineTracks: this.db
+        .prepare("SELECT *, 'online' AS origin, 1 AS available FROM online_tracks")
+        .all(),
       albumRevision: this.library.albums.revision,
       playlists: this.library.playlists(),
       importJob: this.library.job,
@@ -636,7 +639,11 @@ export class MusicStore {
   }
   checkpoint(id, position) {
     // A renderer can still report progress for a recommendation that expired during playback.
-    if (id && !id.startsWith('local-')) {
+    if (
+      id &&
+      !id.startsWith('local-') &&
+      !this.db.prepare('SELECT 1 FROM online_tracks WHERE id=?').get(id)
+    ) {
       const row = this.db
         .prepare(
           'SELECT i.batch,r.local FROM items i LEFT JOIN recommended_items r ON r.item=i.id WHERE i.id=?',

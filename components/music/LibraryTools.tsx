@@ -162,7 +162,9 @@ export function LibraryTools({ refresh }: { refresh: () => Promise<void> }) {
       <h2>曲库管理</h2>
       <section>
         <h3>备份与恢复</h3>
-        <p>导出歌曲索引、歌单及智能歌单规则、收藏、播放历史和推荐偏好。音频文件需另行备份。</p>
+        <p>
+          导出本地歌曲索引、歌单中的本地成员、智能歌单规则、收藏、播放历史和推荐偏好。音频文件需另行备份。
+        </p>
         <div className="library-tool-actions">
           <Button
             disabled={busy}

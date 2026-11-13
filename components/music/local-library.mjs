@@ -45,6 +45,38 @@ export class LocalLibrary {
           ALTER TABLE playlists ADD COLUMN sort TEXT NOT NULL DEFAULT 'custom';
           ALTER TABLE playlists ADD COLUMN descending INTEGER NOT NULL DEFAULT 0;`)
       }
+      this.db.exec(`CREATE TABLE IF NOT EXISTS online_tracks(
+        id TEXT PRIMARY KEY,title TEXT NOT NULL,artist TEXT NOT NULL,album TEXT NOT NULL,duration REAL NOT NULL
+      );`)
+      if (
+        this.db
+          .prepare('PRAGMA foreign_key_list(playlist_tracks)')
+          .all()
+          .some((fk) => fk.table === 'local_tracks')
+      ) {
+        // A playlist can address either kind of recording. Keep SQLite cascades for
+        // local removals and preserve rowids used as tie breakers for old playlists.
+        this.db.exec(`CREATE TABLE playlist_recordings(id TEXT PRIMARY KEY);
+          INSERT INTO playlist_recordings SELECT id FROM local_tracks;
+          CREATE TRIGGER register_local_playlist_recording AFTER INSERT ON local_tracks BEGIN
+            INSERT OR IGNORE INTO playlist_recordings VALUES(NEW.id); END;
+          CREATE TRIGGER unregister_local_playlist_recording AFTER DELETE ON local_tracks BEGIN
+            DELETE FROM playlist_recordings WHERE id=OLD.id; END;
+          CREATE TRIGGER register_online_playlist_recording AFTER INSERT ON online_tracks BEGIN
+            INSERT INTO playlist_recordings VALUES(NEW.id); END;
+          CREATE TRIGGER unregister_online_playlist_recording AFTER DELETE ON online_tracks BEGIN
+            DELETE FROM playlist_recordings WHERE id=OLD.id; END;
+          ALTER TABLE playlist_tracks RENAME TO previous_playlist_tracks;
+          CREATE TABLE playlist_tracks(
+            playlist TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+            track TEXT NOT NULL REFERENCES playlist_recordings(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL DEFAULT 0, addedAt INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(playlist,track));
+          INSERT INTO playlist_tracks(rowid,playlist,track,position,addedAt)
+            SELECT rowid,playlist,track,position,addedAt FROM previous_playlist_tracks;
+          DROP TABLE previous_playlist_tracks;
+          CREATE INDEX playlist_track_lookup ON playlist_tracks(track);`)
+      }
       if (
         !this.db
           .prepare('PRAGMA table_info(local_tracks)')
@@ -451,6 +483,21 @@ export class LocalLibrary {
     this.db.prepare('DELETE FROM music_roots WHERE dir=?').run(path.dirname(rows[0].file))
     return removed
   }
+  rememberOnline({ id, title, artist, album, duration }) {
+    if (
+      !/^online-recording-[a-f0-9]{64}$/.test(id) ||
+      [title, artist, album].some((s) => typeof s !== 'string' || s.length > 1024) ||
+      !title.trim() ||
+      !Number.isFinite(duration) ||
+      duration < 0
+    )
+      throw Error('在线录音资料无效')
+    this.db
+      .prepare(`INSERT INTO online_tracks VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+      title=excluded.title,artist=excluded.artist,album=excluded.album,duration=excluded.duration`)
+      .run(id, title, artist, album, duration)
+    return id
+  }
   setMembership(playlist, tracks, added) {
     const ids = Array.isArray(tracks) ? tracks : [tracks]
     if (
@@ -471,7 +518,7 @@ export class LocalLibrary {
       if (
         this.db
           .prepare(
-            'SELECT 1 FROM json_each(?) j LEFT JOIN local_tracks t ON t.id=j.value WHERE t.id IS NULL LIMIT 1',
+            'SELECT 1 FROM json_each(?) j LEFT JOIN playlist_recordings t ON t.id=j.value WHERE t.id IS NULL LIMIT 1',
           )
           .get(data)
       )
@@ -549,7 +596,7 @@ export class LocalLibrary {
       const present = new Set(current)
       const restored = new Set()
       const insert = this.db.prepare(
-        'INSERT OR IGNORE INTO playlist_tracks(rowid,playlist,track,position,addedAt) SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM playlist_tracks WHERE rowid=?) THEN ? END,?,id,0,? FROM local_tracks WHERE id=?',
+        'INSERT OR IGNORE INTO playlist_tracks(rowid,playlist,track,position,addedAt) SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM playlist_tracks WHERE rowid=?) THEN ? END,?,id,0,? FROM playlist_recordings WHERE id=?',
       )
       const unhide = this.db.prepare('DELETE FROM removed_recommendation_members WHERE track=?')
       for (const [id, addedAt, originalRow] of entries) {

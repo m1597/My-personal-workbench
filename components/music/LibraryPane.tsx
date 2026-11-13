@@ -73,13 +73,18 @@ export type ImportJob = {
   failed: number
   cancelled: boolean
 }
+export type OnlineTrack = Pick<
+  LocalTrack,
+  'id' | 'title' | 'artist' | 'album' | 'duration' | 'available'
+> & { origin: 'online' }
+export type PlaylistTrack = LocalTrack | OnlineTrack
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 interface Props extends SidebarSorting, PlaylistSorting {
   albumRevision: number
   favorite: (id: string, value: boolean) => Promise<unknown>
   addFavorites: (ids: string[]) => Promise<number | null>
-  rows: LocalTrack[]
+  rows: PlaylistTrack[]
   tracks: LocalTrack[]
   playlists: Playlist[]
   collection: string
@@ -401,7 +406,7 @@ export function LibraryPane({
         <RecentHistory tracks={tracks} play={play} />
       ) : collection === 'infrequent' ? (
         <InfrequentTracks
-          rows={rows}
+          rows={rows.filter((row): row is LocalTrack => row.origin !== 'online')}
           days={days}
           changeDays={changeDays}
           active={active}
@@ -510,7 +515,11 @@ export function LibraryPane({
                   </Menu>
                   <Button
                     size="small"
-                    disabled={batchBusy || !selectedIds.length}
+                    disabled={
+                      batchBusy ||
+                      !selectedIds.length ||
+                      rows.some((r) => r.origin === 'online' && selection?.has(r.id))
+                    }
                     icon={<Heart size={15} />}
                     onClick={() => void batchFavorite()}
                   >
@@ -576,7 +585,7 @@ export function LibraryPane({
                         onDismiss={
                           collection === 'system-recommendations' ? () => dismiss(t.id) : undefined
                         }
-                        dismissed={t.notInterested}
+                        dismissed={t.origin !== 'online' && t.notInterested}
                       >
                         <li
                           {...(currentPlaylist?.sort === 'custom' && !selection
@@ -629,17 +638,15 @@ export function LibraryPane({
                           <div className="library-name">
                             <strong title={t.title}>{t.title}</strong>
                             <small title={t.artist}>{t.artist}</small>
-                            {t.recommendationSource && (
-                              <small title={t.recommendationSource}>
-                                推荐来源 · {t.recommendationSource}
-                              </small>
-                            )}
+                            {t.origin === 'online' && <small>在线录音</small>}
                             {!t.available && <small>文件不可用</small>}
                           </div>
                           <span className="library-album" title={t.album}>
                             {t.album || '—'}
                           </span>
-                          <small className="library-time">{formatTime(t.duration)}</small>
+                          <small className="library-time">
+                            {t.origin === 'online' && !t.duration ? '—' : formatTime(t.duration)}
+                          </small>
                           {!selection && (
                             <div className="track-actions">
                               <Popover>
@@ -653,11 +660,13 @@ export function LibraryPane({
                                   />
                                 </PopoverTrigger>
                                 <PopoverSurface className="component-popup playlist-options">
-                                  <Checkbox
-                                    label="我的收藏"
-                                    checked={!!t.favorite}
-                                    onChange={(_, d) => void favorite(t.id, d.checked === true)}
-                                  />
+                                  {t.origin !== 'online' && (
+                                    <Checkbox
+                                      label="我的收藏"
+                                      checked={!!t.favorite}
+                                      onChange={(_, d) => void favorite(t.id, d.checked === true)}
+                                    />
+                                  )}
                                   <strong>我的歌单</strong>
                                   {playlists.some((p) => !p.system) ? (
                                     playlists
@@ -687,14 +696,27 @@ export function LibraryPane({
                                   onClick={() => relocate(t.id)}
                                 />
                               )}
-                              <Button
-                                size="small"
-                                appearance="subtle"
-                                title="从曲库移除"
-                                aria-label={'从曲库移除' + t.title}
-                                icon={<Trash2 size={15} />}
-                                onClick={() => setAction({ kind: 'song', id: t.id, name: t.title })}
-                              />
+                              {t.origin === 'online' ? (
+                                <Button
+                                  size="small"
+                                  appearance="subtle"
+                                  title="从歌单移除"
+                                  aria-label={'从歌单移除' + t.title}
+                                  icon={<Trash2 size={15} />}
+                                  onClick={() => void membership(collection, t.id, false)}
+                                />
+                              ) : (
+                                <Button
+                                  size="small"
+                                  appearance="subtle"
+                                  title="从曲库移除"
+                                  aria-label={'从曲库移除' + t.title}
+                                  icon={<Trash2 size={15} />}
+                                  onClick={() =>
+                                    setAction({ kind: 'song', id: t.id, name: t.title })
+                                  }
+                                />
+                              )}
                             </div>
                           )}
                         </li>
