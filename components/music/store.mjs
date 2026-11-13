@@ -62,6 +62,14 @@ export class MusicStore {
     for (const { id } of this.db.prepare('SELECT id FROM items').all())
       this.removeCache(id, '.part')
     this.library = new LocalLibrary(this)
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS recent_daily_sources(source TEXT NOT NULL, platform TEXT NOT NULL, PRIMARY KEY(source,platform));`,
+    )
+    if (!this.get('daily-source-history-v1')) {
+      this.db.exec(`INSERT OR IGNORE INTO recent_daily_sources SELECT source,platform FROM recording_copies
+        WHERE automatic=1 AND source IS NOT NULL AND platform IS NOT NULL GROUP BY source,platform ORDER BY MAX(rowid)`)
+      this.set('daily-source-history-v1', 1)
+    }
     this.db.exec(`CREATE TABLE IF NOT EXISTS daily_downloads(
       local TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE,
       batch TEXT NOT NULL,file TEXT NOT NULL,digest TEXT NOT NULL,identity TEXT);

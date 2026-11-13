@@ -315,6 +315,10 @@ function extension(format) {
   throw new InvalidAudio('返回的文件不是支持的音频格式')
 }
 function rememberCopy(store, version, local, automatic) {
+  if (automatic && version.source && version.platform)
+    store.db
+      .prepare('INSERT OR REPLACE INTO recent_daily_sources VALUES(?,?)')
+      .run(version.source, version.platform)
   store.db
     .prepare(
       'INSERT OR REPLACE INTO recording_copies(version,local,automatic,source,platform,sourceId,quality,digest) VALUES(?,?,?,?,?,?,?,?)',
@@ -1021,7 +1025,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       if (health) {
         const recent = store.db
           .prepare(
-            'SELECT source AS name,platform FROM recording_copies WHERE automatic=1 AND source IS NOT NULL ORDER BY rowid DESC LIMIT 32',
+            'SELECT source AS name,platform FROM recent_daily_sources ORDER BY rowid DESC LIMIT 32',
           )
           .all()
         const rank = (src) => {
