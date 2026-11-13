@@ -114,7 +114,7 @@ try {
     await window.music.lxImport()
     await window.music.configureModel('deepseek', 'fixture', 'fixture', false)
   })
-  await page.getByRole('tab', { name: '每日推荐' }).click()
+  await page.getByRole('tab', { name: 'AI 推荐' }).click()
   await page.getByLabel('推荐首数').fill('5')
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('只听青禾本人的作品')
   await page.evaluate(() => {

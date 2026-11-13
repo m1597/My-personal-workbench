@@ -192,7 +192,7 @@ try {
     (t) => t.id === automatic,
   ).recommendationSource
   await page.reload()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   const copies = page.locator('.library-row .library-name')
   const pair = ['允许保存', '试音 mp3'].map((title) =>
     copies.filter({ has: page.getByText(title, { exact: true }) }),

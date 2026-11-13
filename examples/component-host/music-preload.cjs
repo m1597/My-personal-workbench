@@ -15,6 +15,8 @@ const names = [
   'lxSearch',
   'rememberOnline',
   'lxDownload',
+  'downloadTasks',
+  'cancelDownloadTask',
   'downloadSelection',
   'lxPreview',
   'lxCancel',

@@ -66,7 +66,7 @@ try {
     if (docked) await checked(false, true)
     else await externalOpen()
     const music = await player()
-    await music.getByRole('tab', { name: '本地曲库' }).click()
+    await music.getByRole('tab', { name: '曲库' }).click()
     // Offscreen captures omit DWM acrylic. Composite the normal dark fallback for inspection.
     await shell.evaluate(() => delete document.documentElement.dataset.backdrop)
     await music.evaluate(() => delete document.documentElement.dataset.backdrop)
@@ -77,6 +77,52 @@ try {
         for (const child of window.contentView.children) child.setBackgroundColor('#202227')
       }
     })
+    if (docked) {
+      const hostWidth = await app.evaluate(
+        ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getContentSize()[0],
+      )
+      for (const width of [1040, 440]) {
+        await app.evaluate(({ BrowserWindow }, target) => {
+          const win = BrowserWindow.getAllWindows()[0]
+          win.setMinimumSize(320, 400)
+          win.setContentSize(target, 640)
+        }, width)
+        const musicTabs = music.getByRole('tablist', { name: '音乐页面' })
+        const labels = ['曲库', '歌单', '在线找歌', 'AI 推荐', '动态']
+        for (const [i, label] of labels.entries())
+          await expect(musicTabs.getByRole('tab').nth(i)).toHaveAccessibleName(label)
+        await expect.poll(() => music.evaluate(() => innerWidth)).toBeLessThanOrEqual(width + 2)
+        console.log(
+          '停靠导航宽度',
+          width,
+          await music.evaluate(() => ({
+            viewport: innerWidth,
+            tabs: document.querySelector('.music-tabs').clientWidth,
+            scroll: document.querySelector('.music-tabs').scrollWidth,
+          })),
+        )
+        for (const control of [
+          ...(await musicTabs.getByRole('tab').all()),
+          ...(await music.locator('.music-view-actions button').all()),
+        ]) {
+          await expect(control).toBeInViewport({ ratio: 0.98 })
+        }
+        await music.getByRole('tab', { name: '歌单', exact: true }).click()
+        await expect(music.getByRole('heading', { name: '歌单 / 我的收藏' })).toBeVisible()
+        await music.screenshot({
+          path: path.join(evidence, '顶栏停靠-' + width + '.png'),
+          style: ':root { background: var(--base) !important }',
+        })
+        await music.getByRole('button', { name: '更多音乐操作' }).click()
+        await music.getByRole('menuitem', { name: '音乐设置' }).click()
+        await expect(music.locator('.music-settings')).toBeVisible()
+        await music.getByRole('tab', { name: '曲库', exact: true }).click()
+      }
+      await app.evaluate(
+        ({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 720),
+        hostWidth,
+      )
+    }
     await music.getByRole('button', { name: '播放夜航', exact: true }).click({ timeout: 5000 })
     const clock = () => music.locator('audio').evaluate((a) => a.currentTime)
     const playing = async () => {
@@ -197,7 +243,7 @@ try {
     await music.getByRole('button', { name: '返回' }).click()
     await music.getByRole('button', { name: '只显示播放栏' }).click()
     await music.getByRole('button', { name: '展开 Music' }).click()
-    await expect(music.getByRole('tab', { name: '本地曲库' })).toBeVisible()
+    await expect(music.getByRole('tab', { name: '曲库' })).toBeVisible()
     if (docked) await expect(tab).toHaveAttribute('aria-selected', 'true')
     expect(await clock()).toBe(paused)
     await music.getByRole('button', { name: '隐藏到后台' }).click()

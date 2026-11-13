@@ -16,13 +16,26 @@ import {
 } from './MusicSettings'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Button, Checkbox, Slider, Tab, TabList } from '@fluentui/react-components'
+import {
+  Button,
+  Checkbox,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
+  Slider,
+  Tab,
+  TabList,
+} from '@fluentui/react-components'
 import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import {
   AudioLines,
   Heart,
   Disc3,
   CircleHelp,
+  Ellipsis,
+  Settings,
   PanelBottomClose,
   PanelTopOpen,
   PanelTopClose,
@@ -48,6 +61,7 @@ import {
   type ImportJob,
 } from './LibraryPane'
 import { PlaybackQueue } from './PlaybackQueue'
+import { DownloadTasks } from './DownloadTasks'
 import { VolumeControls } from './VolumeControls'
 import './style.css'
 const legacySummaries: Record<string, string> = {
@@ -176,7 +190,7 @@ declare global {
           target: string,
           after: boolean,
         ): Promise<void>
-        createPlaylist(name: string): Promise<string>
+        createPlaylist(name: string, tracks?: string[]): Promise<string>
         setPlaylistSort: PlaylistSorting['setPlaylistSort']
         movePlaylistTrack: PlaylistSorting['movePlaylistTrack']
         setMembership(
@@ -305,6 +319,12 @@ function Music() {
   }
   const startFirstGuide = useEffectEvent(() => visitGuide(0))
   const [script, setScript] = useState('')
+  const [recommendationDraft, setRecommendationDraft] = useState<string>()
+  const [recommendationCount, setRecommendationCount] = useState('5')
+  function editRecommendation(value: string) {
+    setRecommendationDraft(value)
+    void host.draft(value).catch((e) => setError(String(e)))
+  }
   useEffect(() => {
     let alive = true
     void window.music
@@ -319,12 +339,6 @@ function Music() {
       })
       .catch((e) => alive && setError(String(e)))
     return () => {
-  const [recommendationDraft, setRecommendationDraft] = useState<string>()
-  const [recommendationCount, setRecommendationCount] = useState('5')
-  function editRecommendation(value: string) {
-    setRecommendationDraft(value)
-    void host.draft(value).catch((e) => setError(String(e)))
-  }
       alive = false
     }
   }, [])
@@ -347,7 +361,8 @@ function Music() {
     setTab('download')
   }
   const [tab, setTab] = useState('library'),
-    [requestedCollection, setCollection] = useState('all'),
+    [libraryCollection, setLibraryCollection] = useState('all'),
+    [playlistCollection, setPlaylistCollection] = useState('favorites'),
     [search, setSearch] = useState('')
   const [online, setOnline] = useState<{
     row: Item
@@ -417,7 +432,7 @@ function Music() {
     return window.musicWindow.subscribe(mode)
   }, [])
   useEffect(() => {
-    if (tab !== 'library') return
+    if (tab !== 'library' && tab !== 'playlists') return
     let mounted = true
     const rescan = () =>
       void host
@@ -501,6 +516,10 @@ function Music() {
   async function forBatches(items: Item[], action: (batch: string) => Promise<unknown>) {
     for (const id of new Set(items.map((item) => item.batch))) await action(id)
   }
+  const inPlaylists = tab === 'playlists'
+  const libraryPage = tab === 'library' || inPlaylists
+  const requestedCollection = inPlaylists ? playlistCollection : libraryCollection
+  const setCollection = inPlaylists ? setPlaylistCollection : setLibraryCollection
   const playlist = state?.playlists.find((p) => p.id === requestedCollection)
   const collection =
     requestedCollection === 'infrequent' ||
@@ -509,7 +528,9 @@ function Music() {
     (requestedCollection !== 'all' &&
       state?.localTracks.some((track) => track.folder?.id === requestedCollection))
       ? requestedCollection
-      : 'all'
+      : inPlaylists
+        ? 'favorites'
+        : 'all'
   const memberIds = new Set(playlist?.tracks)
   const recordings: PlaylistTrack[] = [
     ...(state?.localTracks ?? []),
@@ -534,10 +555,9 @@ function Music() {
     ),
   )
   const queueable = (row: Item) => playable(row) || row.online
-  const visibleQueue =
-    tab === 'library'
-      ? localRows.filter((row) => row.available).map((row) => row.id)
-      : [...new Set(rows.filter(queueable).map((row) => row.localId ?? row.id))]
+  const visibleQueue = libraryPage
+    ? localRows.filter((row) => row.available).map((row) => row.id)
+    : [...new Set(rows.filter(queueable).map((row) => row.localId ?? row.id))]
   const legacyQueue =
     state?.items
       .filter(
@@ -803,7 +823,7 @@ function Music() {
   }
   const selected = rows.filter((i) => i.checked)
   const active = trackById.get(now) ?? state?.items.find((i) => i.id === now)
-  const localMode = active ? 'duration' in active : tab === 'library'
+  const localMode = active ? 'duration' in active : libraryPage
   const elapsed = current.current ? time : (state?.position ?? 0)
   const [lyricsOpen, setLyricsOpen] = useState(false)
   const previousTab = useRef('library')
@@ -1094,15 +1114,17 @@ function Music() {
           <div className="music-heading">
             <h1>Music</h1>
             <small>
-              {showPlayer
-                ? '正在播放'
-                : tab === 'download'
-                  ? '在线搜索'
-                  : tab === 'library'
-                    ? '本地音乐'
-                    : tab === 'settings'
-                      ? '设置'
-                      : '每日推荐'}
+              {
+                {
+                  playing: '正在播放',
+                  download: '在线找歌',
+                  library: '曲库',
+                  playlists: '歌单',
+                  settings: '音乐设置',
+                  audition: 'AI 推荐',
+                  feed: '动态',
+                }[tab]
+              }
             </small>
           </div>
         </header>
@@ -1114,16 +1136,19 @@ function Music() {
           selectedValue={tab}
           onTabSelect={(_, data) => {
             setGuide(null)
+            setSearch('')
             setReleaseSearch('')
             setTab(String(data.value))
           }}
         >
-          <Tab value="library">本地曲库</Tab>
-          <Tab value="download">搜索音乐</Tab>
-          <Tab value="audition">每日推荐</Tab>
-          <Tab value="settings">设置</Tab>
+          <Tab value="library">曲库</Tab>
+          <Tab value="playlists">歌单</Tab>
+          <Tab value="download">在线找歌</Tab>
+          <Tab value="audition">AI 推荐</Tab>
+          <Tab value="feed">动态</Tab>
         </TabList>
         <div className="music-view-actions">
+          <DownloadTasks batch={batch} saved={downloaded.length} />
           <span className="music-guide-trigger">
             <Button
               appearance="subtle"
@@ -1156,6 +1181,30 @@ function Music() {
             icon={<PanelTopClose size={17} />}
             onClick={() => void act(() => window.musicWindow.present('background'))}
           />
+          <Menu>
+            <MenuTrigger disableButtonEnhancement>
+              <Button
+                size="small"
+                appearance="subtle"
+                icon={<Ellipsis size={17} />}
+                aria-label="更多音乐操作"
+                title="更多音乐操作"
+              />
+            </MenuTrigger>
+            <MenuPopover className="component-popup">
+              <MenuList>
+                <MenuItem
+                  icon={<Settings size={16} />}
+                  onClick={() => {
+                    setGuide(null)
+                    openSettings(settingsCategory)
+                  }}
+                >
+                  音乐设置
+                </MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>
         </div>
       </div>
       {guide !== null && state && (
@@ -1199,8 +1248,9 @@ function Music() {
             }
             back={() => setTab(previousTab.current)}
           />
-        ) : tab === 'library' ? (
+        ) : libraryPage ? (
           <LibraryPane
+            scope={inPlaylists ? 'playlists' : 'library'}
             searchRelease={searchRelease}
             albumRevision={state?.albumRevision ?? 0}
             favorite={(id, on) => act(() => host.setFavorite(id, on))}
@@ -1240,9 +1290,10 @@ function Music() {
               setSearch('')
               if (id === 'system-recommendations') void act(() => host.refreshLocal())
             }}
-            create={(name) =>
+            create={(name, tracks) =>
               act(async () => {
-                setCollection(await host.createPlaylist(name))
+                setPlaylistCollection(await host.createPlaylist(name, tracks))
+                setTab('playlists')
                 setSearch('')
               })
             }
@@ -1331,6 +1382,8 @@ function Music() {
               refresh={refresh}
             />
           )
+        ) : tab === 'feed' ? (
+          <ArtistReleases search={searchRelease} />
         ) : tab === 'download' ? (
           <DownloadPane
             initialQuery={releaseSearch || undefined}
@@ -1344,6 +1397,7 @@ function Music() {
           <>
             {state && (
               <RecommendationComposer
+                currentSong={active}
                 activeTarget={running ? batch?.targetCount : null}
                 running={running}
                 models={state.models}
@@ -1356,7 +1410,6 @@ function Music() {
                 refresh={refresh}
               />
             )}
-            <ArtistReleases search={searchRelease} />
             <section className="music-list">
               <div className="music-section-head">
                 <h2>本次推荐</h2>
@@ -1400,7 +1453,6 @@ function Music() {
                           !!state?.localTracks.find(
                             (row) => row.id === clips.current?.ids[clips.current.index],
                           )?.favorite
-                currentSong={active}
                         }
                         start={() => void act(() => quickAt(downloaded, 0))}
                         save={() =>

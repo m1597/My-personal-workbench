@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { selectMusicSettings } from './music-settings-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import assert from 'node:assert/strict'
@@ -32,7 +32,7 @@ try {
   await app.evaluate(({ dialog }, file) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, localSource)
-  await player.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(player)
   await selectMusicSettings(player, '音乐源')
   await player.getByRole('button', { name: '本地导入' }).click()
   const dropdown = player.getByRole('combobox')
@@ -106,7 +106,7 @@ try {
   })
   console.log('saved', name, (await stat(path.join(output, name))).size)
   await player.reload()
-  await player.getByRole('tab', { name: '本地曲库' }).click()
+  await player.getByRole('tab', { name: '曲库' }).click()
   await player.getByRole('button', { name: '播放' + query.title, exact: true }).click()
   await expect
     .poll(() => player.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0.25))

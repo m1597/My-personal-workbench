@@ -1,3 +1,4 @@
+import { openMusicSettings } from './music-settings-fixture.mjs'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -87,9 +88,9 @@ try {
       document.documentElement,
     ).getPropertyValue('--base')
   })
-  await page.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件夹' }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await expect(page.locator('.library-row')).toHaveCount(4)
   const albums = await page.evaluate(() => window.music.albums())
   const trio = albums.find((a) => a.artist === 'Northern Trio' && a.title === 'Echo')

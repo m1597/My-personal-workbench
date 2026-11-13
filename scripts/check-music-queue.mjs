@@ -66,11 +66,11 @@ try {
   await expect.poll(async () => (await snapshot()).current).toBe('C')
   const titles = ['A', 'B', 'C', 'D', 'E']
   assert.deepEqual((await snapshot()).list, titles)
-  await page.getByRole('tab', { name: '搜索音乐' }).click()
+  await page.getByRole('tab', { name: '在线找歌' }).click()
   await button('播放队列').click()
   await expect(pop.getByText('当前曲目 · C · 测试艺人')).toBeVisible()
   await page.keyboard.press('Escape')
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await button('播放A').click()
   const playing = async () => {
     await expect

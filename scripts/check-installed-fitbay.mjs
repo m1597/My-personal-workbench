@@ -7,7 +7,7 @@ import { promisify } from 'node:util'
 import { _electron as electron, expect } from '@playwright/test'
 import { recording } from '../components/music/offline-source.mjs'
 import { dragMusicIn, dragMusicOut } from './music-drag-fixture.mjs'
-import { selectMusicSettings } from './music-settings-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 
 // Called by check-separate-installers.ps1 only after checking the real installer registrations.
 const [scenario, root] = process.argv.slice(2)
@@ -74,16 +74,16 @@ async function checkInstalledMcp() {
 async function listen(player) {
   const skip = player.getByRole('button', { name: '跳过', exact: true })
   if (await skip.isVisible()) await skip.click()
-  await player.getByRole('tab', { name: '本地曲库', exact: true }).click()
+  await player.getByRole('tab', { name: '曲库', exact: true }).click()
   const file = path.join(root, '安装测试音频.wav')
   await writeFile(file, recording('fitbay-tone-1'))
   await app.evaluate(({ dialog }, file) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, file)
-  await player.getByRole('tab', { name: '设置', exact: true }).click()
+  await openMusicSettings(player)
   await selectMusicSettings(player, '本地曲库')
   await player.getByRole('button', { name: '添加文件', exact: true }).click()
-  await player.getByRole('tab', { name: '本地曲库', exact: true }).click()
+  await player.getByRole('tab', { name: '曲库', exact: true }).click()
   await player.getByRole('button', { name: '播放安装测试音频', exact: true }).click()
   await expect
     .poll(() => player.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0.2))

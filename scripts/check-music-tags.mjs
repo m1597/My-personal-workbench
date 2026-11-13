@@ -10,7 +10,7 @@ import { recording } from '../components/music/offline-source.mjs'
 import { register } from '../examples/component-host/plugins/tags.mjs'
 import { buildTagsRuntime } from './build-tags-runtime.mjs'
 import { _electron as electron, expect } from '@playwright/test'
-import { selectMusicSettings } from './music-settings-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 
 await mkdir('tmp', { recursive: true })
 const dir = await mkdtemp(path.resolve('tmp/music-plugin-tags-'))
@@ -193,7 +193,7 @@ if (process.argv.includes('--ui')) {
     await page.waitForSelector('.music-shell')
     await expect(page.getByRole('button', { name: '跳过' })).toBeVisible()
     await page.getByRole('button', { name: '跳过' }).click()
-    await page.getByRole('tab', { name: '设置', exact: true }).click()
+    await openMusicSettings(page)
     await selectMusicSettings(page, '插件')
     const item = page.locator('article').filter({ hasText: '歌曲标签与封面整理' })
     await choosePluginFile(app, 'tags')

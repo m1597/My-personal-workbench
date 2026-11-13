@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
-import { selectMusicSettings } from './music-settings-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 
 const evidence = await mkdtemp(path.resolve('tmp/music-wave-rules-'))
 const profile = path.join(evidence, 'profile')
@@ -82,7 +82,7 @@ try {
   const button = (name, scope = page) => scope.getByRole('button', { name, exact: true })
   const tab = (name) => page.getByRole('tab', { name, exact: true }).click()
   async function settings() {
-    await tab('设置')
+    await openMusicSettings(page)
     await selectMusicSettings(page, '插件')
   }
   const entry = (name) => page.getByRole('article').filter({ hasText: name })

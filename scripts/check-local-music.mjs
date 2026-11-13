@@ -1,3 +1,4 @@
+import { openMusicSettings } from './music-settings-fixture.mjs'
 import { dragMusicIn, dragMusicOut } from './music-drag-fixture.mjs'
 import assert from 'node:assert/strict'
 import {
@@ -89,24 +90,24 @@ let app = await launch()
 try {
   const page = await app.firstWindow()
   await page.getByRole('button', { name: '跳过', exact: true }).click()
-  await expect(page.getByRole('tab', { name: '本地曲库' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: '曲库' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('button', { name: '播放潮汐', exact: true })).toBeVisible()
   await choose(app, [songs])
-  await page.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件夹' }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await expect(page.getByText(/导入完成 · 新增 4 · 重复 0 · 失败 1/)).toBeVisible()
   await choose(app, [songs])
-  await page.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件夹' }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await expect(page.getByText(/导入完成 · 新增 0 · 重复 4 · 失败 1/)).toBeVisible()
 
   await copyFile(path.join(nested, 'tone.mp3'), duplicate)
   await choose(app, [duplicate, longFile])
-  await page.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件', exact: true }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await expect(page.getByText(/导入完成 · 新增 1 · 重复 1/)).toBeVisible()
   await expect(page.getByRole('button', { name: '播放试音 mp3', exact: true })).toHaveCount(2)
   await page.getByRole('searchbox').fill('声学校验')
@@ -128,7 +129,7 @@ try {
   await page.getByRole('button', { name: '播放试音 flac', exact: true }).click()
   const filtered = (await page.evaluate(() => window.music.state())).queue
   await page.getByRole('searchbox').fill('不存在')
-  await page.getByRole('tab', { name: '每日推荐' }).click()
+  await page.getByRole('tab', { name: 'AI 推荐' }).click()
   await expect(page.getByRole('button', { name: '停止播放' })).toBeEnabled()
   await page.locator('audio').evaluate((a) => {
     a.currentTime = a.duration - 0.2
@@ -171,7 +172,7 @@ try {
   await expect(mode).toHaveText('顺序播放')
   await prev.click()
   await expect.poll(currentId).toBe(filtered[filtered.indexOf(heard.at(-1)) - 1])
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await page.getByRole('searchbox').fill('')
   await page.getByRole('button', { name: '播放长音', exact: true }).click()
   await expect.poll(() => page.locator('audio').evaluate((a) => a.duration)).toBe(200)
@@ -186,7 +187,7 @@ try {
     q: (await window.music.state()).queue,
   }))
   await page.getByRole('searchbox').fill('没有结果')
-  await page.getByRole('tab', { name: '每日推荐' }).click()
+  await page.getByRole('tab', { name: 'AI 推荐' }).click()
   await dragMusicIn(app)
   await dragMusicOut(app)
   assert.deepEqual(
@@ -212,8 +213,8 @@ try {
   await page.getByRole('button', { name: '停止播放' }).click()
   const relocated = path.join(root, '迁移.wav')
   await rename(longFile, relocated)
-  await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await expect(page.getByText('文件不可用', { exact: true })).toBeVisible()
   await choose(app, [relocated])
   await page.getByRole('button', { name: '重新定位长音' }).click()
@@ -244,9 +245,9 @@ try {
   const namesake = path.join(nested, '迁移.wav')
   await writeFile(namesake, wav)
   await choose(app, [relocated, namesake])
-  await page.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件', exact: true }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await expect(page.getByRole('button', { name: '播放迁移', exact: true })).toHaveCount(2)
   const recordings = await page.evaluate(async () =>
     (await window.music.state()).localTracks
@@ -259,8 +260,8 @@ try {
   )
   // A replaced or damaged local file stays in the library and can be relocated.
   await writeFile(duplicate, Buffer.alloc(0))
-  await page.getByRole('tab', { name: '每日推荐' }).click()
-  await page.getByRole('tab', { name: '本地曲库' }).click()
+  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '曲库' }).click()
   await expect(page.getByRole('button', { name: '重新定位试音 mp3' })).toBeVisible()
   await page.getByRole('button', { name: '从曲库移除潮汐' }).click()
   await page.getByRole('button', { name: '仅从 FitBay 移除' }).click()
@@ -284,7 +285,7 @@ longList.db.close()
 app = await launch()
 try {
   const page = await app.firstWindow()
-  await expect(page.getByRole('tab', { name: '本地曲库' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: '曲库' })).toBeVisible()
   await expect
     .poll(() =>
       page.evaluate(async () =>

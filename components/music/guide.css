@@ -72,3 +72,53 @@
 .music-guide-trigger:has(:focus-visible) [role="tooltip"] {
   display: block;
 }
+.music-navigation .music-tabs {
+  padding-inline: clamp(4px, 1vw, 12px);
+}
+.music-view-actions > .fui-Button,
+.music-view-actions .music-guide-trigger > .fui-Button {
+  min-width: 30px;
+  width: 30px;
+  padding-inline: 0;
+}
+@media (max-width: 540px) {
+  .music-navigation {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .music-shell .music-navigation > .music-tabs[role="tablist"] {
+    flex: 1 0 100%;
+    justify-content: space-between;
+  }
+  .music-navigation .music-tabs .fui-Tab {
+    padding-inline: 6px;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .music-navigation > .music-view-actions {
+    padding-block-end: 2px;
+  }
+}
+.music-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 320px) {
+  .music-shell .music-navigation > .music-tabs[role="tablist"] {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(65px, 1fr));
+    padding-inline: 2px;
+  }
+  .music-view-actions {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+  .music-navigation .music-tabs .fui-Tab {
+    justify-content: center;
+    padding: 4px 2px;
+    font-size: var(--font-size-caption);
+  }
+  .music-navigation .music-view-actions button {
+    width: 26px;
+    min-width: 26px;
+  }
+}

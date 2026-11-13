@@ -1,4 +1,4 @@
-import { selectMusicSettings } from './music-settings-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 import { spawnSync } from 'node:child_process'
 import electronBin from 'electron'
 import assert from 'node:assert/strict'
@@ -141,15 +141,15 @@ const choose = (file) =>
 try {
   const page = await app.firstWindow()
   const tabs = page.getByRole('tab')
-  await expect(tabs).toHaveCount(4)
-  for (const [index, name] of ['本地曲库', '搜索音乐', '每日推荐', '设置'].entries())
+  await expect(tabs).toHaveCount(5)
+  for (const [index, name] of ['曲库', '歌单', '在线找歌', 'AI 推荐', '动态'].entries())
     await expect(tabs.nth(index)).toHaveAccessibleName(name)
   await page
     .getByRole('complementary', { name: 'Music 使用引导' })
     .getByRole('button', { name: '跳过' })
     .click()
   await expect(page.getByRole('button', { name: /音乐源|搜索/ })).toHaveCount(0)
-  await page.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(page)
   await selectMusicSettings(page, '音乐源')
   await choose(sourceFile)
   await page.getByRole('button', { name: '本地导入' }).click()
@@ -194,11 +194,11 @@ try {
       await expect.poll(() => app.evaluate(() => globalThis.slowImportStatus)).toBe('reading')
       const cancel = page.getByRole('button', { name: '取消音源导入' })
       await expect(cancel).toBeVisible()
-      if (leave) await page.getByRole('tab', { name: '本地曲库' }).click()
+      if (leave) await page.getByRole('tab', { name: '曲库' }).click()
       else await cancel.click()
       await expect.poll(() => app.evaluate(() => globalThis.slowImportStatus)).toBe('cancelled')
       if (leave) {
-        await page.getByRole('tab', { name: '设置' }).click()
+        await openMusicSettings(page)
         await page.getByRole('button', { name: '在线导入' }).click()
       } else await expect(page.getByText('操作已取消', { exact: true })).toBeVisible()
       expect(await page.evaluate(() => window.music.lxInfo())).toBe(savedName)
@@ -233,7 +233,7 @@ try {
     await page.getByRole('button', { name: '导入链接' }).click()
     await expect.poll(() => page.evaluate(() => window.music.lxInfo())).toBe('在线测试源')
   }
-  await page.getByRole('tab', { name: '搜索音乐' }).click()
+  await page.getByRole('tab', { name: '在线找歌' }).click()
   const pane = page.getByRole('region', { name: '搜索音乐' })
   const find = pane.getByRole('button', { name: '搜索' })
   const query = pane.getByRole('textbox', { name: '搜索关键词' })
@@ -361,7 +361,7 @@ try {
       2,
     )
     console.log(
-      'PASS 四页入口、单歌名、单艺人、组合关键词搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
+      'PASS 五页入口、单歌名、单艺人、组合关键词搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
         root,
     )
   } else {

@@ -1,5 +1,5 @@
 import { MusicStore } from '../components/music/store.mjs'
-import { selectMusicSettings } from './music-settings-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 import { dragMusicIn, dragMusicOut } from './music-drag-fixture.mjs'
 import { _electron as electron, expect } from '@playwright/test'
 import { mkdir, mkdtemp } from 'node:fs/promises'
@@ -30,14 +30,14 @@ legacy.db.close()
 let app = await launch('music')
 try {
   const music = await page(app, '/music/index.html')
-  await music.getByRole('tab', { name: '设置' }).click()
+  await openMusicSettings(music)
   await selectMusicSettings(music, '模型与推荐')
   await music.getByRole('button', { name: '模型设置' }).click()
   await music.getByRole('combobox', { name: '服务商' }).click()
   await expect(music.getByRole('option')).toHaveText(['DeepSeek', 'OpenAI', 'Claude', 'Gemini'])
   await music.getByRole('option', { name: 'DeepSeek' }).click()
   await music.getByRole('button', { name: '取消', exact: true }).click()
-  await music.getByRole('tab', { name: '每日推荐' }).click()
+  await music.getByRole('tab', { name: 'AI 推荐' }).click()
   await expect(music.getByRole('textbox', { name: '推荐首数' })).toHaveValue('5')
   await expect(music.locator('li')).toHaveCount(5)
   await music.getByText('匹配目录', { exact: true }).click()

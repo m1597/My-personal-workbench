@@ -63,9 +63,12 @@ try {
         )
       })
       .toBe(true)
-    await expect(
-      page.getByRole('tab', { name: id === 'recommend' ? '每日推荐' : '设置', exact: true }),
-    ).toHaveAttribute('aria-selected', 'true')
+    if (id === 'recommend')
+      await expect(page.getByRole('tab', { name: 'AI 推荐' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+    else await expect(page.locator('.music-settings')).toBeVisible()
     if (id === 'mcp') {
       const command = page.locator('.music-mcp-connection code')
       await expect(command).toContainText('music-source-mcp.mjs')
@@ -84,7 +87,7 @@ try {
     await checkStep(id, 'regular')
   }
   await guide().getByRole('button', { name: '完成' }).click()
-  for (const name of ['本地曲库', '搜索音乐', '每日推荐', '设置']) {
+  for (const name of ['曲库', '歌单', '在线找歌', 'AI 推荐', '动态']) {
     const tab = page.getByRole('tab', { name, exact: true })
     await tab.click()
     await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)
@@ -92,7 +95,7 @@ try {
     const controls = page.locator('.music-view-actions button')
     assert.deepEqual(
       await controls.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label'))),
-      ['使用引导', '只显示播放栏', '隐藏到后台'],
+      ['下载任务', '使用引导', '只显示播放栏', '隐藏到后台', '更多音乐操作'],
     )
     await help.hover()
     await expect(page.getByRole('tooltip')).toContainText('使用引导')
@@ -126,7 +129,7 @@ try {
     false,
   )
   assert.equal(await readFile(oldFile, 'utf8'), 'window.legacyPluginStarted = true')
-  console.log('PASS 四页顶栏、四步引导、窄窗、旧插件不加载且原文件保留', root)
+  console.log('PASS 五页顶栏、四步引导、窄窗、旧插件不加载且原文件保留', root)
 } finally {
   await app.close()
 }

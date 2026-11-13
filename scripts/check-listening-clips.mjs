@@ -61,11 +61,11 @@ try {
       console.error(name, e.message)
     }
   }
-  await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
+  await page.getByRole('tab', { name: 'AI 推荐' }).evaluate((b) => b.click())
   // Hold the real decoder after it receives the recording. Reload between checks to discard the cue cache.
   for (const action of ['暂停', '下一首', '停止播放']) {
     await page.reload()
-    await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
+    await page.getByRole('tab', { name: 'AI 推荐' }).evaluate((b) => b.click())
     await press('播放本次推荐')
     await expect.poll(() => media.evaluate((a) => !a.paused)).toBe(true)
     await page.evaluate(() => {
@@ -92,7 +92,7 @@ try {
     })
   }
   await page.reload()
-  await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
+  await page.getByRole('tab', { name: 'AI 推荐' }).evaluate((b) => b.click())
   await press('快速听这批')
   await expect(page.getByText('1/5 · 代表片段')).toBeVisible()
   await expect.poll(at).toBeGreaterThan(7)
@@ -133,7 +133,7 @@ try {
     },
     [ids[0], ids[2]],
   )
-  await page.getByRole('tab', { name: '本地曲库' }).evaluate((b) => b.click())
+  await page.getByRole('tab', { name: '曲库' }).evaluate((b) => b.click())
   await press('当前顺序播放，切换为随机播放')
   await media.evaluate((a) => {
     a.currentTime = 20
@@ -181,7 +181,7 @@ try {
   })
   await expect.poll(current).toBe(ids[0])
   await expect.poll(at).toBeGreaterThan(7)
-  await page.getByRole('tab', { name: '每日推荐' }).evaluate((b) => b.click())
+  await page.getByRole('tab', { name: 'AI 推荐' }).evaluate((b) => b.click())
   await press('快速听这批')
   await expect(page.getByText('1/5 · 代表片段')).toBeVisible()
   // The hidden Windows compositor omits the native backdrop from captures.
@@ -189,7 +189,7 @@ try {
     delete document.documentElement.dataset.backdrop
   })
   await page.screenshot({ path: path.join(root, 'quick-listen.png') })
-  await page.getByRole('tab', { name: '本地曲库' }).evaluate((b) => b.click())
+  await page.getByRole('tab', { name: '曲库' }).evaluate((b) => b.click())
   await press('专辑')
   await page
     .locator('.album-tile')

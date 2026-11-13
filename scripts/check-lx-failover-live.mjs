@@ -48,7 +48,7 @@ for (const [platform, label] of [
     const page = await app.firstWindow()
     assert.ok(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio')))
     await page.getByRole('button', { name: '跳过', exact: true }).click()
-    await page.getByRole('tab', { name: '搜索音乐', exact: true }).click()
+    await page.getByRole('tab', { name: '在线找歌', exact: true }).click()
     const pane = page.getByRole('region', { name: '搜索音乐' })
     await pane.getByRole('tab', { name: label }).click()
     await pane.getByRole('textbox', { name: '搜索关键词' }).fill(title + ' ' + artist)
@@ -71,7 +71,7 @@ for (const [platform, label] of [
     const tracks = await page.evaluate(async () => (await window.music.state()).localTracks)
     assert.equal(tracks.length, 1)
     assert.ok(!(await readdir(downloads)).some((f) => f.endsWith('.part')))
-    await page.getByRole('tab', { name: '本地曲库', exact: true }).click()
+    await page.getByRole('tab', { name: '曲库', exact: true }).click()
     await page.getByRole('button', { name: '播放' + tracks[0].title, exact: true }).click()
     const audio = page.locator('audio')
     await expect
