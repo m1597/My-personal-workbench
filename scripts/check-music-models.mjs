@@ -562,7 +562,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   })
   await page.getByRole('tab', { name: 'AI 推荐' }).click()
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.getByText(/已下载 4\/5/)).toBeVisible({
+  await expect(page.getByText(/已入库 4\/5/)).toBeVisible({
     timeout: 30000,
   })
   const visibleTitles = await page.locator('.music-list ol li strong').allTextContents()
@@ -590,7 +590,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     style: ':root { background: var(--base) !important }',
   })
   await app.evaluate(() => globalThis.releaseTransfer())
-  await expect(page.getByText(/已下载 5\/5/)).toBeVisible()
+  await expect(page.getByText(/已入库 5\/5/)).toBeVisible()
   await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled()
   assert.deepEqual(
     await page.evaluate(async () => (await window.music.state()).queue),
@@ -739,7 +739,23 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   const target = page.getByRole('textbox', { name: '推荐首数' })
   await target.fill('2')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.getByText(/已下载 1\/2/)).toBeVisible()
+  await expect(page.getByText(/已入库 1\/2/)).toBeVisible()
+  const progressRow = page.locator('.music-batch-progress')
+  const progressBounds = await progressRow.getByRole('status').boundingBox()
+  const stopBounds = await progressRow.getByRole('button').boundingBox()
+  assert.ok(progressBounds && stopBounds)
+  assert.ok(
+    Math.abs(progressBounds.y + progressBounds.height / 2 - stopBounds.y - stopBounds.height / 2) <
+      2,
+  )
+  await page.getByRole('button', { name: '播放本次推荐', exact: true }).click()
+  await expect
+    .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0))
+    .toBe(true)
+  await page.screenshot({
+    path: path.join(root, '首首入库可播放.png'),
+    style: ':root {background:var(--base)!important}',
+  })
   const partFiles = async () => (await fs.readdir(output)).filter((f) => f.endsWith('.part'))
   await expect
     .poll(async () => {
@@ -748,7 +764,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     })
     .toBe(128)
   await page.getByRole('button', { name: '终止本次推荐', exact: true }).click()
-  await expect(page.getByText('已下载 1/2，本次推荐已终止')).toBeVisible()
+  await expect(page.getByText('已入库 1/2，本次推荐已终止')).toBeVisible()
   assert.deepEqual(await partFiles(), [])
   const checkpoint = async () => ({
     files: await fs.readdir(output),
@@ -765,7 +781,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   })
   await target.fill('1')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.getByText('已下载 1/1，已达到目标首数')).toBeVisible()
+  await expect(page.getByText('已入库 1/1，已达到目标首数')).toBeVisible()
   assert.deepEqual(await page.locator('.music-list li strong').allTextContents(), ['新批歌曲'])
   console.log('PASS 传输写入128字节后从页面终止，保留1/2、清理临时文件、停止后无新写入，新批1/1')
   await fs.writeFile(

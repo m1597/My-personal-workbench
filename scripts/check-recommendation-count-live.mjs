@@ -143,7 +143,7 @@ try {
       }))
       const summary =
         document.querySelector('.music-batch-status [role="status"]')?.textContent || ''
-      const count = Number(summary.match(/^已下载\s*(\d+)\s*\/\s*5/)?.[1])
+      const count = Number(summary.match(/^已入库\s*(\d+)\s*\/\s*5/)?.[1])
       if (started && count && rows.length === count && rows.every((row) => row.playable))
         arrivalMs[count] ??= Math.round(performance.now() - started)
       const next = JSON.stringify({ rows, summary })
@@ -215,7 +215,7 @@ try {
     saved.map((row) => row.recordingTitle).sort(),
   )
   for (const sample of evidence.samples) {
-    const progress = sample.summary.match(/^已下载\s*(\d+)\s*\/\s*5/)
+    const progress = sample.summary.match(/^已入库\s*(\d+)\s*\/\s*5/)
     if (progress) assert.equal(sample.rows.length, Number(progress[1]))
     for (const row of sample.rows) {
       if (initialTitles.includes(row.title)) continue

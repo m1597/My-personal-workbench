@@ -117,7 +117,7 @@ type Item = {
   candidates: Track[]
 }
 import { ArtistReleases, type ReleaseAPI } from './ReleaseCatalog'
-import { RecommendationComposer } from './RecommendationComposer'
+import { RecommendationComposer, StopRecommendation } from './RecommendationComposer'
 import type { ModelInfo } from './ModelSettings'
 import { DownloadPane } from './LxPanel'
 import type { LibraryToolsAPI } from './LibraryTools'
@@ -1417,14 +1417,17 @@ function Music() {
               {(batch?.targetCount || legacyDaily) && (
                 <div className="music-batch-status">
                   {batch?.targetCount ? (
-                    <p role="status">
-                      已下载 {rows.length}/{batch.targetCount}
-                      {batch.state === 'completed' && rows.length < batch.targetCount
-                        ? '，部分已下载歌曲已移除或暂不可用'
-                        : running && rows.length >= batch.targetCount
-                          ? '，正在完成本批'
-                          : batch.message && `，${batch.message}`}
-                    </p>
+                    <div className="music-batch-progress">
+                      <p role="status">
+                        已入库 {rows.length}/{batch.targetCount}
+                        {batch.state === 'completed' && rows.length < batch.targetCount
+                          ? '，部分已下载歌曲已移除或暂不可用'
+                          : running && rows.length >= batch.targetCount
+                            ? '，正在完成本批'
+                            : batch.message && `，${batch.message}`}
+                      </p>
+                      {running && <StopRecommendation refresh={refresh} />}
+                    </div>
                   ) : (
                     <p role="status">已下载 {downloaded.length} 首</p>
                   )}

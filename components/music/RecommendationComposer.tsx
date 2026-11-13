@@ -28,7 +28,6 @@ export function RecommendationComposer({
   onGenerating,
 }: Props) {
   const input = useRef<HTMLInputElement>(null)
-  const [stopping, setStopping] = useState(false)
   const [submitting, setBusy] = useState(false)
   const target = Number(count)
   const validCount = /^\d+$/.test(count) && Number.isSafeInteger(target) && target > 0
@@ -67,7 +66,7 @@ export function RecommendationComposer({
             input.current?.focus()
           }}
         >
-          用当前歌曲
+          {currentSong?.title ? `以《${currentSong.title}》为参考` : '以当前歌曲为参考'}
         </Button>
       </div>
       <div className="music-input">
@@ -94,24 +93,7 @@ export function RecommendationComposer({
             onChange={(_, d) => setCount(d.value)}
           />
         </label>
-        {busy ? (
-          <Button
-            disabled={stopping}
-            onClick={async () => {
-              setStopping(true)
-              try {
-                await window.music.stopGeneration()
-                await refresh()
-              } catch (e) {
-                setError(String(e).split('Error: ').pop() || '终止失败')
-              } finally {
-                setStopping(false)
-              }
-            }}
-          >
-            {stopping ? '正在终止…' : '终止本次推荐'}
-          </Button>
-        ) : (
+        {!busy && (
           <Button disabled={!validCount} appearance="primary" onClick={() => void generate()}>
             生成推荐
           </Button>
@@ -120,5 +102,34 @@ export function RecommendationComposer({
       {!validCount && <small>请输入大于零的整数。</small>}
       {error && <p role="alert">{error}</p>}
     </section>
+  )
+}
+
+export function StopRecommendation({ refresh }: { refresh(): Promise<void> }) {
+  const [stopping, setStopping] = useState(false)
+  const [error, setError] = useState('')
+  return (
+    <>
+      <Button
+        size="small"
+        aria-label="终止本次推荐"
+        disabled={stopping}
+        onClick={async () => {
+          setStopping(true)
+          setError('')
+          try {
+            await window.music.stopGeneration()
+            await refresh()
+          } catch (e) {
+            setError(String(e).split('Error: ').pop() || '终止失败')
+          } finally {
+            setStopping(false)
+          }
+        }}
+      >
+        {stopping ? '正在终止…' : '终止'}
+      </Button>
+      {error && <span role="alert">{error}</span>}
+    </>
   )
 }

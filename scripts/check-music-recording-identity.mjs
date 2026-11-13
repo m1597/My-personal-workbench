@@ -155,7 +155,7 @@ try {
   assert.ok(rows.slice(3).every((r) => r.local && r.status === '已入库'))
   const shown = await page.locator('.music-list ol li strong').allTextContents()
   assert.deepEqual(shown, titles.slice(3))
-  await expect(page.getByText(/已下载 5\/5/)).toBeVisible()
+  await expect(page.getByText(/已入库 5\/5/)).toBeVisible()
   const saved = await fs.readdir(output)
   assert.equal(saved.length, 5)
   assert.ok(saved.every((file) => !file.endsWith('.part')))

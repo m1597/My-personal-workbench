@@ -230,7 +230,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   const start = performance.now()
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   let progress = page.locator('.music-batch-status [role="status"]')
-  await expect(progress).toContainText('已下载 0/2，正在生成候选歌曲')
+  await expect(progress).toContainText('已入库 0/2，正在生成候选歌曲')
   await expect(progress).toContainText('正在下载《健康歌曲》')
   await expect(page.getByRole('button', { name: '终止本次推荐' })).toBeEnabled()
   await page.screenshot({ path: path.join(root, '下载进度.png') })
@@ -239,7 +239,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   })
   const firstMs = Math.round(performance.now() - start)
   await page.getByRole('button', { name: '终止本次推荐', exact: true }).click()
-  await expect(page.getByText('已下载 1/2，本次推荐已终止')).toBeVisible()
+  await expect(page.getByText('已入库 1/2，本次推荐已终止')).toBeVisible()
   const snapshot = async () => ({
     files: await fs.readdir(output),
     calls: await app.evaluate(() => globalThis.calls),
@@ -270,7 +270,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   })
   await page.getByLabel('推荐首数').fill('1')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.getByText('已下载 1/1，已达到目标首数')).toBeVisible()
+  await expect(page.getByText('已入库 1/1，已达到目标首数')).toBeVisible()
   const single = await snapshot()
   assert.deepEqual(single.titles, ['同版歌曲'])
   assert.deepEqual(
@@ -310,10 +310,10 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   await expect(page.locator('.music-list li strong')).toHaveText(['滚动二', '滚动三', '滚动四'], {
     timeout: 10000,
   })
-  await expect(progress).toContainText('已下载 3/4，正在下载《滚动一》')
+  await expect(progress).toContainText('已入库 3/4，正在下载《滚动一》')
   await page.getByRole('button', { name: '播放本次推荐' }).click()
   await expect(page.getByRole('button', { name: '终止本次推荐' })).toBeEnabled()
-  await expect(progress).toContainText('已下载 4/4，已达到目标首数', { timeout: 12000 })
+  await expect(progress).toContainText('已入库 4/4，已达到目标首数', { timeout: 12000 })
   await app.evaluate(() => {
     globalThis.calls = []
     globalThis.requestedCounts = []
@@ -334,10 +334,10 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   })
   await page.getByLabel('推荐首数').fill('5')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(progress).toContainText('已下载 4/5，正在下载《慢传追加》', { timeout: 30000 })
+  await expect(progress).toContainText('已入库 4/5，正在下载《慢传追加》', { timeout: 30000 })
   await expect(page.locator('.music-list li strong')).toHaveCount(4)
   await app.evaluate(() => globalThis.releaseSlowTransfer())
-  await expect(progress).toContainText('已下载 5/5，已达到目标首数', { timeout: 14000 })
+  await expect(progress).toContainText('已入库 5/5，已达到目标首数', { timeout: 14000 })
   const counts = await app.evaluate(() => {
     const counts = globalThis.requestedCounts
     delete globalThis.requestedCounts
@@ -363,7 +363,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   })
   await page.getByLabel('推荐首数').fill('4')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(progress).toContainText('已下载 0/4，连续多首歌曲的所有匹配来源均无法访问')
+  await expect(progress).toContainText('已入库 0/4，连续多首歌曲的所有匹配来源均无法访问')
   await page.getByText('查看详情', { exact: true }).click()
   await expect(page.locator('.music-failure-details p')).toContainText('同批暂时跳过此来源')
   const skipped = await app.evaluate(() =>
@@ -378,7 +378,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     await page.getByLabel('推荐首数').fill('1')
     await page.getByRole('button', { name: '生成推荐', exact: true }).click()
     await expect(page.locator('.music-list li strong')).toHaveText([song], { timeout: 11000 })
-    await expect(progress).toContainText('已下载 1/1，已达到目标首数')
+    await expect(progress).toContainText('已入库 1/1，已达到目标首数')
   }
   assert.deepEqual(await app.evaluate(() => globalThis.timedTransfers), [
     ['超时换源', false],

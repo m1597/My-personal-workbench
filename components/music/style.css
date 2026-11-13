@@ -131,6 +131,14 @@ body {
   min-width: 0;
   width: 5.5em;
 }
+.music-batch-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+}
+.music-batch-progress > button {
+  flex: none;
+}
 .music-batch-status p {
   margin-block: var(--space-6);
 }

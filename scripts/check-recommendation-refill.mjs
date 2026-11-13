@@ -131,7 +131,7 @@ try {
   })
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(page.locator('.music-batch-status [role="status"]')).toContainText(
-    '已下载 5/5，已达到目标首数',
+    '已入库 5/5，已达到目标首数',
     { timeout: 30000 },
   )
   const times = await page.evaluate(() => window.fixtureTimes)
