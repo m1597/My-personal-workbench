@@ -101,8 +101,14 @@ try {
   await page.locator('.music-order').click()
   await player.evaluate((a) => (a.currentTime = 3))
   await big.click({ button: 'right' })
-  await page.screenshot({ scale: 'css', path: path.join(root, 'album-menu.png') })
-  await page.getByRole('menuitem', { name: '下一首播放整张' }).click()
+  const insertAlbum = page.getByRole('menuitem', { name: '下一首播放整张' })
+  await expect(insertAlbum).toBeVisible()
+  await page.screenshot({
+    scale: 'css',
+    animations: 'disabled',
+    path: path.join(root, 'album-menu.png'),
+  })
+  await insertAlbum.click()
   const s = await state()
   const byTitle = (title) => s.localTracks.find((t) => t.title === 'Album 110-' + title).id
   const [a, b, c] = [1, 2, 3].map(byTitle)

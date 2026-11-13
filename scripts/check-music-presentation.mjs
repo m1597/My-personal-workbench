@@ -244,11 +244,10 @@ const daily = await electron.launch({
 })
 try {
   const shell = await daily.firstWindow()
-  const original = shell.getByText('从「窗口 → Music」打开音乐组件。', {
-    exact: true,
-  })
+  const original = shell.getByRole('heading', { name: '工作区为空', exact: true })
   const other = shell.getByText('可在这里打开其他组件', { exact: true })
   await expect(original).toBeVisible()
+  await expect(shell.getByRole('button', { name: '打开 Music', exact: true })).toBeVisible()
   await shell.getByRole('button', { name: '窗口', exact: true }).click()
   await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
   await expect
