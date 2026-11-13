@@ -171,6 +171,12 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
         }
         globalThis.fetch = async (_url, options) => {
           globalThis.calls.push('model')
+          let requested
+          if (globalThis.requestedCounts) {
+            const input = JSON.parse(options.body).messages.at(-1).content
+            requested = JSON.parse(input).count
+            globalThis.requestedCounts.push(requested)
+          }
           if (
             globalThis.holdRefill &&
             globalThis.calls.filter((call) => call === 'model').length === 2
@@ -182,7 +188,8 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
               }),
             )
           }
-          if (globalThis.rounds?.length) globalThis.songs = globalThis.rounds.shift()
+          if (globalThis.rounds?.length)
+            globalThis.songs = globalThis.rounds.shift().slice(0, requested)
           await new Promise((resolve) => setTimeout(resolve, 450))
           return Response.json({
             choices: [
@@ -307,6 +314,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   await expect(progress).toContainText('已下载 4/4，已达到目标首数', { timeout: 12000 })
   await app.evaluate(() => {
     globalThis.calls = []
+    globalThis.requestedCounts = []
     globalThis.rounds = [
       [
         ['慢传追加', '甲'],
@@ -314,6 +322,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
         ['缺歌二', '丙'],
       ],
       [
+        ['缺歌三', '庚'],
         ['补选一', '丁'],
         ['补选二', '戊'],
       ],
@@ -326,6 +335,14 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   })
   await expect(progress).toContainText('已下载 2/3，正在下载《慢传追加》')
   await expect(progress).toContainText('已下载 3/3，已达到目标首数', { timeout: 14000 })
+  const counts = await app.evaluate(() => {
+    const counts = globalThis.requestedCounts
+    delete globalThis.requestedCounts
+    return counts
+  })
+  assert.equal(counts[0], 3)
+  assert.ok(counts[1] >= 3 && counts[1] <= 5)
+  assert.equal(await page.locator('.music-list li strong').count(), 3)
   assert.equal(
     await app.evaluate(() => globalThis.calls.filter((call) => call === 'model').length),
     2,

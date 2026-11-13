@@ -128,6 +128,12 @@ try {
   const initialTitles = await rows.locator('strong').allTextContents()
   await page.evaluate(() => {
     const samples = []
+    let started
+    const arrivalMs = {}
+    window.startRecommendationTiming = () => {
+      started = performance.now()
+    }
+    window.recommendationTiming = () => arrivalMs
     const sample = () => {
       const rows = [...document.querySelectorAll('.music-list ol li')].map((row) => ({
         title: row.querySelector('strong')?.textContent,
@@ -137,6 +143,9 @@ try {
       }))
       const summary =
         document.querySelector('.music-batch-status [role="status"]')?.textContent || ''
+      const count = Number(summary.match(/^已下载\s*(\d+)\s*\/\s*5/)?.[1])
+      if (started && count && rows.length === count && rows.every((row) => row.playable))
+        arrivalMs[count] ??= Math.round(performance.now() - started)
       const next = JSON.stringify({ rows, summary })
       if (samples.at(-1) !== next) samples.push(next)
     }
@@ -154,9 +163,15 @@ try {
     }
   })
   const generate = page.getByRole('button', { name: '生成推荐', exact: true })
+  await generate.evaluate((button) =>
+    button.addEventListener('click', window.startRecommendationTiming, { once: true }),
+  )
+  const started = performance.now()
   await generate.click()
   await expect(page.getByRole('button', { name: '终止本次推荐' })).toBeVisible()
   await expect(generate).toBeEnabled({ timeout: 30 * 60_000 })
+  evidence.completeMs = Math.round(performance.now() - started)
+  evidence.arrivalMs = await page.evaluate(() => window.recommendationTiming())
   const state = await page.evaluate(() => window.music.state())
   evidence.rounds = await app.evaluate(() => globalThis.recommendationRounds)
   evidence.samples = await page.evaluate(() => window.recommendationSamples())
@@ -170,7 +185,7 @@ try {
   evidence.run = { state: batch.state, target: batch.targetCount, message: batch.message }
   const candidates = db
     .prepare(
-      'SELECT i.title,i.artist,i.status,r.local,t.file FROM items i JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local WHERE i.batch=?',
+      'SELECT i.title,i.artist,i.status,r.local,t.title AS recordingTitle,t.artist AS recordingArtist,t.file FROM items i JOIN recommended_items r ON r.item=i.id LEFT JOIN local_tracks t ON t.id=r.local WHERE i.batch=?',
     )
     .all(batch.id)
   const saved = candidates.filter((row) => row.status === '已入库' && row.file)
@@ -192,12 +207,12 @@ try {
   assert.equal(batch.targetCount, target)
   assert.equal(saved.length, target, JSON.stringify(evidence.alerts))
   assert.equal(state.localTracks.length - baseline.length, target)
-  assert.equal(finalMembers.length - oldMembers.length, target)
+  assert.equal(finalMembers.length, target)
   assert.deepEqual(added.sort(), expectedIds)
-  assert.deepEqual(finalMembers.filter((id) => !oldMembers.includes(id)).sort(), expectedIds)
+  assert.deepEqual([...finalMembers].sort(), expectedIds)
   assert.deepEqual(
     (await rows.locator('strong').allTextContents()).sort(),
-    saved.map((row) => row.title).sort(),
+    saved.map((row) => row.recordingTitle).sort(),
   )
   for (const sample of evidence.samples) {
     const progress = sample.summary.match(/^已下载\s*(\d+)\s*\/\s*5/)
@@ -205,7 +220,7 @@ try {
     for (const row of sample.rows) {
       if (initialTitles.includes(row.title)) continue
       assert.ok(
-        row.playable && saved.some((r) => r.title === row.title),
+        row.playable && saved.some((r) => r.recordingTitle === row.title),
         `展示了未成功的候选 ${row.title}`,
       )
     }
@@ -219,7 +234,7 @@ try {
   )
   for (const song of saved) {
     assert.equal(path.dirname(song.file), output)
-    assert.ok(!inLibrary(song, baseline))
+    assert.ok(!inLibrary({ title: song.recordingTitle, artist: song.recordingArtist }, baseline))
     const bytes = await fs.readFile(song.file)
     const sha256 = createHash('sha256').update(bytes).digest('hex')
     // Decode the actual saved file with Chromium's codecs, without playing audio or opening a dialog.
@@ -240,8 +255,8 @@ try {
     await picker.dispose()
     assert.ok(decoded.seconds > 1 && decoded.channels > 0)
     evidence.files.push({
-      title: song.title,
-      artist: song.artist,
+      title: song.recordingTitle,
+      artist: song.recordingArtist,
       file: path.basename(song.file),
       bytes: bytes.length,
       sha256,
