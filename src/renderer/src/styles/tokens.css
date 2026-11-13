@@ -106,7 +106,7 @@
   --panel-surface: var(--glass);
   --panel-shadow: var(--shadow-panel);
   --panel-filter: none;
-  --shell-header-height: 56px;
+  --shell-header-height: 40px;
   --shell-toolbar-height: 36px;
   --panel-tab-height: 36px;
   --module-row-height: 36px;
