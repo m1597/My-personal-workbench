@@ -28,6 +28,7 @@ const hash = createHash('sha256')
   .update(await readFile(original))
   .digest('hex')
 const store = new MusicStore(music)
+store.set('music-guide-v1', '1')
 const batch = store.saveSuggestions('第一轮', [], '待处理', undefined, 9)
 const list = store.library.createPlaylist('普通歌单')
 store.set('music-recommend-dir', daily)
@@ -73,7 +74,7 @@ for (const title of [
         title === '旧版无身份' ? null : [s.dev, s.ino, s.birthtimeNs].join(':'),
       )
   }
-  if (['已有分类', '新建分类', '冲突', '无模型', '越界'].includes(title))
+  if (['新建分类', '冲突', '无模型', '越界'].includes(title))
     store.db.prepare('UPDATE local_tracks SET favorite=1 WHERE id=?').run(id)
   store.library.setMembership(list, id, true)
   store.library.heard(id)
@@ -109,6 +110,45 @@ const launch = () =>
     ],
     env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
   })
+const favoriteSession = await launch()
+try {
+  await favoriteSession.evaluate(({ BaseWindow }) =>
+    BaseWindow.getAllWindows()
+      .find((window) => window.getTitle() === 'Music')
+      .setContentSize(1060, 700),
+  )
+  const page = await favoriteSession.firstWindow()
+  await page.getByRole('tab', { name: '每日推荐' }).click()
+  await page.getByRole('button', { name: '试听已有分类', exact: true }).click()
+  const heart = page.getByRole('button', { name: '收藏当前歌曲' })
+  await expect(heart).toHaveAttribute('aria-pressed', 'false')
+  await heart.click()
+  await expect(heart).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('tab', { name: '本地曲库' }).click()
+  const navigation = page.getByRole('button', { name: '曲库导航' })
+  if (await navigation.isVisible()) await navigation.click()
+  await page.getByRole('button', { name: '我的收藏', exact: true }).click()
+  const row = page
+    .locator('.library-row')
+    .filter({ has: page.getByText('已有分类', { exact: true }) })
+  await expect(row).toBeVisible()
+  await heart.click()
+  await expect(row).toHaveCount(0)
+  await heart.click()
+  await expect(row).toBeVisible()
+  await page.screenshot({
+    path: path.join(root, '播放栏收藏.png'),
+    animations: 'disabled',
+    style: ':root { background: var(--base) !important }',
+  })
+} finally {
+  await favoriteSession.close()
+}
+// The next phase starts with a queued non-favorite and verifies cleanup of that playback state.
+const checkpoint = new MusicStore(music)
+checkpoint.set('play-queue', JSON.stringify([tracks['普通歌单歌曲'].item, tracks['已有分类'].id]))
+checkpoint.checkpoint(tracks['普通歌单歌曲'].item, 1)
+checkpoint.db.close()
 const app = await launch()
 try {
   const page = await app.firstWindow()

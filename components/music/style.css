@@ -219,6 +219,21 @@ li[data-active="true"] .music-track-icon,
 .music-player .music-heading {
   flex: 1;
 }
+.music-title-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--space-4);
+}
+.music-title-row .music-favorite {
+  flex: none;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+.music-favorite[aria-pressed="true"] {
+  color: var(--accent);
+}
 .music-lyric-glyph {
   font-size: var(--font-size-caption);
   line-height: 1;

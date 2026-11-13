@@ -18,6 +18,7 @@ import { Button, Checkbox, Slider, Tab, TabList } from '@fluentui/react-componen
 import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import {
   AudioLines,
+  Heart,
   Disc3,
   CircleHelp,
   PanelBottomClose,
@@ -689,6 +690,19 @@ function Music() {
   const showPlayer = tab === 'playing'
   const needLyrics = lyricsOpen || showPlayer
   const coverId = (active && ('duration' in active ? active.id : active.localId)) || undefined
+  const favoriteTrack = coverId ? trackById.get(coverId) : undefined
+  const favoriteButton = favoriteTrack && (
+    <Button
+      appearance="subtle"
+      size="small"
+      className="music-favorite"
+      aria-label="收藏当前歌曲"
+      aria-pressed={!!favoriteTrack.favorite}
+      title={favoriteTrack.favorite ? '取消收藏' : '加入我的收藏'}
+      icon={<Heart size={15} fill={favoriteTrack.favorite ? 'currentColor' : 'none'} />}
+      onClick={() => void act(() => host.setFavorite(favoriteTrack.id, !favoriteTrack.favorite))}
+    />
+  )
   function openPlayer() {
     if (!showPlayer) previousTab.current = tab
     setGuide(null)
