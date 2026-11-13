@@ -137,8 +137,24 @@ async function launch() {
             {
               id: first,
               title: '初雪',
+              'primary-type': 'Single',
               'first-release-date': today,
               'artist-credit': artistCredit,
+            },
+            {
+              id: '00000000-0000-0000-0000-000000000004',
+              title: '薄暮',
+              'primary-type': 'Album',
+              'artist-credit': artistCredit,
+              'first-release-date': new Date(Date.now() - 86400000 * 5).toISOString().slice(0, 10),
+            },
+            {
+              id: '00000000-0000-0000-0000-000000000005',
+              title: '映画',
+              'primary-type': 'Album',
+              'secondary-types': ['Soundtrack'],
+              'artist-credit': artistCredit,
+              'first-release-date': new Date(Date.now() - 86400000 * 9).toISOString().slice(0, 10),
             },
             {
               id: second,
@@ -215,7 +231,7 @@ try {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, source)
   await page.evaluate(() => window.music.lxImport())
-  await tab('搜索音乐').click()
+  await tab('在线找歌').click()
   const input = page.getByRole('textbox', { name: '搜索关键词' })
   await input.fill('远山')
   await input.press('Enter')
@@ -245,7 +261,7 @@ try {
     (await fs.readdir(downloads)).find((f) => f.endsWith('.mp3')),
     /Live/,
   )
-  await tab('每日推荐').click()
+  await tab('动态').click()
   await news().getByRole('button', { name: '管理关注' }).click()
   await news().getByLabel('要关注的歌手').fill('青禾')
   await button('查找歌手').click()
@@ -253,17 +269,41 @@ try {
   await expect(news().getByText('初雪', { exact: true })).toBeVisible()
   await expect(news().getByText('旧作')).toHaveCount(0)
   await expect(page.locator('.music-list li')).toHaveCount(0)
+  await expect(news().locator('.release-event-head strong')).toHaveText(['初雪', '薄暮', '映画'])
+  for (const [i, type] of ['单曲', '专辑', '原声带'].entries())
+    await expect(news().locator('.release-event-head small').nth(i)).toContainText(type)
+  await news().getByRole('button', { name: '查看曲目' }).first().click()
+  const pick = news().getByRole('button', { name: '选择版本播放' }).first()
+  await expect(pick).toBeVisible()
+  const requests = await app.evaluate(() => globalThis.catalogRequests)
+  await news().getByRole('button', { name: '收起曲目' }).click()
+  await news().getByRole('button', { name: '查看曲目' }).first().click()
+  await expect(pick).toBeVisible()
+  assert.deepEqual(await app.evaluate(() => globalThis.catalogRequests), requests)
+  await pick.click()
+  await expect(group.locator('summary')).toBeVisible()
+  await group.locator('summary').click()
+  await versions.nth(0).getByRole('button', { name: '播放', exact: true }).click()
+  await expect
+    .poll(() => app.evaluate(() => globalThis.audioRequests.at(-1)))
+    .toBe('/recording-17.mp3')
+  await played()
+  await tab('AI 推荐').click()
   await expect(page.getByLabel('推荐首数')).toHaveValue('5')
+  await expect(news()).toHaveCount(0)
+  await tab('动态').click()
+  await expect(news().getByText('初雪', { exact: true })).toBeVisible()
+  assert.deepEqual(await app.evaluate(() => globalThis.catalogRequests), requests)
   await page.screenshot({ path: path.join(root, 'artist-news.png') })
   await app.close()
   app = await launch()
   page = await app.firstWindow()
-  await tab('每日推荐').click()
+  await tab('动态').click()
   await expect(news().getByText('初雪', { exact: true })).toBeVisible()
   await button('管理关注').click()
   await button('取消关注青禾').click()
   await expect(news().getByText('初雪', { exact: true })).toHaveCount(0)
-  await tab('本地曲库').click()
+  await tab('曲库').click()
   await button('专辑').click()
   await button('山色 · 青禾').click()
   assert.ok(!(await app.evaluate(() => globalThis.catalogRequests)).includes('/ws/2/release'))

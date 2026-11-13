@@ -7,7 +7,7 @@ const credit = (entries) =>
   (entries ?? []).map((x) => (x.name || x.artist?.name || '') + (x.joinphrase || '')).join('')
 let queue = Promise.resolve()
 let nextRequest = 0
-async function metadata(entity, params) {
+async function fetchMetadata(entity, params) {
   const url = new URL('https://musicbrainz.org/ws/2/' + entity)
   url.search = new URLSearchParams({ ...params, fmt: 'json' })
   const ready = queue.then(async () => {
@@ -32,8 +32,32 @@ async function metadata(entity, params) {
   }
 }
 export function registerReleaseCatalog(bind, getStore) {
+  const responses = new Map()
+  async function metadata(entity, params, refresh = false) {
+    const key = JSON.stringify([entity, params])
+    const cached = responses.get(key)
+    if (cached && (!cached.done || (!refresh && cached.expires > Date.now()))) return cached.result
+    const entry = { done: false, expires: 0 }
+    entry.result = fetchMetadata(entity, params)
+      .then((data) => {
+        entry.done = true
+        entry.expires = Date.now() + 3600000
+        for (const [oldKey, old] of responses) {
+          if (responses.size <= 128) break
+          if (old.done) responses.delete(oldKey)
+        }
+        return data
+      })
+      .catch((e) => {
+        if (responses.get(key) === entry) responses.delete(key)
+        throw e
+      })
+    responses.set(key, entry)
+    return entry.result
+  }
   const artists = new Map()
   const releases = new Set()
+  const newsGroups = new Set()
   const followed = () => JSON.parse(getStore().get('followed-musicbrainz-artists') || '[]')
   let cachedNews
   bind('findArtists', async (term) => {
@@ -84,11 +108,15 @@ export function registerReleaseCatalog(bind, getStore) {
         today +
         ']'
       for (let offset = 0; ; offset += 100) {
-        const data = await metadata('release-group', {
-          query,
-          limit: '100',
-          offset: String(offset),
-        })
+        const data = await metadata(
+          'release-group',
+          {
+            query,
+            limit: '100',
+            offset: String(offset),
+          },
+          refresh,
+        )
         const groups = data['release-groups'] ?? []
         for (const g of groups) {
           const date = g['first-release-date']
@@ -100,8 +128,14 @@ export function registerReleaseCatalog(bind, getStore) {
             date > today
           )
             continue
+          const type = (g['secondary-types'] ?? []).includes('Soundtrack')
+            ? '原声带'
+            : { Album: '专辑', Single: '单曲', EP: 'EP' }[g['primary-type']]
+          if (!type) continue
+          newsGroups.add(g.id)
           rows.set(g.id, {
             id: g.id,
+            type,
             title: name(g.title),
             artist: credit(g['artist-credit']),
             date,
@@ -116,11 +150,17 @@ export function registerReleaseCatalog(bind, getStore) {
     cachedNews = { key, rows: result, expires: Date.now() + 3600000 }
     return result
   })
+  bind('newsEditions', async (id) => {
+    if (!mbid.test(id) || !newsGroups.has(id)) throw Error('请先选择动态中的发行')
+    return findEditions('rgid:' + id + ' AND status:official')
+  })
   bind('albumEditions', async (albumId) => {
     if (typeof albumId !== 'string' || !/^[a-f0-9]{64}$/.test(albumId)) throw Error('无效专辑')
     const album = (await getStore().library.albums.list()).find((a) => a.id === albumId)
     if (!album) throw Error('本地专辑已变更')
-    const query = 'release:' + quote(album.title) + ' AND artist:' + quote(album.artist)
+    return findEditions('release:' + quote(album.title) + ' AND artist:' + quote(album.artist))
+  })
+  async function findEditions(query) {
     const choices = []
     for (let offset = 0; ; offset += 100) {
       const data = await metadata('release', { query, limit: '100', offset: String(offset) })
@@ -147,7 +187,7 @@ export function registerReleaseCatalog(bind, getStore) {
       if (items.length < 100 || offset + 100 >= data.count) break
     }
     return choices
-  })
+  }
   bind('editionTracks', async (id) => {
     if (!mbid.test(id) || !releases.has(id)) throw Error('请先选择发行版本')
     const data = await metadata('release/' + id, { inc: 'recordings+artist-credits' })

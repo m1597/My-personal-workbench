@@ -14,17 +14,114 @@ type ReleaseTrack = {
   title: string
   artist: string
 }
-type News = { id: string; title: string; artist: string; date: string }
+type News = { type: string; id: string; title: string; artist: string; date: string }
 export interface ReleaseAPI {
   findArtists(term: string): Promise<Artist[]>
   followedArtists(): Promise<Artist[]>
   followArtist(id: string, on: boolean): Promise<Artist[]>
   releaseNews(refresh?: boolean): Promise<News[]>
+  newsEditions(id: string): Promise<Edition[]>
   albumEditions(id: string): Promise<Edition[]>
   editionTracks(id: string): Promise<ReleaseTrack[]>
 }
 const message = (error: unknown) => String(error).split('Error: ').at(-1) || '读取发行资料失败'
+function NewsTracks({ group, search }: { group: News; search: (q: string) => void }) {
+  const [editions, setEditions] = useState<Edition[]>([])
+  const [selected, setSelected] = useState('')
+  const [tracks, setTracks] = useState<ReleaseTrack[]>()
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry starts a fresh request after a failed lookup.
+  useEffect(() => {
+    let active = true
+    setError('')
+    void window.music
+      .newsEditions(group.id)
+      .then((list) => {
+        if (!active) return
+        setEditions(list)
+        setSelected(list[0]?.id ?? '')
+        if (!list.length) setError('此发行暂无正式版本资料。')
+      })
+      .catch((e) => {
+        if (active) setError(message(e))
+      })
+    return () => {
+      active = false
+    }
+  }, [group.id, retry])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry also reloads the currently selected edition.
+  useEffect(() => {
+    let active = true
+    if (selected) {
+      setTracks(undefined)
+      setError('')
+      void window.music
+        .editionTracks(selected)
+        .then((list) => {
+          if (active) setTracks(list)
+        })
+        .catch((e) => {
+          if (active) setError(message(e))
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [selected, retry])
+  return (
+    <div className="release-track-picker">
+      {editions.length > 1 && (
+        <Dropdown
+          inlinePopup
+          aria-label="动态发行版本"
+          listbox={{ className: 'component-popup' }}
+          value={editions.filter((e) => e.id === selected).map(labelEdition)[0] ?? ''}
+          selectedOptions={[selected]}
+          onOptionSelect={(_, d) => {
+            if (d.optionValue) setSelected(d.optionValue)
+          }}
+        >
+          {editions.map((e) => (
+            <Option key={e.id} value={e.id} text={labelEdition(e)}>
+              {labelEdition(e)}
+            </Option>
+          ))}
+        </Dropdown>
+      )}
+      {error ? (
+        <p role="alert">
+          {error}{' '}
+          <Button size="small" onClick={() => setRetry((n) => n + 1)}>
+            重试
+          </Button>
+        </p>
+      ) : !tracks ? (
+        <small role="status">正在读取曲目…</small>
+      ) : !tracks.length ? (
+        <small>此版本暂无曲目资料。</small>
+      ) : (
+        <ol>
+          {tracks.map((t) => (
+            <li key={[t.disc, t.number, t.title].join(':')}>
+              <div>
+                <strong>
+                  {t.disc}.{t.number} {t.title}
+                </strong>
+                <small>{t.artist}</small>
+              </div>
+              <Button size="small" onClick={() => search(t.title + ' ' + t.artist)}>
+                选择版本播放
+              </Button>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
 export function ArtistReleases({ search }: { search: (query: string) => void }) {
+  const [openGroup, setOpenGroup] = useState('')
   const [followed, setFollowed] = useState<Artist[]>([])
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<Artist[]>()
@@ -138,16 +235,23 @@ export function ArtistReleases({ search }: { search: (query: string) => void }) 
       {!!news?.length && (
         <ul>
           {news.map((r) => (
-            <li key={r.id}>
-              <div>
-                <strong>{r.title}</strong>
-                <small>
-                  {r.artist} · {r.date}
-                </small>
+            <li key={r.id} className="release-event">
+              <div className="release-event-head">
+                <div>
+                  <strong>{r.title}</strong>
+                  <small>
+                    {r.artist} · {r.date} · {r.type}
+                  </small>
+                </div>
+                <Button
+                  size="small"
+                  aria-expanded={openGroup === r.id}
+                  onClick={() => setOpenGroup(openGroup === r.id ? '' : r.id)}
+                >
+                  {openGroup === r.id ? '收起曲目' : '查看曲目'}
+                </Button>
               </div>
-              <Button size="small" onClick={() => search(r.title + ' ' + r.artist)}>
-                去搜索
-              </Button>
+              {openGroup === r.id && <NewsTracks group={r} search={search} />}
             </li>
           ))}
         </ul>

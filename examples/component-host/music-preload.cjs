@@ -30,6 +30,7 @@ const names = [
   'followedArtists',
   'followArtist',
   'releaseNews',
+  'newsEditions',
   'albumEditions',
   'editionTracks',
   'albumCover',

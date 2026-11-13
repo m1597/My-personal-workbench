@@ -52,3 +52,22 @@
   padding-inline-start: var(--space-12);
   min-height: 0;
 }
+
+.music-release-news .release-event {
+  display: grid;
+  justify-content: stretch;
+  gap: var(--space-8);
+}
+.release-event-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-8);
+}
+.release-track-picker {
+  padding-inline-start: var(--space-12);
+}
+.release-track-picker ol {
+  margin: 0;
+  padding: 0;
+}
