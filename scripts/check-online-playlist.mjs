@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import path from 'node:path'
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
@@ -21,7 +21,7 @@ const originalDigest = await digest(tone)
 const downloadDir = path.join(root, 'downloads')
 await mkdir(downloadDir)
 const conflict = path.join(downloadDir, '艺人 - 文件冲突.wav')
-await writeFile(conflict, '既有文件')
+await writeFile(conflict, recording('fitbay-tone-1'))
 const conflictDigest = await digest(conflict)
 await writeFile(
   file,
@@ -242,6 +242,40 @@ for (const restart of [false, true]) {
       await button('播放另存在线').click()
       await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
       assert.equal(await app.evaluate(() => globalThis.delayOnlineRecording), 'block network')
+      // A missing indexed file still owns its path. Retrying must preserve its metadata.
+      await app.evaluate(() => {
+        globalThis.delayOnlineRecording = false
+      })
+      await app.evaluate(({ dialog }, file) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+      }, conflict)
+      await page.evaluate(() => window.music.importLocal('files'))
+      await expect
+        .poll(() => page.evaluate(async () => (await window.music.state()).localTracks.length))
+        .toBe(3)
+      const before = await page.evaluate(async () =>
+        (await window.music.state()).localTracks.map(({ id, title, artist }) => ({
+          id,
+          title,
+          artist,
+        })),
+      )
+      await unlink(conflict)
+      await button('多选').click()
+      await page.getByRole('checkbox', { name: '选择文件冲突' }).check()
+      await button('下载所选').click()
+      await expect(selectedRow('文件冲突').getByText(/目标路径已有曲库记录/)).toBeVisible()
+      assert.deepEqual(
+        await page.evaluate(async () =>
+          (await window.music.state()).localTracks.map(({ id, title, artist }) => ({
+            id,
+            title,
+            artist,
+          })),
+        ),
+        before,
+      )
+      assert.deepEqual(await readdir(downloadDir), ['艺人 - 另存在线.wav'])
     }
   } finally {
     await app.close()
