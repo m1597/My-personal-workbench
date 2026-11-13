@@ -86,6 +86,8 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     '滚动三',
     '滚动四',
     '慢传追加',
+    '首轮甲',
+    '首轮乙',
     '补选一',
     '补选二',
     '超时换源',
@@ -318,6 +320,8 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     globalThis.rounds = [
       [
         ['慢传追加', '甲'],
+        ['首轮甲', '辛'],
+        ['首轮乙', '壬'],
         ['缺歌一', '乙'],
         ['缺歌二', '丙'],
       ],
@@ -328,21 +332,22 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
       ],
     ]
   })
-  await page.getByLabel('推荐首数').fill('3')
+  await page.getByLabel('推荐首数').fill('5')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.locator('.music-list li strong')).toHaveText(['补选一', '补选二'], {
-    timeout: 11000,
-  })
-  await expect(progress).toContainText('已下载 2/3，正在下载《慢传追加》')
-  await expect(progress).toContainText('已下载 3/3，已达到目标首数', { timeout: 14000 })
+  await expect(page.locator('.music-list li strong')).toHaveCount(4, { timeout: 11000 })
+  await expect(progress).toContainText('已下载 4/5，正在下载《慢传追加》')
+  await expect(progress).toContainText('已下载 5/5，已达到目标首数', { timeout: 14000 })
   const counts = await app.evaluate(() => {
     const counts = globalThis.requestedCounts
     delete globalThis.requestedCounts
     return counts
   })
-  assert.equal(counts[0], 3)
+  assert.equal(counts[0], 5)
   assert.ok(counts[1] >= 3 && counts[1] <= 5)
-  assert.equal(await page.locator('.music-list li strong').count(), 3)
+  assert.deepEqual(
+    (await page.locator('.music-list li strong').allTextContents()).sort(),
+    ['首轮甲', '首轮乙', '补选一', '补选二', '慢传追加'].sort(),
+  )
   assert.equal(
     await app.evaluate(() => globalThis.calls.filter((call) => call === 'model').length),
     2,
