@@ -241,12 +241,14 @@ try {
   await input.press('Enter')
   const group = page.locator('.version-group details')
   await expect(group.locator('summary')).toHaveText('远山 · 青禾 · 2 个版本')
-  await expect(page.getByText('另一人 · 时长未知')).toBeVisible()
+  await expect(page.locator('.search-recording').filter({ hasText: '另一人' })).toContainText(
+    '时长未知',
+  )
   await expect(group).toHaveCount(1)
   for (const name of ['访客', '问候', '无标记'])
     await expect(page.getByText(name, { exact: true })).toHaveCount(2)
   await expect(page.getByText('远山 (月亮)', { exact: true })).toBeVisible()
-  await group.locator('summary').click()
+  await expect(group).toHaveAttribute('open', '')
   const versions = group.getByRole('listitem')
   await expect(versions.nth(0)).toContainText('3:01')
   await expect(versions.nth(1)).toContainText('3:24')
@@ -300,7 +302,7 @@ try {
   assert.deepEqual(await app.evaluate(() => globalThis.catalogRequests), requests)
   await pick.click()
   await expect(group.locator('summary')).toBeVisible()
-  await group.locator('summary').click()
+  await expect(group).toHaveAttribute('open', '')
   await versions.nth(0).getByRole('button', { name: '播放', exact: true }).click()
   await expect
     .poll(() => app.evaluate(() => globalThis.audioRequests.at(-1)))

@@ -126,6 +126,33 @@ try {
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).prefs.manualDir))
     .toBe(downloads)
+  await tab('在线找歌').click()
+  const history = page.getByRole('region', { name: '最近搜索' })
+  const input = page.getByRole('textbox', { name: '搜索关键词' })
+  await expect(history).toHaveCount(0)
+  for (let i = 1; i <= 7; i++) {
+    await input.fill('录音 ' + i)
+    await input.press('Enter')
+    await expect(result()).toBeVisible()
+  }
+  await input.fill('')
+  await expect(history.getByRole('button', { name: /^录音/ })).toHaveText([
+    '录音 7',
+    '录音 6',
+    '录音 5',
+    '录音 4',
+    '录音 3',
+    '录音 2',
+  ])
+  await history.getByRole('button', { name: '录音 3', exact: true }).click()
+  await expect(result()).toBeVisible()
+  await expect(input).toHaveValue('录音 3')
+  await input.fill('')
+  await expect(history.getByRole('button', { name: /^录音/ }).first()).toHaveText('录音 3')
+  await history.getByRole('button', { name: '删除搜索词 录音 7' }).click()
+  await expect(history.getByRole('button', { name: /^录音/ })).toHaveCount(5)
+  await history.getByRole('button', { name: '清空' }).click()
+  await expect(history).toHaveCount(0)
   await search()
   await result().getByRole('button', { name: '加入歌单' }).click()
   await page.getByRole('menuitem', { name: '路上听' }).click()
@@ -137,6 +164,12 @@ try {
   await app.close()
   app = await launch()
   page = await app.firstWindow()
+  await tab('在线找歌').click()
+  await expect(
+    page
+      .getByRole('region', { name: '最近搜索' })
+      .getByRole('button', { name: '远山 青禾', exact: true }),
+  ).toBeVisible()
   await tab('歌单').click()
   await button('路上听').click()
   await expect(page.locator('.library-name strong')).toHaveText(['远山'])

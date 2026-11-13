@@ -173,6 +173,11 @@ declare global {
         lxCancel(scope?: 'import' | 'search' | 'download'): Promise<void>
         downloadTasks(): Promise<{ id: string; title: string; status: string; detail: string }[]>
         cancelDownloadTask(id: string): Promise<void>
+        searchHistory(
+          action?: 'list' | 'add' | 'remove' | 'clear',
+          keyword?: string,
+        ): Promise<string[]>
+        searchCover(key: string): Promise<string | null>
         lxSearch(
           query: string | { title: string; artist: string },
           platform?: string,

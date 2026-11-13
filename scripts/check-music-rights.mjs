@@ -84,6 +84,7 @@ try {
           ? Promise.resolve([{ address: '1.1.1.1', family: 4 }])
           : lookup(name, ...args)
       process.getBuiltinModule('node:module').syncBuiltinESMExports()
+      globalThis.testOffsets = []
       globalThis.downloadCalls = 0
       https.request = (url, _opts, done) => {
         let response
@@ -107,6 +108,33 @@ try {
           if (title === '网络失败') {
             const req = new EventEmitter()
             req.end = () => done(Object.assign(Readable.from([]), { statusCode: 503, headers: {} }))
+            return req
+          }
+          if (title.startsWith('目录夹具')) {
+            const offset = Number(url.searchParams.get('offset'))
+            const songs = Array.from({ length: 45 }, (_, i) => ({
+              id: 100 + i,
+              name: '曲目' + i,
+              artists: [{ name: '艺人' }],
+              album: { name: '专辑' },
+            }))
+            const body =
+              title === '目录夹具业务错误'
+                ? { code: 503, result: { songCount: 0 } }
+                : title === '目录夹具无效数据'
+                  ? { code: 200, result: { songCount: 2 } }
+                  : title === '目录夹具分页' && offset === 0
+                    ? { code: 200, result: { songs, songCount: 45 } }
+                    : { code: 200, result: { songCount: 0 } }
+            if (title === '目录夹具分页') globalThis.testOffsets.push(offset)
+            const req = new EventEmitter()
+            req.end = () =>
+              done(
+                Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), {
+                  statusCode: 200,
+                  headers: {},
+                }),
+              )
             return req
           }
           const rights =
@@ -147,6 +175,18 @@ try {
     { sourceFile, file: path.resolve('tests/fixtures/local-music/tone.mp3') },
   )
   await page.evaluate(() => window.music.lxImport())
+  const search = (title) =>
+    page.evaluate((title) => window.music.lxSearch({ title, artist: '' }, 'wy'), title)
+  const found = await search('目录夹具分页')
+  assert.equal(found.items.length, 45)
+  assert.equal(found.partial, false)
+  assert.deepEqual(await app.evaluate(() => globalThis.testOffsets), [0, 45])
+  assert.deepEqual((await search('目录夹具空')).items, [])
+  await assert.rejects(search('目录夹具业务错误'), /业务码 503/)
+  await assert.rejects(search('目录夹具无效数据'), /目录暂时不可用/)
+  await assert.rejects(search('网络失败'), /HTTP 503/)
+  console.log('PASS 网易云 45 首后空页、初始空页、业务错误、异常数据和 HTTP 503')
+
   const run = (id) => page.evaluate((id) => window.music.prepareRecommendation(id), id)
   const state = () => page.evaluate(() => window.music.state())
   const openWindow = app.waitForEvent('window')

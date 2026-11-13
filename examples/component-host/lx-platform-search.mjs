@@ -27,6 +27,9 @@ function qqSong(s) {
     songmid: s.mid,
     songId: s.id,
     strMediaMid: f.media_mid,
+    picUrl: /^[a-z0-9]+$/i.test(s.album?.mid ?? '')
+      ? 'https://y.gtimg.cn/music/photo_new/T002R150x150M000' + s.album.mid + '.jpg'
+      : undefined,
     albumId: s.album?.mid,
     albumMid: s.album?.mid,
     albumName: s.album?.name,
@@ -43,6 +46,7 @@ function kgSong(s) {
     name: [s.OriSongName || s.SongName, s.Suffix].filter(Boolean).join(' '),
     singer: s.Singers?.map((a) => a.name).join('、') || s.SingerName,
     albumName: s.AlbumName,
+    picUrl: typeof s.Image === 'string' ? s.Image.replace('{size}', '120') : undefined,
     songmid: s.Audioid,
     albumAudioId: s.MixSongID,
     albumId: s.AlbumID,

@@ -12,6 +12,8 @@ import {
   Tab,
   TabList,
 } from '@fluentui/react-components'
+import { X } from 'lucide-react'
+import './search.css'
 import { formatTime, type Playlist } from './LibraryPane'
 export type Versions = {
   items: {
@@ -19,6 +21,7 @@ export type Versions = {
     title: string
     artist: string
     album: string
+    hasCover?: boolean
     duration?: number
     quality?: string[]
   }[]
@@ -26,6 +29,52 @@ export type Versions = {
   partial?: boolean
 }
 const versionSuffix = /\s*(?:[（(【\[]([^）)】\]]+)[）)】\]]|[-–—]\s*(.+))\s*$/u
+function ResultCover({ item }: { item: Versions['items'][number] }) {
+  const image = useRef<HTMLImageElement>(null)
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!item.hasCover || !image.current) return
+    let live = true
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return
+      observer.disconnect()
+      void window.music
+        .searchCover(item.key)
+        .then((value) => {
+          if (live) setUrl(value)
+        })
+        .catch(() => {})
+    })
+    observer.observe(image.current)
+    return () => {
+      live = false
+      observer.disconnect()
+    }
+  }, [item.key, item.hasCover])
+  return (
+    <img
+      ref={image}
+      className="search-cover"
+      src={url || './default-cover.png'}
+      alt=""
+      onError={url ? () => setUrl(null) : undefined}
+    />
+  )
+}
+const versionLabel = /(?:伴奏|现场|現場|翻唱|\blive\b|\bcover\b|\binstrumental\b)/iu
+function recordingName(title: string) {
+  const suffix = title.match(versionSuffix)
+  const label = suffix?.[1] ?? suffix?.[2] ?? ''
+  if (!suffix || !versionLabel.test(label)) return <strong>{title}</strong>
+  const base = title.slice(0, suffix.index).trim()
+  return base ? (
+    <strong>
+      {base} <span className="search-version">{label}</span>
+    </strong>
+  ) : (
+    <strong>{title}</strong>
+  )
+}
 function groupedVersions(items: Versions['items']) {
   const groups = new Map<string, { title: string; items: Versions['items'] }>()
   const normalize = (value: string) =>
@@ -90,7 +139,12 @@ export function DownloadPane({
   const platforms = { wy: '网易云音乐', tx: 'QQ 音乐', kg: '酷狗音乐' }
   const unsupported = available && !available.includes(platform)
   const hasQuery = Boolean(query.trim())
+  const [history, setHistory] = useState<string[]>([])
   const host = window.music
+  async function changeHistory(action: 'list' | 'add' | 'remove' | 'clear', word?: string) {
+    const words = await host.searchHistory(action, word)
+    if (live.current) setHistory(words)
+  }
   const live = useRef(true)
   async function act(fn: () => Promise<void>, cancellable = true) {
     setOperation(cancellable ? 'cancellable' : 'pending')
@@ -105,6 +159,7 @@ export function DownloadPane({
   }
   async function search(target = platform, keyword = query) {
     setResult(undefined)
+    void changeHistory('add', keyword.trim()).catch(() => {})
     const found = await host.lxSearch({ title: keyword.trim(), artist: '' }, target)
     if (!live.current) return
     setResult(found)
@@ -116,6 +171,12 @@ export function DownloadPane({
   )
   useEffect(() => {
     live.current = true
+    void host
+      .searchHistory()
+      .then((words) => {
+        if (live.current) setHistory(words)
+      })
+      .catch(() => {})
     const load = () =>
       void host
         .lxSources()
@@ -148,15 +209,15 @@ export function DownloadPane({
   }, [])
   function versionRow(item: Versions['items'][number]) {
     return (
-      <li key={item.key}>
-        <div>
-          <strong>{item.title}</strong>
-          <small>
-            {[item.artist, item.album, item.duration ? formatTime(item.duration) : '时长未知']
-              .filter(Boolean)
-              .join(' · ')}
-          </small>
+      <li className="search-recording" key={item.key}>
+        <ResultCover item={item} />
+        <div className="search-track">
+          {recordingName(item.title)}
+          <small>{item.artist || '未知艺人'}</small>
         </div>
+        <small className="search-duration">
+          {item.duration ? formatTime(item.duration) : '时长未知'}
+        </small>
         <div className="search-result-actions">
           <Button
             size="small"
@@ -219,37 +280,6 @@ export function DownloadPane({
   }
   return (
     <section className="lx-panel" aria-label="搜索音乐">
-      <TabList
-        size="small"
-        aria-label="搜索平台"
-        selectedValue={platform}
-        onTabSelect={(_, data) => {
-          const next = String(data.value)
-          if (next === platform || busy) return
-          setPlatform(next)
-          setResult(undefined)
-          setStatus('')
-          if (name && hasQuery && (!available || available.includes(next)))
-            void act(() => search(next))
-        }}
-      >
-        <Tab value="wy" disabled={busy}>
-          网易云音乐
-        </Tab>
-        <Tab value="tx" disabled={busy}>
-          QQ 音乐
-        </Tab>
-        <Tab value="kg" disabled={busy}>
-          酷狗音乐
-        </Tab>
-      </TabList>
-      {!name && <p>请先到「设置」导入音乐源。</p>}
-      {unsupported && (
-        <p role="status">
-          当前音乐源不支持{platforms[platform as keyof typeof platforms]}
-          的搜索和下载，请更换音乐源。
-        </p>
-      )}
       <form
         className="download-search"
         onSubmit={(e) => {
@@ -277,6 +307,76 @@ export function DownloadPane({
           搜索
         </Button>
       </form>
+      <TabList
+        className="search-platforms"
+        size="small"
+        aria-label="搜索平台"
+        selectedValue={platform}
+        onTabSelect={(_, data) => {
+          const next = String(data.value)
+          if (next === platform || busy) return
+          setPlatform(next)
+          setResult(undefined)
+          setStatus('')
+          if (name && hasQuery && (!available || available.includes(next)))
+            void act(() => search(next))
+        }}
+      >
+        <Tab value="wy" disabled={busy}>
+          网易云音乐
+        </Tab>
+        <Tab value="tx" disabled={busy}>
+          QQ 音乐
+        </Tab>
+        <Tab value="kg" disabled={busy}>
+          酷狗音乐
+        </Tab>
+      </TabList>
+      {!name && hasQuery && <p>请先到「设置」导入音乐源。</p>}
+      {unsupported && (
+        <p role="status">
+          当前音乐源不支持{platforms[platform as keyof typeof platforms]}
+          的搜索和下载，请更换音乐源。
+        </p>
+      )}
+      {!hasQuery && !busy && history.length > 0 && (
+        <section className="search-history" aria-label="最近搜索">
+          <header>
+            <h2>最近搜索</h2>
+            <Button
+              size="small"
+              appearance="subtle"
+              onClick={() => void act(() => changeHistory('clear'), false)}
+            >
+              清空
+            </Button>
+          </header>
+          <div>
+            {history.map((word) => (
+              <span key={word}>
+                <Button
+                  size="small"
+                  appearance="subtle"
+                  disabled={!name || unsupported}
+                  onClick={() => {
+                    setQuery(word)
+                    void act(() => search(platform, word))
+                  }}
+                >
+                  {word}
+                </Button>
+                <Button
+                  size="small"
+                  appearance="subtle"
+                  aria-label={'删除搜索词 ' + word}
+                  icon={<X size={13} />}
+                  onClick={() => void act(() => changeHistory('remove', word), false)}
+                />
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
       {busy ? (
         <div role="status">
           正在处理…{' '}
@@ -289,37 +389,39 @@ export function DownloadPane({
       ) : null}
       {result && result.items.length > 0 && (
         <>
-          <label htmlFor="lx-quality">
-            音质{' '}
-            <Dropdown
-              inlinePopup
-              listbox={{ className: 'component-popup' }}
-              id="lx-quality"
-              size="small"
-              value={quality}
-              selectedOptions={[quality]}
-              onOptionSelect={(_, data) => {
-                if (data.optionValue) setQuality(data.optionValue)
-              }}
-            >
-              {result.quality.map((q) => (
-                <Option key={q} value={q}>
-                  {q}
-                </Option>
-              ))}
-            </Dropdown>
-          </label>
-          <small>
-            {result.items.length} 个版本
-            {result.partial && ' · 后续结果暂时不可用'}
-          </small>
+          <div className="search-result-head">
+            <label htmlFor="lx-quality">
+              音质{' '}
+              <Dropdown
+                inlinePopup
+                listbox={{ className: 'component-popup' }}
+                id="lx-quality"
+                size="small"
+                value={quality}
+                selectedOptions={[quality]}
+                onOptionSelect={(_, data) => {
+                  if (data.optionValue) setQuality(data.optionValue)
+                }}
+              >
+                {result.quality.map((q) => (
+                  <Option key={q} value={q}>
+                    {q}
+                  </Option>
+                ))}
+              </Dropdown>
+            </label>
+            <small>
+              {result.items.length} 个版本
+              {result.partial && ' · 后续结果暂时不可用'}
+            </small>
+          </div>
           <ul>
             {groupedVersions(result.items).map((group) =>
               group.items.length === 1 ? (
                 versionRow(group.items[0])
               ) : (
                 <li className="version-group" key={group.items[0].key}>
-                  <details>
+                  <details open>
                     <summary>
                       {group.title} · {group.items[0].artist} · {group.items.length} 个版本
                     </summary>
@@ -331,7 +433,7 @@ export function DownloadPane({
           </ul>
         </>
       )}
-      {status && <p role="status">{status}</p>}
+      {!busy && status && <p role="status">{status}</p>}
     </section>
   )
 }

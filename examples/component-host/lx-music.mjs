@@ -155,6 +155,23 @@ const explanations = {
 }
 
 const text = (v) => (typeof v === 'string' ? v.trim().slice(0, 256) : '')
+function searchCoverAddress(row) {
+  const value = row?.picUrl || row?.imgUrl || row?.meta?.picUrl
+  if (typeof value !== 'string' || value.length > 2048) return
+  try {
+    const url = new URL(value)
+    if (
+      url.protocol === 'https:' &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      /^(?:p[0-9]+\.music\.126\.net|y\.gtimg\.cn|imge?\.kugou\.com)$/i.test(url.hostname)
+    )
+      return url.href
+  } catch {
+    /* Source has no usable artwork. */
+  }
+}
 function recordingQualities(source, row) {
   if (source.search || !['tx', 'kg'].includes(source.platform) || !Array.isArray(row.types))
     return source.quality
@@ -190,7 +207,11 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
       'network',
       '在线目录请求失败（HTTP ' + response.statusCode + '），请重试',
     )
-  const songs = response.body?.result?.songs
+  const { code, result } = response.body ?? {}
+  if (code !== undefined && code !== 200)
+    throw new RecordingError('network', '在线目录请求失败（业务码 ' + code + '）')
+  const songs = result?.songs
+  if (code === 200 && result?.songCount === 0 && songs === undefined) return []
   if (!Array.isArray(songs)) throw new RecordingError('network', '在线目录暂时不可用')
   const grants = response.body.result.privileges ?? response.body.privileges
   const privileges = new Map(Array.isArray(grants) ? grants.map((p) => [String(p.id), p]) : [])
@@ -210,6 +231,8 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
           [a.name, ...(a.alias ?? []), a.trans].filter((v) => typeof v === 'string'),
         ),
         albumName: s.album?.name,
+        picUrl: s.album?.picUrl,
+        catalogCoverId: s.album?.id && /^\d+$/.test(String(s.id)) ? String(s.id) : undefined,
         durationSeconds: Number(s.duration) / 1000,
         id: String(s.id),
         songmid: String(s.id),
@@ -746,6 +769,86 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     matches.clear()
   })
   bind('lxInfo', () => source()?.name ?? '')
+  bind('searchHistory', (action = 'list', keyword) => {
+    const store = getStore()
+    const words = JSON.parse(store.get('music-search-history') || '[]')
+    if (action === 'list') return words
+    if (
+      action !== 'clear' &&
+      (typeof keyword !== 'string' || !keyword.trim() || keyword.length > 256)
+    )
+      throw Error('无效搜索词')
+    const next = action === 'clear' ? [] : words.filter((word) => word !== keyword.trim())
+    if (action === 'add') next.unshift(keyword.trim())
+    else if (action !== 'clear' && action !== 'remove') throw Error('无效历史操作')
+    store.set('music-search-history', JSON.stringify(next.slice(0, 6)))
+    return next.slice(0, 6)
+  })
+  const coverDetails = new Map()
+  bind('searchCover', async (key) => {
+    const match = matches.get(key)
+    if (!match) return null
+    const row = match.row
+    let address = searchCoverAddress(row)
+    // Resolve thumbnails in small batches only when their first recording scrolls into view.
+    if (!address && !match.customSearch && match.platform === 'wy' && row.catalogCoverId) {
+      const ids = [...matches.values()]
+        .filter(
+          (candidate) =>
+            !candidate.customSearch && candidate.platform === 'wy' && candidate.row.catalogCoverId,
+        )
+        .map((candidate) => candidate.row.catalogCoverId)
+      const start = Math.floor(ids.indexOf(row.catalogCoverId) / 8) * 8
+      const batch = ids.slice(start, start + 8)
+      const batchKey = JSON.stringify(batch)
+      let request = coverDetails.get(batchKey)
+      if (!request) {
+        const query = encodeURIComponent(JSON.stringify(batch.map((id) => ({ id }))))
+        request = sourceRequest('https://music.163.com/api/v3/song/detail?c=' + query, {
+          timeout: 5000,
+        }).then(
+          ({ statusCode, body }) =>
+            new Map(
+              statusCode === 200 && body?.code === 200 && Array.isArray(body.songs)
+                ? body.songs.map((song) => [
+                    String(song.id),
+                    searchCoverAddress({ picUrl: song.al?.picUrl }),
+                  ])
+                : [],
+            ),
+        )
+        coverDetails.set(batchKey, request)
+      }
+      address = (await request).get(row.catalogCoverId)
+      if (address) {
+        const small = new URL(address)
+        small.searchParams.set('param', '96y96')
+        address = small.href
+      }
+    }
+    if (!address) return null
+    const response = await openPublic(address, { signal: AbortSignal.timeout(5000) })
+    try {
+      if (response.statusCode !== 200) return null
+      const chunks = []
+      let length = 0
+      for await (const chunk of response) {
+        length += chunk.length
+        if (length > 512 * 1024) return null
+        chunks.push(chunk)
+      }
+      const bytes = Buffer.concat(chunks)
+      const mime = bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
+        ? 'jpeg'
+        : bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+          ? 'png'
+          : ''
+      return mime ? 'data:image/' + mime + ';base64,' + bytes.toString('base64') : null
+    } finally {
+      response.destroy()
+    }
+  })
+
   bind(
     'lxImport',
     exclusive(async (signal, link) => {
@@ -793,6 +896,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
       if (!track) throw Error('无效曲目')
       matches.clear()
+      coverDetails.clear()
       const audition = typeof id === 'string' && !id.startsWith('local-')
       const { rows, partial } = audition
         ? {
@@ -809,6 +913,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         matches.set(key, {
           sourceCode: src.code,
           platform: src.platform,
+          customSearch: src.search,
           query: { title: track.title, artist: track.artist },
           row,
           auditionId: typeof id === 'string' && !id.startsWith('local-') ? id : null,
@@ -819,6 +924,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           artist: text(row.singer),
           album: text(row.albumName),
           duration: durationSeconds(row),
+          hasCover: Boolean(
+            searchCoverAddress(row) || (!src.search && src.platform === 'wy' && row.catalogCoverId),
+          ),
           quality: recordingQualities(src, row),
         })
       }
