@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import { MusicStore } from '../components/music/store.mjs'
 import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 import { dragMusicIn, dragMusicOut } from './music-drag-fixture.mjs'
@@ -37,7 +38,7 @@ try {
   await expect(music.getByRole('option')).toHaveText(['DeepSeek', 'OpenAI', 'Claude', 'Gemini'])
   await music.getByRole('option', { name: 'DeepSeek' }).click()
   await music.getByRole('button', { name: '取消', exact: true }).click()
-  await music.getByRole('tab', { name: '智能推荐' }).click()
+  await openDiscovery(music, true)
   await expect(music.getByRole('textbox', { name: '推荐首数' })).toHaveValue('5')
   await expect(music.locator('li')).toHaveCount(5)
   await music.getByText('匹配目录', { exact: true }).click()

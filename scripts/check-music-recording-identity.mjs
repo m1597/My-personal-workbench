@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import { offlineSourceRepository } from './music-source-fixture.mjs'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
@@ -135,7 +136,7 @@ try {
     await window.music.configureModel('deepseek', 'fixture', 'fixture', false)
   })
   await page.reload()
-  await page.getByRole('tab', { name: '智能推荐' }).click()
+  await openDiscovery(page, true)
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('只听目录艺人本人的作品')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(page.getByRole('button', { name: '生成推荐', exact: true })).toBeEnabled({

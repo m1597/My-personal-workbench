@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -69,7 +70,7 @@ try {
   await expect.poll(async () => (await snapshot()).current).toBe('C')
   const titles = ['A', 'B', 'C', 'D', 'E']
   assert.deepEqual((await snapshot()).list, titles)
-  await page.getByRole('tab', { name: '在线找歌' }).click()
+  await openDiscovery(page, false)
   await button('播放队列').click()
   await expect(pop.getByText('当前曲目 · C · 测试艺人')).toBeVisible()
   await page.keyboard.press('Escape')

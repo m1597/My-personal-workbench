@@ -1,7 +1,6 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Button,
-  Input,
   Dropdown,
   Option,
   Menu,
@@ -13,6 +12,7 @@ import {
   TabList,
 } from '@fluentui/react-components'
 import { TrackMenu } from './TrackMenu'
+import { DiscoveryInput } from './DiscoveryInput'
 import { X } from 'lucide-react'
 import './search.css'
 import { formatTime, type Playlist } from './LibraryPane'
@@ -115,13 +115,17 @@ function groupedVersions(items: Versions['items']) {
 }
 export function DownloadPane({
   playlists,
-  initialQuery,
+  query,
+  setQuery,
+  toggle,
   onPlay,
   onAdd,
   refresh,
   preferredQuality = '320k',
 }: {
-  initialQuery?: string
+  query: string
+  setQuery(value: string): void
+  toggle(): void
   playlists: Playlist[]
   onPlay: (key: string, quality?: string) => Promise<void>
   onAdd: (playlist: string, key: string) => Promise<void>
@@ -134,13 +138,13 @@ export function DownloadPane({
     [status, setStatus] = useState(''),
     [operation, setOperation] = useState<'idle' | 'cancellable' | 'pending'>('idle')
   const busy = operation !== 'idle'
-  const [query, setQuery] = useState(initialQuery ?? '')
-  const pendingQuery = useRef(initialQuery)
   const [platform, setPlatform] = useState('wy')
+  const sourceId = useRef<string | null>(null)
   const [available, setAvailable] = useState<string[]>()
   const platforms = { wy: '网易云音乐', tx: 'QQ 音乐', kg: '酷狗音乐' }
   const unsupported = available && !available.includes(platform)
   const hasQuery = Boolean(query.trim())
+  const searchable = hasQuery && query.trim().length <= 256
   const [history, setHistory] = useState<string[]>([])
   const host = window.music
   async function changeHistory(action: 'list' | 'add' | 'remove' | 'clear', word?: string) {
@@ -168,9 +172,6 @@ export function DownloadPane({
     setQuality(found.quality.includes(preferredQuality) ? preferredQuality : found.quality[0])
     if (!found.items.length) setStatus('没有找到匹配版本')
   }
-  const searchInitial = useEffectEvent(
-    (target: string, keyword: string) => void act(() => search(target, keyword)),
-  )
   useEffect(() => {
     live.current = true
     void host
@@ -187,15 +188,10 @@ export function DownloadPane({
           const active = data.installed.find((entry) => entry.id === data.active)
           setName(active?.name ?? '')
           setAvailable(active?.searchPlatforms)
-          setResult(undefined)
-          setStatus('')
-          if (active && pendingQuery.current) {
-            const target =
-              active.searchPlatforms?.find((p) => ['wy', 'tx', 'kg'].includes(p)) ?? 'wy'
-            const keyword = pendingQuery.current
-            pendingQuery.current = undefined
-            setPlatform(target)
-            searchInitial(target, keyword)
+          if (sourceId.current !== data.active) {
+            sourceId.current = data.active
+            setResult(undefined)
+            setStatus('')
           }
         })
         .catch(() => {
@@ -299,17 +295,16 @@ export function DownloadPane({
           className="download-search"
           onSubmit={(e) => {
             e.preventDefault()
-            if (!busy && name && hasQuery && !unsupported) void act(() => search())
+            if (!busy && name && searchable && !unsupported) void act(() => search())
           }}
         >
-          <Input
-            aria-label="搜索关键词"
-            placeholder="输入歌名、艺人或关键词"
+          <DiscoveryInput
+            ai={false}
             value={query}
-            maxLength={256}
             disabled={busy}
-            onChange={(_, data) => {
-              setQuery(data.value)
+            toggle={toggle}
+            edit={(value) => {
+              setQuery(value)
               setResult(undefined)
               setStatus('')
             }}
@@ -317,7 +312,7 @@ export function DownloadPane({
           <Button
             type="submit"
             appearance="primary"
-            disabled={!name || !hasQuery || busy || unsupported}
+            disabled={!name || !searchable || busy || unsupported}
           >
             搜索
           </Button>
@@ -333,7 +328,7 @@ export function DownloadPane({
             setPlatform(next)
             setResult(undefined)
             setStatus('')
-            if (name && hasQuery && (!available || available.includes(next)))
+            if (name && searchable && (!available || available.includes(next)))
               void act(() => search(next))
           }}
         >
@@ -347,7 +342,8 @@ export function DownloadPane({
             酷狗音乐
           </Tab>
         </TabList>
-        {!name && hasQuery && <p>请先到「设置」导入音乐源。</p>}
+        {hasQuery && !searchable && <p>在线搜索关键词最多 256 字。</p>}
+        {!name && hasQuery && <p>正在等待可用音乐源，连接网络后会自动检查。</p>}
         {unsupported && (
           <p role="status">
             当前音乐源不支持{platforms[platform as keyof typeof platforms]}

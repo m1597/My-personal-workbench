@@ -88,7 +88,7 @@ try {
           win.setContentSize(target, 640)
         }, width)
         const musicTabs = music.getByRole('tablist', { name: '音乐页面' })
-        const labels = ['曲库', '歌单', '在线找歌', '智能推荐', '歌手']
+        const labels = ['曲库', '歌单', '找歌', '歌手']
         for (const [i, label] of labels.entries())
           await expect(musicTabs.getByRole('tab').nth(i)).toHaveAccessibleName(label)
         await expect.poll(() => music.evaluate(() => innerWidth)).toBeLessThanOrEqual(width + 2)

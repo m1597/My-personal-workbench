@@ -65,10 +65,7 @@ try {
       })
       .toBe(true)
     if (id === 'recommend')
-      await expect(page.getByRole('tab', { name: '智能推荐' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      )
+      await expect(page.getByRole('tab', { name: '找歌' })).toHaveAttribute('aria-selected', 'true')
     else await expect(page.locator('.music-settings')).toBeVisible()
     if (id === 'mcp') {
       await expect(page.locator('.music-settings h2')).toHaveText('MCP')
@@ -90,7 +87,7 @@ try {
     await checkStep(id, 'regular')
   }
   await guide().getByRole('button', { name: '完成' }).click()
-  for (const name of ['曲库', '歌单', '在线找歌', '智能推荐', '歌手']) {
+  for (const name of ['曲库', '歌单', '找歌', '歌手']) {
     const tab = page.getByRole('tab', { name, exact: true })
     await tab.click()
     await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)
@@ -133,7 +130,7 @@ try {
     true,
   )
   assert.equal(await readFile(oldFile, 'utf8'), 'window.legacyPluginStarted = true')
-  console.log('PASS 五页顶栏、四步引导、窄窗、旧插件不加载且原文件保留', root)
+  console.log('PASS 四页顶栏、四步引导、窄窗、旧插件不加载且原文件保留', root)
 } finally {
   await app.close()
 }

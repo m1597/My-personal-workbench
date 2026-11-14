@@ -352,6 +352,7 @@ function Music() {
   const startFirstGuide = useEffectEvent(() => visitGuide(0))
   const [script, setScript] = useState('')
   const [recommendationDraft, setRecommendationDraft] = useState<string>()
+  const [discoveryMode, setDiscoveryMode] = useState('download')
   const [recommendationCount, setRecommendationCount] = useState('5')
   function editRecommendation(value: string) {
     setRecommendationDraft(value)
@@ -1262,11 +1263,11 @@ function Music() {
               {
                 {
                   playing: '正在播放',
-                  download: '在线找歌',
+                  download: '找歌',
                   library: '曲库',
                   playlists: '歌单',
                   settings: '音乐设置',
-                  audition: '智能推荐',
+                  audition: '找歌',
                   feed: '歌手',
                 }[tab]
               }
@@ -1278,17 +1279,16 @@ function Music() {
         <TabList
           className="music-tabs"
           aria-label="音乐页面"
-          selectedValue={tab}
+          selectedValue={tab === 'audition' ? 'download' : tab}
           onTabSelect={(_, data) => {
             setGuide(null)
             setSearch('')
-            setTab(String(data.value))
+            setTab(data.value === 'download' ? discoveryMode : String(data.value))
           }}
         >
           <Tab value="library">曲库</Tab>
           <Tab value="playlists">歌单</Tab>
-          <Tab value="download">在线找歌</Tab>
-          <Tab value="audition">智能推荐</Tab>
+          <Tab value="download">找歌</Tab>
           <Tab value="feed">歌手</Tab>
           {pluginRows.some((r) => r.installed) && <Tab value="extensions">扩展</Tab>}
         </TabList>
@@ -1580,6 +1580,12 @@ function Music() {
           />
         ) : tab === 'download' ? (
           <DownloadPane
+            query={recommendationDraft ?? state?.draft ?? ''}
+            setQuery={editRecommendation}
+            toggle={() => {
+              setDiscoveryMode('audition')
+              setTab('audition')
+            }}
             preferredQuality={state?.prefs.quality}
             playlists={state?.playlists.filter((list) => !list.system) ?? []}
             onPlay={playSearchResult}
@@ -1590,6 +1596,10 @@ function Music() {
           <>
             {state && (
               <RecommendationComposer
+                toggle={() => {
+                  setDiscoveryMode('download')
+                  setTab('download')
+                }}
                 currentSong={active}
                 activeTarget={running ? batch?.targetCount : null}
                 running={running}

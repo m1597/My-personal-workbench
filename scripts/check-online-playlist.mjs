@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { mkdir, mkdtemp, readdir, readFile, unlink, writeFile } from 'node:fs/promises'
@@ -108,7 +109,7 @@ for (const restart of [false, true]) {
     if (!restart) {
       await button('跳过').click()
       await page.evaluate(() => window.music.lxImport())
-      await page.getByRole('tab', { name: '在线找歌' }).click()
+      await openDiscovery(page, false)
       const pane = page.getByRole('region', { name: '搜索音乐' })
       await pane.getByRole('textbox').fill('测试在线歌曲')
       await pane.getByRole('textbox').press('Enter')
@@ -131,7 +132,7 @@ for (const restart of [false, true]) {
       await selectMusicSettings(page, '下载')
       await page.getByRole('combobox', { name: '试听音质' }).click()
       await page.getByRole('option', { name: nextQuality, exact: true }).click()
-      await page.getByRole('tab', { name: '在线找歌' }).click()
+      await openDiscovery(page, false)
       await pane.getByRole('textbox').fill('测试在线歌曲')
       await pane.getByRole('textbox').press('Enter')
       await pane.getByRole('button', { name: '播放', exact: true }).click()
@@ -203,7 +204,7 @@ for (const restart of [false, true]) {
         return ids
       }, list)
       assert.equal(extra.length, 3)
-      await page.getByRole('tab', { name: '在线找歌' }).click()
+      await openDiscovery(page, false)
       await page.getByRole('tab', { name: '歌单' }).click()
       const rows = page.locator('.library-row')
       await expect(rows).toHaveCount(5)

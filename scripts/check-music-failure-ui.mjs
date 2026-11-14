@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import path from 'node:path'
 import { _electron as electron, expect } from '@playwright/test'
@@ -60,7 +61,7 @@ async function verify(check) {
         )
       }),
     ).toBe(true)
-    await page.getByRole('tab', { name: '智能推荐' }).click()
+    await openDiscovery(page, true)
     await check(page, page.locator('.music-list'))
   } finally {
     await app.close()

@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import { offlineSourceRepository } from './music-source-fixture.mjs'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
@@ -220,7 +221,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   }
   await mockRequests()
   await page.evaluate(() => window.music.configureModel('deepseek', 'fixture', 'fixture', false))
-  await page.getByRole('tab', { name: '智能推荐' }).click()
+  await openDiscovery(page, true)
   await page.getByLabel('推荐首数').fill('2')
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('测试两首音乐')
   // Offscreen capture cannot composite the Windows acrylic surface.
@@ -262,7 +263,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   page = await app.firstWindow()
   await page.waitForSelector('.music-shell')
   await mockRequests()
-  await page.getByRole('tab', { name: '智能推荐' }).click()
+  await openDiscovery(page, true)
   progress = page.locator('.music-batch-status [role="status"]')
   await app.evaluate(() => {
     globalThis.songs = [['同版歌曲', '乙']]

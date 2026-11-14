@@ -4,7 +4,7 @@ body {
 * {
   box-sizing: border-box;
 }
-.music-shell {
+.music-shell[data-surface] {
   height: 100dvh;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;

@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -219,7 +220,7 @@ try {
   await expect(page.getByRole('combobox', { name: '试听音质' })).toContainText('快速试听')
   await expect(page.getByRole('combobox', { name: '下载音质' })).toContainText('flac')
   await shot('02-quality-settings')
-  await page.getByRole('tab', { name: '智能推荐' }).click()
+  await openDiscovery(page, true)
   await page
     .getByLabel('想让 AI 推荐什么？（选填）')
     .fill(
@@ -239,7 +240,7 @@ try {
       await app.close()
       app = await launch()
       const reopened = await app.firstWindow()
-      await reopened.getByRole('tab', { name: '智能推荐' }).click()
+      await openDiscovery(reopened, true)
       await expect(reopened.locator('.music-batch-progress [role=status]')).toContainText(
         '已入库 2/5',
       )
@@ -276,7 +277,7 @@ try {
       ),
     )
     if (mode === 'keep') {
-      await page.getByRole('tab', { name: '在线找歌' }).click()
+      await openDiscovery(page, false)
       const input = page.getByRole('textbox', { name: '搜索关键词' })
       await input.fill('深林')
       await input.press('Enter')

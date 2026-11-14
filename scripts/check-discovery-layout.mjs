@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import { copyFile, mkdtemp } from 'node:fs/promises'
 import path from 'node:path'
@@ -52,12 +53,17 @@ try {
   await app.evaluate(() => {
     globalThis.fetch = async (input) => {
       const url = new URL(input)
-      if (url.pathname.includes('/artist/'))
+      if (/\/artist\/[^/]+$/.test(url.pathname))
         return Response.json({
-          relations: [
+          genres: [{ name: 'rock', count: 3 }],
+        })
+      if (url.pathname.endsWith('/artist/'))
+        return Response.json({
+          artists: [
             {
-              type: 'collaboration',
-              artist: { id: '20000000-0000-0000-0000-000000000002', name: '山雀' },
+              id: '20000000-0000-0000-0000-000000000002',
+              name: '山雀',
+              tags: [{ name: 'rock', count: 2 }],
             },
           ],
         })
@@ -85,7 +91,8 @@ try {
       ['智能推荐', '.music-compose'],
       ['歌手', '.followed-artists'],
     ]) {
-      await page.getByRole('tab', { name, exact: true }).click()
+      if (name === '歌手') await page.getByRole('tab', { name, exact: true }).click()
+      else await openDiscovery(page, name === '智能推荐')
       const frame = await box(selector)
       if (width > 740) {
         const anchor = await box('.music-navigation [role=tab]')

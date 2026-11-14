@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, unlink, writeFile } from 'node:fs/promises'
@@ -100,7 +101,7 @@ async function checkBatchUpgrade() {
     db.db.close()
     try {
       await launch(upgradeProfile, false)
-      await page.getByRole('tab', { name: '智能推荐' }).click()
+      await openDiscovery(page, true)
       const currentTitles = files.slice(10).map((file) => path.basename(file, '.wav'))
       await expect(page.locator('.music-track strong')).toHaveText(currentTitles)
       await page.getByRole('tab', { name: '曲库' }).click()
@@ -131,7 +132,7 @@ async function checkBatchUpgrade() {
         const snapshot = await page.evaluate(() => window.music.state())
         assert.equal(snapshot.batches[0].state, state)
         assert.deepEqual(snapshot.playlists.find((p) => p.system).tracks, [])
-        await page.getByRole('tab', { name: '智能推荐' }).click()
+        await openDiscovery(page, true)
         await expect(page.locator('.music-track strong')).toHaveCount(0)
         await page.getByRole('tab', { name: '曲库' }).click()
         await folderButton.click()

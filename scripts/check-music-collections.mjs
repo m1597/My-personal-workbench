@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import { openMusicSettings } from './music-settings-fixture.mjs'
 import { mkdir, mkdtemp, writeFile, stat, rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -381,7 +382,7 @@ try {
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).importJob.running))
     .toBe(false)
-  await page.getByRole('tab', { name: '在线找歌' }).click()
+  await openDiscovery(page, false)
   await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('全部歌曲').click()
   await expect(page.locator('.library-name strong')).toHaveText(['海边'])

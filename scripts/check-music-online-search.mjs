@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -90,7 +91,7 @@ try {
   const result = () =>
     page.getByRole('listitem').filter({ has: page.getByText('远山', { exact: true }) })
   const search = async () => {
-    await tab('在线找歌').click()
+    await openDiscovery(page, false)
     const input = page.getByRole('textbox', { name: '搜索关键词' })
     await input.fill('远山 青禾')
     await input.press('Enter')
@@ -126,7 +127,7 @@ try {
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).prefs.manualDir))
     .toBe(downloads)
-  await tab('在线找歌').click()
+  await openDiscovery(page, false)
   const platforms = page.getByRole('tablist', { name: '搜索平台' })
   for (const label of ['QQ 音乐', '酷狗音乐', '网易云音乐']) {
     const selected = platforms.getByRole('tab', { name: label })
@@ -192,7 +193,7 @@ try {
   await app.close()
   app = await launch()
   page = await app.firstWindow()
-  await tab('在线找歌').click()
+  await openDiscovery(page, false)
   await expect(
     page
       .getByRole('region', { name: '最近搜索' })

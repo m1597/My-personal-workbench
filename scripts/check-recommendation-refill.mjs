@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -138,8 +139,7 @@ try {
     await window.music.lxImport()
     await window.music.configureModel('deepseek', 'fixture', 'fixture', false)
   })
-  const recommendation = page.getByRole('tab', { name: /AI 推荐|智能推荐/ })
-  await recommendation.click()
+  await openDiscovery(page, true)
   await page.getByLabel('推荐首数').fill('5')
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('只听青禾本人的作品')
   await page.evaluate(() => {
@@ -190,8 +190,9 @@ try {
     .toBe('function')
   await expect(progress).toContainText('已入库 4/5')
   const partial = await capture('01-four-saved')
-  await page.getByRole('tab', { name: '在线找歌' }).click()
+  await openDiscovery(page, false)
   const input = page.getByRole('textbox', { name: '搜索关键词' })
+  await expect(input).toHaveValue('只听青禾本人的作品')
   await input.fill(preview)
   await input.press('Enter')
   await page
@@ -207,8 +208,9 @@ try {
   const online = await capture('02-online-playing')
   assert.equal(online.protocol, 'fitbay-audio')
   await page.keyboard.press('Escape')
-  await recommendation.click()
+  await openDiscovery(page, true)
   await expect(progress).toContainText('已入库 4/5')
+  await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveValue(preview)
   const returned = await capture('03-return-running')
   for (const state of [partial, online, returned]) {
     assert.equal(state.status, 'running')

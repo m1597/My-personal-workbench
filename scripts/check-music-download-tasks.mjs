@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { mkdir, mkdtemp, writeFile, readdir } from 'node:fs/promises'
@@ -97,12 +98,12 @@ try {
   const button = (name) => page.getByRole('button', { name, exact: true })
   const press = (name) => button(name).evaluate((b) => b.click())
   const panel = page.locator('.download-tasks')
-  await tab('智能推荐')
+  await openDiscovery(page, true)
   await expect(button('以当前歌曲为参考')).toBeDisabled()
   await tab('曲库')
   await press('播放晨光')
   await expect.poll(() => page.locator('audio').evaluate((a) => !a.paused)).toBe(true)
-  await tab('智能推荐')
+  await openDiscovery(page, true)
   const description = page.getByLabel('想让 AI 推荐什么？（选填）')
   await expect(description).toHaveValue('上次保存的草稿')
   await expect(page.getByLabel('推荐首数')).toHaveValue('5')
@@ -114,7 +115,7 @@ try {
   await description.fill('晨光 · 林声，想听木吉他')
   for (const destination of ['歌手', '歌手']) {
     await tab(destination)
-    await tab('智能推荐')
+    await openDiscovery(page, true)
     await expect(description).toHaveValue('晨光 · 林声，想听木吉他')
     await expect(page.getByLabel('推荐首数')).toHaveValue('3')
   }
@@ -130,10 +131,10 @@ try {
   await press('下载任务')
   await expect(panel).toContainText('已下载 0/3 首')
   await page.keyboard.press('Escape')
-  await tab('智能推荐')
+  await openDiscovery(page, true)
   await press('终止本次推荐')
   await expect(button('生成推荐')).toBeEnabled()
-  await tab('在线找歌')
+  await openDiscovery(page, false)
   const input = page.getByRole('textbox', { name: '搜索关键词' })
   await input.fill('山风')
   await input.press('Enter')

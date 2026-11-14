@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -48,7 +49,7 @@ for (const [platform, label] of [
     const page = await app.firstWindow()
     assert.ok(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio')))
     await page.getByRole('button', { name: '跳过', exact: true }).click()
-    await page.getByRole('tab', { name: '在线找歌', exact: true }).click()
+    await openDiscovery(page, false)
     const pane = page.getByRole('region', { name: '搜索音乐' })
     await pane.getByRole('tab', { name: label }).click()
     await pane.getByRole('textbox', { name: '搜索关键词' }).fill(title + ' ' + artist)

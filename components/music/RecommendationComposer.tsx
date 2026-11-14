@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Button, Input } from '@fluentui/react-components'
 import type { ModelInfo } from './ModelSettings'
+import { DiscoveryInput } from './DiscoveryInput'
 type Props = {
   models: ModelInfo
   onGenerating(busy: boolean): void
@@ -8,6 +9,7 @@ type Props = {
   running: boolean
   description: string
   edit(value: string): void
+  toggle(): void
   count: string
   setCount(value: string): void
   currentSong?: { title: string; artist: string }
@@ -20,6 +22,7 @@ export function RecommendationComposer({
   running,
   description,
   edit,
+  toggle,
   count,
   setCount,
   currentSong,
@@ -70,15 +73,13 @@ export function RecommendationComposer({
         </Button>
       </div>
       <div className="music-input">
-        <Input
-          data-guide-anchor="recommend"
-          id="music-description"
-          ref={input}
-          placeholder="歌手名、歌名，或一句想法都行"
-          maxLength={1000}
-          disabled={busy}
+        <DiscoveryInput
+          ai
           value={description}
-          onChange={(_, d) => edit(d.value)}
+          edit={edit}
+          toggle={toggle}
+          inputRef={input}
+          disabled={busy}
         />
         <label className="music-target-count" htmlFor="music-count">
           推荐首数

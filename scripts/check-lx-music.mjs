@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 import { spawnSync } from 'node:child_process'
 import electronBin from 'electron'
@@ -144,8 +145,8 @@ try {
     .toBe(true)
   const page = app.windows().find((p) => p.url().includes('/music/index.html'))
   const tabs = page.getByRole('tab')
-  await expect(tabs).toHaveCount(5)
-  for (const [index, name] of ['曲库', '歌单', '在线找歌', '智能推荐', '歌手'].entries())
+  await expect(tabs).toHaveCount(4)
+  for (const [index, name] of ['曲库', '歌单', '找歌', '歌手'].entries())
     await expect(tabs.nth(index)).toHaveAccessibleName(name)
   await page
     .getByRole('complementary', { name: 'Music 使用引导' })
@@ -236,7 +237,7 @@ try {
     await page.getByRole('button', { name: '导入链接' }).click()
     await expect.poll(() => page.evaluate(() => window.music.lxInfo())).toBe('在线测试源')
   }
-  await page.getByRole('tab', { name: '在线找歌' }).click()
+  await openDiscovery(page, false)
   const pane = page.getByRole('region', { name: '搜索音乐' })
   const find = pane.getByRole('button', { name: '搜索', exact: true })
   const query = pane.getByRole('textbox', { name: '搜索关键词' })
@@ -366,7 +367,7 @@ try {
       2,
     )
     console.log(
-      'PASS 五页入口、单歌名、单艺人、组合关键词搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
+      'PASS 四页入口、单歌名、单艺人、组合关键词搜索、源导入、取消重搜、选版本、失败清理及下载到选定目录并入库 · ' +
         root,
     )
   } else {

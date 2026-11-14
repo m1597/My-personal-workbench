@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
@@ -61,11 +62,11 @@ try {
       console.error(name, e.message)
     }
   }
-  await page.getByRole('tab', { name: '智能推荐' }).evaluate((b) => b.click())
+  await openDiscovery(page, true)
   // Hold the real decoder after it receives the recording. Reload between checks to discard the cue cache.
   for (const action of ['暂停', '下一首', '停止播放']) {
     await page.reload()
-    await page.getByRole('tab', { name: '智能推荐' }).evaluate((b) => b.click())
+    await openDiscovery(page, true)
     await press('播放本次推荐')
     await expect.poll(() => media.evaluate((a) => !a.paused)).toBe(true)
     await page.evaluate(() => {
@@ -92,7 +93,7 @@ try {
     })
   }
   await page.reload()
-  await page.getByRole('tab', { name: '智能推荐' }).evaluate((b) => b.click())
+  await openDiscovery(page, true)
   await press('快速听这批')
   await expect(page.getByText('1/5 · 代表片段')).toBeVisible()
   await expect.poll(at).toBeGreaterThan(7)
@@ -181,7 +182,7 @@ try {
   })
   await expect.poll(current).toBe(ids[0])
   await expect.poll(at).toBeGreaterThan(7)
-  await page.getByRole('tab', { name: '智能推荐' }).evaluate((b) => b.click())
+  await openDiscovery(page, true)
   await press('快速听这批')
   await expect(page.getByText('1/5 · 代表片段')).toBeVisible()
   // The hidden Windows compositor omits the native backdrop from captures.

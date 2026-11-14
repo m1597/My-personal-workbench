@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import path from 'node:path'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
@@ -119,7 +120,7 @@ try {
       .find((window) => window.getTitle() === 'Music')
       .setContentSize(1060, 700),
   )
-  await page.getByRole('tab', { name: '智能推荐' }).click()
+  await openDiscovery(page, true)
   await page.getByRole('button', { name: '试听已有分类', exact: true }).click()
   const heart = page.getByRole('button', { name: '收藏当前歌曲' })
   await expect(heart).toHaveAttribute('aria-pressed', 'false')
