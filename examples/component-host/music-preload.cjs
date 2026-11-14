@@ -50,6 +50,7 @@ const names = [
   'similarArtists',
   'artistHighlights',
   'artistSongs',
+  'aiCatalogQuery',
   'followArtist',
   'releaseNews',
   'artistReleases',

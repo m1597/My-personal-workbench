@@ -2,6 +2,7 @@ import { artistsOf, SongCredits, type ArtistCredit } from './SongCredits'
 import { OnlineSongRow } from './OnlineSongRow'
 import { ArtistPortrait } from './ArtistPortrait'
 import { guardSearchEnter } from './searchSubmit'
+import { Sparkles } from 'lucide-react'
 import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
@@ -31,6 +32,7 @@ export type News = {
   date: string
 }
 export interface ReleaseAPI extends SongAPI {
+  aiCatalogQuery(kind: 'artists' | 'publicLists', description: string): Promise<string>
   findArtists(term: string): Promise<Artist[]>
   similarArtists(id: string): Promise<Artist[]>
   artistHighlights(id: string): Promise<Pick<ReleaseTrack, 'artist' | 'title' | 'artistCredits'>[]>
@@ -688,6 +690,7 @@ export function ArtistReleases({
   }, [])
   const [followed, setFollowed] = useState<Artist[]>([])
   const [query, setQuery] = useState('')
+  const [aiSearch, setAiSearch] = useState(false)
   const [matches, setMatches] = useState<Artist[]>()
   const [news, setNews] = useState<News[]>()
   const [status, setStatus] = useState('')
@@ -736,7 +739,9 @@ export function ArtistReleases({
     setSearching(true)
     setSearchError('')
     try {
-      const found = await window.music.findArtists(term)
+      const keyword = aiSearch ? await window.music.aiCatalogQuery('artists', term) : term
+      if (!alive.current || searchVersion.current !== request) return
+      const found = await window.music.findArtists(keyword)
       if (alive.current && searchVersion.current === request) setMatches(found)
     } catch (error) {
       if (alive.current && searchVersion.current === request) setSearchError(message(error))
@@ -810,7 +815,25 @@ export function ArtistReleases({
                 data-guide-anchor="artist"
                 maxLength={160}
                 value={query}
-                placeholder="输入歌手名"
+                placeholder={aiSearch ? '描述要查找的歌手' : '输入歌手名'}
+                contentAfter={
+                  <Button
+                    type="button"
+                    size="small"
+                    appearance="subtle"
+                    aria-label="AI 搜索歌手"
+                    title="AI 搜索歌手"
+                    aria-pressed={aiSearch}
+                    icon={<Sparkles size={16} />}
+                    onClick={() => {
+                      searchVersion.current++
+                      setAiSearch((v) => !v)
+                      setSearchError('')
+                      setMatches(undefined)
+                      setSearching(false)
+                    }}
+                  />
+                }
                 onChange={(_, d) => {
                   searchVersion.current++
                   setQuery(d.value)

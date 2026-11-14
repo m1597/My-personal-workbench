@@ -735,6 +735,22 @@ export function musicService(
       if (collectionSearch === job) collectionSearch = undefined
     }
   })
+  bind('aiCatalogQuery', (kind, description) => {
+    if (
+      !['publicLists', 'artists'].includes(kind) ||
+      typeof description !== 'string' ||
+      !description.trim() ||
+      description.length > 400
+    )
+      throw Error('请输入 400 字以内的目录搜索描述')
+    return requestMusicModel(
+      store,
+      safeStorage,
+      'catalog-query',
+      { kind, description: description.trim() },
+      AbortSignal.timeout(60000),
+    )
+  })
   bind('configureModel', (id, model, key, forget) => {
     if (pending) throw Error('请先结束当前生成')
     configureModel(store, safeStorage, id, model, key, forget)
