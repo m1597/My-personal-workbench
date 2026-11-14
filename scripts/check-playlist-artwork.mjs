@@ -12,7 +12,16 @@ const store = new MusicStore(dir)
 store.set('lx-bootstrap', 'done')
 store.set('music-guide-v1', 1)
 store.set('latest-daily-run', 'test-batch')
-store.library.createPlaylist(groups[1])
+const recording = path.resolve('tests/fixtures/local-music/tone.mp3')
+store.library.upsert({
+  file: recording,
+  title: '通勤试听',
+  artist: '测试艺人',
+  album: '',
+  duration: 2,
+})
+const member = store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(recording)
+store.library.createPlaylist(groups[1], [member.id])
 store.db.close()
 
 const expected = new Map()
@@ -56,6 +65,22 @@ try {
   for (const [i, name] of groups.entries()) {
     const { app, page } = session
     const button = await select(page, name)
+    const playAll = page.getByRole('button', { name: '播放全部', exact: true })
+    await expect(playAll).toBeVisible()
+    assert.equal(await playAll.isEnabled(), name === groups[1])
+    assert.equal(
+      await button.evaluate((el) => el.nextElementSibling?.textContent.trim()),
+      '播放全部',
+    )
+    assert.ok(
+      await page
+        .locator('.playlist-cover')
+        .evaluate((el) => el.nextElementSibling?.querySelector('h2')),
+    )
+    const [changeBox, playBox] = await Promise.all([button.boundingBox(), playAll.boundingBox()])
+    assert.ok(
+      changeBox.x + changeBox.width <= playBox.x + 1 && Math.abs(changeBox.y - playBox.y) < 1,
+    )
     const png = await page.evaluate((i) => {
       const c = document.createElement('canvas')
       c.width = 128

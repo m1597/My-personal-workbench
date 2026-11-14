@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@fluentui/react-components'
 import { defaultCover, requestCover } from './AlbumBrowser'
 
@@ -8,9 +8,13 @@ export function PlaylistCover({
   id,
   latest,
   revision,
+  heading,
+  playAll,
 }: {
   id: string
   latest?: string
+  heading: ReactNode
+  playAll: ReactNode
   revision: number
 }) {
   const [custom, setCustom] = useState<string | null>()
@@ -64,13 +68,17 @@ export function PlaylistCover({
     (automatic?.id === latest && automatic?.revision === revision && automatic.url) ||
     defaultCover
   return (
-    <div className="playlist-artwork">
+    <>
       <div className="playlist-cover">
         <img src={src} alt="歌单封面" />
       </div>
-      <Button size="small" disabled={busy} onClick={() => void change(false)}>
-        更换封面
-      </Button>
+      {heading}
+      <span className="playlist-header-actions">
+        <Button size="small" disabled={busy} onClick={() => void change(false)}>
+          更换封面
+        </Button>
+        {playAll}
+      </span>
       {custom && (
         <button
           className="catalog-text-link"
@@ -82,6 +90,6 @@ export function PlaylistCover({
         </button>
       )}
       {error && <small role="alert">{error}</small>}
-    </div>
+    </>
   )
 }

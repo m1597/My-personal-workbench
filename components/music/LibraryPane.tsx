@@ -352,6 +352,18 @@ export function LibraryPane({
     sentinel.current?.closest('.music-scroll')?.scrollTo(0, 0)
   }
   const library = (
+  const collectionHeading = (
+    <div>
+      <h2>
+        {currentFolder ? '文件夹 / ' : scope === 'playlists' ? '歌单 / ' : ''}
+        {collection === 'favorites' ? '我的收藏' : heading}
+      </h2>
+      <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
+      {playlistPage && (
+        <small>总时长 {formatTime(members.reduce((sum, row) => sum + row.duration, 0))}</small>
+      )}
+    </div>
+  )
     <div
       ref={(el) => {
         layout.current = el
@@ -567,30 +579,20 @@ export function LibraryPane({
                     }
                     revision={albumRevision}
                   />
+                    heading={collectionHeading}
+                    playAll={
+                      <Button
+                        size="small"
+                        appearance="primary"
+                        icon={<Play size={15} />}
+                        disabled={!playableMembers.length}
+                        onClick={() => playAlbum(playableMembers[0], playableMembers, true)}
+                      >
+                        播放全部
+                      </Button>
+                    }
                 )}
-                <div>
-                  <h2>
-                    {currentFolder ? '文件夹 / ' : scope === 'playlists' ? '歌单 / ' : ''}
-                    {collection === 'favorites' ? '我的收藏' : heading}
-                  </h2>
-                  <small>{search ? rows.length + ' / ' + total : total} 首歌曲</small>
-                  {playlistPage && (
-                    <small>
-                      总时长 {formatTime(members.reduce((sum, row) => sum + row.duration, 0))}
-                    </small>
-                  )}
-                </div>
-                {playlistPage && (
-                  <Button
-                    size="small"
-                    appearance="primary"
-                    icon={<Play size={15} />}
-                    disabled={!playableMembers.length}
-                    onClick={() => playAlbum(playableMembers[0], playableMembers, true)}
-                  >
-                    播放全部
-                  </Button>
-                )}
+                {!playlistPage && collectionHeading}
                 {playlistPage && (
                   <TimedPlaylist
                     key={collection}
