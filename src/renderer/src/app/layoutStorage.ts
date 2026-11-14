@@ -164,8 +164,46 @@ function restoreSnapshot(api: DockviewApi, snapshot: SerializedDockview, gap: nu
   if (music && !window.musicDock) api.removePanel(music)
 }
 
+export function currentLayoutName() {
+  try {
+    return localStorage.getItem('workbench.layoutName') ?? ''
+  } catch {
+    return ''
+  }
+}
+export function selectLayoutName(name: string) {
+  try {
+    localStorage.setItem('workbench.layoutName', name)
+  } catch {
+    /* The layout remains usable. */
+  }
+  window.dispatchEvent(new Event('fitbay-layout-name'))
+}
+const startupKey = 'workbench.startup.v1'
+export function readStartup() {
+  try {
+    return localStorage.getItem(startupKey) ?? 'last'
+  } catch {
+    return 'last'
+  }
+}
+export function writeStartup(value: string) {
+  localStorage.setItem(startupKey, value)
+}
 export function restoreLayout(api: DockviewApi, gap: number) {
   try {
+    const startup = readStartup()
+    if (startup === 'blank') {
+      selectLayoutName('')
+      return
+    }
+    if (startup.startsWith('named:')) {
+      const preset = readPresets().items.find((item) => item.name === startup.slice(6))
+      if (preset) {
+        selectLayoutName(preset.name)
+        return restoreSnapshot(api, preset.layout, gap)
+      }
+    }
     const raw = localStorage.getItem(layoutStorageKey)
     if (raw) {
       if (raw.length > 100_000) throw new Error('布局数据过大')
@@ -176,7 +214,7 @@ export function restoreLayout(api: DockviewApi, gap: number) {
       return
     }
   } catch {
-    console.warn('无法恢复工作区布局，已使用默认布局；可从窗口菜单还原默认布局。')
+    console.warn('无法恢复工作区布局，已使用默认布局；可从布局菜单还原默认布局。')
   }
   const presets = readPresets()
   const chosen = presets.items.find((item) => item.name === presets.defaultName)
@@ -266,16 +304,19 @@ const switching = new WeakSet<DockviewApi>()
 export function switchingLayout(api: DockviewApi) {
   return switching.has(api)
 }
-export function switchLayout(api: DockviewApi, snapshot?: SerializedDockview) {
+export function switchLayout(api: DockviewApi, snapshot?: SerializedDockview, blank = false) {
   const gap = Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue('--space-8'),
   )
   switching.add(api)
   try {
-    if (snapshot) restoreSnapshot(api, snapshot, gap)
+    if (blank) api.clear()
+    else if (snapshot) restoreSnapshot(api, snapshot, gap)
     else createDefaultLayout(api)
   } finally {
     switching.delete(api)
   }
-  if (api.getPanel('component-music')) void window.musicDock?.restore()
+  void window.musicDock?.layout(Boolean(api.getPanel('component-music')))
+  if (window.componentHost?.sampleEnabled)
+    void window.componentHost.layout(Boolean(api.getPanel('component-example')))
 }

@@ -1,5 +1,5 @@
 import { useTranslation } from './preferences'
-import { useContext, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import {
   Button,
   Menu,
@@ -8,19 +8,21 @@ import {
   MenuList,
   MenuSplitGroup,
   MenuItem,
-  MenuDivider,
 } from '@fluentui/react-components'
 import { ChevronDown, Check, Eye, EyeOff, Plus, PanelsTopLeft } from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { modules } from './moduleRegistry'
 import { openModule } from './workspace'
 
+import { readPresets, switchLayout, currentLayoutName, selectLayoutName } from './layoutStorage'
 import { LayoutDialog } from './LayoutDialog'
 import { useMusicHostState } from './componentPrototype'
 
 export function WindowMenu() {
   const t = useTranslation()
   const music = useMusicHostState()
+  const sampleState = useMusicHostState(window.componentHost)
+  const sampleHidden = sampleState?.presentation === 'background'
   const running = music?.phase === 'ready' || music?.phase === 'attaching'
   const hidden = music?.presentation === 'background'
   const visibilityLabel = hidden ? t('显示 Music', 'Show Music') : t('隐藏 Music', 'Hide Music')
@@ -28,11 +30,41 @@ export function WindowMenu() {
   const [musicError, setMusicError] = useState('')
   const [layoutsOpen, setLayoutsOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
+  const [installed, setInstalled] = useState(false)
+  const [sample, setSample] = useState(false)
+  const [activeName, setActiveName] = useState(currentLayoutName)
+  const layoutTrigger = useRef<HTMLButtonElement>(null)
+  const panels = workspace.api?.panels ?? []
+  const inspect = useCallback(() => {
+    void window.musicDock
+      ?.inventory()
+      .then((info) => setInstalled(info.installed))
+      .catch(() => setInstalled(false))
+    if (window.componentHost?.sampleEnabled)
+      void window.componentHost
+        .inventory()
+        .then((info) => setSample(info.installed))
+        .catch(() => setSample(false))
+  }, [])
+  useEffect(() => {
+    inspect()
+    const sync = () => setActiveName(currentLayoutName())
+    window.addEventListener('fitbay-layout-name', sync)
+    return () => window.removeEventListener('fitbay-layout-name', sync)
+  }, [inspect])
+  function arrange(position: 'right' | 'bottom') {
+    if (panels.length !== 2) return
+    panels[1].api.moveTo({ group: panels[0].group, position })
+    selectLayoutName('')
+  }
   return (
     <>
       <Menu
+        onOpenChange={(_, data) => {
+          if (data.open) inspect()
+        }}
         positioning={{
-          position: modules.length ? 'below' : 'after',
+          position: 'below',
           align: 'start',
         }}
       >
@@ -43,11 +75,11 @@ export function WindowMenu() {
             icon={<ChevronDown size={14} />}
             iconPosition="after"
           >
-            {t('窗口', 'Window')}
+            {t('组件', 'Components')}
           </Button>
         </MenuTrigger>
         <MenuPopover className="component-popup workbench-menu">
-          <MenuList aria-label={t('窗口菜单', 'Window menu')} id="window-menu">
+          <MenuList aria-label={t('组件菜单', 'Components menu')} id="window-menu">
             {modules.map((module) => (
               <MenuItem
                 key={module.id}
@@ -59,10 +91,38 @@ export function WindowMenu() {
                 {module.title}
               </MenuItem>
             ))}
-            {window.musicDock && (
+            {sample && (
+              <MenuSplitGroup>
+                <MenuItem
+                  aria-label={t('示例组件', 'Sample component')}
+                  onClick={() => void window.componentHost?.open()}
+                >
+                  {t('示例组件', 'Sample component')}
+                  <small>
+                    {sampleState?.phase === 'ready'
+                      ? sampleHidden
+                        ? t('后台运行', 'In background')
+                        : t('显示中', 'Visible')
+                      : t('未打开', 'Not open')}
+                  </small>
+                </MenuItem>
+                <MenuItem
+                  disabled={sampleState?.phase !== 'ready'}
+                  aria-label={
+                    sampleHidden
+                      ? t('显示示例组件', 'Show sample')
+                      : t('隐藏示例组件', 'Hide sample')
+                  }
+                  icon={sampleHidden ? <EyeOff size={16} /> : <Eye size={16} />}
+                  onClick={() => void window.componentHost?.toggleVisibility()}
+                />
+              </MenuSplitGroup>
+            )}
+            {installed && (
               <MenuSplitGroup>
                 <MenuItem
                   role="menuitemcheckbox"
+                  aria-label="Music"
                   aria-checked={running}
                   icon={running ? <Check size={16} /> : <Plus size={16} />}
                   onClick={async () => {
@@ -75,7 +135,14 @@ export function WindowMenu() {
                     } else setMusicError((await host.open()).error ?? '')
                   }}
                 >
-                  Music
+                  <span>Music</span>
+                  <small>
+                    {running
+                      ? hidden
+                        ? t('后台运行', 'In background')
+                        : t('显示中', 'Visible')
+                      : t('未打开', 'Not open')}
+                  </small>
                 </MenuItem>
                 <MenuItem
                   className="music-menu-reveal"
@@ -87,19 +154,66 @@ export function WindowMenu() {
                 />
               </MenuSplitGroup>
             )}
-            <MenuDivider />
+            {!modules.length && !installed && !sample && (
+              <MenuItem disabled>{t('未检测到已安装组件', 'No installed components')}</MenuItem>
+            )}
+          </MenuList>
+        </MenuPopover>
+      </Menu>
+      <Menu positioning={{ position: 'below', align: 'start' }}>
+        <MenuTrigger disableButtonEnhancement>
+          <Button
+            ref={layoutTrigger}
+            appearance="subtle"
+            icon={<ChevronDown size={14} />}
+            iconPosition="after"
+          >
+            {t('布局', 'Layouts')}
+          </Button>
+        </MenuTrigger>
+        <MenuPopover className="component-popup workbench-menu">
+          <MenuList>
+            {panels.length === 2 && (
+              <>
+                <MenuItem onClick={() => arrange('right')}>
+                  {t('左右并排', 'Side by side')}
+                </MenuItem>
+                <MenuItem onClick={() => arrange('bottom')}>
+                  {t('上下并排', 'Stack vertically')}
+                </MenuItem>
+              </>
+            )}
+            {readPresets().items.map((item) => (
+              <MenuItem
+                key={item.name}
+                onClick={() => {
+                  if (workspace.api) {
+                    switchLayout(workspace.api, item.layout)
+                    selectLayoutName(item.name)
+                  }
+                }}
+              >
+                {item.name}
+              </MenuItem>
+            ))}
             <MenuItem icon={<PanelsTopLeft size={16} />} onClick={() => setLayoutsOpen(true)}>
-              {t('布局', 'Layouts')}
+              {t('管理布局', 'Manage layouts')}
             </MenuItem>
           </MenuList>
         </MenuPopover>
       </Menu>
+      <span className="toolbar-layout-name">
+        {activeName ||
+          (panels.length
+            ? t('当前工作区', 'Current workspace')
+            : t('空白工作台', 'Blank workspace'))}
+      </span>
       {layoutsOpen && workspace.api && (
         <LayoutDialog
           api={workspace.api}
           onClose={() => {
             setLayoutsOpen(false)
-            trigger.current?.focus()
+            layoutTrigger.current?.focus()
           }}
         />
       )}

@@ -15,6 +15,7 @@ import {
 import { X } from 'lucide-react'
 import {
   captureLayout,
+  selectLayoutName,
   readPresets,
   savePresets,
   switchLayout,
@@ -90,6 +91,7 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                     t('已保存当前布局。', 'Current layout saved.'),
                   )
                 ) {
+                  selectLayoutName(trimmed)
                   setSelected(trimmed)
                   setName('')
                 }
@@ -122,6 +124,7 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
                     onClick={() => {
                       if (chosen) {
                         switchLayout(api, chosen.layout)
+                        selectLayoutName(chosen.name)
                         onClose()
                       }
                     }}
@@ -163,6 +166,7 @@ export function LayoutDialog({ api, onClose }: { api: DockviewApi; onClose(): vo
             <div className="layout-restore">
               <Button
                 onClick={() => {
+                  selectLayoutName(presets.defaultName ?? '')
                   switchLayout(
                     api,
                     presets.items.find((item) => item.name === presets.defaultName)?.layout,

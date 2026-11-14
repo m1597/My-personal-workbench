@@ -26,18 +26,19 @@ function componentBridge(prefix) {
   return {
     ...(prefix === 'music-prototype'
       ? {
+          show: (settings) => ipcRenderer.invoke('music-prototype:show', settings),
           close: () => ipcRenderer.invoke('music-prototype:close'),
-          toggleVisibility: () => ipcRenderer.invoke('music-prototype:toggle-visibility'),
         }
       : {}),
-    overlayFrame: () => ipcRenderer.invoke(`${prefix}:overlay-frame`),
+    layout: (included) => ipcRenderer.invoke(`${prefix}:layout`, included),
+    toggleVisibility: () => ipcRenderer.invoke(`${prefix}:toggle-visibility`),
+    inventory: () => ipcRenderer.invoke(`${prefix}:inventory`),
     status: () => ipcRenderer.invoke(`${prefix}:status`),
     restore: () => ipcRenderer.invoke(`${prefix}:restore`),
     open: () => ipcRenderer.invoke(`${prefix}:open`),
     dropZone: (rect) => ipcRenderer.send('prototype:drop-zone', rect),
     confirmedTransfer: (id) => ipcRenderer.sendSync(`${prefix}:confirmed-transfer`, id),
-    bounds: (bounds, id, composited) =>
-      ipcRenderer.send(`${prefix}:bounds`, bounds, id, composited),
+    bounds: (bounds, id) => ipcRenderer.send(`${prefix}:bounds`, bounds, id),
     detach: (release) => ipcRenderer.invoke(`${prefix}:detach`, release),
     onActivate: (callback) => {
       const listener = () => callback()
@@ -57,8 +58,8 @@ contextBridge.exposeInMainWorld('firstWorkspace', {
 })
 contextBridge.exposeInMainWorld('componentHost', {
   ...componentBridge('prototype'),
+  setLanguage: (language) => ipcRenderer.send('workbench:language', language),
   setMaterial: (value) => ipcRenderer.send('workbench:material', value),
   sampleEnabled: process.argv.includes('--enable-sample-component'),
-  setLanguage: (language) => ipcRenderer.send('workbench:language', language),
 })
 contextBridge.exposeInMainWorld('musicDock', componentBridge('music-prototype'))

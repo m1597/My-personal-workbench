@@ -62,7 +62,7 @@ for (const scale of [1.25, 1.5]) {
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true)
-      await expect(page.getByRole('heading', { name: '工作区为空' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: '快速开始' })).toBeVisible()
       const capture = async (suffix) => {
         // Fluent motion may start after React commits; wait for its real final frame.
         await page.evaluate(async () => {

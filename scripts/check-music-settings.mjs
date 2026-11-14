@@ -43,7 +43,7 @@ try {
     if (!register('Ctrl+Alt+Shift+F12', () => {})) throw Error('测试冲突键无法预占')
   })
   const open = async () => {
-    await shell.getByRole('button', { name: '窗口', exact: true }).click()
+    await shell.getByRole('button', { name: '组件', exact: true }).click()
     await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
     await expect
       .poll(() => app.windows().some((p) => p.url().includes('/music/index.html')))

@@ -68,14 +68,14 @@ try {
     await expect
       .poll(() => app.windows().some((p) => p.url().includes('/music/index.html')))
       .toBe(true)
-    await page.getByRole('button', { name: '窗口', exact: true }).click()
+    await page.getByRole('button', { name: '组件', exact: true }).click()
     await page.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
     await expect(tabs()).toHaveCount(0)
-    await expect(button('打开 Music')).toHaveCount(0)
+    await expect(button('打开 Music')).toBeVisible()
     await restart()
-    await expect(page.getByRole('heading', { name: '工作区为空' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '快速开始' })).toBeVisible()
     await expect(tabs()).toHaveCount(0)
-    await expect(button('打开 Music')).toHaveCount(0)
+    await expect(button('打开 Music')).toBeVisible()
     await expect(button('添加组件')).toHaveCount(0)
     await page.screenshot({ path: path.join(root, mode + '-cleared.png') })
   }

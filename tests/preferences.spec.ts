@@ -48,7 +48,7 @@ test('工作台设置即时生效，重启保留六项偏好和旧布局', async
         }
       }
       await page.keyboard.press('Escape')
-      const menu = page.getByRole('button', { name: 'Window', exact: true })
+      const menu = page.getByRole('button', { name: 'Components', exact: true })
       await expect(menu).toHaveCSS('font-family', /^"Microsoft YaHei UI"/)
       await expect(menu).toHaveCSS('font-size', '16px')
       await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(3)

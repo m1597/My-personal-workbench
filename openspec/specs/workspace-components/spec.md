@@ -34,14 +34,24 @@
 - **WHEN** 同一组在仅有 Music 和含多个标签之间切换
 - **THEN** 单独 Music 标签呈现额外下方间距；多标签组使用原间距并可照常切换。
 
-### Requirement: 设置叠加在停靠内容上
+### Requirement: 工作台整页设置与紧凑工具栏
 
-工作台 SHALL 在打开设置和嵌套选项列表时继续显示正在运行的停靠视图，保留页面、滚动位置及播放会话。
+工作台 SHALL 在主窗口提供外观、布局与启动、组件管理和跨分类搜索。顶部保留组件、布局和设置入口，仅品牌字使用 Lobster。
 
-#### Scenario: 在播放中的曲库展开设置
+#### Scenario: 播放中访问设置
 
-- **WHEN** 用户在已滚动的停靠曲库中打开设置并展开字体
-- **THEN** 设置外仍显示原列表和播放器，播放时间继续推进，关闭后在原位置继续操作
+- **WHEN** 用户在播放中的工作台打开设置，搜索字号、材质或音乐设置
+- **THEN** 对应控件可以直接定位；返回后恢复原工作区与播放实例，进入音乐设置使用 Music 自己的页面
+
+#### Scenario: 布局与启动
+
+- **WHEN** 用户选择恢复上次工作区、空白工作台或一个已保存布局
+- **THEN** 下次启动按所选策略恢复；运行中切换布局只更新组件呈现，后台音乐继续播放
+
+#### Scenario: 两个组件排列
+
+- **WHEN** 当前工作区有两个可排列的组件
+- **THEN** 布局菜单可左右或上下并排，分隔线可拖动；窄窗口收起布局名，保留组件与布局入口
 
 ### Requirement: 公共选项列表材质
 
@@ -57,24 +67,14 @@
 - **WHEN** 用户打开已有偏好的工作台，在 Music 停靠时调整材质并展开未收听时间
 - **THEN** 加载保存的数值，音乐和工作台列表使用相同材质规则，分离后组件退出工作台参数的作用范围
 
-### Requirement: First empty workspace entry
+### Requirement: 空工作区快速开始
 
-The desktop workbench SHALL offer a direct action on a new empty workspace based on actual Music availability and SHALL preserve deliberately empty saved layouts.
+工作台 SHALL 在空工作区列出实际检测到的组件及其图标，保留获取尚未安装的 Music 的入口。
 
-#### Scenario: Music installed
+#### Scenario: 新装与后台组件
 
-- **WHEN** a new empty workspace has an installed Music component
-- **THEN** 打开 Music opens the component in the workspace
-
-#### Scenario: Music absent
-
-- **WHEN** Music is absent and the user selects 添加组件
-- **THEN** the workbench offers the real matching Windows Music installer and refreshes availability after installation or cancellation
-
-#### Scenario: Previously used workspace
-
-- **WHEN** the user closes the last component and restarts
-- **THEN** the workspace stays empty without the first-run action
+- **WHEN** 工作台保持空白时安装受支持组件，或 Music 正在后台播放
+- **THEN** 快速开始更新列表，单击组件铺满工作区；恢复后台 Music 时保留既有播放实例和进度
 
 ### Requirement: 工作台菜单切换 Music 可见性
 

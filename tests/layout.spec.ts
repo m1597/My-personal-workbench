@@ -138,7 +138,7 @@ test('关闭部分及全部模块保持状态，重置后持久恢复默认', as
   await expect(page.getByRole('button', { name: '恢复默认布局' })).toBeVisible()
   expect(Object.keys((await saved()).panels)).toHaveLength(0)
   for (const id of [1, 2, 3, 4]) {
-    await page.getByRole('button', { name: '窗口', exact: true }).click()
+    await page.getByRole('button', { name: '组件', exact: true }).click()
     await page.getByRole('menuitem', { name: `模块 ${id}`, exact: true }).click()
   }
   await expect.poll(async () => (await saved()).panels).toEqual(baseline.panels)
@@ -153,8 +153,8 @@ test('关闭部分及全部模块保持状态，重置后持久恢复默认', as
   await restart()
   await expect(page.locator('.dv-groupview')).toHaveCount(1)
   await expect.poll(async () => (await saved()).panels).toEqual(baseline.panels)
-  await page.getByRole('button', { name: '窗口', exact: true }).click()
-  await page.getByRole('menuitem', { name: '布局', exact: true }).click()
+  await page.getByRole('button', { name: '布局', exact: true }).click()
+  await page.getByRole('menuitem', { name: '管理布局', exact: true }).click()
   await page.getByRole('button', { name: '还原默认布局', exact: true }).click()
   await restart()
   await expect(page.locator('.dv-groupview')).toHaveCount(4)
@@ -237,8 +237,8 @@ test('组件宿主缺失只移除对应标签', async () => {
 
 test('命名快照可显式更新，默认布局独立于重启实时布局', async ({}, info) => {
   const layouts = async () => {
-    await page.getByRole('button', { name: '窗口', exact: true }).click()
-    await page.getByRole('menuitem', { name: '布局', exact: true }).click()
+    await page.getByRole('button', { name: '布局', exact: true }).click()
+    await page.getByRole('menuitem', { name: '管理布局', exact: true }).click()
   }
   const close = () => page.getByRole('button', { name: '关闭布局' }).click()
   await layouts()

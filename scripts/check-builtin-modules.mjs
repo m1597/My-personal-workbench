@@ -200,7 +200,7 @@ try {
   console.log('PASS 空工作台接回、同组、四边实际位置、超时重试、导航搜索保持')
   await dragOut('module-3')
   const inspector = await pageFor('module-3')
-  await shell.getByRole('button', { name: '窗口', exact: true }).click()
+  await shell.getByRole('button', { name: '组件', exact: true }).click()
   await shell.getByRole('menuitem', { name: '模块 2', exact: true }).click()
   await expect(inspector.getByText('模块 2', { exact: true })).toBeVisible()
   const content = await shell.getByTestId('module-2').boundingBox()
@@ -220,7 +220,7 @@ try {
       .close(),
   )
   await expect.poll(() => app.windows().length).toBe(1)
-  await shell.getByRole('button', { name: '窗口', exact: true }).click()
+  await shell.getByRole('button', { name: '组件', exact: true }).click()
   await shell.getByRole('menuitem', { name: '模块 3', exact: true }).click()
   await expect(shell.getByTestId('module-3')).toBeVisible()
   await app.evaluate(({ ipcMain }) => {

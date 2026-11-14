@@ -85,8 +85,8 @@ try {
   expect(Math.abs((await sharedHeader.boundingBox()).height - 32)).toBeLessThanOrEqual(1)
   expect(await output(music)).toEqual([0.99, true])
   const layouts = async () => {
-    await shell.getByRole('button', { name: '窗口', exact: true }).click()
-    await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
+    await shell.getByRole('button', { name: '布局', exact: true }).click()
+    await shell.getByRole('menuitem', { name: '管理布局', exact: true }).click()
   }
   const editorTab = shell.getByRole('tab', { name: '模块 2', exact: true })
   await editorTab.click()
@@ -211,7 +211,7 @@ try {
   await expect
     .poll(() => app.windows().filter((p) => p.url().includes('/music/index.html')).length)
     .toBe(0)
-  const windowMenu = shell.getByRole('button', { name: '窗口', exact: true })
+  const windowMenu = shell.getByRole('button', { name: '组件', exact: true })
   const musicItem = shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true })
   await expect(shell.getByRole('button', { name: /^(Music|示例组件)$/ })).toHaveCount(0)
   await windowMenu.click()
@@ -220,7 +220,7 @@ try {
     .poll(() =>
       items.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label') || n.textContent)),
     )
-    .toEqual(['模块 1', '模块 2', '模块 3', '模块 4', 'Music', '隐藏 Music', '布局'])
+    .toEqual(['模块 1', '模块 2', '模块 3', '模块 4', 'Music', '隐藏 Music'])
   // Off-screen capture cannot composite the Windows acrylic background.
   await shell.evaluate(() => {
     delete document.documentElement.dataset.backdrop

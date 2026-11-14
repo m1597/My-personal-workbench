@@ -335,8 +335,7 @@ const daily = await electron.launch({
 })
 try {
   const shell = await daily.firstWindow()
-  const original = shell.getByRole('heading', { name: '工作区为空', exact: true })
-  const other = shell.getByText('可在这里打开其他组件', { exact: true })
+  const original = shell.getByRole('heading', { name: '快速开始', exact: true })
   await expect(original).toBeVisible()
   await expect(shell.getByRole('button', { name: '打开 Music', exact: true })).toBeVisible()
   await shell.getByRole('button', { name: '组件', exact: true }).click()
@@ -346,8 +345,7 @@ try {
     .toBe(true)
   const music = daily.windows().find((p) => p.url().includes('/music/index.html'))
   await music.getByRole('button', { name: '只显示播放栏' }).click()
-  await expect(other).toBeVisible()
-  await expect(original).toHaveCount(0)
+  await expect(original).toBeVisible()
   await shell.evaluate(() => delete document.documentElement.dataset.backdrop)
   await daily.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].setBackgroundColor('#202227'),
@@ -358,7 +356,6 @@ try {
   await music.getByRole('button', { name: '展开 Music' }).click()
   await music.getByRole('button', { name: '隐藏到后台' }).click()
   await expect(original).toBeVisible()
-  await expect(other).toHaveCount(0)
   console.log('PASS 普通空工作区和仅剩停靠播放栏的提示')
 } finally {
   await daily.close()

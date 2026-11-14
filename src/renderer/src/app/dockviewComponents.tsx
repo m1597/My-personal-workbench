@@ -10,7 +10,7 @@ import { NavigationPanel } from '../../../../tests/fixtures/workspace/Navigation
 import { CanvasPanel } from '../../../../tests/fixtures/workspace/CanvasPanel'
 import { Inspector } from '../../../../tests/fixtures/workspace/Inspector'
 import { BottomPanel } from '../../../../tests/fixtures/workspace/BottomPanel'
-import { ComponentSlot, useDockedMusicBar } from './componentPrototype'
+import { ComponentSlot } from './componentPrototype'
 
 function ModulePanel({ api }: IDockviewPanelProps) {
   return <BuiltinContent id={api.id} />
@@ -62,29 +62,13 @@ export function HeaderActions({ api, containerApi }: IDockviewHeaderActionsProps
 
 export function EmptyWorkspace() {
   const t = useTranslation()
-  const { api, firstEntry } = useContext(WorkspaceContext)
-  const dockedBar = useDockedMusicBar()
+  const { api } = useContext(WorkspaceContext)
   if (!fixtureWorkspace)
     return (
-      <div className="empty-workspace">
-        <PanelsTopLeft size={40} strokeWidth={1} />
-        <h2>
-          {dockedBar
-            ? t('可在这里打开其他组件', 'Open other components here')
-            : t('工作区为空', 'Your workspace is empty')}
-        </h2>
-        {!dockedBar && firstEntry && window.firstWorkspace ? (
-          <FirstWorkspaceAction />
-        ) : (
-          !dockedBar && (
-            <p>
-              {window.musicDock
-                ? t('从「窗口 → Music」打开音乐组件。', 'Open Music from the Window menu.')
-                : t('从桌面工作台打开 Music。', 'Open Music from the desktop workbench.')}
-            </p>
-          )
-        )}
-      </div>
+      <section className="empty-workspace quick-start">
+        <h2>{t('快速开始', 'Quick start')}</h2>
+        <FirstWorkspaceAction />
+      </section>
     )
   return (
     <div className="empty-workspace">
@@ -92,8 +76,8 @@ export function EmptyWorkspace() {
       <h2>{t('留一点空间给新的想法', 'Make room for new ideas')}</h2>
       <p>
         {t(
-          '从「窗口」菜单打开模块，或恢复默认布局。',
-          'Open a module from the Window menu or restore the default layout.',
+          '从「组件」菜单打开模块，或恢复默认布局。',
+          'Open a module from the Components menu or restore the default layout.',
         )}
       </p>
       <button

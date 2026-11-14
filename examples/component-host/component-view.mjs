@@ -45,13 +45,16 @@ export function componentView({
       : undefined
 
   let dragOver = null
+  let settingsRequest = 0
+  let version
   let material
   let placement = null
   const snapshot = () => ({
     mode,
+    language,
     material: mode === 'docked' ? material : undefined,
     presentation,
-    language,
+    settingsRequest,
     phase,
     error,
     sessionId,
@@ -86,6 +89,7 @@ export function componentView({
   function stopMusic() {
     if (!music) return
     clearTimeout(transferTimer)
+    settingsRequest = 0
     phase = 'stopped'
     mode = 'standalone'
     presentation = 'full'
@@ -100,7 +104,7 @@ export function componentView({
     broadcast()
   }
   function setPresentation(next) {
-    if (!music || phase !== 'ready' || next === presentation) return
+    if (phase !== 'ready' || next === presentation) return
     presentation = next
     view.setVisible(false)
     if (mode === 'standalone' && standalone) {
@@ -121,7 +125,8 @@ export function componentView({
       }
     }
     broadcast()
-    if (next === 'full' && mode === 'docked') shell()?.webContents.send('music-prototype:activate')
+    if (next === 'full' && mode === 'docked')
+      shell()?.webContents.send(music ? 'music-prototype:activate' : 'prototype:activate')
   }
   function detach(point) {
     clearTimeout(transferTimer)
@@ -156,6 +161,7 @@ export function componentView({
           view?.webContents.close()
           view = undefined
           parent = undefined
+          settingsRequest = 0
           phase = 'stopped'
           broadcast()
         }
@@ -171,7 +177,7 @@ export function componentView({
     show(standalone)
     broadcast()
   }
-  async function discover() {
+  async function discover(reportFailure = true) {
     try {
       const folder = typeof componentRoot === 'function' ? await componentRoot() : componentRoot
       if (!folder)
@@ -194,8 +200,10 @@ export function componentView({
         throw new Error('DENIED：组件标识、入口或权限与固定清单不符')
       entry = await realpath(path.join(root, manifest.uiEntry))
       if (path.dirname(entry) !== root) throw new Error('DENIED：入口越界')
+      version = typeof manifest.version === 'string' ? manifest.version : undefined
       return root
     } catch (failure) {
+      if (!reportFailure) return
       error = failure.code === 'ENOENT' ? 'NOT_INSTALLED：组件清单或入口不存在' : failure.message
       phase = 'unavailable'
       broadcast()
@@ -342,15 +350,15 @@ export function componentView({
 
   return {
     isSender: isSample,
-    setMaterial(next) {
-      material = next
-      if (mode === 'docked' && view && !view.webContents.isDestroyed())
-        view.webContents.send(music ? 'music-sample:state' : 'sample:state', snapshot())
     setLanguage(next) {
       language = next
       if (view && !view.webContents.isDestroyed())
         view.webContents.send('music-sample:state', snapshot())
     },
+    setMaterial(next) {
+      material = next
+      if (mode === 'docked' && view && !view.webContents.isDestroyed())
+        view.webContents.send(music ? 'music-sample:state' : 'sample:state', snapshot())
     },
     discover,
     preview,
@@ -375,49 +383,48 @@ export function componentView({
         if (!isShell(event)) throw new Error('DENIED')
         return snapshot()
       })
-      // Only the trusted shell may composite this component's own docked surface.
-      let capturing = false
-      ipcMain.handle(
-        music ? 'music-prototype:overlay-frame' : 'prototype:overlay-frame',
-        async (event) => {
-          if (!isShell(event)) throw new Error('DENIED')
-          const source = view
-          const docked = () =>
-            source &&
-            source === view &&
-            phase === 'ready' &&
-            mode === 'docked' &&
-            parent === shell() &&
-            presentation !== 'background' &&
-            !source.webContents.isDestroyed()
-          if (capturing || !docked()) return null
-          capturing = true
-          try {
-            const frame = await source.webContents.capturePage(undefined, {
-              stayHidden: true,
-              stayAwake: true,
-            })
-            return docked() && !frame.isEmpty() ? frame.toDataURL() : null
-          } catch {
-            return null
-          } finally {
-            capturing = false
+      ipcMain.handle(music ? 'music-prototype:inventory' : 'prototype:inventory', async (event) => {
+        if (!isShell(event)) throw Error('DENIED')
+        const installed = Boolean(await discover(false))
+        return { installed, version: installed ? version : undefined }
+      })
+      if (music)
+        ipcMain.handle('music-prototype:show', async (event, settings) => {
+          if (!isShell(event) || typeof settings !== 'boolean') throw Error('DENIED')
+          if (settings && mode === 'standalone' && phase === 'ready') {
+            setPresentation('full')
+            if (parent?.isMinimized()) parent.restore()
+            if (parent) show(parent)
+          } else {
+            if (mode === 'standalone') setPresentation('full')
+            const result = await attach()
+            if (!result.ok) return result
+            setPresentation('full')
+            shell()?.webContents.send(music ? 'music-prototype:activate' : 'prototype:activate')
           }
+          if (settings) settingsRequest++
+          broadcast()
+          return { ok: true }
+        })
+      ipcMain.handle(
+        music ? 'music-prototype:layout' : 'prototype:layout',
+        async (event, included) => {
+          if (!isShell(event) || typeof included !== 'boolean') throw Error('DENIED')
+          if (!included) {
+            if (mode === 'docked' && presentation === 'full') setPresentation('background')
+            return
+          }
+          if (phase === 'ready') {
+            presentation = 'full'
+            restoreDockedView(shell())
+          } else await openComponent(shell())
         },
       )
       ipcMain.handle(music ? 'music-prototype:restore' : 'prototype:restore', async (event) => {
-        if (!isShell(event)) throw new Error('DENIED')
-        if (presentation !== 'full') {
-          broadcast()
-          return
-        }
+        if (!isShell(event)) throw Error('DENIED')
+        if (presentation !== 'full') return broadcast()
         if (phase === 'stopped') await openComponent(shell())
-        else if (music && phase === 'ready' && mode === 'standalone') {
-          // The saved slot can be an inactive tab. Its renderer will report bounds
-          // when visible; adopting the live player now preserves the active tab.
-          error = ''
-          restoreDockedView(shell())
-        }
+        else if (phase === 'ready' && mode === 'standalone') restoreDockedView(shell())
       })
       if (music)
         ipcMain.handle('music-sample:presentation', (event, next) => {
@@ -425,11 +432,14 @@ export function componentView({
             throw Error('DENIED')
           setPresentation(next)
         })
-      if (music) {
-        ipcMain.handle('music-prototype:toggle-visibility', (event) => {
+      ipcMain.handle(
+        music ? 'music-prototype:toggle-visibility' : 'prototype:toggle-visibility',
+        (event) => {
           if (!isShell(event)) throw Error('DENIED')
           setPresentation(presentation === 'background' ? 'full' : 'background')
-        })
+        },
+      )
+      if (music) {
         ipcMain.handle('music-prototype:close', (event) => {
           if (!isShell(event)) throw Error('DENIED')
           stopMusic()
@@ -437,6 +447,7 @@ export function componentView({
       }
       ipcMain.handle(music ? 'music-prototype:open' : 'prototype:open', (event) => {
         if (!isShell(event)) throw new Error('DENIED')
+        setPresentation('full')
         return attach()
       })
       ipcMain.handle(music ? 'music-prototype:detach' : 'prototype:detach', (event, release) => {
@@ -452,51 +463,47 @@ export function componentView({
           event.returnValue = Boolean(isShell(event) && id > 0 && id === confirmedTransfer)
         },
       )
-      ipcMain.on(
-        music ? 'music-prototype:bounds' : 'prototype:bounds',
-        (event, bounds, id, composited = false) => {
-          if (typeof composited !== 'boolean') return
-          if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return
-          if (presentation === 'background' || (presentation === 'bar') !== (id === 'bar')) return
-          if (phase === 'attaching' && id !== transfer) return
-          if (bounds === null) {
-            if (parent === shell()) view.setVisible(false)
-            return
-          }
-          if (
-            !bounds ||
-            !['x', 'y', 'width', 'height'].every(
-              (key) => Number.isFinite(bounds[key]) && bounds[key] >= 0,
-            )
+      ipcMain.on(music ? 'music-prototype:bounds' : 'prototype:bounds', (event, bounds, id) => {
+        if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return
+        if (presentation === 'background' || (presentation === 'bar') !== (id === 'bar')) return
+        if (phase === 'attaching' && id !== transfer) return
+        if (bounds === null) {
+          if (parent === shell()) view.setVisible(false)
+          return
+        }
+        if (
+          !bounds ||
+          !['x', 'y', 'width', 'height'].every(
+            (key) => Number.isFinite(bounds[key]) && bounds[key] >= 0,
           )
-            return
-          const [width, height] = shell().getContentSize()
-          if (
-            bounds.width < 1 ||
-            bounds.height < 1 ||
-            bounds.x + bounds.width > width + 1 ||
-            bounds.y + bounds.height > height + 1
+        )
+          return
+        const [width, height] = shell().getContentSize()
+        if (
+          bounds.width < 1 ||
+          bounds.height < 1 ||
+          bounds.x + bounds.width > width + 1 ||
+          bounds.y + bounds.height > height + 1
+        )
+          return
+        if (phase === 'attaching') {
+          clearTimeout(transferTimer)
+          const transferFocus = !background && standalone?.isFocused()
+          moveTo(shell())
+          if (transferFocus) shell().focus()
+          mode = 'docked'
+          confirmedTransfer = transfer
+          phase = 'ready'
+          standalone?.hide()
+          broadcast()
+        }
+        if (mode === 'docked') {
+          view.setBounds(
+            Object.fromEntries(Object.entries(bounds).map(([k, v]) => [k, Math.round(v)])),
           )
-            return
-          if (phase === 'attaching') {
-            clearTimeout(transferTimer)
-            const transferFocus = !background && standalone?.isFocused()
-            moveTo(shell())
-            if (transferFocus) shell().focus()
-            mode = 'docked'
-            confirmedTransfer = transfer
-            phase = 'ready'
-            standalone?.hide()
-            broadcast()
-          }
-          if (mode === 'docked') {
-            view.setBounds(
-              Object.fromEntries(Object.entries(bounds).map(([k, v]) => [k, Math.round(v)])),
-            )
-            view.setVisible(!composited)
-          }
-        },
-      )
+          view.setVisible(true)
+        }
+      })
     },
     closing() {
       if (phase === 'attaching') cancelAttach('目标工作台已关闭')

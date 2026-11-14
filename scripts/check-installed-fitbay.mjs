@@ -107,7 +107,7 @@ try {
     await assert.rejects(access(m), { code: 'ENOENT' })
     const shell = await find('/workbench/index.html')
     await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(0)
-    await shell.getByRole('button', { name: '窗口', exact: true }).click()
+    await shell.getByRole('button', { name: '组件', exact: true }).click()
     await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
     await expect(
       shell.getByRole('alert').filter({ hasText: '请先安装 FitBay Music' }),
@@ -136,7 +136,7 @@ try {
       shell = await find('/workbench/index.html')
     } else {
       shell = await find('/workbench/index.html')
-      await shell.getByRole('button', { name: '窗口', exact: true }).click()
+      await shell.getByRole('button', { name: '组件', exact: true }).click()
       await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
       player = await find('/music/index.html')
       await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()

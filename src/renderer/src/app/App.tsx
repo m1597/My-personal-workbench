@@ -10,7 +10,6 @@ import { finishFirstEntry, firstEntryPending, restoreLayout } from './layoutStor
 import {
   ComponentDropPreview,
   MusicPlayerBar,
-  SettingsOpenContext,
   useComponentPrototype,
   useMusicHostState,
 } from './componentPrototype'
@@ -23,8 +22,8 @@ export default function App() {
   const [preferences, setPreferences] = useState(readPreferences)
   useLayoutEffect(() => {
     const root = document.documentElement
-    window.componentHost?.setLanguage?.(preferences.language)
     root.lang = preferences.language
+    window.componentHost?.setLanguage?.(preferences.language)
     root.dataset.workbenchFont = preferences.font
     root.dataset.workbenchSize = preferences.size
   }, [preferences])
@@ -95,41 +94,41 @@ export default function App() {
         <WorkspaceContext.Provider
           value={{ ...workspace, firstEntry, visible: [...workspace.visible, ...detached] }}
         >
-          <SettingsOpenContext.Provider value={settingsOpen}>
-            <div className="workbench">
-              <div className="workbench-caption">
-                <img src="./fitbay.png" alt="" draggable={false} />
-                FitBay
-              </div>
-              <header className="app-header">
-                <WindowMenu />
-                <WorkbenchSettings
-                  value={preferences}
-                  onChange={setPreferences}
-                  open={settingsOpen}
-                  setOpen={setSettingsOpen}
-                />
-                <ComponentDropPreview />
-              </header>
-              <main
-                className="docking-area"
-                aria-label={
-                  preferences.language === 'en' ? 'Adjustable workspace' : '可调整的模块工作区'
-                }
-              >
-                <DockviewReact
-                  components={components}
-                  onReady={onReady}
-                  theme={theme}
-                  dndStrategy={window.componentHost ? 'pointer' : 'auto'}
-                  disableFloatingGroups
-                  rightHeaderActionsComponent={HeaderActions}
-                  watermarkComponent={EmptyWorkspace}
-                />
-              </main>
-              <MusicPlayerBar />
+          <div className="workbench">
+            <div className="workbench-caption">
+              <img src="./fitbay.png" alt="" draggable={false} />
+              <span className="fitbay-brand">FitBay</span>
             </div>
-          </SettingsOpenContext.Provider>
+            <header className="app-header">
+              {!settingsOpen && <WindowMenu />}
+              <WorkbenchSettings
+                value={preferences}
+                onChange={setPreferences}
+                open={settingsOpen}
+                setOpen={setSettingsOpen}
+              />
+              <ComponentDropPreview />
+            </header>
+            <main
+              className="docking-area"
+              inert={settingsOpen}
+              style={settingsOpen ? { visibility: 'hidden', opacity: 0 } : undefined}
+              aria-label={
+                preferences.language === 'en' ? 'Adjustable workspace' : '可调整的模块工作区'
+              }
+            >
+              <DockviewReact
+                components={components}
+                onReady={onReady}
+                theme={theme}
+                dndStrategy={window.componentHost ? 'pointer' : 'auto'}
+                disableFloatingGroups
+                rightHeaderActionsComponent={HeaderActions}
+                watermarkComponent={EmptyWorkspace}
+              />
+            </main>
+            <MusicPlayerBar />
+          </div>
         </WorkspaceContext.Provider>
       </ComponentTheme>
     </LanguageContext.Provider>

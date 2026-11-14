@@ -1,6 +1,6 @@
 import type { Material } from './material'
 import { useTranslation } from './preferences'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { Button } from '@fluentui/react-components'
 
@@ -25,13 +25,18 @@ type HostState = {
 const attachingGroups = new WeakMap<IDockviewPanelProps['api'], string>()
 declare global {
   interface Window {
-    musicDock?: NonNullable<Window['componentHost']> & { toggleVisibility(): Promise<void> }
+    musicDock?: NonNullable<Window['componentHost']> & {
+      show(settings: boolean): Promise<{ ok: boolean; error?: string }>
+      toggleVisibility(): Promise<void>
+    }
     componentHost?: {
+      layout(included: boolean): Promise<void>
+      toggleVisibility(): Promise<void>
+      inventory(): Promise<{ installed: boolean; version?: string }>
       sampleEnabled?: boolean
       dropZone(value: Region[] | null): void
-      setMaterial?(value: Material): void
       setLanguage?(value: 'zh-CN' | 'en'): void
-      overlayFrame?(): Promise<string | null>
+      setMaterial?(value: Material): void
       status(): Promise<HostState>
       close?(): Promise<void>
       restore(): Promise<void>
@@ -40,7 +45,6 @@ declare global {
       bounds(
         value: { x: number; y: number; width: number; height: number } | null,
         id?: number | 'bar',
-        composited?: boolean,
       ): void
       detach(release?: { x: number; y: number }): Promise<void>
       onActivate(callback: () => void): () => void
@@ -48,13 +52,6 @@ declare global {
     }
   }
 }
-export function showMusicSlot(api: DockviewApi) {
-  const slot =
-    api.getPanel('component-music') ??
-    api.addPanel({ id: 'component-music', title: 'Music', component: 'component-slot' })
-  slot.api.setActive()
-}
-
 export function useComponentPrototype(
   api: DockviewApi | undefined,
   gap: number,
@@ -158,7 +155,7 @@ export function useComponentPrototype(
         }
       }
       const removed = api.onDidRemovePanel((panel) => {
-        if (panelId === 'component-music' && switchingLayout(api)) return
+        if (switchingLayout(api)) return
         if (
           panel.id === panelId &&
           last?.mode === 'docked' &&
@@ -168,8 +165,12 @@ export function useComponentPrototype(
           void (host.close ? host.close() : host.detach())
       })
       const offActivate = host.onActivate(() => {
-        if (panelId === 'component-music' && last?.mode === 'docked') showMusicSlot(api)
-        else api.getPanel(panelId)?.api.setActive()
+        if (last?.mode === 'docked') {
+          const slot =
+            api.getPanel(panelId) ??
+            api.addPanel({ id: panelId, title, component: 'component-slot' })
+          slot.api.setActive()
+        } else api.getPanel(panelId)?.api.setActive()
       })
       let disposed = false
       const off = host.subscribe(update)
@@ -295,10 +296,9 @@ export function useComponentPrototype(
   }, [api, gap, onDetached])
 }
 
-export function useMusicHostState() {
+export function useMusicHostState(host = window.musicDock as Window['componentHost']) {
   const [state, setState] = useState<HostState>()
   useEffect(() => {
-    const host = window.musicDock
     if (!host) return
     let received = false
     const unsubscribe = host.subscribe((next) => {
@@ -312,68 +312,13 @@ export function useMusicHostState() {
       received = true
       unsubscribe()
     }
-  }, [])
+  }, [host])
   return state
 }
 
 export function useDockedMusicBar() {
   const state = useMusicHostState()
   return state?.phase === 'ready' && state.mode === 'docked' && state.presentation === 'bar'
-}
-export const SettingsOpenContext = createContext(false)
-
-// Native child views paint above Chromium popovers. While the settings surface
-// owns focus, composite frames from the same running component below the glass.
-function ComponentBackdrop({ host }: { host: Window['componentHost'] }) {
-  const ref = useRef<HTMLImageElement>(null)
-  const open = useContext(SettingsOpenContext)
-  useEffect(() => {
-    const image = ref.current
-    if (!open || !image || !host) return
-    let disposed = false
-    let timer = 0
-    async function refresh() {
-      if (!image || !host || disposed) return
-      const frame =
-        image.clientWidth && image.clientHeight
-          ? await host.overlayFrame?.().catch(() => null)
-          : null
-      if (disposed) return
-      if (frame) image.src = frame
-      // Let the settings remain reachable if a crashed renderer cannot supply a frame.
-      else if (!image.src) image.dataset.composited = 'fallback'
-      timer = window.setTimeout(refresh, 500)
-    }
-    void refresh()
-    return () => {
-      disposed = true
-      window.clearTimeout(timer)
-    }
-  }, [open, host])
-  return open ? (
-    <img
-      ref={ref}
-      className="component-overlay-frame"
-      alt=""
-      decoding="sync"
-      draggable={false}
-      onError={(event) => {
-        delete event.currentTarget.dataset.loaded
-        event.currentTarget.dataset.composited = 'fallback'
-      }}
-      onLoad={(event) => {
-        const image = event.currentTarget
-        image.dataset.loaded = 'true'
-        if (image.dataset.composited === 'ready') return
-        // The native child must cover the slot until Chromium has painted the decoded image.
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            if (image.isConnected) image.dataset.composited = 'ready'
-          })
-        })
-      }}
-    />
-  ) : null
 }
 export function MusicPlayerBar() {
   const t = useTranslation()
@@ -385,9 +330,8 @@ export function MusicPlayerBar() {
     let previous = ''
     const measure = () => {
       const rect = slot.current?.getBoundingClientRect()
-      const composited = !!slot.current?.querySelector('.component-overlay-frame[data-composited]')
       const covered =
-        document.querySelector('[role="dialog"]:not(.settings-surface), [data-component-drag]') ||
+        document.querySelector('[role="dialog"], [data-component-drag]') ||
         Array.from(document.querySelectorAll('[role="menu"], .component-drop-preview')).some(
           (popup) => {
             const bounds = popup.getBoundingClientRect()
@@ -396,14 +340,10 @@ export function MusicPlayerBar() {
         )
       const bounds =
         rect && !covered ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
-      const encoded = JSON.stringify([bounds, composited])
+      const encoded = JSON.stringify(bounds)
       if (previous !== encoded) {
         previous = encoded
-        window.musicDock?.bounds(
-          composited && !window.musicDock.overlayFrame ? null : bounds,
-          'bar',
-          composited,
-        )
+        window.musicDock?.bounds(bounds, 'bar')
       }
       frame = requestAnimationFrame(measure)
     }
@@ -418,9 +358,7 @@ export function MusicPlayerBar() {
       aria-label={t('Music 播放栏', 'Music player bar')}
       ref={slot}
       style={{ flex: '0 0 40px', position: 'relative' }}
-    >
-      <ComponentBackdrop host={window.musicDock} />
-    </section>
+    ></section>
   ) : null
 }
 
@@ -483,15 +421,10 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
         rect.right > menu.left &&
         rect.top < menu.bottom &&
         rect.bottom > menu.top
-      const composited = !!element.current?.querySelector(
-        '.component-overlay-frame[data-composited]',
-      )
       const blocked =
         covered ||
         menuOverlaps ||
-        document.querySelector(
-          '[role="dialog"]:not(.settings-surface), .dv-drop-target-selection, [data-component-drag]',
-        )
+        document.querySelector('[role="dialog"], .dv-drop-target-selection, [data-component-drag]')
       const bounds =
         rect &&
         api.isVisible &&
@@ -500,10 +433,10 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
           (current?.phase === 'attaching' && attachingGroups.get(api) === api.group.id))
           ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
           : null
-      const encoded = JSON.stringify([current?.transfer, bounds, composited])
+      const encoded = JSON.stringify([current?.transfer, bounds])
       if (encoded !== previous) {
         previous = encoded
-        host.bounds(composited && !host.overlayFrame ? null : bounds, current?.transfer, composited)
+        host.bounds(bounds, current?.transfer)
       }
       frame = requestAnimationFrame(measure)
     }
@@ -526,11 +459,6 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
         position: 'relative',
       }}
     >
-      {state?.mode === 'docked' && state.phase === 'ready' && (
-        <ComponentBackdrop
-          host={api.id === 'component-music' ? window.musicDock : window.componentHost}
-        />
-      )}
       {!(state?.mode === 'docked' && state.phase === 'ready') && (
         <>
           <p>

@@ -33,37 +33,15 @@ try {
     )
       throw Error('工作台未离屏静音')
   })
-  await page.getByRole('button', { name: '窗口', exact: true }).click()
+  await page.getByRole('button', { name: '组件', exact: true }).click()
   await page.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
   await expect(page.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
   const gear = page.getByRole('button', { name: '工作台设置' })
   const dialog = page.getByRole('dialog', { name: '工作台设置' })
   for (const attempt of [1, 2]) {
-    const paintedAtOpen = page.evaluate(
-      () =>
-        new Promise((resolve) => {
-          let placeholderHidden = false
-          const observer = new MutationObserver(() => {
-            const image = document.querySelector('.component-overlay-frame')
-            if (image && !image.hasAttribute('src')) {
-              placeholderHidden = getComputedStyle(image).visibility === 'hidden'
-            }
-            if (!document.querySelector('.settings-surface')) return
-            observer.disconnect()
-            resolve({
-              placeholderHidden,
-              painted:
-                image?.dataset.composited === 'ready' &&
-                image.naturalWidth > 0 &&
-                getComputedStyle(image).visibility === 'visible',
-            })
-          })
-          observer.observe(document.body, { childList: true, subtree: true })
-        }),
-    )
     await gear.click()
     await expect(dialog).toBeVisible()
-    assert.deepEqual(await paintedAtOpen, { placeholderHidden: true, painted: true })
+    await expect(page.locator('.docking-area')).toBeHidden()
     if (attempt === 1) await dialog.getByRole('button', { name: '关闭设置' }).click()
   }
   for (const [name, initial, final] of [

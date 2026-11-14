@@ -52,16 +52,16 @@ function saved(groups, activeGroup) {
 let app = await launch()
 try {
   let shell = await app.firstWindow()
-  const empty = shell.getByRole('heading', { name: '工作区为空' })
+  const empty = shell.getByRole('heading', { name: '快速开始' })
   await expect(empty).toBeVisible()
-  const menu = shell.getByRole('button', { name: '窗口', exact: true })
+  const menu = shell.getByRole('button', { name: '组件', exact: true })
   await menu.click()
   const items = shell.locator('[role="menuitem"], [role="menuitemcheckbox"]')
   await expect
     .poll(() =>
       items.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label') || n.textContent)),
     )
-    .toEqual(['Music', '隐藏 Music', '布局'])
+    .toEqual(['Music', '隐藏 Music'])
   await shell.screenshot({ path: path.join(profile, 'window-menu.png') })
   await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
   await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()
@@ -79,7 +79,17 @@ try {
   await shell.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   )
-  assert.equal(await nativeVisible(), true, '窗口菜单展开时应保留 Music 视图')
+  const overlaps = await shell.evaluate(() => {
+    const menu = document.querySelector('[role="menu"]').getBoundingClientRect()
+    const content = document.querySelector('.dv-content-container').getBoundingClientRect()
+    return (
+      menu.bottom > content.top &&
+      menu.top < content.bottom &&
+      menu.right > content.left &&
+      menu.left < content.right
+    )
+  })
+  await expect.poll(nativeVisible).toBe(!overlaps)
   await shell.keyboard.press('Escape')
   await expect.poll(nativeVisible).toBe(true)
   assert.deepEqual(await shell.locator('.dv-tab').allTextContents(), layoutBefore)
@@ -123,7 +133,7 @@ try {
   await app.close()
   app = await launch(true)
   shell = await app.firstWindow()
-  await expect(shell.getByRole('heading', { name: '工作区为空' })).toBeVisible()
+  await expect(shell.getByRole('heading', { name: '快速开始' })).toBeVisible()
   await restore(
     saved(
       [

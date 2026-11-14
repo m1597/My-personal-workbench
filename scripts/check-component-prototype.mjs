@@ -457,8 +457,8 @@ try {
   await sample.getByRole('button', { name: '加入工作台', exact: true }).click()
   await expect(sample.locator('#mode')).toHaveText('已停靠')
   let shell = await findPage(app, '/workbench/index.html')
-  await shell.getByRole('button', { name: '窗口', exact: true }).click()
-  await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
+  await shell.getByRole('button', { name: '布局', exact: true }).click()
+  await shell.getByRole('menuitem', { name: '管理布局', exact: true }).click()
   await expect(shell.getByRole('dialog')).toBeVisible()
   await expect
     .poll(() =>
@@ -476,8 +476,8 @@ try {
     )
     .toBe(true)
   await expect(sample.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await shell.getByRole('button', { name: '窗口', exact: true }).click()
-  await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
+  await shell.getByRole('button', { name: '布局', exact: true }).click()
+  await shell.getByRole('menuitem', { name: '管理布局', exact: true }).click()
   await shell.getByRole('button', { name: '还原默认布局', exact: true }).click()
   await expect(sample.locator('#mode')).toHaveText('独立窗口')
   await sample.getByRole('button', { name: '加入工作台', exact: true }).click()
@@ -555,8 +555,8 @@ try {
       .forcefullyCrashRenderer(),
   )
   await expect(shell.getByText(/CRASHED：示例组件退出/)).toBeVisible()
-  await shell.getByRole('button', { name: '窗口', exact: true }).click()
-  await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
+  await shell.getByRole('button', { name: '布局', exact: true }).click()
+  await shell.getByRole('menuitem', { name: '管理布局', exact: true }).click()
   await shell.getByRole('button', { name: '还原默认布局', exact: true }).click()
   await expect(shell.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(4)
   console.log('PASS 20 次同视图停靠/分离，中文/队列/计数/会话保持；权限、遮挡与崩溃隔离')
@@ -631,8 +631,8 @@ for (const kind of ['missing', 'incompatible']) {
     if (kind === 'missing') {
       await cp(samplePath, fixture, { recursive: true })
       await shell.getByRole('tab', { name: '模块 1', exact: true }).click()
-      await shell.getByRole('button', { name: '窗口', exact: true }).click()
-      await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
+      await shell.getByRole('button', { name: '布局', exact: true }).click()
+      await shell.getByRole('menuitem', { name: '管理布局', exact: true }).click()
       await expect(shell.getByRole('dialog')).toBeVisible()
       const results = await shell.evaluate(() =>
         Promise.all([window.componentHost.open(), window.componentHost.open()]),
@@ -669,8 +669,8 @@ for (const kind of ['missing', 'incompatible']) {
         .locator('.dv-groupview')
         .filter({ has: shell.getByRole('tab', { name: '模块 1', exact: true }) })
       await expect(originalGroup.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(1)
-      await shell.getByRole('button', { name: '窗口', exact: true }).click()
-      await shell.getByRole('menuitem', { name: '布局', exact: true }).click()
+      await shell.getByRole('button', { name: '布局', exact: true }).click()
+      await shell.getByRole('menuitem', { name: '管理布局', exact: true }).click()
       await shell.evaluate(() => window.componentHost.open())
       await expect
         .poll(async () => (await shell.evaluate(() => window.componentHost.status())).phase, {

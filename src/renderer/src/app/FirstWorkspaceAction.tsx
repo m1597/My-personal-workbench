@@ -1,3 +1,4 @@
+import { Music2, Boxes, Plus } from 'lucide-react'
 import { Button } from '@fluentui/react-components'
 import { useEffect, useState } from 'react'
 import { useTranslation } from './preferences'
@@ -14,6 +15,7 @@ declare global {
 export function FirstWorkspaceAction() {
   const t = useTranslation()
   const [installed, setInstalled] = useState<boolean>()
+  const [sample, setSample] = useState(false)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState('')
   useEffect(() => {
@@ -24,28 +26,37 @@ export function FirstWorkspaceAction() {
     const refresh = async () => {
       const id = ++request
       try {
-        const value = await bridge.musicInstalled()
+        const [music, example] = await Promise.all([
+          window.musicDock?.inventory(),
+          window.componentHost?.sampleEnabled ? window.componentHost.inventory() : undefined,
+        ])
+        const value = Boolean(music?.installed)
+        if (active && id === request) setSample(Boolean(example?.installed))
         if (active && id === request) setInstalled(value)
       } catch {
         if (active && id === request) setProblem('failed')
       }
     }
     void refresh()
+    const timer = window.setInterval(refresh, 3000)
     window.addEventListener('focus', refresh)
     return () => {
+      clearInterval(timer)
       active = false
       window.removeEventListener('focus', refresh)
     }
   }, [])
-  async function activate() {
+  async function activate(which: 'music' | 'sample' | 'install') {
     const bridge = window.firstWorkspace
     if (!bridge || busy) return
     setBusy(true)
     setProblem('')
     try {
-      if (await bridge.musicInstalled()) {
-        setInstalled(true)
-        const result = await window.musicDock?.open()
+      if (which !== 'install') {
+        const result =
+          which === 'music'
+            ? await window.musicDock?.show(false)
+            : await window.componentHost?.open()
         if (!result?.ok) setProblem('open')
       } else {
         setInstalled(false)
@@ -62,11 +73,34 @@ export function FirstWorkspaceAction() {
   }
   return (
     <>
-      {installed !== undefined && (
-        <Button appearance="primary" disabled={busy} onClick={activate}>
-          {installed ? t('打开 Music', 'Open Music') : t('添加组件', 'Add component')}
-        </Button>
-      )}
+      <div className="quick-components">
+        {installed && (
+          <Button
+            className="quick-component"
+            icon={<Music2 />}
+            disabled={busy}
+            onClick={() => void activate('music')}
+            aria-label={t('打开 Music', 'Open Music')}
+          >
+            Music
+          </Button>
+        )}
+        {sample && (
+          <Button
+            className="quick-component"
+            icon={<Boxes />}
+            disabled={busy}
+            onClick={() => void activate('sample')}
+          >
+            {t('示例组件', 'Sample component')}
+          </Button>
+        )}
+        {installed === false && (
+          <Button icon={<Plus />} disabled={busy} onClick={() => void activate('install')}>
+            {t('添加组件', 'Add component')}
+          </Button>
+        )}
+      </div>
       {problem && (
         <p role="alert">
           {problem === 'mismatch'
