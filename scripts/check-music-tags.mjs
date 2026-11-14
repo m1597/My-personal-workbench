@@ -1,4 +1,4 @@
-import { choosePluginFile } from './music-plugin-file-fixture.mjs'
+import { checkInstalled, installPublic, uninstallPublic } from './public-music-plugin-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
@@ -179,25 +179,27 @@ try {
   store.db.close()
 }
 if (process.argv.includes('--ui')) {
-  const app = await electron.launch({
-    args: [
-      path.resolve('dist/component-prototype/host'),
-      '--mode=music',
-      '--mute-audio',
-      '--user-data-dir=' + profile,
-    ],
-    env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
-  })
+  const launch = () =>
+    electron.launch({
+      args: [
+        path.resolve('dist/component-prototype/host'),
+        '--mode=music',
+        '--mute-audio',
+        '--user-data-dir=' + profile,
+      ],
+      env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+    })
+  let app = await launch()
   try {
-    const page = await app.firstWindow()
+    let page = await app.firstWindow()
     await page.waitForSelector('.music-shell')
     await expect(page.getByRole('button', { name: '跳过' })).toBeVisible()
     await page.getByRole('button', { name: '跳过' }).click()
     await openMusicSettings(page)
     await selectMusicSettings(page, '插件')
     const item = page.locator('article').filter({ hasText: '歌曲标签与封面整理' })
-    await choosePluginFile(app, 'tags')
-    await item.getByRole('button', { name: '选择插件文件' }).click()
+    await checkInstalled(page, profile, [])
+    await installPublic(app, page, profile, 'tags')
     await item.getByRole('button', { name: '打开', exact: true }).click()
     const panel = page.getByRole('region', { name: '歌曲标签与封面整理' })
     const corrupt = path.join(dir, 'truncated.png')
@@ -233,8 +235,34 @@ if (process.argv.includes('--ui')) {
     assert.equal(updated.common.title, '界面勾选的新歌名')
     assert.equal(updated.common.artist, 'FitBay 测试')
     assert.deepEqual(Buffer.from(updated.common.picture[0].data), sourceImage)
+    await app.close()
+    app = await launch()
+    page = await app.firstWindow()
+    await page.waitForSelector('.music-shell')
+    await openMusicSettings(page)
+    await selectMusicSettings(page, '插件')
+    await checkInstalled(page, profile, ['tags'])
+    const tagsRow = page.locator('article').filter({ hasText: '歌曲标签与封面整理' })
+    await tagsRow.getByRole('button', { name: '打开', exact: true }).click()
+    await expect(page.getByRole('region', { name: '歌曲标签与封面整理' })).toBeVisible()
+    await openMusicSettings(page)
+    await selectMusicSettings(page, '插件')
+    await uninstallPublic(page, profile, 'tags')
+    const preserved = await parseFile(path.join(album, '测试艺人 - 歌名.flac'))
+    assert.equal(preserved.common.title, '界面勾选的新歌名')
+    assert.deepEqual(Buffer.from(preserved.common.picture[0].data), sourceImage)
+    await installPublic(app, page, profile, 'tags')
+    await tagsRow.getByRole('button', { name: '打开', exact: true }).click()
+    await page.getByRole('button', { name: '选择筛选结果' }).click()
+    await page.getByRole('button', { name: '预览资料' }).click()
+    const restored = page.getByRole('group', { name: '测试艺人 - 歌名.flac', exact: true })
+    await expect(restored).toContainText('界面勾选的新歌名')
+    await expect(restored.getByRole('img', { name: '已有封面' })).toBeVisible()
+    await openMusicSettings(page)
+    await selectMusicSettings(page, '插件')
+    await uninstallPublic(page, profile, 'tags')
     console.log(
-      'PASS 实际安装打开插件、查看原图与建议、编辑未勾选不可写、仅写入一首的一个字段。' + dir,
+      'PASS 公开地址下载、独立安装、查看原图与建议、仅写入所选字段，重启及卸载重装后标签与封面保留。' + dir,
     )
   } finally {
     await app.close()

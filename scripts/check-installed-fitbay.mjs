@@ -1,3 +1,4 @@
+import { checkDefaultCatalog } from './public-music-plugin-fixture.mjs'
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { access, writeFile } from 'node:fs/promises'
@@ -100,7 +101,7 @@ try {
     await assert.rejects(access(w), { code: 'ENOENT' })
     const music = await find('/music/index.html')
     await listen(music)
-    assert.equal(await music.evaluate(() => typeof window.musicPlugins), 'undefined')
+    await checkDefaultCatalog(music)
     console.log('PASS 卸载工作台后，Music 仍可播放')
   } else if (scenario === 'workbench') {
     await assert.rejects(access(m), { code: 'ENOENT' })
@@ -118,12 +119,14 @@ try {
     const music = await find('/music/index.html')
     await listen(music)
     await checkInstalledMcp()
-    assert.equal(await music.evaluate(() => typeof window.musicPlugins), 'undefined')
+    await checkDefaultCatalog(music)
     await expect(music.getByRole('button', { name: '使用引导' })).toBeVisible()
     // Off-screen Chromium screenshots omit the native acrylic composition.
     await music.evaluate(() => delete document.documentElement.dataset.backdrop)
     await music.screenshot({ path: path.join(root, 'installed-music.png') })
-    console.log('PASS 仅安装 Music，真实 WAV 导入与静音播放、引导入口与插件桥接撤下')
+    console.log(
+      'PASS 仅安装 Music，真实 WAV 导入与静音播放、引导与三个公开插件与本地路径插件默认未安装',
+    )
   } else {
     let shell, player
     if (scenario === 'music-first') {

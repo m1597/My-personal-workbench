@@ -1,3 +1,4 @@
+import { checkDefaultCatalog } from './public-music-plugin-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { mkdir, mkdtemp, writeFile, readFile } from 'node:fs/promises'
@@ -121,14 +122,15 @@ try {
     await checkStep(id, 'small')
   }
   await guide().getByRole('button', { name: '完成' }).click()
-  assert.equal(await page.evaluate(() => typeof window.musicPlugins), 'undefined')
+  const catalog = await checkDefaultCatalog(page)
+  assert.equal(catalog.find((p) => p.id === 'rules').outdated, true)
   assert.equal(await page.evaluate(() => window.legacyPluginStarted), undefined)
   assert.equal(
     await app.evaluate(({ webContents }, url) => {
       const music = webContents.getAllWebContents().find((w) => w.getURL() === url)
       return music.session.protocol.isProtocolHandled('fitbay-plugin')
     }, page.url()),
-    false,
+    true,
   )
   assert.equal(await readFile(oldFile, 'utf8'), 'window.legacyPluginStarted = true')
   console.log('PASS 五页顶栏、四步引导、窄窗、旧插件不加载且原文件保留', root)

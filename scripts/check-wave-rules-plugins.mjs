@@ -1,4 +1,4 @@
-import { choosePluginFile } from './music-plugin-file-fixture.mjs'
+import { checkInstalled, installPublic, uninstallPublic } from './public-music-plugin-fixture.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -33,7 +33,7 @@ function wav(duration) {
 }
 for (const [name, duration, origin, days, plays] of [
   ['01 波形测试', 8, 'local', 0, 0],
-  ['02 刚收到的推荐', 0.8, 'daily', 3, 0],
+  ['02 刚收到的推荐', 32, 'daily', 3, 0],
   ['03 已听推荐', 1, 'daily', 2, 1],
   ['04 更早的推荐', 1, 'daily', 45, 0],
   ['05 手动下载', 1, 'download', 4, 0],
@@ -80,7 +80,6 @@ let app = await launch()
 try {
   let page = await app.firstWindow()
   const button = (name, scope = page) => scope.getByRole('button', { name, exact: true })
-  const tab = (name) => page.getByRole('tab', { name, exact: true }).click()
   async function settings() {
     await openMusicSettings(page)
     await selectMusicSettings(page, '插件')
@@ -90,11 +89,16 @@ try {
     rules = '智能歌单'
   await button('跳过').click()
   await settings()
-  for (const name of [wave, rules]) {
-    await choosePluginFile(app, name === wave ? 'wave' : 'rules')
-    await button('选择插件文件', entry(name)).click()
-    await expect(button('打开', entry(name))).toBeVisible()
+  async function restart() {
+    await app.close()
+    app = await launch()
+    page = await app.firstWindow()
+    await page.waitForSelector('.music-shell')
+    await page.evaluate(() => delete document.documentElement.dataset.backdrop)
+    await settings()
   }
+  await checkInstalled(page, profile, [])
+  await installPublic(app, page, profile, 'wave')
   const readPending = () =>
     page.evaluate((id) => window.musicPlugins.call('wave', 'audio', id), pendingId)
   await assert.rejects(readPending(), /重新定位/)
@@ -107,28 +111,28 @@ try {
     .toBeGreaterThan(0)
   await button('打开', entry(wave)).click()
   const plot = page.getByRole('slider', { name: '波形定位' })
-  const wavePanel = page.getByRole('region', { name: wave, exact: true })
-  await expect(wavePanel.locator('.wave-plot svg')).toBeVisible()
+  const wavePanel = () => page.getByRole('region', { name: wave, exact: true })
+  await expect(wavePanel().locator('.wave-plot svg')).toBeVisible()
   for (const ext of ['flac', 'm4a', 'mp3']) {
-    await wavePanel.getByRole('combobox', { name: '分析歌曲' }).click()
+    await wavePanel().getByRole('combobox', { name: '分析歌曲' }).click()
     await page.getByRole('option', { name: '编码 ' + ext + ' · 格式测试' }).click()
-    await expect(wavePanel.locator('.wave-plot svg')).toBeVisible()
-    assert.ok((await wavePanel.locator('svg path').last().getAttribute('d')).length > 100)
+    await expect(wavePanel().locator('.wave-plot svg')).toBeVisible()
+    assert.ok((await wavePanel().locator('svg path').last().getAttribute('d')).length > 100)
   }
-  await wavePanel.getByRole('combobox', { name: '分析歌曲' }).click()
+  await wavePanel().getByRole('combobox', { name: '分析歌曲' }).click()
   await page.getByRole('option', { name: '01 波形测试 · 测试曲库' }).click()
   const rect = await plot.boundingBox()
   const y = rect.y + rect.height / 2
   await page.mouse.click(rect.x + rect.width * 0.35, y)
   await expect.poll(() => page.locator('audio').evaluate((a) => a.currentTime)).toBeGreaterThan(2.6)
-  await wavePanel.getByRole('textbox', { name: '标记名称' }).fill('鼓点')
-  await button('标记当前位置', wavePanel).click()
-  await expect(wavePanel.getByRole('button', { name: /鼓点/ })).toBeVisible()
+  await wavePanel().getByRole('textbox', { name: '标记名称' }).fill('鼓点')
+  await button('标记当前位置', wavePanel()).click()
+  await expect(wavePanel().getByRole('button', { name: /鼓点/ })).toBeVisible()
   await page.mouse.move(rect.x + rect.width * 0.2, y)
   await page.mouse.down()
   await page.mouse.move(rect.x + rect.width * 0.32, y, { steps: 6 })
   await page.mouse.up()
-  await expect(button('关闭循环', wavePanel)).toHaveAttribute('aria-pressed', 'true')
+  await expect(button('关闭循环', wavePanel())).toHaveAttribute('aria-pressed', 'true')
   await page.locator('audio').evaluate((a) => {
     window.testLoopSeeks = 0
     a.addEventListener('seeked', () => {
@@ -138,8 +142,25 @@ try {
   await expect.poll(() => page.evaluate(() => window.testLoopSeeks)).toBeGreaterThanOrEqual(2)
   await page.evaluate(() => delete document.documentElement.dataset.backdrop)
   await page.screenshot({ path: path.join(evidence, 'wave.png') })
-  await button('关闭循环', wavePanel).click()
-  await tab(rules)
+  await button('关闭循环', wavePanel()).click()
+  await restart()
+  await checkInstalled(page, profile, ['wave'])
+  await button('打开', entry(wave)).click()
+  async function existingMark() {
+    await wavePanel().getByRole('combobox', { name: '分析歌曲' }).click()
+    await page.getByRole('option', { name: '01 波形测试 · 测试曲库' }).click()
+    await expect(page.getByRole('button', { name: /鼓点/ })).toBeVisible()
+  }
+  await existingMark()
+  await settings()
+  await uninstallPublic(page, profile, 'wave')
+  await installPublic(app, page, profile, 'wave')
+  await button('打开', entry(wave)).click()
+  await existingMark()
+  await settings()
+  await uninstallPublic(page, profile, 'wave')
+  await installPublic(app, page, profile, 'rules')
+  await button('打开', entry(rules)).click()
   const smart = page.getByRole('region', { name: rules, exact: true })
   await expect(smart.getByRole('listitem')).toHaveCount(1)
   await expect(smart.getByRole('listitem')).toContainText('02 刚收到的推荐')
@@ -161,35 +182,29 @@ try {
       .setContentSize(840, 620),
   )
   await button('试听02 刚收到的推荐', smart).click()
-  await expect(smart.getByRole('listitem')).toHaveCount(0)
+  await expect
+    .poll(() => page.locator('audio').evaluate((a) => a.currentTime > 0 && !a.paused))
+    .toBe(true)
+  await expect(smart.getByRole('listitem')).toHaveCount(0, { timeout: 45000 })
   await smart.getByRole('combobox', { name: '有效播放次数' }).click()
   await page.getByRole('option', { name: '至少', exact: true }).click()
   await smart.getByRole('spinbutton', { name: '次数', exact: true }).fill('1')
   await expect(smart.getByRole('listitem')).toHaveCount(2)
   await settings()
-  for (const name of [wave, rules]) {
-    await button('卸载', entry(name)).click()
-    await expect(button('选择插件文件', entry(name))).toBeVisible()
-  }
-  await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)
-  await app.close()
-  app = await launch()
-  page = await app.firstWindow()
+  await restart()
+  await checkInstalled(page, profile, ['rules'])
+  await button('打开', entry(rules)).click()
+  await expect(page.getByLabel('歌单名称')).toHaveValue('近月未听推荐')
   await settings()
-  for (const name of [wave, rules]) {
-    await choosePluginFile(app, name === wave ? 'wave' : 'rules')
-    await button('选择插件文件', entry(name)).click()
-    await expect(button('打开', entry(name))).toBeVisible()
-  }
+  await uninstallPublic(page, profile, 'rules')
+  await installPublic(app, page, profile, 'rules')
   await button('打开', entry(rules)).click()
   await expect(page.getByLabel('歌单名称')).toHaveValue('近月未听推荐')
   await expect(page.locator('.smart-playlists li')).toHaveCount(0)
-  await tab(wave)
-  await page.getByRole('combobox', { name: '分析歌曲' }).click()
-  await page.getByRole('option', { name: '01 波形测试 · 测试曲库' }).click()
-  await expect(page.getByRole('button', { name: /鼓点/ })).toBeVisible()
+  await settings()
+  await uninstallPublic(page, profile, 'rules')
   console.log(
-    'PASS 四格式波形、定位、框选 A–B 实际循环、标记；规则三条件、实际听完自动更新、两插件卸载重装保留资料。' +
+    'PASS 四格式波形、定位、框选 A–B 实际循环、标记；规则三条件、实际播放达标自动更新；公开地址下载、重启可用、逐项卸载重装保留资料。' +
       evidence,
   )
 } finally {
