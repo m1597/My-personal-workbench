@@ -22,6 +22,9 @@ export function isolateRecommendationProfile(db, directory) {
       'music_roots',
       'daily_downloads',
       'pending_trash',
+      'favorite_moves',
+      'cleanup_renames',
+      'favorite_sort_pending',
       'lyric_files',
     ]) {
       if (tables.has(table)) db.exec(`DELETE FROM ${table}`)

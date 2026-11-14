@@ -1,7 +1,7 @@
 import { registerCleanup, recoverRenames } from './library-cleanup.mjs'
+import { reconcileRecycled } from './recycled-tracks.mjs'
 import { libraryTools, callLibraryTool } from './music-mcp-library.mjs'
 import { musicMcpAgents } from './music-mcp-agents.mjs'
-import { reconcileRecycled } from './recycled-tracks.mjs'
 import { registerReleaseCatalog } from './release-catalog.mjs'
 import { desktopLyrics } from './desktop-lyrics.mjs'
 import { musicPlugins } from './music-plugins.mjs'
@@ -69,7 +69,9 @@ export function musicService(
         requestMusicModel(store, safeStorage, 'profile', data, signal),
       )
       store.library.changed = queueTasteUpdate
-      void store.library.readLegacyArtistCredits(()=>{if(musicView && !musicView.isDestroyed()) musicView.send('music:library-changed',[])})
+      void store.library.readLegacyArtistCredits(() => {
+        if (musicView && !musicView.isDestroyed()) musicView.send('music:library-changed', [])
+      })
       if (store.get('auto-sort-favorites') === 'on') {
         const ids = store.db
           .prepare("SELECT local FROM favorite_sort_pending WHERE reason='正在归类'")
@@ -701,8 +703,8 @@ export function musicService(
   bind('setPlayerOption', (key, value) => setPlayerOption(store, key, value))
   bind('setMusicOutput', (volume, muted) => setMusicOutput(store, volume, muted))
   bind('setShortcutEnabled', (scope, enabled) => shortcuts.setEnabled(store, scope, enabled))
-  bind('setMusicShortcut', (action, key,scope) => shortcuts.setCustom(store, action, key,scope))
-  bind('resetMusicShortcuts',scope=>shortcuts.reset(store,scope))
+  bind('setMusicShortcut', (action, key, scope) => shortcuts.setCustom(store, action, key, scope))
+  bind('resetMusicShortcuts', (scope) => shortcuts.reset(store, scope))
   bind('setMusicMediaKeys', (enabled) => shortcuts.setMedia(store, enabled))
   async function chooseMusicDirectory(kind, signal) {
     if (!['manual', 'recommend'].includes(kind)) throw Error('无效的目录用途')
@@ -1198,14 +1200,20 @@ export function musicService(
   return {
     async sourceTool(name, args, signal, connection) {
       ensureStore()
-      if (connection !== undefined && !agents.authorized(connection)) throw Error('Agent 连接已关闭')
+      if (connection !== undefined && !agents.authorized(connection))
+        throw Error('Agent 连接已关闭')
       if (name === 'agent_connected') {
         agents.heartbeat(args.token)
         return true
       }
-      if (libraryTools.some(tool => tool.name === name)) {
-        const result = callLibraryTool(store,name,args)
-        if (['add_to_playlist','create_listening_playlist'].includes(name) && musicView && !musicView.isDestroyed()) musicView.send('music:library-changed',[])
+      if (libraryTools.some((tool) => tool.name === name)) {
+        const result = callLibraryTool(store, name, args)
+        if (
+          ['add_to_playlist', 'create_listening_playlist'].includes(name) &&
+          musicView &&
+          !musicView.isDestroyed()
+        )
+          musicView.send('music:library-changed', [])
         return result
       }
       try {

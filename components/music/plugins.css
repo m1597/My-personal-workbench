@@ -26,6 +26,6 @@
   flex-wrap: wrap;
   gap: var(--space-8);
 }
-.wave-playback-speed [role='combobox'] {
+.wave-playback-speed [role="combobox"] {
   min-width: 5rem;
 }

@@ -135,7 +135,7 @@ try {
     shell
       .locator('.dv-groupview')
       .evaluateAll((list) =>
-        list.map((e) => [e.offsetLeft, e.offsetTop, e.offsetWidth, e.offsetHeight, e.innerText]),
+        list.map((e) => [e.offsetLeft, e.offsetTop, e.offsetWidth, e.offsetHeight, e.textContent]),
       )
   const before = await geometry()
   expect(before).toHaveLength(2)

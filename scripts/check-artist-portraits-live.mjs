@@ -103,7 +103,7 @@ try {
   })
   const back = home.getByRole('button', { name: '返回', exact: true })
   await expect(back).toHaveAttribute('title', '返回')
-  assert.equal(await back.innerText(), '')
+  assert.equal(await back.textContent(), '')
   assert.ok((await back.boundingBox()).width >= 40)
   await back.click()
   await button(missing.name).first().click()

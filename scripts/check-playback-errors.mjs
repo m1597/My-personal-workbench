@@ -59,13 +59,13 @@ for (const language of ['zh-CN', 'en']) {
       exact: true,
     })
     await expect(back).toHaveAttribute('title', backLabel)
-    assert.equal(await back.innerText(), '')
+    assert.equal(await back.textContent(), '')
     await back.click()
     // Reject the older play promise after a later successful resume of this recording.
     await page.evaluate(() => {
       const el = document.querySelector('audio')
       const original = el.play.bind(el)
-      el.play = function () {
+      el.play = () => {
         el.play = original
         return new Promise((_, reject) => {
           globalThis.failOld = () =>

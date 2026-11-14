@@ -1,3 +1,4 @@
+import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
@@ -118,7 +119,7 @@ try {
   assert.ok(before.models.providers.find((p) => p.id === evidence.provider)?.hasKey)
   assert.ok(evidence.source)
   console.log('验收基线', evidence.baseline, evidence.provider, evidence.source)
-  await page.getByRole('tab', { name: '智能推荐' }).click()
+  await openDiscovery(page, true)
   const count = page.getByLabel('推荐首数')
   await expect(count).toHaveValue(String(target))
   await count.fill(String(target))

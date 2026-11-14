@@ -163,12 +163,12 @@ const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
 function ShortcutField({
   action,
   saved,
-  local=false,
+  local = false,
   change,
 }: {
   action: TransportAction
   saved: string
-  local?:boolean
+  local?: boolean
   change(key: string): Promise<boolean>
 }) {
   const [value, setValue] = useState(saved)
@@ -186,7 +186,7 @@ function ShortcutField({
         await change(value)
       }}
     >
-      <Field label={(local?'应用内':'')+actions[action]} hint={hint || undefined}>
+      <Field label={(local ? '应用内' : '') + actions[action]} hint={hint || undefined}>
         <Input
           value={recording ? '' : value}
           readOnly
@@ -204,7 +204,7 @@ function ShortcutField({
             if (!recording) return
             e.preventDefault()
             e.stopPropagation()
-            if (e.repeat || e.nativeEvent.isComposing || e.nativeEvent.keyCode===229) return
+            if (e.repeat || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
             if (e.key === 'Escape') {
               setRecording(false)
               setHint('')
@@ -213,7 +213,7 @@ function ShortcutField({
             if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
             const clear =
               e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey
-            const key = clear ? '' : recordShortcut(e.nativeEvent,local)
+            const key = clear ? '' : recordShortcut(e.nativeEvent, local)
             if (key === undefined) {
               setHint('请按修饰键与字母、数字或导航键的组合，或直接按功能键')
               return
@@ -228,7 +228,7 @@ function ShortcutField({
         type="submit"
         size="small"
         disabled={value === saved}
-        aria-label={'保存' + (local?'应用内':'') + actions[action] + '快捷键'}
+        aria-label={'保存' + (local ? '应用内' : '') + actions[action] + '快捷键'}
       >
         保存
       </Button>
@@ -585,11 +585,21 @@ export function MusicSettings({
                 void update(() => window.music.setShortcutEnabled('app', !!d.checked))
               }
             />
-            {Object.entries(actions).map(([id])=>{
-              const action=id as TransportAction
-              return <ShortcutField local key={action+prefs.appShortcuts[action]} action={action} saved={prefs.appShortcuts[action]} change={key=>update(()=>window.music.setMusicShortcut(action,key,'app'))}/>
+            {Object.entries(actions).map(([id]) => {
+              const action = id as TransportAction
+              return (
+                <ShortcutField
+                  local
+                  key={action + prefs.appShortcuts[action]}
+                  action={action}
+                  saved={prefs.appShortcuts[action]}
+                  change={(key) => update(() => window.music.setMusicShortcut(action, key, 'app'))}
+                />
+              )
             })}
-            <Button onClick={()=>void update(()=>window.music.resetMusicShortcuts('app'))}>恢复应用内默认快捷键</Button>
+            <Button onClick={() => void update(() => window.music.resetMusicShortcuts('app'))}>
+              恢复应用内默认快捷键
+            </Button>
             <Checkbox
               label="启用全局快捷键"
               checked={prefs.globalKeys}
@@ -610,14 +620,16 @@ export function MusicSettings({
               const action = id as TransportAction
               return (
                 <ShortcutField
-                  key={action+prefs.shortcuts[action]}
+                  key={action + prefs.shortcuts[action]}
                   action={action}
                   saved={prefs.shortcuts[action]}
                   change={(key) => update(() => window.music.setMusicShortcut(action, key))}
                 />
               )
             })}
-            <Button onClick={()=>void update(()=>window.music.resetMusicShortcuts('global'))}>恢复全局默认快捷键</Button>
+            <Button onClick={() => void update(() => window.music.resetMusicShortcuts('global'))}>
+              恢复全局默认快捷键
+            </Button>
             {prefs.shortcutFailures.length > 0 && (
               <span role="alert">
                 系统未允许注册或快捷键已被占用：{prefs.shortcutFailures.join('、')}

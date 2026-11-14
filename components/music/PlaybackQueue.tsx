@@ -69,9 +69,13 @@ export function PlaybackQueue({
         <strong>播放队列</strong>
         {active && (
           <TrackMenu localId={localFile(active)}>
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: The track title button supports keyboard playback. */}
             <p onClick={(e) => songRowClick(e, () => play(active.id))}>
-              当前曲目 · {active.title} ·{' '}
-              <SongCredits song={active} beforeOpen={() => setOpen(false)} />
+              当前曲目 ·{' '}
+              <button type="button" className="catalog-text-link" onClick={() => play(active.id)}>
+                {active.title}
+              </button>{' '}
+              · <SongCredits song={active} beforeOpen={() => setOpen(false)} />
             </p>
           </TrackMenu>
         )}
@@ -81,8 +85,16 @@ export function PlaybackQueue({
             {upcoming.map(({ row, occurrence }) => {
               return (
                 <TrackMenu key={row.id + ':' + occurrence} localId={localFile(row)}>
+                  {/* biome-ignore lint/a11y/useKeyWithClickEvents: The track title button supports keyboard playback. */}
                   <li onClick={(e) => songRowClick(e, () => play(row.id, occurrence))}>
-                    {row.title} · <SongCredits song={row} beforeOpen={() => setOpen(false)} />
+                    <button
+                      type="button"
+                      className="catalog-text-link"
+                      onClick={() => play(row.id, occurrence)}
+                    >
+                      {row.title}
+                    </button>{' '}
+                    · <SongCredits song={row} beforeOpen={() => setOpen(false)} />
                   </li>
                 </TrackMenu>
               )

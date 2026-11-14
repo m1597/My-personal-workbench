@@ -68,7 +68,9 @@ try {
   ])
   for (const name of ['音乐源', 'MCP', '下载', '模型与推荐', '快捷键']) {
     await selectMusicSettings(player, name)
-    await expect(player.locator('.music-settings h2')).toHaveText([name === 'MCP' ? '外部 Agent 连接（可选）' : name])
+    await expect(player.locator('.music-settings h2')).toHaveText([
+      name === 'MCP' ? '外部 Agent 连接（可选）' : name,
+    ])
     if (name === '音乐源') await expect(player.getByText('复制启动命令')).toHaveCount(0)
     if (name === 'MCP') {
       // Capture this action without overwriting the user's Windows clipboard.

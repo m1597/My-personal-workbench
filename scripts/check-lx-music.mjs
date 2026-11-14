@@ -120,6 +120,7 @@ if (live) {
   )
 }
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
+store.set('lx-bootstrap', 'done')
 store.library.upsert({
   ...row,
   duration: 20,
@@ -152,7 +153,7 @@ try {
     .getByRole('complementary', { name: 'Music 使用引导' })
     .getByRole('button', { name: '跳过' })
     .click()
-  await expect(page.getByRole('button', { name: /音乐源|搜索/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /音乐源|^搜索$/ })).toHaveCount(0)
   await openMusicSettings(page)
   await selectMusicSettings(page, '音乐源')
   await choose(sourceFile)

@@ -129,7 +129,8 @@ try {
     w.setMinimumSize(360, 320)
     w.setContentSize(420, 480)
   })
-  await help.click()
+  await page.getByRole('button', { name: '更多音乐操作' }).click()
+  await page.getByRole('menuitem', { name: '使用引导' }).click()
   for (const [i, id] of steps.entries()) {
     if (i) await next()
     await checkStep(id, 'small')

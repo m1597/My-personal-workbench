@@ -102,6 +102,7 @@ export function RecentHistory({
                   return (
                     t && (
                       <TrackMenu key={r.track} localId={r.track}>
+                        {/* biome-ignore lint/a11y/useKeyWithClickEvents: The song title button provides keyboard playback. */}
                         <li
                           onClick={(e) =>
                             songRowClick(e, () => {

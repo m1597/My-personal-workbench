@@ -14,7 +14,6 @@ export function PlaylistCover({
 }) {
   const [custom, setCustom] = useState<string | null>()
   const [error, setError] = useState('')
-  const [version, setVersion] = useState(0)
   useEffect(() => {
     let alive = true
     window.music
@@ -28,12 +27,12 @@ export function PlaylistCover({
     return () => {
       alive = false
     }
-  }, [id, version])
+  }, [id])
   async function change(reset: boolean) {
     try {
       await window.music.changePlaylistArtwork(id, reset)
       setError('')
-      setVersion((n) => n + 1)
+      setCustom(await window.music.playlistArtwork(id))
     } catch (e) {
       setError(String(e).split('Error: ').pop() || '更换封面失败')
     }
