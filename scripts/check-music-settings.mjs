@@ -76,7 +76,7 @@ try {
       await player.getByRole('button', { name: '复制启动命令' }).click()
       await expect(player.getByRole('status')).toContainText('已复制启动命令')
       expect(await app.evaluate(() => globalThis.testMcpCommand)).toBe(
-        await player.locator('.music-mcp-connection code').innerText(),
+        await player.locator('.music-mcp-connection code').textContent(),
       )
       await player.screenshot({ path: path.join(evidence, 'mcp-settings.png') })
     }
