@@ -823,3 +823,6 @@ li[data-active="true"] .music-track-icon,
 .library-sidebar button[data-insert="after"]::after {
   bottom: 0;
 }
+.library-search .fui-Input {
+  width: 100%;
+}

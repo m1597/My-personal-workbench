@@ -48,6 +48,8 @@ import {
   Music2,
   Play,
   Search,
+  Sparkles,
+  ArrowRight,
   Trash2,
   Pause,
   FolderSearch,
@@ -120,6 +122,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   create: (name: string, tracks?: string[]) => Promise<boolean>
   membership: (list: string, ids: string | string[], added: boolean) => Promise<boolean>
   total: number
+  librarySearch: ReturnType<typeof import('./useLibrarySearch').useLibrarySearch>
   search: string
   setSearch: (v: string) => void
   job?: ImportJob
@@ -168,6 +171,7 @@ export function LibraryPane({
   recentImports,
   setRecentImports,
   total,
+  librarySearch,
   search,
   setSearch,
   job,
@@ -318,7 +322,9 @@ export function LibraryPane({
   const heading = currentPlaylist?.name ?? currentFolder?.name ?? '全部歌曲'
   const playlistPage = scope === 'playlists'
   const importer = usePlaylistImport(playlistPage)
-  const playableMembers = playlistPage ? members.filter((t) => t.available).map((t) => t.id) : []
+  const playableMembers = playlistPage
+    ? (librarySearch.ids ? rows : members).filter((t) => t.available).map((t) => t.id)
+    : []
   const [locations, setLocations] = useState<CatalogLocation[]>([])
   const layout = useRef<HTMLDivElement>(null)
   const scrollPositions = useRef<number[]>([])
@@ -597,17 +603,62 @@ export function LibraryPane({
                   {selection ? '退出多选' : '多选'}
                 </Button>
               </div>
-              <Input
-                aria-label="搜索本地歌曲"
-                type="search"
-                placeholder="搜索歌名、艺人或专辑"
-                contentBefore={<Search size={16} />}
-                value={search}
-                onChange={(_, v) => {
-                  if (selection) setSelection(new Set())
-                  setSearch(v.value)
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void librarySearch.submit(collection)
                 }}
-              />
+                className="library-search"
+              >
+                <Input
+                  aria-label="搜索本地歌曲"
+                  type="search"
+                  placeholder={
+                    librarySearch.enabled ? '描述想听的音乐，按回车搜索' : '搜索歌名、艺人或专辑'
+                  }
+                  maxLength={librarySearch.enabled ? 500 : undefined}
+                  contentAfter={
+                    <>
+                      {librarySearch.enabled && (
+                        <Button
+                          type="submit"
+                          size="small"
+                          appearance="subtle"
+                          aria-label="提交 AI 搜索"
+                          title="提交 AI 搜索"
+                          icon={<ArrowRight size={16} />}
+                          disabled={!search.trim() || librarySearch.pending}
+                        />
+                      )}
+                      <Button
+                        type="button"
+                        size="small"
+                        appearance={librarySearch.enabled ? 'primary' : 'subtle'}
+                        aria-label="AI 搜索"
+                        title="AI 搜索"
+                        aria-pressed={librarySearch.enabled}
+                        icon={<Sparkles size={16} />}
+                        onClick={() => {
+                          if (selection) setSelection(new Set())
+                          librarySearch.toggle()
+                        }}
+                      />
+                    </>
+                  }
+                  contentBefore={<Search size={16} />}
+                  value={search}
+                  onChange={(_, v) => {
+                    if (selection) setSelection(new Set())
+                    setSearch(v.value)
+                  }}
+                />
+              </form>
+              {librarySearch.error && <small role="alert">{librarySearch.error}</small>}
+              {librarySearch.enabled && (librarySearch.pending || librarySearch.ids) && (
+                <small role="status">
+                  {librarySearch.pending ? '正在搜索…' : 'AI 找到 ' + rows.length + ' 首'}
+                </small>
+              )}
               {selection && (
                 <section className="library-import" aria-label="批量管理歌曲">
                   <Checkbox
@@ -940,7 +991,9 @@ export function LibraryPane({
                   </h2>
                   <p>
                     {total
-                      ? '试试其他歌名、艺人或专辑。'
+                      ? librarySearch.enabled
+                        ? '试试其他场景或听感。'
+                        : '试试其他歌名、艺人或专辑。'
                       : collection === 'all'
                         ? '选择音乐文件或文件夹，歌曲会保留在原位置。'
                         : '在歌曲右侧打开「管理歌单」添加歌曲。'}

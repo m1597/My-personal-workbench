@@ -1,3 +1,4 @@
+import { useLibrarySearch } from './useLibrarySearch'
 import { useOutputDevice } from './PlayerOptionsPane'
 import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
 import { RevealTrackContext, TrackMenu } from './TrackMenu'
@@ -170,6 +171,7 @@ declare global {
         setMusicShortcut(action: TransportAction, key: string): Promise<void>
         setMusicMediaKeys(enabled: boolean): Promise<void>
         chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
+        searchCollection(scope: string, query: string): Promise<string[]>
         configureModel(id: string, model: string, key: string, forget: boolean): Promise<void>
         onLyricsSaved(listener: () => void): () => void
         onLibraryChanged(listener: (removed: string[]) => void): () => void
@@ -383,8 +385,7 @@ function Music() {
   }
   const [tab, setTab] = useState('library'),
     [libraryCollection, setLibraryCollection] = useState('all'),
-    [playlistCollection, setPlaylistCollection] = useState('favorites'),
-    [search, setSearch] = useState('')
+    [playlistCollection, setPlaylistCollection] = useState('favorites')
   const [online, setOnline] = useState<{
     row: Item
     result: Versions
@@ -571,12 +572,20 @@ function Music() {
           memberIds.has(row.id) ||
           row.folder?.id === collection,
       )
-  const localRows = categoryRows.filter((row) =>
-    [row.title, row.artist, row.album].some((value) =>
-      value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
-    ),
-  )
-  if (collection === 'all' && recentImports)
+  const librarySearch = useLibrarySearch(tab + '/' + collection)
+  const search = librarySearch.query
+  const setSearch = librarySearch.edit
+  const searchMembers = librarySearch.ids && new Map(categoryRows.map((row) => [row.id, row]))
+  const localRows = librarySearch.enabled
+    ? librarySearch.ids && searchMembers
+      ? librarySearch.ids.flatMap((id) => searchMembers.get(id) ?? [])
+      : [...categoryRows]
+    : categoryRows.filter((row) =>
+        [row.title, row.artist, row.album].some((value) =>
+          value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
+        ),
+      )
+  if (!librarySearch.ids && collection === 'all' && recentImports)
     localRows.sort((a, b) =>
       a.origin !== 'online' && b.origin !== 'online' ? b.observedAt - a.observedAt : 0,
     )
@@ -1391,6 +1400,7 @@ function Music() {
               })
             }
             exportList={(id) => act(() => host.exportPlaylist(id))}
+            librarySearch={librarySearch}
             search={search}
             setSearch={setSearch}
             job={state?.importJob}

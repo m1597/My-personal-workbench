@@ -30,6 +30,7 @@ import { lstat, realpath } from 'node:fs/promises'
 import { openAudio, pathKey, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
+import { searchCollection } from './search-collection.mjs'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
 import { ipcMain, clipboard, dialog, nativeImage, safeStorage, shell } from 'electron'
 import { MusicStore } from './music/store.mjs'
@@ -547,6 +548,17 @@ export function musicService(
   bind('chooseMusicDirectory', async (kind) => {
     await chooseMusicDirectory(kind)
   })
+  let collectionSearch
+  bind('searchCollection', async (scope, query) => {
+    collectionSearch?.abort()
+    const job = new AbortController()
+    collectionSearch = job
+    try {
+      return await searchCollection(store, safeStorage, scope, query, job.signal)
+    } finally {
+      if (collectionSearch === job) collectionSearch = undefined
+    }
+  })
   bind('configureModel', (id, model, key, forget) => {
     if (pending) throw Error('请先结束当前生成')
     configureModel(store, safeStorage, id, model, key, forget)
@@ -973,6 +985,7 @@ export function musicService(
       }
     },
     dispose(reason = '音乐组件已关闭') {
+      collectionSearch?.abort()
       pending?.abort(new DOMException(reason, 'AbortError'))
       for (const generation of archiveJobs) generation.abort()
       overlay.show(false)

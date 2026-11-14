@@ -31,6 +31,7 @@ const names = [
   'setMusicShortcut',
   'setMusicMediaKeys',
   'chooseMusicDirectory',
+  'searchCollection',
   'configureModel',
   'state',
   'albums',
