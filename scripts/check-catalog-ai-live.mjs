@@ -58,7 +58,24 @@ try {
   })
   const page = await app.firstWindow(),
     calls = () => app.evaluate(() => globalThis.calls)
-  await page.getByRole('tab', { name: '歌手', exact: true }).click()
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
+  const reference = page.getByRole('button', { name: 'AI 搜索', exact: true })
+  const color = (button) =>
+    button.evaluate(async (el) => {
+      await new Promise(requestAnimationFrame)
+      await Promise.allSettled(el.getAnimations().map((animation) => animation.finished))
+      return getComputedStyle(el).backgroundColor
+    })
+  const libraryTab = page.getByRole('tab', { name: '曲库', exact: true })
+  await libraryTab.hover()
+  const offColor = await color(reference)
+  await reference.click()
+  await libraryTab.hover()
+  const onColor = await color(reference)
+  assert.notEqual(onColor, offColor)
+  await reference.click()
+  const artistTab = page.getByRole('tab', { name: '歌手', exact: true })
+  await artistTab.click()
   const field = page.getByLabel('要关注的歌手')
   async function ime(input) {
     for (const init of [
@@ -87,9 +104,18 @@ try {
     timeout: 45000,
   })
   assert.equal((await calls()).filter((x) => x.model).length, 0)
-  await page.getByRole('button', { name: 'AI 搜索歌手' }).click()
+  const toggleArtist = page.getByRole('button', { name: 'AI 搜索歌手' })
+  const checkMode = async (enabled) => {
+    await artistTab.hover()
+    await expect(toggleArtist).toHaveAttribute('aria-pressed', String(enabled))
+    await expect(toggleArtist).toHaveCSS('background-color', enabled ? onColor : offColor)
+  }
+  await checkMode(false)
+  await toggleArtist.click()
+  await checkMode(true)
   await field.fill('唱《晴天》和《稻香》的台湾男歌手')
   await ime(field)
+  assert.equal((await calls()).filter((x) => x.model).length, 0)
   await field.press('Enter')
   await expect
     .poll(async () => (await calls()).filter((x) => x.model).length, { timeout: 70000 })
@@ -97,6 +123,23 @@ try {
   await expect(page.getByRole('button', { name: '关注周杰倫', exact: true })).toBeVisible({
     timeout: 40000,
   })
+  await checkMode(true)
+  const capture = (mode) =>
+    field.locator('..').screenshot({
+      path: path.join(root, 'artist-ai-' + mode + '.png'),
+      style: ':root { background: var(--base) !important }',
+    })
+  await capture('on')
+  await toggleArtist.click()
+  await checkMode(false)
+  await field.fill('周杰伦')
+  await field.press('Enter')
+  await expect(page.getByRole('button', { name: '关注周杰倫', exact: true })).toBeVisible({
+    timeout: 45000,
+  })
+  await checkMode(false)
+  await capture('off')
+  assert.equal((await calls()).filter((x) => x.model).length, 1)
   await page.getByRole('button', { name: '关注周杰倫', exact: true }).click()
   const artist = await page.evaluate(() => window.music.followedArtists())
   assert.equal(artist[0].id, 'a223958d-5c56-4b2c-a30a-87e357bc121b')

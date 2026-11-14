@@ -840,7 +840,7 @@ export function ArtistReleases({
                   <Button
                     type="button"
                     size="small"
-                    appearance="subtle"
+                    appearance={aiSearch ? 'primary' : 'subtle'}
                     aria-label="AI 搜索歌手"
                     title="AI 搜索歌手"
                     aria-pressed={aiSearch}
