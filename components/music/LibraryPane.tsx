@@ -296,6 +296,7 @@ export function LibraryPane({
   const currentFolder = folders.find((f) => f.id === collection)
   const heading = currentPlaylist?.name ?? currentFolder?.name ?? '全部歌曲'
   const playlistPage = scope === 'playlists'
+  const importer = usePlaylistImport(playlistPage)
   const playableMembers = playlistPage ? members.filter((t) => t.available).map((t) => t.id) : []
   const choose = (id: string) => {
     setAlbumView(false)
@@ -309,7 +310,6 @@ export function LibraryPane({
     <div className="library-layout" {...importer.drop}>
       <Button
         size="small"
-  const importer = usePlaylistImport(playlistPage)
         appearance="subtle"
         className="library-nav-toggle"
         icon={<PanelLeft size={15} />}
@@ -406,6 +406,7 @@ export function LibraryPane({
                 }}
               />
             </div>
+            {importer.trigger}
             {orderedSidebarItems(playlists, sidebarOrder?.playlists).map((list) => {
               const trigger = (
                 <Button
@@ -420,7 +421,6 @@ export function LibraryPane({
                   {list.name}
                 </Button>
               )
-            {importer.trigger}
               return (
                 <Menu key={list.id} openOnContext>
                   <MenuTrigger disableButtonEnhancement>{trigger}</MenuTrigger>
@@ -862,6 +862,15 @@ export function LibraryPane({
           )}
         </section>
       )}
+      {playlistPage && importer.preview && (
+        <PlaylistImportDialog
+          preview={importer.preview}
+          tracks={tracks}
+          create={create}
+          close={importer.close}
+          error={error}
+        />
+      )}
       {creating && (
         <Dialog
           open
@@ -885,15 +894,6 @@ export function LibraryPane({
                 } finally {
                   saving.current = false
                   setSubmitting(false)
-      {playlistPage && importer.preview && (
-        <PlaylistImportDialog
-          preview={importer.preview}
-          tracks={tracks}
-          create={create}
-          close={importer.close}
-          error={error}
-        />
-      )}
                 }
               }}
             >
