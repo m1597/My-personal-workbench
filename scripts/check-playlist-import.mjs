@@ -64,9 +64,7 @@ const app = await electron.launch({
 })
 try {
   const page = await app.firstWindow()
-  await app.evaluate(({ BaseWindow }) =>
-    BaseWindow.getAllWindows()[0].setContentSize(1100, 780),
-  )
+  await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(1100, 780))
   await page.getByRole('tab', { name: '歌单', exact: true }).click()
   const bounds = await page.locator('.library-layout').boundingBox()
   const cdp = await page.context().newCDPSession(page)

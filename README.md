@@ -64,7 +64,7 @@ SQLite 和媒体播放当前用于第一方Music组件。Git 只备份已提交�
 
 只用工作台可运行 `FitBay-Workbench-Setup-0.1.0-x64.exe`。只用曲库或以后补装 Music 可运行 `FitBay-Music-Setup-0.1.0-x64.exe`。首次补装会从已安装工作台的登记位置预填 Music 子目录。两者共存时，可从「FitBay Music」直接启动，也可在工作台的「窗口 → Music」打开音乐组件，拖出标签可分离。
 
-Music 内部插件延期，本版保留已有用户资料。
+在「Music → 设置 → 插件」单独下载安装波形与片段试听、歌曲标签与封面整理或智能歌单。安装后点「打开」，以后可从「扩展」进入。歌曲过渡插件在同一页选择本地安装包。卸载保留标记和规则。[公开插件与校验值](https://github.com/m1597/fitbay-plugins/releases/tag/music-v1.0.0)
 
 ## 独立组件原型
 
