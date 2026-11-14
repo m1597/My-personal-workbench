@@ -84,13 +84,13 @@ try {
     else if (['sources', 'model', 'mcp', 'plugins', 'import'].includes(id))
       await expect(page.locator('.music-settings')).toBeVisible()
     if (id === 'mcp') {
-      await expect(page.locator('.music-settings h2')).toHaveText('MCP')
-      await expect(target).toHaveText('复制启动命令')
+      await expect(page.locator('.music-settings h2')).toHaveText('外部 Agent 连接（可选）')
+      await expect(target).toBeVisible()
       const command = page.locator('.music-mcp-connection code')
       await expect(command).toContainText('music-source-mcp.mjs')
-      await expect(page.locator('.music-mcp-connection')).toContainText('移动和重命名前后的路径')
-      await expect(page.locator('.music-mcp-connection')).toContainText('重新定位')
-      await expect(command).toBeInViewport({ ratio: 0.99 })
+      await expect(page.locator('.music-mcp-connection')).toContainText('从最近播放找出上一首')
+      await expect(page.locator('.music-mcp-connection')).toContainText('包括在线引用')
+      await expect(target).toBeInViewport({ ratio: 0.99 })
     }
     await page.screenshot({
       animations: 'disabled',

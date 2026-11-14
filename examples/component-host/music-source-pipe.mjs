@@ -1,4 +1,5 @@
 import net from 'node:net'
+import { libraryTools, validLibraryArgs } from './music-mcp-library.mjs'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { readFile, writeFile, rename } from 'node:fs/promises'
 import { unlinkSync } from 'node:fs'
@@ -49,6 +50,11 @@ export async function sourceEndpoint(profile, operation) {
   }
 }
 const pipePrefix = '\\\\.\\pipe\\fitbay-music-sources-'
+const heartbeat = (name, args) =>
+  name === 'agent_connected' &&
+  typeof args?.token === 'string' &&
+  /^[a-f0-9-]{36}$/.test(args.token) &&
+  Object.keys(args).length === 1
 const validId = { type: 'string', maxLength: 96 }
 const schema = (properties, required = Object.keys(properties)) => ({
   type: 'object',
@@ -77,6 +83,7 @@ export const sourceTools = [
     description: '切换到指定的已导入音源。',
     inputSchema: schema({ id: validId }),
   },
+  ...libraryTools,
 ]
 export function validCall(name, args) {
   const tool = sourceTools.find((t) => t.name === name)
@@ -87,6 +94,7 @@ export function validCall(name, args) {
     !keys.every((key) => Object.hasOwn(tool.inputSchema.properties, key))
   )
     return false
+  if (libraryTools.includes(tool)) return validLibraryArgs(tool, args)
   if (name === 'list_sources') return true
   if (name === 'import_sources')
     return (
@@ -149,9 +157,10 @@ export async function startSourcePipe(profile, call) {
         !timingSafeEqual(Buffer.from(token), Buffer.from(request.token))
       )
         throw Error('未授权')
-      if (!validCall(request.name, request.args)) throw Error('未知操作或参数无效')
+      if (!validCall(request.name, request.args) && !heartbeat(request.name, request.args))
+        throw Error('未知操作或参数无效')
       socket.setTimeout(600000)
-      const value = await call(request.name, request.args, controller.signal)
+      const value = await call(request.name, request.args, controller.signal, request.connection)
       socket.end(JSON.stringify({ value }) + '\n')
     } catch (e) {
       if (!socket.destroyed)
@@ -179,8 +188,8 @@ export async function startSourcePipe(profile, call) {
     } catch {}
   }
 }
-export async function requestSourceTool(profile, name, args, signal) {
-  if (!validCall(name, args)) throw Error('未知操作或参数无效')
+export async function requestSourceTool(profile, name, args, signal, connection) {
+  if (!validCall(name, args) && !heartbeat(name, args)) throw Error('未知操作或参数无效')
   let descriptor
   try {
     descriptor = JSON.parse(await readFile(await sourceEndpoint(profile, 'connect'), 'utf8'))
@@ -196,7 +205,7 @@ export async function requestSourceTool(profile, name, args, signal) {
   try {
     signal?.throwIfAborted()
     const reply = receive(socket, 2 * 1024 * 1024)
-    socket.write(JSON.stringify({ token: descriptor.token, name, args }) + '\n')
+    socket.write(JSON.stringify({ token: descriptor.token, name, args, connection }) + '\n')
     const result = await reply
     if (result.error) throw Error(result.error)
     return result.value

@@ -1,3 +1,5 @@
+import { libraryTools, callLibraryTool } from './music-mcp-library.mjs'
+import { musicMcpAgents } from './music-mcp-agents.mjs'
 import { reconcileRecycled } from './recycled-tracks.mjs'
 import { registerReleaseCatalog } from './release-catalog.mjs'
 import { desktopLyrics } from './desktop-lyrics.mjs'
@@ -103,6 +105,9 @@ export function musicService(
     script: mcpScript,
   }))
   bind('copyMcpCommand', () => clipboard.writeText(`node "${mcpScript}"`))
+  const agents = musicMcpAgents(profile, mcpScript, () => store)
+  bind('mcpAgents', agents.list)
+  bind('setMcpAgent', agents.toggle)
   bind('markMusicGuide', () => store.set('music-guide-v1', 1))
   const lx = registerLx(
     bind,
@@ -1125,8 +1130,18 @@ export function musicService(
   }, 60000)
   timer.unref()
   return {
-    async sourceTool(name, args, signal) {
+    async sourceTool(name, args, signal, connection) {
       ensureStore()
+      if (connection !== undefined && !agents.authorized(connection)) throw Error('Agent 连接已关闭')
+      if (name === 'agent_connected') {
+        agents.heartbeat(args.token)
+        return true
+      }
+      if (libraryTools.some(tool => tool.name === name)) {
+        const result = callLibraryTool(store,name,args)
+        if (['add_to_playlist','create_listening_playlist'].includes(name) && musicView && !musicView.isDestroyed()) musicView.send('music:library-changed',[])
+        return result
+      }
       try {
         return await lx.sourceTool(name, args, signal)
       } finally {

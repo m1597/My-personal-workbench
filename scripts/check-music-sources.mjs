@@ -89,7 +89,7 @@ await assert.rejects(bank.importSelected(['not-in-catalog'], signal))
 assert.ok(!JSON.stringify(bank.list()).includes('lx.send'))
 assert.deepEqual(
   sourceTools.map((t) => t.name),
-  ['list_sources', 'import_sources', 'source_capabilities', 'select_source'],
+  ['list_sources', 'import_sources', 'source_capabilities', 'select_source', 'recent_tracks', 'search_library', 'list_playlists', 'add_to_playlist', 'create_listening_playlist', 'compare_playlists'],
 )
 for (const [name, args] of [
   ['read_file', { path: 'x' }],

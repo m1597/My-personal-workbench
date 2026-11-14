@@ -18,6 +18,16 @@ if (!path.isAbsolute(profile) || process.argv.length > 3)
   throw Error('用法：node music-source-mcp.mjs [绝对 profile 路径]')
 const version = '2025-06-18'
 let phase = 'new'
+const connection = process.env.FITBAY_MUSIC_CONNECTION
+let timer
+function connected() {
+  if (!connection || timer) return
+  const notify = () =>
+    requestSourceTool(profile, 'agent_connected', { token: connection }).catch(() => {})
+  void notify()
+  timer = setInterval(notify, 20000)
+  timer.unref()
+}
 const pending = new Map()
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\n')
 const fail = (id, code, message) => send({ jsonrpc: '2.0', id, error: { code, message } })
@@ -29,7 +39,10 @@ async function dispatch(msg) {
   }
   const { id, method, params = {} } = msg
   if (id === undefined) {
-    if (method === 'notifications/initialized' && phase === 'initializing') phase = 'ready'
+    if (method === 'notifications/initialized' && phase === 'initializing') {
+      phase = 'ready'
+      connected()
+    }
     if (method === 'notifications/cancelled') pending.get(params.requestId)?.abort()
     return
   }
@@ -74,7 +87,7 @@ async function dispatch(msg) {
   const control = new AbortController()
   pending.set(id, control)
   try {
-    const value = await requestSourceTool(profile, params.name, args, control.signal)
+    const value = await requestSourceTool(profile, params.name, args, control.signal, connection)
     if (!control.signal.aborted)
       result(id, { content: [{ type: 'text', text: JSON.stringify(value) }] })
   } catch (e) {
@@ -105,3 +118,4 @@ for await (const chunk of process.stdin) {
   if (buffer.length > 16384) break
 }
 for (const controller of pending.values()) controller.abort()
+clearInterval(timer)

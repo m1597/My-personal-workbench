@@ -1,3 +1,4 @@
+import { MusicMcpSettings } from './MusicMcpSettings'
 import { type KeyboardEvent, useEffect, useState } from 'react'
 import { Button, Checkbox, Dropdown, Field, Input, Option } from '@fluentui/react-components'
 import { ModelSettings, type ModelInfo } from './ModelSettings'
@@ -337,44 +338,7 @@ export function MusicSettings({
         )}
         {category === 'library' && <LibraryTools refresh={refresh} />}
         {category === 'sources' && <MusicSourcesSettings />}
-        {category === 'mcp' && (
-          <section className="music-mcp-connection">
-            <h2>MCP</h2>
-            <p>
-              打开 Music 并保持运行。在支持 stdio 的本机 Agent 中新增 MCP 服务，使用以下启动命令。
-            </p>
-            <code>node "{script}"</code>
-            <div className="settings-buttons">
-              <Button
-                size="small"
-                data-guide-anchor="mcp"
-                disabled={!script}
-                onClick={async () => {
-                  try {
-                    await window.music.copyMcpCommand()
-                    setFeedback({ category, text: '已复制启动命令' })
-                  } catch {
-                    setFeedback({ category, text: '复制失败，请选中上方命令后按 Ctrl+C' })
-                  }
-                }}
-              >
-                复制启动命令
-              </Button>
-            </div>
-            <h3>连接后可以问 Agent</h3>
-            <ul>
-              <li>列出我已安装的音源。</li>
-              <li>当前音源支持哪些平台和音质？</li>
-              <li>从音源目录导入我选中的音源。</li>
-              <li>切换到另一个已安装的音源。</li>
-            </ul>
-            <p>
-              要整理本地歌曲，请在你自己的 Agent
-              中授权音乐文件夹，先让它列出移动和重命名前后的路径。
-              核对方案后再让它执行。外部移动或改名后，FitBay 中的旧条目可能需要「重新定位」。
-            </p>
-          </section>
-        )}
+        {category === 'mcp' && <MusicMcpSettings script={script} />}
         {(category === 'lyrics' || category === 'playback') && (
           <PlayerOptionsPane
             category={category}

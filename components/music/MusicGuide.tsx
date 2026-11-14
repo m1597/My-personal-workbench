@@ -85,7 +85,7 @@ export const guideSteps = [
     page: 'mcp',
     target: 'mcp',
     title: '把 Music 连到本机 Agent',
-    text: '将启动命令复制到支持 stdio 的本机 Agent，并保持 Music 运行。可先让它列出音源；整理文件前，先核对拟移动或重命名的路径。',
+    text: '按需启用外部 Agent 连接，选择客户端并重启。保持 Music 运行，即可让 Agent 按脚本组歌单或比较共有录音。',
   },
 ] as const
 

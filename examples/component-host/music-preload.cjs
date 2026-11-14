@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron')
 const names = [
   'musicGuide',
   'copyMcpCommand',
+  'mcpAgents',
+  'setMcpAgent',
   'markMusicGuide',
   'lyrics',
   'lyricTiming',

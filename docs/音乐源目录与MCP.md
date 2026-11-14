@@ -12,7 +12,19 @@
 
 仓库条目按目录 ID 合并原始与加速链接，并以脚本内容摘要识别已从本地导入的副本。刷新目录只取索引。下载脚本时优先 GitHub 原始地址，失败后尝试 GitHub Contents API 和上游列出的 gh-proxy.org 镜像。镜像可提供与 GitHub 不同的字节，导入后仍经过同一个隔离运行时。上游源会变更或失效，平台目录检索和脚本的取址操作可分别成功或失败。[上游目录](https://github.com/pdone/lx-music-source)
 
-## 接入本机 MCP 客户端
+## 可选的外部 Agent 连接
+
+在 Music 的设置中选择 MCP，打开「允许本机 Agent 连接 Music」。检测到一个支持的客户端时直接写入，多个时先选择 Codex 或 Claude Desktop。重启所选客户端并保持 Music 运行，设置页收到真实 MCP 初始化后的心跳才显示「已连接」。关闭开关移除 FitBay 写入且尚未被用户修改的条目；同名的既有条目和其他服务保留。Codex 通过官方 CLI 更新配置，Claude Desktop 使用其 stdio 配置文件。[Codex MCP](https://developers.openai.com/learn/docs-mcp/) · [Claude Desktop 配置](https://py.sdk.modelcontextprotocol.io/get-started/real-host/)
+
+可以直接在 Agent 的对话里提出以下任务。
+
+- 从最近播放的录音里找到上一首，加到指定歌单。使用 `recent_tracks`、`list_playlists` 和 `add_to_playlist`。
+- 结合当前对话里的视频脚本，使用 `search_library` 浏览或搜索可用本地录音，由 Agent 按镜头选择排序，用 `create_listening_playlist` 新建试听歌单。
+- 通过 `compare_playlists` 比较两个歌单，包含共有的在线引用。按相同录音 ID 匹配，保留第一个歌单内的顺序。
+
+列表工具传入从 0 开始的 `offset`，每次最多返回 50 项。曲库工具只传录音资料和 ID，以上任务无需授权文件夹。专项命令 `node scripts/check-music-mcp-settings.mjs` 使用独立客户端配置和测试曲库。
+
+### 手动接入
 
 本仓库已为 Codex 配置项目级 `fitbay_music`。从该工作区新开 Codex 会话并打开 FitBay 后，即可让 Agent 列出自己的已装音源、检查能力或切换。运行 `codex mcp get fitbay_music` 可以查看该项目实际加载的配置。其他 stdio 客户端可使用下面的配置。
 
@@ -48,7 +60,7 @@
 
 ## 权限审核和验证
 
-服务与当前 Windows 用户绑定。宿主在系统 LocalApplicationData 下原子创建仅当前用户有权限的 FitBayMusicAgent 目录，按 profile 的实际路径摘要分开描述符。启动和连接检查父目录写权限、重解析点、DACL 和所有者，验证失败时关闭该接口。每次启动生成随机命名管道和 256 位令牌。本机同一用户进程是信任边界；同一用户运行的不可信软件可使用该接口。客户端根据固定四工具清单校验参数，宿主独立再次校验。Agent 只能按目录 ID 导入，无法提供脚本内容、网页链接、文件路径或 IPC 名称。脚本照旧在工作线程中的 QuickJS WASM 加载，网络访问沿用既有公网与资源限制。
+服务与当前 Windows 用户绑定。宿主在系统 LocalApplicationData 下原子创建仅当前用户有权限的 FitBayMusicAgent 目录，按 profile 的实际路径摘要分开描述符。启动和连接检查父目录写权限、重解析点、DACL 和所有者，验证失败时关闭该接口。每次启动生成随机命名管道和 256 位令牌。本机同一用户进程是信任边界；同一用户运行的不可信软件可使用该接口。客户端根据固定的音源与曲库工具清单校验参数，宿主独立再次校验。Agent 只能按目录 ID 导入，无法提供脚本内容、网页链接、文件路径或 IPC 名称。脚本照旧在工作线程中的 QuickJS WASM 加载，网络访问沿用既有公网与资源限制。
 
 运行 `node scripts/check-music-sources.mjs` 复验旧源迁移、内容与 origin 去重、升级、不同源切换、部分失败、权限状态、错误令牌与异常 DACL 拒绝。测试会把独立 profile 的描述符临时授予内置 Users 读取权，验证连接被拒后删除。2026-11-12 实测专属目录关闭继承，唯一允许项为当前用户 FullControl；该用户及管理员仍应按正常系统安全方式保护主机。
 
