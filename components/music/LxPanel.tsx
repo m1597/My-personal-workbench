@@ -123,7 +123,7 @@ export function DownloadPane({
 }: {
   initialQuery?: string
   playlists: Playlist[]
-  onPlay: (key: string, quality: string) => Promise<void>
+  onPlay: (key: string, quality?: string) => Promise<void>
   onAdd: (playlist: string, key: string) => Promise<void>
   refresh: () => Promise<void>
   preferredQuality?: string
@@ -224,8 +224,8 @@ export function DownloadPane({
           <div className="search-result-actions">
             <Button
               size="small"
-              disabled={busy || (item.quality !== undefined && !item.quality.includes(quality))}
-              onClick={() => void act(() => onPlay(item.key, quality), false)}
+              disabled={busy || item.quality?.length === 0}
+              onClick={() => void act(() => onPlay(item.key), false)}
             >
               播放
             </Button>
@@ -405,7 +405,7 @@ export function DownloadPane({
         <>
           <div className="search-result-head">
             <label htmlFor="lx-quality">
-              音质{' '}
+              下载音质{' '}
               <Dropdown
                 inlinePopup
                 listbox={{ className: 'component-popup' }}

@@ -28,6 +28,11 @@ export type TasteStatus = {
 }
 export type TransportAction = 'toggle' | 'previous' | 'next'
 export type MusicPreferences = {
+  previewQuality: string
+  shortage: string
+  edition: string
+  cover: string
+  instrumental: string
   volume: number
   muted: boolean
   manualDir: string
@@ -193,6 +198,33 @@ export function MusicSettings({
     if (guideTarget === 'model') selectCategory('model')
     setEditing(open)
   }
+  function preference(
+    key: 'previewQuality' | 'shortage' | 'edition' | 'cover' | 'instrumental',
+    label: string,
+    options: Record<string, string>,
+  ) {
+    const value = prefs[key] || Object.keys(options)[0]
+    return (
+      <Field label={label}>
+        <Dropdown
+          inlinePopup
+          listbox={{ className: 'component-popup' }}
+          value={options[value]}
+          selectedOptions={[value]}
+          onOptionSelect={(_, d) => {
+            const selected = d.optionValue
+            if (selected) void update(() => window.music.setListeningPreference(key, selected))
+          }}
+        >
+          {Object.entries(options).map(([id, name]) => (
+            <Option key={id} value={id}>
+              {name}
+            </Option>
+          ))}
+        </Dropdown>
+      </Field>
+    )
+  }
   async function update(action: () => Promise<unknown>, message = '已保存') {
     setBusy(true)
     setFeedback(undefined)
@@ -323,7 +355,11 @@ export function MusicSettings({
         {category === 'downloads' && (
           <section>
             <h2>下载</h2>
-            <Field label="首选音质">
+            {preference('previewQuality', '试听音质', {
+              fast: '快速试听（最低可用音质）',
+              ...Object.fromEntries(qualities.map((q) => [q, q])),
+            })}
+            <Field label="下载音质">
               <Dropdown
                 inlinePopup
                 listbox={{ className: 'component-popup' }}
@@ -366,6 +402,25 @@ export function MusicSettings({
         {category === 'model' && (
           <section>
             <h2>模型与推荐</h2>
+            {preference('shortage', '直接相关歌曲不足时', {
+              ask: '保留已有歌曲并询问',
+              similar: '自动补充相近歌曲',
+            })}
+            {preference('edition', '录音版本', {
+              any: '都可以',
+              studio: '优先录音室',
+              live: '优先现场',
+            })}
+            {preference('cover', '翻唱', {
+              any: '都可以',
+              prefer: '优先翻唱',
+              avoid: '尽量避开翻唱',
+            })}
+            {preference('instrumental', '伴奏', {
+              requested: '仅在明确要求时推荐',
+              any: '都可以',
+              prefer: '优先伴奏',
+            })}
             <div className="settings-buttons">
               <span>{models.providers.find((p) => p.id === models.active)?.label}</span>
               <Button

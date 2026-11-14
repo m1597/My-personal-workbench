@@ -5,6 +5,7 @@ import {
   inLibrary,
   searchRecommendation,
   recordingPreference,
+  recordingRank,
   recordingDisplayTitle,
   namesRequestedArtist,
 } from './music-discovery.mjs'
@@ -25,7 +26,7 @@ import { sourceRequest, openPublic } from './lx-net.mjs'
 import { verifyAudio, AudioDecodeError } from './lx-audio-check.mjs'
 import { pathKey, openAudio } from './music/local-files.mjs'
 import { albumTags } from './music/albums.mjs'
-import { getMusicPreferences } from './music-preferences.mjs'
+import { chooseQuality, getMusicPreferences } from './music-preferences.mjs'
 import { publish } from './music/store.mjs'
 
 class SourceDownloadError extends Error {}
@@ -949,8 +950,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     const recording = recordingId(src, row)
     const qualities = recordingQualities(src, row)
     if (quality === undefined) {
-      const preferred = getMusicPreferences(getStore()).quality
-      quality = qualities.includes(preferred) ? preferred : qualities[0]
+      quality = chooseQuality(qualities, getMusicPreferences(getStore()).previewQuality)
     }
     if (!recording || !/^[\p{L}\p{N}._:-]{1,256}$/u.test(recording) || !qualities.includes(quality))
       throw Error('此版本没有可用的录音标识或音质')
@@ -1267,7 +1267,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             if (!row) throw Error('音乐源中已找不到该录音')
             const rights = permission(src, row)
             if (rights === 'denied' || rights === 'preview') throw Error(explanations[rights])
-            await downloadManual(src, row, record.quality, dir, signal, false)
+            const quality = chooseQuality(
+              recordingQualities(src, row),
+              getMusicPreferences(store).quality,
+            )
+            if (!quality) throw Error('此录音没有可下载音质')
+            await downloadManual(src, row, quality, dir, signal, false)
             results.push({ id, status: 'saved' })
           } catch (error) {
             signal.throwIfAborted()
@@ -1528,8 +1533,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           const rank = { exact: 0, variant: 1, cover: 2 }
           return [...candidates.values()].sort(
             (a, b) =>
+              recordingRank(a.row, constraints) - recordingRank(b.row, constraints) ||
               rank[titleMatch(item, a.row, constraints)] -
-              rank[titleMatch(item, b.row, constraints)],
+                rank[titleMatch(item, b.row, constraints)],
           )[0]
         }
         const exact = [...candidates.values()].filter(
@@ -1778,13 +1784,19 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     const source = JSON.parse(installed.payload)
     const platform =
       source.platforms?.[record.platform] ?? (source.platform === record.platform ? source : null)
-    if (!platform?.quality.includes(record.quality)) throw Error('原音乐源已不支持此音质')
+    if (!platform?.quality.length) throw Error('原音乐源已不支持此音质')
     const src = { ...source, ...platform }
     return { record, src }
   }
   return {
     onlineAddress(id) {
       const { record, src } = onlineRecording(id)
+      const preferred = getMusicPreferences(getStore()).previewQuality
+      const resolve = (entry, signal) => {
+        const quality = chooseQuality(recordingQualities(src, entry), preferred)
+        if (!quality) throw Error('此版本没有可试听音质')
+        return recordingAddress(src, entry, quality, signal)
+      }
       let row = onlineRows.get(id)
       return async (signal) => {
         if (!row) {
@@ -1793,7 +1805,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           if (!src.search) {
             try {
               const saved = JSON.parse(record.identifiers)
-              const url = await recordingAddress(src, saved, record.quality, signal)
+              const url = await resolve(saved, signal)
               row = saved
               return url
             } catch {
@@ -1809,7 +1821,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           row = rows[0]
           if (!row) throw Error('音乐源中已找不到该录音，请重新搜索')
         }
-        return recordingAddress(src, row, record.quality, signal)
+        return resolve(row, signal)
       }
     },
     synchronizeSources(signal) {

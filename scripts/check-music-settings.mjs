@@ -161,7 +161,7 @@ try {
     await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows().some((w) => w.isFocused())),
   ).toBe(false)
   await selectMusicSettings(player, '下载')
-  await player.getByRole('combobox', { name: '首选音质' }).click()
+  await player.getByRole('combobox', { name: '下载音质' }).click()
   await expect(player.getByRole('listbox')).toBeVisible()
   await player.screenshot({ path: path.join(evidence, 'quality-menu.png') })
   await player.getByRole('option', { name: 'flac', exact: true }).click()

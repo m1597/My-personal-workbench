@@ -60,7 +60,7 @@ for (const [platform, label] of [
       .filter({ hasText: artist })
       .first()
     await expect(selected).toBeVisible({ timeout: 60000 })
-    await pane.getByRole('combobox', { name: '音质', exact: true }).click()
+    await pane.getByRole('combobox', { name: '下载音质', exact: true }).click()
     await page.getByRole('option', { name: '128k', exact: true }).click()
     await selected.getByRole('button', { name: '下载', exact: true }).click()
     await expect(find).toBeEnabled({ timeout: 240000 })

@@ -1,4 +1,20 @@
 const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
+const choices = {
+  previewQuality: ['fast', ...qualities],
+  shortage: ['ask', 'similar'],
+  edition: ['any', 'studio', 'live'],
+  cover: ['any', 'prefer', 'avoid'],
+  instrumental: ['requested', 'any', 'prefer'],
+}
+export function setListeningPreference(store, key, value) {
+  if (!Object.hasOwn(choices, key) || !choices[key].includes(value)) throw Error('无效的音乐偏好')
+  store.set('music-pref-' + key, value)
+}
+export function chooseQuality(available, preference) {
+  if (available.includes(preference)) return preference
+  const order = preference === 'fast' ? qualities : [preference, '320k', ...qualities]
+  return order.find((q) => available.includes(q)) ?? available[0]
+}
 export const mediaBindings = {
   toggle: 'MediaPlayPause',
   previous: 'MediaPreviousTrack',
@@ -9,6 +25,12 @@ export function getMusicPreferences(store) {
   const quality = store.get('music-quality')
   const level = Number(store.get('music-volume') || 100)
   return {
+    ...Object.fromEntries(
+      Object.entries(choices).map(([key, values]) => {
+        const value = store.get('music-pref-' + key)
+        return [key, values.includes(value) ? value : values[0]]
+      }),
+    ),
     volume: Number.isInteger(level) && level >= 1 && level <= 100 ? level : 100,
     muted: store.get('music-muted') === 'on',
     manualDir: store.get('music-manual-dir'),

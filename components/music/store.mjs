@@ -55,7 +55,7 @@ export class MusicStore {
       if (/^\.fitbay-[a-f0-9-]{36}\.part$/.test(file)) unlinkSync(path.join(this.cache, file))
     }
     this.db.exec(`CREATE TABLE IF NOT EXISTS recommendation_runs(batch TEXT PRIMARY KEY,targetCount INTEGER NOT NULL,state TEXT NOT NULL,message TEXT);
-      UPDATE recommendation_runs SET state='cancelled',message='上次生成已中断' WHERE state='running'`)
+      UPDATE recommendation_runs SET state='cancelled',message='上次生成已中断' WHERE state IN ('running','awaiting')`)
     this.jobs = new Map()
     this.active = null
     this.db.exec("UPDATE items SET status='中断' WHERE status IN ('等候','下载中')")

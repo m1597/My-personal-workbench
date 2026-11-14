@@ -83,7 +83,7 @@ type Batch = {
   day: string
   preference: string
   targetCount: number | null
-  state: 'running' | 'completed' | 'cancelled' | 'blocked' | null
+  state: 'running' | 'awaiting' | 'partial' | 'completed' | 'cancelled' | 'blocked' | null
   message: string | null
   details: string | null
 }
@@ -158,6 +158,8 @@ declare global {
         copyMcpCommand(): Promise<void>
         markMusicGuide(): Promise<void>
         setMusicQuality(quality: string): Promise<void>
+        setListeningPreference(key: string, value: string): Promise<void>
+        answerShortage(batch: string, expand: boolean): Promise<void>
         setMusicOutput(volume: number, muted: boolean): Promise<void>
         setMusicShortcut(action: TransportAction, key: string): Promise<void>
         setMusicMediaKeys(enabled: boolean): Promise<void>
@@ -465,7 +467,7 @@ function Music() {
   }, [tab])
   const [generating, setGenerating] = useState(false)
   const batch = state?.batches[0]
-  const running = batch?.state === 'running'
+  const running = batch?.state === 'running' || batch?.state === 'awaiting'
   const working =
     running ||
     generating ||
@@ -1490,6 +1492,22 @@ function Music() {
                             : batch.message && `，${batch.message}`}
                       </p>
                       {running && <StopRecommendation refresh={refresh} />}
+                      {batch.state === 'awaiting' && (
+                        <>
+                          <Button
+                            size="small"
+                            onClick={() => void act(() => host.answerShortage(batch.id, false))}
+                          >
+                            保留当前结果
+                          </Button>
+                          <Button
+                            size="small"
+                            onClick={() => void act(() => host.answerShortage(batch.id, true))}
+                          >
+                            扩大到相近歌曲
+                          </Button>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <p role="status">已下载 {downloaded.length} 首</p>

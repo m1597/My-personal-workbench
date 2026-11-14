@@ -15,11 +15,16 @@ import {
   inLibrary,
   artistMatches,
   namesRequestedArtist,
-  recordingPreference,
+  recordingConstraints,
 } from './music-discovery.mjs'
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
-import { getMusicPreferences, setMusicOutput, setMusicQuality } from './music-preferences.mjs'
+import {
+  getMusicPreferences,
+  setMusicOutput,
+  setMusicQuality,
+  setListeningPreference,
+} from './music-preferences.mjs'
 import { lstat, realpath } from 'node:fs/promises'
 import { openAudio, pathKey, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
@@ -496,6 +501,13 @@ export function musicService(
     },
   }))
   bind('setMusicQuality', (quality) => setMusicQuality(store, quality))
+  bind('setListeningPreference', (key, value) => setListeningPreference(store, key, value))
+  let shortageDecision
+  bind('answerShortage', (batch, expand) => {
+    if (!shortageDecision || shortageDecision.batch !== batch || typeof expand !== 'boolean')
+      throw Error('此批次没有待确认的范围选择')
+    shortageDecision.answer(expand)
+  })
   bind('setMusicOutput', (volume, muted) => setMusicOutput(store, volume, muted))
   bind('setMusicShortcut', (action, key) => shortcuts.setCustom(store, action, key))
   bind('setMusicMediaKeys', (enabled) => shortcuts.setMedia(store, enabled))
@@ -664,6 +676,10 @@ export function musicService(
         let freshSelected = false
         let refilling
         let refillError
+        const prefs = getMusicPreferences(store)
+        let exhausted = false
+        let broadened = false
+        let keepPartial = false
         const sourceHealth = {
           catalogSync,
           lyricTasks: [],
@@ -671,9 +687,31 @@ export function musicService(
           queries: new Map(),
           cooldown: new Map(),
           catalogRecordings: new Map(),
-          constraints: { version: recordingPreference(preference), artist: '' },
+          constraints: { ...recordingConstraints(preference, prefs), artist: '' },
         }
         async function refill(represented, savedCount, work) {
+          if (exhausted && !broadened) {
+            let expand = prefs.shortage === 'similar'
+            if (!expand) {
+              update('awaiting', '直接相关的候选已用尽，是否扩大到相近歌曲？')
+              const decision = Promise.withResolvers()
+              const abort = () => decision.reject(work.reason)
+              shortageDecision = { batch, answer: decision.resolve }
+              work.addEventListener('abort', abort, { once: true })
+              try {
+                work.throwIfAborted()
+                expand = await decision.promise
+              } finally {
+                work.removeEventListener('abort', abort)
+                shortageDecision = undefined
+              }
+            }
+            if (!expand) {
+              keepPartial = true
+              return
+            }
+            broadened = true
+          }
           stalled = round && savedCount <= roundSaved ? stalled + 1 : 0
           if (stalled >= 6)
             throw Error(
@@ -706,12 +744,18 @@ export function musicService(
           const excluded = [...(profile ? history.slice(-20) : []), ...seen.slice(-100)].map(
             ({ title, artist }) => ({ title, artist }),
           )
-          const { songs: rows, requestedArtist } = await requestMusicModel(
+          const {
+            songs: rows,
+            requestedArtist,
+            directExhausted,
+          } = await requestMusicModel(
             store,
             safeStorage,
             'recommend',
             {
               preference,
+              scope: broadened ? 'related' : 'direct',
+              recording: sourceHealth.constraints,
               mode,
               similar: mode === 'artist' && similar,
               // Keep alternates in memory on refills. The reservation limit below still
@@ -729,6 +773,7 @@ export function musicService(
             work,
           )
           work.throwIfAborted()
+          exhausted = !!preference.trim() && directExhausted
           if (mode === 'auto' && !seen.length && !requiredArtist) {
             if (requestedArtist && namesRequestedArtist(preference, requestedArtist, true))
               requiredArtist = requestedArtist
@@ -752,7 +797,7 @@ export function musicService(
           update('running', '正在匹配录音')
         }
         await lx.batch(batch, signal, sourceHealth, async (work) => {
-          while (!refillError) {
+          while (!refillError && !keepPartial) {
             work.throwIfAborted()
             const saved = savedRows.all(batch)
             const active = reservations.all(batch)
@@ -769,6 +814,7 @@ export function musicService(
             )
             if (index < 0 && (!freshSelected || (!active.length && saved.length === roundSaved)))
               index = candidates.findIndex((row) => reserves.has(row))
+            if (index < 0 && exhausted && candidates.length) index = 0
             if (index >= 0) {
               const row = candidates.splice(index, 1)[0]
               store.saveSuggestions(label, [row], '待处理', batch)
@@ -777,6 +823,7 @@ export function musicService(
               if (!reserves.has(row)) freshSelected = true
               return entry.id
             }
+            if (exhausted && !broadened && active.length) return
             // All idle workers share a single refill, while other workers keep their recordings.
             refilling ??= refill(represented, saved.length, work)
               .catch((error) => {
@@ -791,7 +838,10 @@ export function musicService(
         })
         signal.throwIfAborted()
         if (refillError && savedRows.all(batch).length < targetCount) throw refillError
-        update('completed', '已达到目标首数')
+        update(
+          keepPartial ? 'partial' : 'completed',
+          keepPartial ? '已保留直接相关的歌曲' : '已达到目标首数',
+        )
       } catch (error) {
         if (!signal.aborted)
           update(

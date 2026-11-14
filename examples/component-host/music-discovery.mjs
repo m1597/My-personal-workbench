@@ -43,6 +43,7 @@ function titles(title, artist) {
   return values
 }
 const versionLabels = [
+  ['cover', /^(?:cover(?: version)?|翻唱(?:版)?)$/iu],
   [
     'live',
     /^(?:live(?:\s+(?:version|ver\.?|at\b.+|in\b.+|from\b.+|\d{4}.*))?|现场(?:版|录音)?|現場(?:版|錄音)?|ライブ(?:版)?|演唱会(?:版|现场)?)$/iu,
@@ -101,6 +102,37 @@ const liveAlbum = (name) =>
   /(?:^live$|\blive (?:at|in|from|recording|version|album|(?:19|20)\d{2})\b|[(【]live[)】]|现场(?:版|录音)|現場版|演唱会现场|ライブ盤)/iu.test(
     name ?? '',
   )
+export function recordingConstraints(text, prefs) {
+  const description = fold(text)
+  const choice = (pattern, fallback) => {
+    const match = description.match(
+      new RegExp('(?:不要|不听|排除|避免|别来)\\s*(?:听)?\\s*(?:' + pattern + ')', 'iu'),
+    )
+    if (match) return 'exclude'
+    return new RegExp(pattern, 'iu').test(description) ? 'require' : fallback
+  }
+  return {
+    version: recordingPreference(text),
+    editionPreference: prefs.edition,
+    cover: choice('翻唱|cover\\b', prefs.cover),
+    instrumental: choice('伴奏|纯音乐|instrumental', prefs.instrumental),
+  }
+}
+export function recordingRank(row, constraints) {
+  const version = edition(row.name ?? row.title)
+  const live = version.kind === 'live' || liveAlbum(row.albumName)
+  const cover =
+    version.kind === 'cover' ||
+    (originalArtists(row) && !artistMatches(row.singer ?? row.artist, originalArtists(row)))
+  return (
+    Number(
+      (constraints.editionPreference === 'live' && !live) ||
+        (constraints.editionPreference === 'studio' && live),
+    ) +
+    Number((constraints.cover === 'prefer' && !cover) || (constraints.cover === 'avoid' && cover)) +
+    Number(constraints.instrumental === 'prefer' && version.kind !== 'instrumental')
+  )
+}
 export function titleMatch(item, row, constraints = {}) {
   const artist = row.singer ?? row.artist
   if (constraints.artist && !artistMatches(constraints.artist, artist, row.artistAliases)) return ''
@@ -121,6 +153,15 @@ export function titleMatch(item, row, constraints = {}) {
       if (!key(request.base) || key(request.base) !== key(entry.base)) continue
       const kind = primary.kind || (albumLive ? 'live' : '')
       const cover = primary.origin || explicitOriginal
+      const isCover = kind === 'cover' || !!(cover && !artistMatches(artist, cover))
+      if (
+        (constraints.cover === 'require' && !isCover) ||
+        (constraints.cover === 'exclude' && isCover)
+      )
+        continue
+      if (constraints.instrumental === 'require' && kind !== 'instrumental') continue
+      if (['requested', 'exclude'].includes(constraints.instrumental) && kind === 'instrumental')
+        continue
       if (!sameArtist && !(cover && artistMatches(item.artist, cover))) continue
       if (request.kind && request.kind !== kind && !(request.kind === 'original' && !kind)) continue
       if (

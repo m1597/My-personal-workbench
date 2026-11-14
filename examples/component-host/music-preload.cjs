@@ -24,6 +24,8 @@ const names = [
   'lxPreview',
   'lxCancel',
   'setMusicQuality',
+  'setListeningPreference',
+  'answerShortage',
   'setMusicOutput',
   'setMusicShortcut',
   'setMusicMediaKeys',
