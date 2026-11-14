@@ -115,9 +115,7 @@ try {
   await unlink(tracks.外部删除.file)
   await openHistory(page)
   await expect(history.getByRole('button', { name: /昨日曲目/ })).toBeVisible()
-  evidence.afterFileRemoval = await history
-    .locator('li > strong')
-    .allTextContents()
+  evidence.afterFileRemoval = await history.locator('li > strong').allTextContents()
   await app.close()
   app = await launch()
   const reopened = await app.firstWindow()

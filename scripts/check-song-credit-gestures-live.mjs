@@ -25,7 +25,7 @@ const getSong = db.prepare(
 const initial = getSong.get('Beautiful World'),
   song = getSong.get('One Last Kiss')
 try {
-  assert.ok(initial && song && song.album && song.artist)
+  assert.ok(initial && song?.album && song.artist)
   isolateRecommendationProfile(db, directory)
   for (const t of [initial, song]) {
     const copy = path.join(root, t.id + path.extname(t.file))
@@ -102,14 +102,14 @@ try {
           gesture: '双击',
           before,
           after: await time(),
-          playing: await now.innerText(),
+          playing: await now.textContent(),
           list: await query.inputValue(),
         })
       } else {
         await link.click()
         await expect(home.getByRole('heading', { name: title, exact: true })).toBeVisible()
         await expect(now).toHaveText(initial.title)
-        evidence.push({ kind, gesture: '单击', home: title, playing: await now.innerText() })
+        evidence.push({ kind, gesture: '单击', home: title, playing: await now.textContent() })
         await page.getByRole('tab', { name: '曲库', exact: true }).click()
       }
     }
