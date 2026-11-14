@@ -57,6 +57,8 @@ const names = [
   'personWorks',
   'albumCover',
   'trackCover',
+  'playlistArtwork',
+  'changePlaylistArtwork',
   'moveSidebarItem',
   'createPlaylist',
   'setMembership',

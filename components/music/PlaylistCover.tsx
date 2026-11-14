@@ -1,62 +1,77 @@
 import { useEffect, useState } from 'react'
 import { defaultCover, requestCover } from './AlbumBrowser'
-import type { LocalTrack, PlaylistTrack } from './LibraryPane'
+
 import './playlist-cover.css'
 
 export function PlaylistCover({
-  members,
-  tracks,
+  id,
+  latest,
   revision,
 }: {
-  members: PlaylistTrack[]
-  tracks: LocalTrack[]
+  id: string
+  latest?: string
   revision: number
 }) {
-  const localById = new Map(tracks.map((t) => [t.id, t]))
-  const albums = new Set<string>()
-  const ids: string[] = []
-  for (const member of members) {
-    const track = member.origin === 'online' ? localById.get(member.localCopy ?? '') : member
-    if (!track) continue
-    const group = JSON.stringify(
-      [track.album, track.albumArtist || track.artist].map((s) =>
-        s.trim().normalize().toLowerCase(),
-      ),
-    )
-    if (albums.has(group)) continue
-    albums.add(group)
-    ids.push(track.id)
-  }
-  const candidates = JSON.stringify(ids)
-  const [result, setResult] = useState<{ candidates: string; revision: number; urls: string[] }>()
+  const [custom, setCustom] = useState<string | null>()
+  const [error, setError] = useState('')
+  const [version, setVersion] = useState(0)
   useEffect(() => {
     let alive = true
-    async function load() {
-      const urls = new Set<string>()
-      for (const id of JSON.parse(candidates) as string[]) {
-        const cover = await requestCover(id, true, revision).catch(() => null)
-        if (!alive) return
-        if (cover) urls.add(cover)
-        if (urls.size === 4) break
-      }
-      if (alive) setResult({ candidates, revision, urls: [...urls] })
-    }
-    void load()
+    window.music
+      .playlistArtwork(id)
+      .then((url) => {
+        if (alive) setCustom(url)
+      })
+      .catch(() => {
+        if (alive) setCustom(null)
+      })
     return () => {
       alive = false
     }
-  }, [candidates, revision])
-  const covers =
-    result?.candidates === candidates && result.revision === revision ? result.urls : []
-  const tiles =
-    covers.length < 2
-      ? [covers[0] ?? defaultCover]
-      : Array.from({ length: 4 }, (_, i) => covers[i] ?? defaultCover)
+  }, [id, version])
+  async function change(reset: boolean) {
+    try {
+      await window.music.changePlaylistArtwork(id, reset)
+      setError('')
+      setVersion((n) => n + 1)
+    } catch (e) {
+      setError(String(e).split('Error: ').pop() || '更换封面失败')
+    }
+  }
+  const [automatic, setAutomatic] = useState<{ id: string; revision: number; url: string }>()
+  useEffect(() => {
+    if (custom !== null || !latest) return
+    let alive = true
+    void requestCover(latest, true, revision)
+      .then((url) => {
+        if (alive && url) setAutomatic({ id: latest, revision, url })
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [latest, revision, custom])
+  const src =
+    custom ||
+    (automatic?.id === latest && automatic?.revision === revision && automatic.url) ||
+    defaultCover
   return (
-    <span className="playlist-cover" data-single={tiles.length === 1} aria-hidden="true">
-      {tiles.map((src, i) => (
-        <img key={src === defaultCover ? 'default-' + i : src} src={src} alt="" />
-      ))}
-    </span>
+    <div className="playlist-artwork">
+      <button
+        type="button"
+        className="playlist-cover"
+        onClick={() => void change(false)}
+        title="更换歌单封面"
+        aria-label="更换歌单封面"
+      >
+        <img src={src} alt="" />
+      </button>
+      {custom && (
+        <button className="catalog-text-link" type="button" onClick={() => void change(true)}>
+          恢复自动封面
+        </button>
+      )}
+      {error && <small role="alert">{error}</small>}
+    </div>
   )
 }

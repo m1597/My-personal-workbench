@@ -76,6 +76,7 @@ export type LocalTrack = {
   hiddenFromRecent?: number
   lastHeardAt: number | null
   size: number | null
+  favoritedAt?: number
   favorite: number
   origin: 'local' | 'download' | 'daily'
   playCount: number
@@ -543,7 +544,24 @@ export function LibraryPane({
             <>
               <div className="library-title">
                 {playlistPage && (
-                  <PlaylistCover members={members} tracks={tracks} revision={albumRevision} />
+                  <PlaylistCover
+                    key={`artwork-${collection}`}
+                    id={collection}
+                    latest={
+                      currentPlaylist?.additions.at(-1)?.[0] ??
+                      (collection === 'favorites'
+                        ? members.reduce<LocalTrack | undefined>(
+                            (last, t) =>
+                              t.origin !== 'online' &&
+                              (!last || (t.favoritedAt ?? 0) > (last.favoritedAt ?? 0))
+                                ? t
+                                : last,
+                            undefined,
+                          )?.id
+                        : undefined)
+                    }
+                    revision={albumRevision}
+                  />
                 )}
                 <div>
                   <h2>

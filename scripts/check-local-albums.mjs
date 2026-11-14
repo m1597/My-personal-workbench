@@ -11,6 +11,7 @@ const profile = path.join(root, 'profile')
 const library = path.join(root, 'albums')
 await mkdir(library)
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
+store.set('lx-bootstrap', 'done')
 store.set('music-guide-v1', '1')
 store.set('music-muted', 'on')
 store.set('music-media-keys', 'off')
@@ -235,9 +236,9 @@ try {
   const images = page.locator('.playlist-cover img')
   for (const [list, expected] of [
     ['无封面', [null]],
-    ['单封面', [ids[0]]],
-    ['双封面', [ids[0], ids[3], null, null]],
-    ['四季', [ids[0], ...ids.slice(3, 6)]],
+    ['单封面', [ids[1]]],
+    ['双封面', [ids[3]]],
+    ['四季', [ids.at(-1)]],
   ]) {
     await choose(list)
     await expect(images).toHaveCount(expected.length)
@@ -252,6 +253,59 @@ try {
       style: ':root {background:var(--base) !important}',
     })
   }
+  const listId = await page.evaluate(() => window.music.createPlaylist('封面顺序', []))
+  // The IPC mutation returns the collection delta on the next state refresh.
+  await page.reload()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
+  const customFile = path.resolve('src/renderer/public/fitbay.png')
+  for (const [group, collection] of [
+    ['封面顺序', listId],
+    ['我的收藏', 'favorites'],
+  ]) {
+    await choose(group)
+    const add = async (track, on) => {
+      await page.evaluate(
+        ([collection, track, on]) =>
+          collection === 'favorites'
+            ? window.music.setFavorite(track, on)
+            : window.music.setMembership(collection, track, on),
+        [collection, track, on],
+      )
+      await page.reload()
+      await page.getByRole('tab', { name: '歌单', exact: true }).click()
+      await choose(group)
+    }
+    const thumbnail = async (track) => {
+      const src = track ? await page.evaluate((id) => window.music.trackCover(id), track) : null
+      await expect(images).toHaveAttribute('src', src || './default-cover.png')
+    }
+    await thumbnail(null)
+    await add(ids[3], true)
+    await thumbnail(ids[3])
+    await add(ids[4], true)
+    await thumbnail(ids[4])
+    if (group !== '我的收藏')
+      await page.evaluate((id) => window.music.setPlaylistSort(id, 'title', true), collection)
+    await thumbnail(ids[4])
+    await add(ids[4], false)
+    await thumbnail(ids[3])
+    await add(ids[2], true)
+    await thumbnail(null)
+    await add(ids[2], false)
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+    }, customFile)
+    await choose('更换歌单封面')
+    await expect(page.getByRole('button', { name: '恢复自动封面' })).toBeVisible()
+    const custom = await images.getAttribute('src')
+    await add(ids[4], true)
+    await add(ids[3], false)
+    await expect(images).toHaveAttribute('src', custom)
+    await choose('恢复自动封面')
+    await thumbnail(ids[4])
+    await page.screenshot({ path: path.join(root, group + '-最近加入.png') })
+  }
+  await choose('四季')
   await page.getByRole('searchbox', { name: '搜索本地歌曲' }).fill('Noon')
   await expect(page.locator('.library-title')).toContainText('1 / 7 首歌曲')
   const seconds = (await state()).localTracks

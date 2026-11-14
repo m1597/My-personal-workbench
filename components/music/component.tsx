@@ -164,6 +164,8 @@ declare global {
         albums(): Promise<Album[]>
         albumCover(id: string): Promise<string | null>
         trackCover(id: string): Promise<string | null>
+        playlistArtwork(id: string): Promise<string | null>
+        changePlaylistArtwork(id: string, reset: boolean): Promise<void>
         musicGuide(): Promise<{ seen: boolean; script: string }>
         copyMcpCommand(): Promise<void>
         markMusicGuide(): Promise<void>
@@ -898,9 +900,7 @@ function Music() {
   const previousTab = useRef('library')
   const showPlayer = tab === 'playing'
   const needLyrics = lyricsOpen || showPlayer
-  const coverId =
-    (active && ('duration' in active ? active.origin !== 'online' && active.id : active.localId)) ||
-    undefined
+  const coverId = (active && ('duration' in active ? active.id : active.localId)) || undefined
   const favoriteTrack = coverId ? trackById.get(coverId) : undefined
   const favoriteButton = favoriteTrack && favoriteTrack.origin !== 'online' && (
     <Button

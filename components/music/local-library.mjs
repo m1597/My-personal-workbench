@@ -23,6 +23,10 @@ export class LocalLibrary {
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS music_roots(dir TEXT PRIMARY KEY COLLATE NOCASE);
         CREATE TABLE IF NOT EXISTS playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE);
+        CREATE TABLE IF NOT EXISTS playlist_artwork(id TEXT PRIMARY KEY,image BLOB NOT NULL);
+        CREATE TRIGGER IF NOT EXISTS discard_playlist_artwork AFTER DELETE ON playlists BEGIN
+          DELETE FROM playlist_artwork WHERE id=OLD.id; END;
+        CREATE TABLE IF NOT EXISTS recording_artwork(platform TEXT,recording TEXT,address TEXT,catalogId TEXT,image TEXT,PRIMARY KEY(platform,recording));
         CREATE TABLE IF NOT EXISTS playlist_tracks(
           playlist TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
           track TEXT NOT NULL REFERENCES local_tracks(id) ON DELETE CASCADE,
@@ -185,6 +189,14 @@ export class LocalLibrary {
               .prepare('UPDATE local_tracks SET favorite=1 WHERE path_key=?')
               .run(pathKey(path.join(root, row.file)))
       }
+      if (!trackColumns.some((column) => column.name === 'favoritedAt')) {
+        this.db.exec(`ALTER TABLE local_tracks ADD COLUMN favoritedAt INTEGER NOT NULL DEFAULT 0;
+          UPDATE local_tracks SET favoritedAt=COALESCE(observedAt,0) WHERE favorite=1;
+          CREATE TRIGGER track_favorite_time AFTER UPDATE OF favorite ON local_tracks
+          WHEN OLD.favorite<>NEW.favorite AND NEW.favoritedAt=OLD.favoritedAt BEGIN
+            UPDATE local_tracks SET favoritedAt=CASE WHEN NEW.favorite=1 THEN unixepoch('subsec')*1000 ELSE 0 END WHERE id=NEW.id;
+          END;`)
+      }
       if (!trackColumns.some((column) => column.name === 'awaitingLocation'))
         this.db.exec(
           'ALTER TABLE local_tracks ADD COLUMN awaitingLocation INTEGER NOT NULL DEFAULT 0',
@@ -292,7 +304,7 @@ export class LocalLibrary {
   list() {
     const rows = this.db
       .prepare(
-        `SELECT id,title,artist,album,albumArtist,discNumber,trackNumber,duration,available,listed,file,observedAt,lastHeardAt,hiddenFromRecent,size,favorite,
+        `SELECT id,title,artist,album,albumArtist,discNumber,trackNumber,duration,available,listed,file,observedAt,lastHeardAt,hiddenFromRecent,size,favorite,favoritedAt,
         (SELECT COUNT(*) FROM local_play_history h WHERE h.track=local_tracks.id) AS playCount,
         COALESCE((SELECT CASE MAX(v.automatic) WHEN 1 THEN 'daily' WHEN 0 THEN 'download' END FROM recording_copies v WHERE v.local=local_tracks.id),importedOrigin) AS origin,
         (SELECT source || ' · ' || quality FROM recording_copies v WHERE v.local=local_tracks.id AND v.automatic=1 LIMIT 1) AS recommendationSource FROM local_tracks ORDER BY title COLLATE NOCASE,artist,id`,

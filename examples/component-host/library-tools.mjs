@@ -159,9 +159,20 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
       if (count !== ids.length) throw Error('歌曲已移除')
       changed = db
         .prepare(
-          'UPDATE local_tracks SET favorite=? WHERE favorite<>? AND id IN (SELECT value FROM json_each(?))',
+          `WITH selected AS MATERIALIZED (SELECT value,key FROM json_each(?))
+          UPDATE local_tracks SET favorite=?,favoritedAt=CASE WHEN ? THEN ?+(SELECT key FROM selected WHERE value=local_tracks.id) ELSE 0 END
+          WHERE favorite<>? AND id IN (SELECT value FROM selected)`,
         )
-        .run(Number(on), Number(on), data).changes
+        .run(
+          data,
+          Number(on),
+          Number(on),
+          Math.max(
+            Date.now(),
+            1 + db.prepare('SELECT MAX(favoritedAt) AS last FROM local_tracks').get().last,
+          ),
+          Number(on),
+        ).changes
       db.exec('COMMIT')
     } catch (e) {
       db.exec('ROLLBACK')

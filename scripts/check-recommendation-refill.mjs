@@ -15,6 +15,7 @@ await fs.mkdir(output)
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
 const cancellation = process.env.FITBAY_TEST_RECOMMEND_STOP
 if (cancellation === 'consent') store.set('taste-consent', '1')
+store.set('lx-bootstrap', 'done')
 store.set('music-recommend-dir', output)
 store.set('music-media-keys', 'off')
 store.set('music-guide-v1', 1)
@@ -37,7 +38,7 @@ lx.on('request', ({action,info}) => {
   if(action === 'musicUrl') return 'https://1.1.1.1/audio/' + encodeURIComponent(info.musicInfo.name)
   if(action !== 'search') return ''
   const name = info.keyword.split(' ')[0]
-  return [{id:name,name,singer:'青禾',allowPermanentSave:!name.startsWith('限听')}]
+  return [{id:name,name,singer:'青禾',picUrl:name==='晨风'?'https://p1.music.126.net/fixture.png':undefined,allowPermanentSave:!name.startsWith('限听')}]
 })
 lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
 )
@@ -65,8 +66,29 @@ try {
       const fs = process.getBuiltinModule('node:fs')
       const https = process.getBuiltinModule('node:https')
       const { EventEmitter } = process.getBuiltinModule('node:events')
+      const dns = process.getBuiltinModule('node:dns/promises')
+      const lookup = dns.lookup
+      dns.lookup = (host, ...args) =>
+        host === 'p1.music.126.net'
+          ? Promise.resolve([{ address: '1.1.1.1', family: 4 }])
+          : lookup(host, ...args)
+      process.getBuiltinModule('node:module').syncBuiltinESMExports()
+      globalThis.artRequests = 0
       globalThis.transfers = []
       https.request = (url, options, receive) => {
+        if (url.href === 'https://p1.music.126.net/fixture.png') {
+          globalThis.artRequests++
+          const req = new EventEmitter()
+          req.end = () =>
+            receive(
+              Object.assign(fs.createReadStream(files.cover), {
+                statusCode: 200,
+                headers: { 'content-type': 'image/png' },
+                setTimeout() {},
+              }),
+            )
+          return req
+        }
         if (url.origin !== 'https://1.1.1.1') throw Error('夹具意外请求')
         const title = decodeURIComponent(url.pathname.slice('/audio/'.length))
         if (!files[title]) throw Error('无授权曲目触发了音频请求')
@@ -133,7 +155,7 @@ try {
         })
       }
     },
-    { files, code, songs },
+    { files: { ...files, cover: path.resolve('src/renderer/public/fitbay.png') }, code, songs },
   )
   await page.evaluate(async () => {
     await window.music.lxImport()
@@ -299,7 +321,21 @@ try {
     )
     assert.equal((await fs.readdir(output)).filter((f) => f.endsWith('.wav')).length, 5)
     assert.deepEqual(counts, [5, 5])
-    const report = { ...times, counts, events, transfers, root }
+    const expectedCover =
+      'data:image/png;base64,' +
+      (await fs.readFile('src/renderer/public/fitbay.png')).toString('base64')
+    const recommendation = page.locator('.music-list li').filter({ hasText: '晨风' }).first()
+    await expect(recommendation.locator('.album-art img')).toHaveAttribute('src', expectedCover)
+    await recommendation.getByRole('button', { name: '试听晨风', exact: true }).click()
+    await expect(page.locator('.music-cover-button img')).toHaveAttribute('src', expectedCover)
+    await page.screenshot({ path: path.join(root, '05-recommendation-player-art.png') })
+    await openDiscovery(page, false)
+    await input.fill('晨风')
+    await input.press('Enter')
+    await expect(page.locator('.search-cover').first()).toHaveAttribute('src', expectedCover)
+    await page.screenshot({ path: path.join(root, '06-search-art.png') })
+    assert.equal(await app.evaluate(() => globalThis.artRequests), 1)
+    const report = { sameCoverAcrossThreeViews: true, ...times, counts, events, transfers, root }
     await fs.writeFile(path.join(root, 'timing.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }

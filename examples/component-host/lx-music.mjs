@@ -859,21 +859,63 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     return next.slice(0, 6)
   })
   const coverDetails = new Map()
-  bind('searchCover', async (key) => {
+  const loadingCovers = new Map()
+  function rememberArtwork(src, row) {
+    const recording = recordingId(src, row)
+    const address = searchCoverAddress(row)
+    const catalogId =
+      !src.search && src.platform === 'wy' && /^\d+$/.test(row.catalogCoverId ?? '')
+        ? row.catalogCoverId
+        : null
+    if (!recording || (!address && !catalogId)) return
+    getStore()
+      .db.prepare(`INSERT INTO recording_artwork(platform,recording,address,catalogId) VALUES(?,?,?,?)
+      ON CONFLICT(platform,recording) DO UPDATE SET address=coalesce(excluded.address,address),catalogId=coalesce(excluded.catalogId,catalogId)`)
+      .run(src.platform, recording, address ?? null, catalogId)
+  }
+  function readArtwork(platform, recording) {
+    const db = getStore().db
+    const record = db
+      .prepare('SELECT * FROM recording_artwork WHERE platform=? AND recording=?')
+      .get(platform, recording)
+    if (!record || record.image) return record?.image ?? null
+    const key = JSON.stringify([platform, recording])
+    if (loadingCovers.has(key)) return loadingCovers.get(key)
+    const pending = fetchArtwork(platform, record.address, record.catalogId)
+      .then((image) => {
+        if (image)
+          db.prepare('UPDATE recording_artwork SET image=? WHERE platform=? AND recording=?').run(
+            image,
+            platform,
+            recording,
+          )
+        return image
+      })
+      .finally(() => loadingCovers.delete(key))
+    loadingCovers.set(key, pending)
+    return pending
+  }
+  bind('searchCover', (key) => {
     const match = matches.get(key)
     if (!match) return null
-    const row = match.row
-    let address = searchCoverAddress(row)
+    const src = { platform: match.platform, search: match.customSearch }
+    rememberArtwork(src, match.row)
+    const id = recordingId(src, match.row)
+    return id
+      ? readArtwork(src.platform, id)
+      : fetchArtwork(src.platform, searchCoverAddress(match.row))
+  })
+  async function fetchArtwork(platform, address, catalogId) {
     // Resolve thumbnails in small batches only when their first recording scrolls into view.
-    if (!address && !match.customSearch && match.platform === 'wy' && row.catalogCoverId) {
+    if (!address && platform === 'wy' && catalogId) {
       const ids = [...matches.values()]
         .filter(
           (candidate) =>
             !candidate.customSearch && candidate.platform === 'wy' && candidate.row.catalogCoverId,
         )
         .map((candidate) => candidate.row.catalogCoverId)
-      const start = Math.floor(ids.indexOf(row.catalogCoverId) / 8) * 8
-      const batch = ids.slice(start, start + 8)
+      const start = Math.floor(ids.indexOf(catalogId) / 8) * 8
+      const batch = start < 0 ? [catalogId] : ids.slice(start, start + 8)
       const batchKey = JSON.stringify(batch)
       let request = coverDetails.get(batchKey)
       if (!request) {
@@ -892,8 +934,14 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             ),
         )
         coverDetails.set(batchKey, request)
+        void request.then(
+          (rows) => {
+            if (!rows.size && coverDetails.get(batchKey) === request) coverDetails.delete(batchKey)
+          },
+          () => coverDetails.delete(batchKey),
+        )
       }
-      address = (await request).get(row.catalogCoverId)
+      address = (await request).get(catalogId)
       if (address) {
         const small = new URL(address)
         small.searchParams.set('param', '96y96')
@@ -921,7 +969,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     } finally {
       response.destroy()
     }
-  })
+  }
 
   bind(
     'lxImport',
@@ -1060,6 +1108,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       throw error
     }
     onlineRows.delete(id)
+    rememberArtwork(src, row)
     onlineRows.set(id, row)
     if (onlineRows.size > 64) onlineRows.delete(onlineRows.keys().next().value)
     return id
@@ -1242,6 +1291,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         (!attempt && preparedUrl) || (await recordingAddress(src, row, quality, signal, dailyId))
       try {
         const started = performance.now()
+        if (!auditionId) rememberArtwork(src, row)
         const filename = await saveRecording(
           url,
           dir,
@@ -1867,6 +1917,38 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     return { record, src }
   }
   return {
+    async recordingCover(id) {
+      if (typeof id !== 'string' || id.length > 128) return null
+      const db = getStore().db
+      const versions = db
+        .prepare(`SELECT platform,recording FROM online_recording_sources WHERE id=?
+        UNION SELECT platform,sourceId FROM recording_copies WHERE local=? AND sourceId IS NOT NULL`)
+        .all(id, id)
+      for (const version of versions) {
+        if (version.platform === 'wy' && /^\d+$/.test(version.recording)) {
+          // Older profiles have a recording ID, but only native catalogs share NetEase IDs.
+          const sources = db
+            .prepare(`SELECT payload FROM music_sources WHERE id IN
+            (SELECT source FROM online_recording_sources WHERE id=? AND platform='wy')
+            OR json_extract(payload,'$.name') IN
+            (SELECT source FROM recording_copies WHERE local=? AND platform='wy' AND sourceId=?)`)
+            .all(id, id, version.recording)
+          const nativeCatalog =
+            sources.length &&
+            sources.every(({ payload }) => {
+              const source = JSON.parse(payload)
+              const platform = source.platforms?.wy ?? (source.platform === 'wy' ? source : null)
+              return platform && platform.search === false
+            })
+          if (nativeCatalog)
+            db.prepare(`INSERT OR IGNORE INTO recording_artwork(platform,recording,catalogId)
+            VALUES('wy',?,?)`).run(version.recording, version.recording)
+        }
+        const image = await readArtwork(version.platform, version.recording)
+        if (image) return image
+      }
+      return null
+    },
     onlinePlayback(id, scope) {
       const record = getStore()
         .db.prepare('SELECT * FROM online_recording_sources WHERE id=?')
