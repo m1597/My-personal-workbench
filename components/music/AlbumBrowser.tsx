@@ -1,3 +1,4 @@
+import { TrackMenu } from './TrackMenu'
 import {
   Button,
   Input,
@@ -82,7 +83,7 @@ export function Cover({
 }
 
 type Props = {
-  searchRelease: (query: string) => void
+  releaseActions: import('./ReleaseCatalog').ReleaseActions
   revision: number
   tracks: LocalTrack[]
   active: string
@@ -93,7 +94,7 @@ type Props = {
 const sortLabels = { name: '专辑名称', descending: '曲数从多到少', ascending: '曲数从少到多' }
 type AlbumSort = keyof typeof sortLabels
 
-export function AlbumBrowser({ searchRelease, revision, tracks, active, play, queueNext }: Props) {
+export function AlbumBrowser({ releaseActions, revision, tracks, active, play, queueNext }: Props) {
   const [albums, setAlbums] = useState<Album[]>()
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -197,31 +198,33 @@ export function AlbumBrowser({ searchRelease, revision, tracks, active, play, qu
           key={selected.id}
           album={selected}
           local={selected.tracks.flatMap((id) => trackMap.get(id) ?? [])}
-          search={searchRelease}
+          actions={releaseActions}
         />
         <ol className="album-tracks">
           {selected.tracks.map((id) => {
             const row = trackMap.get(id)
             if (!row) return null
             return (
-              <li key={id} data-active={id === active}>
-                <Button
-                  size="small"
-                  appearance="subtle"
-                  disabled={!row.available}
-                  icon={<Play size={15} />}
-                  aria-label={'播放' + row.title}
-                  onClick={() => play(id, queue)}
-                />
-                <div className="library-name">
-                  <strong title={row.title}>{row.title}</strong>
-                  <small>
-                    {row.artist}
-                    {!row.available && ' · 文件不可用'}
-                  </small>
-                </div>
-                <small className="library-time">{formatTime(row.duration)}</small>
-              </li>
+              <TrackMenu key={id} localId={id}>
+                <li data-active={id === active}>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    disabled={!row.available}
+                    icon={<Play size={15} />}
+                    aria-label={'播放' + row.title}
+                    onClick={() => play(id, queue)}
+                  />
+                  <div className="library-name">
+                    <strong title={row.title}>{row.title}</strong>
+                    <small>
+                      {row.artist}
+                      {!row.available && ' · 文件不可用'}
+                    </small>
+                  </div>
+                  <small className="library-time">{formatTime(row.duration)}</small>
+                </li>
+              </TrackMenu>
             )
           })}
         </ol>

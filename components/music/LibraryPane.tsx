@@ -91,7 +91,7 @@ export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 interface Props extends SidebarSorting, PlaylistSorting {
   scope: 'library' | 'playlists'
-  searchRelease: (query: string) => void
+  releaseActions: import('./ReleaseCatalog').ReleaseActions
   albumRevision: number
   favorite: (id: string, value: boolean) => Promise<unknown>
   addFavorites: (ids: string[]) => Promise<number | null>
@@ -132,7 +132,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
 }
 export function LibraryPane({
   scope,
-  searchRelease,
+  releaseActions,
   albumRevision,
   favorite,
   addFavorites,
@@ -478,7 +478,7 @@ export function LibraryPane({
           )}
           {showAlbums ? (
             <AlbumBrowser
-              searchRelease={searchRelease}
+              releaseActions={releaseActions}
               revision={albumRevision}
               tracks={tracks}
               active={active}
@@ -677,6 +677,7 @@ export function LibraryPane({
                     {rows.slice(0, limit).map((t) => (
                       <TrackMenu
                         key={t.id}
+                        localId={t.origin === 'online' && !t.localCopy ? null : t.id}
                         queueable={!!t.available}
                         onQueue={(next) => onQueue(t.id, next)}
                         onDismiss={

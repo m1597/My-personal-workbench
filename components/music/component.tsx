@@ -1,5 +1,5 @@
 import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
-import { TrackMenu } from './TrackMenu'
+import { RevealTrackContext, TrackMenu } from './TrackMenu'
 import { Cover, type Album } from './AlbumBrowser'
 import { NowPlaying, type LyricLine } from './NowPlaying'
 import { guideSteps, MusicGuide } from './MusicGuide'
@@ -189,7 +189,7 @@ declare global {
           key: string,
           quality: string,
           detailed: true,
-        ): Promise<'' | { file: string; sources: string[] }>
+        ): Promise<'' | { file: string; sources: string[]; localId?: string }>
         moveSidebarItem(
           group: 'folders' | 'playlists',
           id: string,
@@ -216,6 +216,7 @@ declare global {
         lyricLine(line: string): Promise<void>
         removeLocal(id: string | string[]): Promise<void>
         trashLocal(id: string | string[]): Promise<boolean>
+        revealTrack(id: string): Promise<void>
         openFolder(id: string): Promise<void>
         removeFolder(id: string): Promise<string[]>
         renamePlaylist(id: string, name: string): Promise<void>
@@ -360,11 +361,6 @@ function Music() {
     setSettingsCategory(category)
     setTab('settings')
     requestAnimationFrame(() => document.querySelector('.music-scroll')?.scrollTo(0, 0))
-  }
-  const [releaseSearch, setReleaseSearch] = useState('')
-  function searchRelease(query: string) {
-    setReleaseSearch(query)
-    setTab('download')
   }
   const [tab, setTab] = useState('library'),
     [libraryCollection, setLibraryCollection] = useState('all'),
@@ -1112,7 +1108,7 @@ function Music() {
       setResolving(false)
     }
   }
-  return (
+  const content = (
     <ComponentTheme
       surface={docked ? 'embedded' : 'window'}
       className={presentation === 'bar' ? 'music-shell music-bar-only' : 'music-shell'}
@@ -1132,8 +1128,8 @@ function Music() {
                   library: '曲库',
                   playlists: '歌单',
                   settings: '音乐设置',
-                  audition: 'AI 推荐',
-                  feed: '动态',
+                  audition: '智能推荐',
+                  feed: '歌手',
                 }[tab]
               }
             </small>
@@ -1148,15 +1144,14 @@ function Music() {
           onTabSelect={(_, data) => {
             setGuide(null)
             setSearch('')
-            setReleaseSearch('')
             setTab(String(data.value))
           }}
         >
           <Tab value="library">曲库</Tab>
           <Tab value="playlists">歌单</Tab>
           <Tab value="download">在线找歌</Tab>
-          <Tab value="audition">AI 推荐</Tab>
-          <Tab value="feed">动态</Tab>
+          <Tab value="audition">智能推荐</Tab>
+          <Tab value="feed">歌手</Tab>
         </TabList>
         <div className="music-view-actions">
           <DownloadTasks batch={batch} saved={downloaded.length} />
@@ -1262,7 +1257,11 @@ function Music() {
         ) : libraryPage ? (
           <LibraryPane
             scope={inPlaylists ? 'playlists' : 'library'}
-            searchRelease={searchRelease}
+            releaseActions={{
+              play: playSearchResult,
+              add: addSearchResult,
+              playlists: state?.playlists.filter((p) => !p.system) ?? [],
+            }}
             albumRevision={state?.albumRevision ?? 0}
             favorite={(id, on) => act(() => host.setFavorite(id, on))}
             addFavorites={async (ids) => {
@@ -1400,7 +1399,6 @@ function Music() {
           <ArtistReleases play={playSearchResult} />
         ) : tab === 'download' ? (
           <DownloadPane
-            initialQuery={releaseSearch || undefined}
             preferredQuality={state?.prefs.quality}
             playlists={state?.playlists.filter((list) => !list.system) ?? []}
             onPlay={playSearchResult}
@@ -1555,6 +1553,7 @@ function Music() {
                       return (
                         <TrackMenu
                           key={r.id}
+                          localId={r.localId}
                           queueable={playable(r)}
                           onQueue={(next) => onQueue(r.localId ?? r.id, next)}
                           onDismiss={() => void act(() => host.dismissRecommendation(r.id))}
@@ -1919,6 +1918,11 @@ function Music() {
         <p role="status">{error}</p>
       </footer>
     </ComponentTheme>
+  )
+  return (
+    <RevealTrackContext.Provider value={(id) => void act(() => host.revealTrack(id))}>
+      {content}
+    </RevealTrackContext.Provider>
   )
 }
 const root = document.getElementById('root')

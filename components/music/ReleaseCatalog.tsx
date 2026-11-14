@@ -2,6 +2,7 @@ import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { LocalTrack } from './LibraryPane'
 import { Cover, type Album } from './AlbumBrowser'
+import { TrackMenu } from './TrackMenu'
 import './release-catalog.css'
 
 type Artist = { id: string; name: string; detail: string }
@@ -17,6 +18,8 @@ type ReleaseTrack = {
 type News = { type: string; id: string; title: string; artist: string; date: string }
 export interface ReleaseAPI {
   findArtists(term: string): Promise<Artist[]>
+  similarArtists(id: string): Promise<Artist[]>
+  artistHighlights(id: string): Promise<Pick<ReleaseTrack, 'artist' | 'title'>[]>
   followedArtists(): Promise<Artist[]>
   followArtist(id: string, on: boolean): Promise<Artist[]>
   releaseNews(refresh?: boolean): Promise<News[]>
@@ -33,6 +36,110 @@ const artistNames = (name: string) =>
     .split(/\s*(?:\/|、|;|＆|&|\bfeat\.?\s+|\bfeaturing\s+)\s*/u)
     .filter(Boolean)
 
+export interface ReleaseActions {
+  play: PlayRecording
+  add: (playlist: string, key: string) => Promise<void>
+  playlists: { id: string; name: string }[]
+}
+async function matchTrack(track: Pick<ReleaseTrack, 'title' | 'artist'>, album = '') {
+  const artists = artistNames(track.artist)
+  const result = await window.music.lxSearch({ title: track.title, artist: artists[0] ?? '' })
+  const matches = result.items.filter(
+    (item) =>
+      normalize(item.title) === normalize(track.title) &&
+      (!artists.length || artistNames(item.artist).some((name) => artists.includes(name))) &&
+      (item.quality === undefined || item.quality.length > 0),
+  )
+  const recording = matches.find((item) => normalize(item.album) === normalize(album)) ?? matches[0]
+  if (!recording) throw Error('未找到这首歌的可播放版本')
+  return recording
+}
+function MissingTrack({
+  track,
+  album,
+  actions,
+  onSearch,
+  active,
+}: {
+  active: boolean
+  onSearch: () => void
+  track: ReleaseTrack
+  album: string
+  actions: ReleaseActions
+}) {
+  const [recording, setRecording] = useState<Awaited<ReturnType<typeof matchTrack>>>()
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('')
+  async function run(action: () => Promise<void>) {
+    setBusy(true)
+    setStatus('')
+    try {
+      await action()
+    } catch (e) {
+      setStatus(message(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="missing-track-actions">
+      {recording && active ? (
+        <>
+          <small>
+            {[recording.title, recording.artist, recording.album].filter(Boolean).join(' · ')}
+          </small>
+          <Button
+            size="small"
+            disabled={busy}
+            onClick={() => void run(() => actions.play(recording.key))}
+          >
+            播放
+          </Button>
+          <Dropdown
+            inlinePopup
+            size="small"
+            aria-label="加入歌单"
+            placeholder="加入歌单"
+            value="加入歌单"
+            selectedOptions={[]}
+            disabled={busy}
+            listbox={{ className: 'component-popup' }}
+            onOptionSelect={(_, d) => {
+              const id = d.optionValue
+              if (id)
+                void run(async () => {
+                  await actions.add(id, recording.key)
+                  setStatus('已加入' + d.optionText)
+                })
+            }}
+          >
+            {actions.playlists.length ? (
+              actions.playlists.map((p) => (
+                <Option key={p.id} value={p.id}>
+                  {p.name}
+                </Option>
+              ))
+            ) : (
+              <Option disabled>请先创建歌单</Option>
+            )}
+          </Dropdown>
+        </>
+      ) : (
+        <Button
+          size="small"
+          disabled={busy}
+          onClick={() => {
+            onSearch()
+            void run(async () => setRecording(await matchTrack(track, album)))
+          }}
+        >
+          {busy ? '正在查找…' : '搜索缺曲'}
+        </Button>
+      )}
+      {active && status && <small role="status">{status}</small>}
+    </div>
+  )
+}
 function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
   const [pending, setPending] = useState('')
   const [playError, setPlayError] = useState('')
@@ -94,18 +201,8 @@ function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
     setPending(track.disc + ':' + track.number)
     setPlayError('')
     try {
-      const artists = artistNames(track.artist)
-      const result = await window.music.lxSearch({ title: track.title, artist: artists[0] ?? '' })
+      const recording = await matchTrack(track, group.title)
       if (attempt.current !== request) return
-      const matches = result.items.filter(
-        (item) =>
-          normalize(item.title) === normalize(track.title) &&
-          (!artists.length || artistNames(item.artist).some((name) => artists.includes(name))) &&
-          (item.quality === undefined || item.quality.length > 0),
-      )
-      const recording =
-        matches.find((item) => normalize(item.album) === normalize(group.title)) ?? matches[0]
-      if (!recording) throw Error('未找到这首歌的可播放版本')
       await play(recording.key)
     } catch (e) {
       if (attempt.current === request) setPlayError(track.title + ' · ' + message(e))
@@ -166,6 +263,137 @@ function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
       )}
       {playError && <small role="alert">{playError}</small>}
     </div>
+  )
+}
+function Highlights({ id, play }: { id: string; play: PlayRecording }) {
+  const [songs, setSongs] = useState<Pick<ReleaseTrack, 'artist' | 'title'>[]>()
+  const [error, setError] = useState('')
+  const [pending, setPending] = useState(false)
+  const live = useRef(false)
+  useEffect(() => {
+    live.current = true
+    void window.music
+      .artistHighlights(id)
+      .then((rows) => {
+        if (live.current) setSongs(rows)
+      })
+      .catch((e) => {
+        if (live.current) setError(message(e))
+      })
+    return () => {
+      live.current = false
+    }
+  }, [id])
+  async function listen(song: Pick<ReleaseTrack, 'artist' | 'title'>) {
+    setPending(true)
+    setError('')
+    try {
+      const recording = await matchTrack(song)
+      if (live.current) await play(recording.key)
+    } catch (e) {
+      if (live.current) setError(message(e))
+    } finally {
+      if (live.current) setPending(false)
+    }
+  }
+  return (
+    <div>
+      {error && <small role="alert">{error}</small>}
+      {songs ? (
+        songs.length ? (
+          <ul>
+            {songs.map((song) => (
+              <li key={song.title}>
+                <span>{song.title}</span>
+                <Button size="small" disabled={pending} onClick={() => void listen(song)}>
+                  试听
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <small>暂无正式发行录音。</small>
+        )
+      ) : (
+        !error && <small role="status">正在读取代表作…</small>
+      )}
+    </div>
+  )
+}
+function SimilarArtists({
+  seed,
+  followed,
+  busy,
+  follow,
+  play,
+}: {
+  seed: Artist
+  followed: Artist[]
+  busy: boolean
+  follow: (id: string) => void
+  play: PlayRecording
+}) {
+  const [rows, setRows] = useState<Artist[]>()
+  const [error, setError] = useState('')
+  const [open, setOpen] = useState('')
+  const [retry, setRetry] = useState(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry repeats the selected lookup.
+  useEffect(() => {
+    let live = true
+    setError('')
+    void window.music
+      .similarArtists(seed.id)
+      .then((list) => {
+        if (live) setRows(list)
+      })
+      .catch((e) => {
+        if (live) setError(message(e))
+      })
+    return () => {
+      live = false
+    }
+  }, [seed.id, retry])
+  const visible = rows?.filter((a) => !followed.some((f) => f.id === a.id))
+  return (
+    <section className="similar-artists" aria-label="相似歌手">
+      <h3>与{seed.name}相似的歌手</h3>
+      {error ? (
+        <small role="alert">
+          {error}{' '}
+          <Button size="small" onClick={() => setRetry((n) => n + 1)}>
+            重试
+          </Button>
+        </small>
+      ) : !visible ? (
+        <small role="status">正在查找相似歌手…</small>
+      ) : !visible.length ? (
+        <small>暂无相关歌手。</small>
+      ) : (
+        <ul>
+          {visible.map((a) => (
+            <li key={a.id} className="release-event">
+              <div className="release-event-head">
+                <div>
+                  <strong>{a.name}</strong>
+                  <small>{a.detail}</small>
+                </div>
+                <Button
+                  size="small"
+                  aria-expanded={open === a.id}
+                  onClick={() => setOpen(open === a.id ? '' : a.id)}
+                >
+                  {open === a.id ? '收起代表作' : '代表作'}
+                </Button>
+                <Button size="small" disabled={busy} onClick={() => follow(a.id)}>
+                  关注{a.name}
+                </Button>
+              </div>
+              {open === a.id && <Highlights id={a.id} play={play} />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 function ArtistPortrait({ id }: { id: string }) {
@@ -354,6 +582,21 @@ export function ArtistReleases({ play }: { play: PlayRecording }) {
             </button>
           ))}
         </div>
+        {selected || followed.length === 1 ? (
+          <SimilarArtists
+            key={(selected ?? followed[0]).id}
+            seed={selected ?? followed[0]}
+            followed={followed}
+            busy={busy}
+            follow={(id) => {
+              if (!selected && followed.length === 1) setSelected(followed[0])
+              toggle(id, true)
+            }}
+            play={play}
+          />
+        ) : (
+          followed.length > 1 && <small>选择上方歌手，查看相似歌手与发行。</small>
+        )}
         {selected && (
           <section aria-label={selected.name + '的发行'} className="artist-discography">
             <header>
@@ -432,7 +675,7 @@ export function ArtistReleases({ play }: { play: PlayRecording }) {
 }
 const normalize = (v: string) => v.trim().normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ')
 function collectedTracks(tracks: ReleaseTrack[], local: LocalTrack[]) {
-  const matched = new Set<ReleaseTrack>()
+  const matched = new Map<ReleaseTrack, string | null>()
   for (const row of local) {
     if (!row.available) continue
     const options = tracks.filter(
@@ -443,18 +686,18 @@ function collectedTracks(tracks: ReleaseTrack[], local: LocalTrack[]) {
         (row.trackNumber == null || row.trackNumber === t.position),
     )
     // An ambiguous file may be a duplicate of an already matched recording.
-    if (options.length === 1) matched.add(options[0])
+    if (options.length === 1) matched.set(options[0], matched.has(options[0]) ? null : row.id)
   }
   return matched
 }
 export function AlbumEditions({
   album,
   local,
-  search,
+  actions,
 }: {
   album: Album
   local: LocalTrack[]
-  search: (query: string) => void
+  actions: ReleaseActions
 }) {
   const [choices, setChoices] = useState<Edition[]>()
   const [selected, setSelected] = useState('')
@@ -478,6 +721,7 @@ export function AlbumEditions({
       setBusy(false)
     }
   }
+  const [openTrack, setOpenTrack] = useState<ReleaseTrack>()
   const collected = collectedTracks(tracks ?? [], local)
   return (
     <section className="music-album-editions" aria-label="发行版本曲目">
@@ -517,21 +761,28 @@ export function AlbumEditions({
         <ol>
           {tracks.map((t) => {
             return (
-              <li key={t.disc + ':' + t.number + ':' + t.title}>
-                <div>
-                  <strong>
-                    {t.disc}.{t.number} {t.title}
-                  </strong>
-                  <small>{t.artist}</small>
-                </div>
-                {collected.has(t) ? (
-                  <small>已收录</small>
-                ) : (
-                  <Button size="small" onClick={() => search(t.title + ' ' + t.artist)}>
-                    搜索缺曲
-                  </Button>
-                )}
-              </li>
+              <TrackMenu key={t.disc + ':' + t.number + ':' + t.title} localId={collected.get(t)}>
+                <li>
+                  <div>
+                    <strong>
+                      {t.disc}.{t.number} {t.title}
+                    </strong>
+                    <small>{t.artist}</small>
+                  </div>
+                  {collected.has(t) ? (
+                    <small>已收录</small>
+                  ) : (
+                    <MissingTrack
+                      key={selected}
+                      active={openTrack === t}
+                      track={t}
+                      album={album.title}
+                      actions={actions}
+                      onSearch={() => setOpenTrack(t)}
+                    />
+                  )}
+                </li>
+              </TrackMenu>
             )
           })}
         </ol>

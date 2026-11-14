@@ -37,12 +37,14 @@ for (const title of ['无编号', '唯一曲目']) {
     duration: 1,
   })
 }
+const listId = store.library.createPlaylist('发行试听')
 store.db.close()
 await fs.writeFile(
   source,
   `// @name 版本归组源
 lx.on('request',({action,info})=>{
  if(action==='search') {
+   if(info.keyword==='夜风 云海')return [{id:'highlight',name:'夜风',singer:'云海'}]
    if(info.keyword==='缺少曲 青禾')return [{id:'missing',name:'缺少曲',singer:'青禾',albumName:'山色'}]
    return [{id:'recording-17',name:'远山',singer:'青禾',albumName:'山色',interval:'03:01'},
     {id:'recording-18',name:'远山 (Live)',singer:'青禾',albumName:'山色现场',interval:'03:24'},
@@ -87,7 +89,7 @@ async function launch() {
     const request = https.request.bind(https)
     globalThis.audioRequests = []
     https.request = (url, options, done) => {
-      if (!/^https:\/\/1\.1\.1\.1\/recording-(?:17|18)\.mp3$/.test(url.href))
+      if (!/^https:\/\/1\.1\.1\.1\/(?:recording-(?:17|18)|missing|highlight)\.mp3$/.test(url.href))
         return request(url, options, done)
       globalThis.audioRequests.push(url.pathname)
       const req = new EventEmitter()
@@ -129,6 +131,20 @@ async function launch() {
       globalThis.catalogRequests.push(url.pathname)
       const today = new Date().toISOString().slice(0, 10)
       const entity = url.pathname.split('/').at(-1)
+      const related = '00000000-0000-0000-0000-000000000006'
+      if (entity === artist || entity === related)
+        return Response.json({
+          relations: [
+            { type: 'collaboration', artist: { id: related, name: '云海' } },
+            { type: 'collaboration', artist: { id: artist, name: '青禾' } },
+          ],
+        })
+      if (entity === 'recording')
+        return Response.json({
+          recordings: [
+            { title: '夜风', 'artist-credit': [{ artist: { id: related, name: '云海' } }] },
+          ],
+        })
       if (entity === 'artist')
         return Response.json({ artists: [{ id: artist, name: '青禾', disambiguation: '乐队' }] })
       if (entity === 'release-group')
@@ -267,7 +283,7 @@ try {
     (await fs.readdir(downloads)).find((f) => f.endsWith('.mp3')),
     /Live/,
   )
-  await tab('动态').click()
+  await tab('歌手').click()
   await news().getByRole('button', { name: '管理关注' }).click()
   await news().getByLabel('要关注的歌手').fill('青禾')
   await button('查找歌手').click()
@@ -275,9 +291,13 @@ try {
   await expect(news().getByText('初雪', { exact: true })).toBeVisible()
   await expect(news().getByText('旧作')).toHaveCount(0)
   await expect(page.locator('.music-list li')).toHaveCount(0)
-  await expect(news().locator('.release-event-head strong')).toHaveText(['初雪', '薄暮', '映画'])
+  await expect(news().locator(':scope > ul .release-event-head strong')).toHaveText([
+    '初雪',
+    '薄暮',
+    '映画',
+  ])
   for (const [i, type] of ['单曲', '专辑', '原声带'].entries())
-    await expect(news().locator('.release-event-head small').nth(i)).toContainText(type)
+    await expect(news().locator(':scope > ul .release-event-head small').nth(i)).toContainText(type)
   await news().getByRole('button', { name: '查看曲目' }).first().click()
   const pick = news().getByRole('button', { name: '播放', exact: true }).first()
   await expect(pick).toBeVisible()
@@ -300,9 +320,17 @@ try {
   await news().getByRole('button', { name: '查看曲目' }).first().click()
   await expect(pick).toBeVisible()
   assert.deepEqual(await app.evaluate(() => globalThis.catalogRequests), requests)
+  await selector.click()
+  await page.getByRole('option', { name: /豪华版/ }).click()
+  await expect(news().getByText('2.2 缺少曲', { exact: true })).toBeVisible()
+  await pick.scrollIntoViewIfNeeded()
+  const scroll = () => page.locator('.music-scroll').evaluate((el) => el.scrollTop)
+  const before = await scroll()
   await pick.click()
-  await expect(tab('动态')).toHaveAttribute('aria-selected', 'true')
-  await expect(selector).toBeVisible()
+  await expect(tab('歌手')).toHaveAttribute('aria-selected', 'true')
+  await expect(selector).toContainText('豪华版')
+  await expect(news().getByRole('button', { name: '收起曲目' })).toBeVisible()
+  assert.equal(await scroll(), before)
   await expect
     .poll(() => app.evaluate(() => globalThis.audioRequests.at(-1)))
     .toBe('/recording-17.mp3')
@@ -314,18 +342,35 @@ try {
     .last()
     .click()
   await expect(news().getByRole('alert')).toContainText('未找到这首歌的可播放版本')
-  await expect(tab('动态')).toHaveAttribute('aria-selected', 'true')
-  await tab('AI 推荐').click()
+  await expect(tab('歌手')).toHaveAttribute('aria-selected', 'true')
+  await tab('智能推荐').click()
   await expect(page.getByLabel('推荐首数')).toHaveValue('5')
   await expect(news()).toHaveCount(0)
-  await tab('动态').click()
+  await tab('歌手').click()
   await expect(news().getByText('初雪', { exact: true })).toBeVisible()
   assert.deepEqual(await app.evaluate(() => globalThis.catalogRequests), requests)
   await page.screenshot({ path: path.join(root, 'artist-news.png') })
+  const similar = news().getByRole('region', { name: '相似歌手' })
+  await expect(similar.getByText('云海', { exact: true })).toBeVisible()
+  await expect(similar.getByText('青禾', { exact: true })).toHaveCount(0)
+  await similar.getByRole('button', { name: '代表作' }).click()
+  await similar.getByRole('button', { name: '试听' }).click()
+  await expect
+    .poll(() => app.evaluate(() => globalThis.audioRequests.at(-1)))
+    .toBe('/highlight.mp3')
+  await played()
+  await similar.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+  await page.screenshot({ path: path.join(root, 'similar-artists.png') })
+  await similar.getByRole('button', { name: '关注云海' }).click()
+  await expect(similar.getByText('暂无相关歌手。')).toBeVisible()
+  await button('云海').click()
+  await expect(similar.getByRole('heading')).toHaveText('与云海相似的歌手')
+  await expect(similar.getByText('暂无相关歌手。')).toBeVisible()
+
   await app.close()
   app = await launch()
   page = await app.firstWindow()
-  await tab('动态').click()
+  await tab('歌手').click()
   await expect(news().getByText('初雪', { exact: true })).toBeVisible()
   await button('管理关注').click()
   await button('取消关注青禾').click()
@@ -336,7 +381,7 @@ try {
   assert.ok(!(await app.evaluate(() => globalThis.catalogRequests)).includes('/ws/2/release'))
   await button('查看完整发行曲目').click()
   const editions = page.getByRole('region', { name: '发行版本曲目' })
-  const choose = editions.getByRole('combobox')
+  const choose = editions.getByRole('combobox', { name: '发行版本', exact: true })
   await choose.click()
   await expect(page.getByRole('listbox')).toBeVisible()
   await page.screenshot({ path: path.join(root, 'edition-menu.png') })
@@ -349,15 +394,35 @@ try {
     editions.getByRole('listitem').filter({ has: page.getByText(name, { exact: true }) })
   await expect(trackRow('1.1 远山').getByRole('button', { name: '搜索缺曲' })).toBeVisible()
   await expect(trackRow('2.1 远山').getByText('已收录', { exact: true })).toBeVisible()
+  await app.evaluate(({ shell }) => {
+    shell.showItemInFolder = (file) => {
+      globalThis.revealedTrack = file
+    }
+  })
+  await trackRow('2.1 远山').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '查看文件所在位置' }).click()
+  assert.equal(await app.evaluate(() => globalThis.revealedTrack), tone)
   for (const title of ['1.2 无编号', '2.3 无编号'])
     await expect(trackRow(title).getByRole('button', { name: '搜索缺曲' })).toBeVisible()
   await expect(trackRow('1.3 唯一曲目').getByText('已收录', { exact: true })).toBeVisible()
   await page.screenshot({ path: path.join(root, 'editions.png') })
   await trackRow('2.2 缺少曲').getByRole('button', { name: '搜索缺曲' }).click()
-  await expect(page.getByRole('textbox', { name: '搜索关键词' })).toHaveValue('缺少曲 青禾')
-  await expect(
-    page.getByRole('region', { name: '搜索音乐' }).getByText('缺少曲', { exact: true }),
-  ).toBeVisible()
+  const missing = trackRow('2.2 缺少曲')
+  await missing.getByRole('button', { name: '播放', exact: true }).click()
+  await expect.poll(() => app.evaluate(() => globalThis.audioRequests.at(-1))).toBe('/missing.mp3')
+  await played()
+  await expect(choose).toContainText('豪华版')
+  await missing.getByRole('combobox', { name: '加入歌单' }).click()
+  await page.getByRole('option', { name: '发行试听' }).click()
+  await expect(missing.getByRole('status')).toHaveText('已加入发行试听')
+  const saved = await page.evaluate(
+    async (id) => (await window.music.state()).playlists.find((p) => p.id === id).tracks.length,
+    listId,
+  )
+  assert.equal(saved, 1)
+  assert.equal((await fs.readdir(downloads)).filter((f) => f.endsWith('.mp3')).length, 1)
+  await missing.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+  await page.screenshot({ path: path.join(root, 'inline-missing.png') })
   console.log(
     'PASS 同曲版组、逐项播放/时长/下载、关注与跨重启新发行、发行版本切换与缺曲搜索 ' + root,
   )

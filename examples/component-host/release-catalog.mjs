@@ -74,6 +74,72 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     for (const artist of found) artists.set(artist.id, artist)
     return found
   })
+  const related = new Map()
+  bind('similarArtists', async (id) => {
+    if (!mbid.test(id) || !followed().some((a) => a.id === id)) throw Error('请先选择已关注歌手')
+    const data = await metadata('artist/' + id, { inc: 'artist-rels+genres' })
+    const candidates = new Map()
+    const excluded = new Set(followed().map((a) => a.id))
+    excluded.add(id)
+    for (const rel of data.relations ?? []) {
+      if (rel.type === 'is person') excluded.add(rel.artist?.id)
+    }
+    function include(a, detail) {
+      if (mbid.test(a?.id) && name(a.name) && !excluded.has(a.id) && !candidates.has(a.id)) {
+        candidates.set(a.id, { id: a.id, name: name(a.name), detail })
+      }
+    }
+    for (const rel of data.relations ?? []) {
+      const reason = {
+        'member of band': '乐队成员',
+        collaboration: '合作歌手',
+        'supporting musician': '演出合作',
+        'artist subgroup': '关联组合',
+        founder: '创办组合',
+      }[rel.type]
+      if (reason) include(rel.artist, reason)
+    }
+    const genre = [...(data.genres ?? [])].sort((a, b) => b.count - a.count)[0]
+    if (!candidates.size && name(genre?.name)) {
+      const matches = await metadata('artist', {
+        query: 'tag:' + quote(name(genre.name)),
+        limit: '24',
+      })
+      for (const a of matches.artists ?? []) include(a, '共同风格 · ' + name(genre.name))
+    }
+    const result = [...candidates.values()].slice(0, 8)
+    for (const a of result) related.set(a.id, a)
+    return result
+  })
+  bind('artistHighlights', async (id) => {
+    if (!mbid.test(id) || !related.has(id)) throw Error('请先选择相似歌手')
+    const data = await metadata('recording', {
+      query: 'arid:' + id + ' AND status:official',
+      limit: '25',
+    })
+    const titles = new Set()
+    const recordings = data.recordings ?? []
+    const singles = (r) =>
+      (r.releases ?? []).filter((x) => x['release-group']?.['primary-type'] === 'Single').length
+    const alternate = (r) =>
+      Number(/(?:instrumental|karaoke|伴奏|off vocal|tv size)/iu.test(name(r.title)))
+    recordings.sort(
+      (a, b) =>
+        alternate(a) - alternate(b) ||
+        singles(b) - singles(a) ||
+        (b.releases?.length ?? 0) - (a.releases?.length ?? 0),
+    )
+    return recordings
+      .filter((r) => {
+        const title = name(r.title)
+        if (!title || titles.has(title) || !r['artist-credit']?.some((c) => c.artist?.id === id))
+          return false
+        titles.add(title)
+        return true
+      })
+      .slice(0, 5)
+      .map((r) => ({ title: name(r.title), artist: credit(r['artist-credit']) }))
+  })
   bind('followedArtists', followed)
   bind('artistPortrait', async (id) => {
     const artist = mbid.test(id) && followed().find((a) => a.id === id)
@@ -84,7 +150,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     if (!mbid.test(id) || typeof on !== 'boolean') throw Error('无效艺人')
     const list = followed()
     if (on && !list.some((a) => a.id === id)) {
-      const artist = artists.get(id)
+      const artist = artists.get(id) ?? related.get(id)
       if (!artist) throw Error('请重新搜索并选择艺人')
       list.push(artist)
     }

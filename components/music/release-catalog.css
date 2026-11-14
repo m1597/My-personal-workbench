@@ -132,3 +132,21 @@
   display: grid;
   gap: var(--space-8);
 }
+
+.similar-artists {
+  display: grid;
+  gap: var(--space-8);
+}
+.similar-artists h3 {
+  margin: 0;
+}
+.missing-track-actions {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+.missing-track-actions > [role="combobox"] {
+  min-width: 0;
+}
