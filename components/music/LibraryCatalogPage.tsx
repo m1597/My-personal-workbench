@@ -219,7 +219,7 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
         <h2>{location.name}</h2>
         {!artistPage && (
           <>
-            <Cover id={localSongs.find((s) => s.available)?.id} track />
+            <Cover id={localSongs.find((s) => s.available)?.id} group={location.group?.id} track />
             <p>
               <ArtistLinks
                 song={{

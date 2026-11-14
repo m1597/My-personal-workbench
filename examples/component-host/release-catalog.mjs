@@ -1,3 +1,4 @@
+import { fetchReleaseCover } from './release-cover.mjs'
 import { loadArtistPortrait } from './artist-portrait.mjs'
 import { registerSongDetails } from './song-details.mjs'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -90,6 +91,20 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
   }
   const releases = new Set()
   const newsGroups = new Set()
+  const covers = new Map()
+  bind('releaseCover', async (id) => {
+    if (!mbid.test(id) || !newsGroups.has(id)) throw Error('请先选择发行')
+    const cached = covers.get(id)
+    if (cached && cached.until > Date.now()) return cached.request
+    if (covers.size >= 128) covers.delete(covers.keys().next().value)
+    const entry = {
+      until: Date.now() + 3600000,
+      request: fetchReleaseCover(id, nativeImage).catch(() => null),
+    }
+    covers.set(id, entry)
+    if (!(await entry.request)) entry.until = Date.now() + 60000
+    return entry.request
+  })
   const followed = () => JSON.parse(getStore().get('followed-musicbrainz-artists') || '[]')
   let cachedNews
   bind('findArtists', async (term) => {

@@ -54,6 +54,7 @@ const names = [
   'followArtist',
   'releaseNews',
   'artistReleases',
+  'releaseCover',
   'artistPortrait',
   'newsEditions',
   'albumEditions',

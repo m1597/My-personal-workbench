@@ -42,12 +42,15 @@ export function requestCover(id: string, track: boolean, revision: number) {
 export function Cover({
   id,
   track = false,
+  group,
   revision = 0,
 }: {
   id?: string
+  group?: string
   track?: boolean
   revision?: number
 }) {
+  const key = JSON.stringify([id, group])
   const frame = useRef<HTMLSpanElement>(null)
   const [image, setImage] = useState<{
     id: string
@@ -56,14 +59,16 @@ export function Cover({
   }>()
   useEffect(() => {
     const element = frame.current
-    if (!id || !element) return
+    if ((!id && !group) || !element) return
     let alive = true
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
       observer.disconnect()
-      void requestCover(id, track, revision)
+      void (async () =>
+        (id && (await requestCover(id, track, revision).catch(() => null))) ||
+        (group && (await window.music.releaseCover(group))))()
         .then((url) => {
-          if (alive && url) setImage({ id, revision, url })
+          if (alive && url) setImage({ id: key, revision, url })
         })
         .catch(() => {})
     })
@@ -72,11 +77,11 @@ export function Cover({
       alive = false
       observer.disconnect()
     }
-  }, [id, track, revision])
+  }, [key, id, group, track, revision])
   return (
     <span ref={frame} className="album-art" aria-hidden="true">
       <img
-        src={(image?.id === id && image?.revision === revision && image.url) || defaultCover}
+        src={(image?.id === key && image?.revision === revision && image.url) || defaultCover}
         alt=""
         onError={image ? () => setImage(undefined) : undefined}
       />

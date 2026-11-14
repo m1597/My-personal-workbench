@@ -52,13 +52,44 @@ const app = await electron.launch({
 try {
   const page = await app.firstWindow()
   await page.setViewportSize({ width: 1200, height: 850 })
-  await app.evaluate(() => {
-    globalThis.fetch = async () =>
-      new Response(
-        JSON.stringify({ artists: [], recordings: [], 'release-groups': [], 'recording-count': 0 }),
-        { status: 200 },
-      )
-  })
+  const cover = (await fs.readFile('components/music/default-cover.png')).toString('base64')
+  await app.evaluate(
+    (_electron, { cover, ids, artists }) => {
+      globalThis.fetch = async (input) => {
+        const url = new URL(input)
+        if (url.hostname === 'coverartarchive.org')
+          return new Response(null, {
+            status: 307,
+            headers: { location: 'https://archive.org/download/fixture/cover.png' },
+          })
+        if (url.hostname === 'archive.org')
+          return new Response(Buffer.from(cover, 'base64'), {
+            headers: { 'content-type': 'image/png' },
+          })
+        return new Response(
+          JSON.stringify({
+            artists: [],
+            recordings: [],
+            'recording-count': 0,
+            'release-groups': [
+              {
+                id: '038531e0-88d6-4dec-9df5-2d7852c891d2',
+                title: '署名专辑',
+                'primary-type': 'Album',
+                'first-release-date': '2020-01-01',
+                'artist-credit': artists.map((name, i) => ({
+                  artist: { name, id: ids[i] },
+                  name,
+                  joinphrase: i ? '' : ' & ',
+                })),
+              },
+            ],
+          }),
+        )
+      }
+    },
+    { cover, ids, artists },
+  )
   const button = (name) => page.getByRole('button', { name, exact: true })
   const song = (title) => page.locator('.library-row').filter({ hasText: title })
   await page.getByRole('tab', { name: '曲库', exact: true }).press('Enter')
@@ -76,6 +107,21 @@ try {
     await expect
       .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0.1))
       .toBe(true)
+    if (name === artists[0]) {
+      await home.getByRole('button', { name: /署名专辑/ }).press('Enter')
+      const album = page.getByRole('region', { name: '专辑主页' })
+      await expect(album.locator('header img')).toHaveAttribute(
+        'src',
+        /^data:image\/jpeg;base64,/,
+        { timeout: 12000 },
+      )
+      for (const credit of artists)
+        await expect(
+          album.locator('header').getByRole('button', { name: credit, exact: true }),
+        ).toBeVisible()
+      await album.screenshot({ path: path.join(root, '发行封面.png') })
+      await album.getByRole('button', { name: '返回', exact: true }).press('Enter')
+    }
     await home.screenshot({ path: path.join(root, name + '.png') })
     await home.getByRole('button', { name: '返回', exact: true }).press('Enter')
   }

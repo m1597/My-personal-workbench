@@ -53,6 +53,7 @@ export interface ReleaseAPI extends SongAPI {
   followedArtists(): Promise<Artist[]>
   followArtist(id: string, on: boolean): Promise<Artist[]>
   releaseNews(refresh?: boolean): Promise<News[]>
+  releaseCover(id: string): Promise<string | null>
   artistPortrait(id: string): Promise<string | null>
   artistReleases(id: string): Promise<News[]>
   newsEditions(id: string): Promise<Edition[]>
