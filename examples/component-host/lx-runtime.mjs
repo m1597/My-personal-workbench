@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads'
+export class InvalidSource extends Error {}
 export class SourceRequestError extends Error {}
 export function runSource(code, payload, signal) {
   signal?.throwIfAborted()
@@ -26,7 +27,11 @@ export function runSource(code, payload, signal) {
     signal?.addEventListener('abort', stop, { once: true })
     worker.once('message', (msg) =>
       finish(
-        msg.error ? new SourceRequestError('音乐源未能完成请求，请检查源或稍后重试') : null,
+        msg.invalidInit
+          ? new InvalidSource('此版本未能完成初始化')
+          : msg.error
+            ? new SourceRequestError('音乐源未能完成请求，请检查源或稍后重试')
+            : null,
         msg.value,
       ),
     )

@@ -1,7 +1,7 @@
 import { Script } from 'node:vm'
 import { createHash } from 'node:crypto'
 import { openPublic } from './lx-net.mjs'
-import { runSource } from './lx-runtime.mjs'
+import { InvalidSource, runSource } from './lx-runtime.mjs'
 const text = (v) => (typeof v === 'string' ? v.trim().slice(0, 256) : '')
 const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
 export async function fetchSource(link, signal, headers) {
@@ -32,7 +32,6 @@ export async function fetchSource(link, signal, headers) {
     throw error
   }
 }
-class InvalidSource extends Error {}
 export async function inspectSource(code, signal, preferredPlatform) {
   if (typeof code !== 'string' || Buffer.byteLength(code) > 1024 * 1024) throw Error('源文件过大')
   try {
@@ -212,6 +211,9 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
   )
   db.exec(
     'CREATE TABLE IF NOT EXISTS music_source_origins (origin TEXT PRIMARY KEY, source TEXT NOT NULL)',
+  )
+  db.exec(
+    'CREATE TABLE IF NOT EXISTS music_source_rejections(origin TEXT PRIMARY KEY,blob TEXT NOT NULL)',
   )
   const columns = db
     .prepare('PRAGMA table_info(music_sources)')
@@ -400,7 +402,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     else db.prepare("DELETE FROM state WHERE key='lx-source'").run()
   }
   const verifiedManual = new Set()
-  async function synchronize(signal, onChecked) {
+  async function synchronize(signal, onChecked, onInstalled) {
     migrate()
     for (const row of db
       .prepare("SELECT id,payload FROM music_sources WHERE manual=1 AND disabled=''")
@@ -436,7 +438,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
         .catch(() => null),
     ])
     signal.throwIfAborted()
-    if (!index) return
+    if (!index) return false
     const completeTree =
       Array.isArray(tree?.tree) &&
       tree.truncated === false &&
@@ -472,10 +474,16 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     signal.throwIfAborted()
     const budget = AbortSignal.any([signal, AbortSignal.timeout(15000)])
     let next = 0
+    let complete = true
     async function worker() {
       while (next < pending.length && !budget.aborted) {
         const { id: origin } = pending[next++]
         const file = origin + '/latest.js'
+        const knownInvalid = db
+          .prepare('SELECT blob FROM music_source_rejections WHERE origin=?')
+          .get(origin)?.blob
+        if (knownInvalid && knownInvalid === gitBlobs.get(file)) continue
+        let blob
         const prior = db
           .prepare('SELECT payload FROM music_sources WHERE id=?')
           .get(byOrigin(origin) ?? null)
@@ -491,26 +499,42 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
           continue
         try {
           const code = await loadFile(file, AbortSignal.any([budget, AbortSignal.timeout(5500)]))
-          if (!code.trim() || /^\s*(?:<!doctype|<html)/i.test(code)) continue
-          if (old?.code === code) continue
+          if (!code.trim() || /^\s*(?:<!doctype|<html)/i.test(code)) {
+            complete = false
+            continue
+          }
+          blob = createHash('sha1')
+            .update('blob ' + Buffer.byteLength(code) + '\0')
+            .update(code)
+            .digest('hex')
+          if (knownInvalid === blob || old?.code === code) continue
           const cached = db
             .prepare("SELECT payload FROM music_sources WHERE digest=? AND disabled=''")
             .get(fingerprint(code))
           const src = cached ? JSON.parse(cached.payload) : await inspectSource(code, budget)
           budget.throwIfAborted()
           install(src, origin, false)
+          db.prepare('DELETE FROM music_source_rejections WHERE origin=?').run(origin)
+          onInstalled?.()
         } catch (error) {
           signal.throwIfAborted()
           if (error instanceof InvalidSource)
             transaction(() => {
+              if (blob)
+                db.prepare('INSERT OR REPLACE INTO music_source_rejections VALUES(?,?)').run(
+                  origin,
+                  blob,
+                )
               retire(origin, error.message)
               repairSelection()
             })
+          else complete = false
         }
       }
     }
     await Promise.all(Array.from({ length: Math.min(4, pending.length) }, worker))
     signal.throwIfAborted()
+    return complete && !budget.aborted && validReport
   }
   return {
     configuration(code = JSON.parse(get('lx-source') || 'null')?.code) {

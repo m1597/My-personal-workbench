@@ -169,6 +169,47 @@ for (const [name, args] of [
   assert.ok(!bank.list().catalog.some((s) => s.id === 'huibq'))
   db.close()
 }
+{
+  const db = new DatabaseSync(':memory:')
+  db.exec('CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
+  let next = "throw Error('初始化固定失败')"
+  let offline = false
+  let reads = 0
+  const { createHash } = await import('node:crypto')
+  const blob = () =>
+    createHash('sha1')
+      .update('blob ' + Buffer.byteLength(next) + '\0')
+      .update(next)
+      .digest('hex')
+  const bank = sourceCatalog(db, async (file) => {
+    if (file === 'README.md') return markdown
+    if (file === 'tree')
+      return JSON.stringify({
+        truncated: false,
+        tree: [{ type: 'blob', path: 'huibq/latest.js', sha: blob() }],
+      })
+    if (file === 'health-state.json')
+      return JSON.stringify({ sources: { fish: '可用', huibq: '可用' } })
+    if (file === 'fish/latest.js') return code('可用 A')
+    if (file === 'huibq/latest.js') {
+      reads++
+      if (offline) throw Error('下载中断')
+      return next
+    }
+    throw Error(file)
+  })
+  for (let i = 0; i < 3; i++) assert.equal(await bank.synchronize(signal), true)
+  assert.equal(reads, 1)
+  assert.equal(bank.list().installed.length, 1)
+  next = code('已修复 B')
+  offline = true
+  assert.equal(await bank.synchronize(signal), false)
+  offline = false
+  assert.equal(await bank.synchronize(signal), true)
+  assert.equal(reads, 3)
+  assert.equal(bank.list().installed.length, 2)
+  db.close()
+}
 await mkdir('tmp', { recursive: true })
 const profile = await mkdtemp(path.resolve('tmp/source-permissions-'))
 const endpoint = await sourceEndpoint(profile, 'publish')

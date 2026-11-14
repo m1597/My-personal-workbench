@@ -544,15 +544,20 @@ export function musicService(
       throw e
     }
   })
-  bind('state', () => ({
-    ...store.snapshot(),
-    tasteExclusions: taste.exclusions(),
-    models: modelInfo(store),
-    prefs: {
-      ...getMusicPreferences(store),
-      shortcutFailures: shortcuts.failures(),
-    },
-  }))
+  bind('state', () => {
+    lx.startBootstrap(() => {
+      if (musicView && !musicView.isDestroyed()) musicView.send('music:sources-changed')
+    })
+    return {
+      ...store.snapshot(),
+      tasteExclusions: taste.exclusions(),
+      models: modelInfo(store),
+      prefs: {
+        ...getMusicPreferences(store),
+        shortcutFailures: shortcuts.failures(),
+      },
+    }
+  })
   bind('setMusicQuality', (quality) => setMusicQuality(store, quality))
   bind('setListeningPreference', (key, value) => setListeningPreference(store, key, value))
   let shortageDecision

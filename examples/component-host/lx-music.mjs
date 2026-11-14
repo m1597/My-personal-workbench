@@ -741,7 +741,41 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         if (active === task) active = null
       }
     }
-  let bank
+  let bank,
+    bootstrap,
+    retryTimer,
+    bootstrapRun,
+    retryDelay = 5000
+  function startBootstrap(notify) {
+    if (bootstrap) return
+    const store = getStore()
+    if (store.get('lx-bootstrap') === 'done') return
+    if (!store.get('lx-bootstrap') && store.get('lx-source')) return
+    store.set('lx-bootstrap', 'pending')
+    const job = new AbortController()
+    bootstrap = job
+    async function sync() {
+      const work = catalog().synchronize(job.signal, undefined, notify)
+      bootstrapRun = work
+      let complete = false
+      try {
+        complete = await work
+      } catch {
+        /* Offline startup retries while the component remains open. */
+      }
+      if (job.signal.aborted) return
+      bootstrapRun = undefined
+      if (complete && store.get('lx-source')) {
+        store.set('lx-bootstrap', 'done')
+        return
+      }
+      retryTimer = setTimeout(sync, retryDelay)
+      retryTimer.unref()
+      retryDelay = Math.min(60000, retryDelay * 2)
+    }
+    retryTimer = setTimeout(sync, 300)
+    retryTimer.unref()
+  }
   const catalog = () => {
     if (!bank) {
       const { db } = getStore()
@@ -1797,10 +1831,51 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     onlineAddress(id) {
       const { record, src } = onlineRecording(id)
       const preferred = getMusicPreferences(getStore()).previewQuality
-      const resolve = (entry, signal) => {
+      let preferredSource = src
+      const resolve = async (entry, signal) => {
         const quality = chooseQuality(recordingQualities(src, entry), preferred)
         if (!quality) throw Error('此版本没有可试听音质')
-        return recordingAddress(src, entry, quality, signal)
+        // Only replay platform-native metadata and stable platform recording IDs to alternate resolvers.
+        const alternatives =
+          getStore().get('lx-bootstrap') &&
+          !src.search &&
+          recordingId(src, entry) &&
+          !['preview', 'denied'].includes(permission(src, entry))
+            ? catalog().alternatives(src.platform, quality, src.code)
+            : []
+        if (!alternatives.length) return recordingAddress(src, entry, quality, signal)
+        const probe = async (candidate, work) => {
+          const url = await recordingAddress(candidate, entry, quality, work)
+          const upstream = await openPublic(url, { mediaRange: 'bytes=0-0', signal: work })
+          try {
+            if (
+              ![200, 206].includes(upstream.statusCode) ||
+              !/^(?:audio\/|application\/(?:ogg|octet-stream)|video\/mp4)/i.test(
+                upstream.headers['content-type'] || 'application/octet-stream',
+              )
+            )
+              throw Error('试听地址不可用')
+            return url
+          } finally {
+            upstream.destroy()
+          }
+        }
+        const candidates = [src, ...alternatives].sort(
+          (a, b) =>
+            Number(b.code === preferredSource.code) - Number(a.code === preferredSource.code),
+        )
+        for await (const { src: provider, candidate: url } of availableSources(
+          candidates,
+          probe,
+          signal,
+          4,
+        )) {
+          if (url) {
+            preferredSource = provider
+            return url
+          }
+        }
+        throw Error('已导入音乐源暂时无法播放此录音')
       }
       let row = onlineRows.get(id)
       return async (signal) => {
@@ -1829,7 +1904,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         return resolve(row, signal)
       }
     },
+    startBootstrap,
     synchronizeSources(signal) {
+      if (bootstrapRun && !catalog().independentManual()) {
+        const ready = bootstrapRun
+        return { ready, finish: () => ready }
+      }
       const bank = catalog()
       // Independent user scripts can work immediately. Repository-managed sources wait for the check.
       if (!bank.independentManual()) {
@@ -1989,6 +2069,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
     },
     close() {
+      clearTimeout(retryTimer)
+      bootstrap?.abort()
+      bootstrap = undefined
+      bootstrapRun = undefined
+      retryDelay = 5000
       generation++
       for (const task of running.values()) task.abort()
       active?.abort()

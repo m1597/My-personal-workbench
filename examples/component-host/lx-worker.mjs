@@ -28,15 +28,17 @@ function evaluate(code) {
   result.value.dispose()
   return ready
 }
+let requestedNetwork = false
 const replies = []
 let operations = 0
 async function dispatch({ kind, id, url, options, ms }) {
   try {
     let result = null
     if (kind === 'timer') await wait(Math.min(5000, Math.max(0, Number(ms) || 0)))
-    else if (kind === 'http' && typeof url === 'string' && url.length < 8192)
+    else if (kind === 'http' && typeof url === 'string' && url.length < 8192) {
+      requestedNetwork = true
       result = await sourceRequest(url, options ?? {})
-    else throw Error()
+    } else throw Error()
     replies.push([id, null, result])
   } catch {
     replies.push([id, '音乐源网络请求失败', null])
@@ -65,10 +67,11 @@ try {
       if (op.kind === 'failed' || ++operations > 64) throw Error()
       void dispatch(op)
     }
+    if (!workerData.payload && !started && !operations) throw Error('未提供初始化能力')
     await wait(12)
   }
 } catch {
-  parentPort.postMessage({ error: true })
+  parentPort.postMessage({ error: true, invalidInit: !workerData.payload && !requestedNetwork })
 } finally {
   vm.dispose()
 }
