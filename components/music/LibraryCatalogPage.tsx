@@ -1,8 +1,9 @@
 import { Button } from '@fluentui/react-components'
+import { Cover } from './AlbumBrowser'
 import { ArrowLeft, Play } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { formatTime, type PlaylistTrack, type LocalTrack } from './LibraryPane'
-import { NewsTracks, type News, type ReleaseActions } from './ReleaseCatalog'
+import { Highlights, NewsTracks, type News, type ReleaseActions } from './ReleaseCatalog'
 const norm = (s: string) => s.normalize('NFKC').trim().toLowerCase()
 export const knownAlbum = (album: string) =>
   !!album.trim() && !['—', '-', '未知专辑', 'unknown album'].includes(norm(album))
@@ -12,15 +13,38 @@ export type CatalogLocation = {
   kind: 'artist' | 'album'
   name: string
   artist: string
+  artistId?: string
   fromSong?: string
   group?: News
+}
+export function useCatalogNavigation() {
+  const [locations, setLocations] = useState<CatalogLocation[]>([])
+  const layout = useRef<HTMLElement>(null)
+  const scrollPositions = useRef<number[]>([])
+  const restoreTop = useRef<number | null>(null)
+  function openCatalog(location: CatalogLocation) {
+    scrollPositions.current.push(layout.current?.closest('.music-scroll')?.scrollTop ?? 0)
+    restoreTop.current = 0
+    setLocations((stack) => [...stack, location])
+  }
+  function catalogBack() {
+    restoreTop.current = scrollPositions.current.pop() ?? 0
+    setLocations((stack) => stack.slice(0, -1))
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: restore the visible route before paint.
+  useLayoutEffect(() => {
+    if (restoreTop.current !== null)
+      layout.current?.closest('.music-scroll')?.scrollTo(0, restoreTop.current)
+    restoreTop.current = null
+  }, [locations])
+  return { locations, layout, openCatalog, catalogBack }
 }
 type Props = {
   location: CatalogLocation
   local: LocalTrack[]
   songs: PlaylistTrack[]
   play: (id: string, ids: string[]) => void
-  actions: ReleaseActions
+  actions: Pick<ReleaseActions, 'play'>
   back(): void
   open(v: CatalogLocation): void
 }
@@ -38,7 +62,8 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
     setStatus('')
     setRemote(undefined)
     setArtists([])
-    setChosen('')
+    setChosen(location.artistId ?? '')
+    if (location.artistId) return
     const lookup = async () => {
       const fromTrack = location.fromSong
         ? await window.music.trackArtists(location.fromSong, location.name)
@@ -62,7 +87,8 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
     return () => {
       live = false
     }
-  }, [artistPage, location.name, location.fromSong, retry])
+  }, [artistPage, location.name, location.fromSong, location.artistId, retry])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry reloads the known artist.
   useEffect(() => {
     if (!chosen) return
     let live = true
@@ -79,7 +105,7 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
     return () => {
       live = false
     }
-  }, [chosen])
+  }, [chosen, retry])
   const localSongs = local.filter(
     (t) =>
       t.listed &&
@@ -103,11 +129,13 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
       collected.push(copy || song)
     }
   }
+  const covers = new Map<string, string>()
   const albums = new Map<string, CatalogLocation>()
   for (const song of collected)
     if (knownAlbum(song.album)) {
       const a = albumArtist(song),
         key = JSON.stringify([norm(a), norm(song.album)])
+      if (song.origin !== 'online' && song.available && !covers.has(key)) covers.set(key, song.id)
       albums.set(key, { kind: 'album', name: song.album, artist: a })
     }
   const ids = collected.filter((r) => r.available).map((r) => r.id)
@@ -128,9 +156,10 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
         <h2>{location.name}</h2>
         {!artistPage && <p>{location.artist}</p>}
       </header>
+      {artistPage && <h3>歌曲</h3>}
       {!!collected.length && (
         <>
-          <h3>{artistPage ? '歌曲' : '已收录曲目'}</h3>
+          {!artistPage && <h3>已收录曲目</h3>}
           <ol>
             {collected.map((song) => (
               <li key={song.id}>
@@ -157,6 +186,10 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
       )}
       {artistPage ? (
         <>
+          {chosen && (
+            <Highlights key={chosen} id={chosen} play={actions.play} collected={collected} />
+          )}
+          {!chosen && !collected.length && remote?.length === 0 && <small>暂无歌曲资料。</small>}
           <h3>专辑与发行</h3>
           {[...albums.values()].map((a) => (
             <button
@@ -198,16 +231,19 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
           {remote?.map((r) => (
             <button
               type="button"
-              className="catalog-text-link"
+              className="catalog-text-link catalog-release-link"
               key={r.id}
               onClick={() =>
                 open({ kind: 'album', name: r.title, artist: location.artist, group: r })
               }
             >
-              {r.title}{' '}
-              <small>
-                {r.artist} · {r.date} · {r.type}
-              </small>
+              <Cover id={covers.get(JSON.stringify([norm(r.artist), norm(r.title)]))} track />
+              <span>
+                {r.title}
+                <small>
+                  {r.artist} · {r.date} · {r.type}
+                </small>
+              </span>
             </button>
           ))}
         </>

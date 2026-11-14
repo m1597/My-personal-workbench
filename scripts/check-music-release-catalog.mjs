@@ -97,6 +97,7 @@ lx.on('request',({action,info})=>{
    }
    if(info.keyword==='海へ ギヴン')return [{id:'missing',name:'海へ',singer:'ギヴン',albumName:'海へ'}]
    if(info.keyword==='i beg you yurisa')return [{id:'highlight',name:'i beg you',singer:'yurisa',interval:'04:29'}]
+   if(info.keyword==='Vogel im Käfig 澤野弘之')return [{id:'sawano',name:'Vogel im Käfig',singer:'澤野弘之'}]
    if(info.keyword==='夜风 云海')return [{id:'highlight',name:'夜风',singer:'云海'}]
    if(info.keyword==='缺少曲 青禾')return [{id:'missing',name:'缺少曲',singer:'青禾',albumName:'山色'}]
    return [{id:'recording-17',name:'远山',singer:'青禾',albumName:'山色',interval:'03:01'},
@@ -142,7 +143,11 @@ async function launch() {
     const request = https.request.bind(https)
     globalThis.audioRequests = []
     https.request = (url, options, done) => {
-      if (!/^https:\/\/1\.1\.1\.1\/(?:recording-(?:17|18)|missing|highlight)\.mp3$/.test(url.href))
+      if (
+        !/^https:\/\/1\.1\.1\.1\/(?:recording-(?:17|18)|missing|highlight|sawano)\.mp3$/.test(
+          url.href,
+        )
+      )
         return request(url, options, done)
       globalThis.audioRequests.push(url.pathname)
       const req = new EventEmitter()
@@ -312,6 +317,31 @@ async function launch() {
           relations: [
             { type: 'collaboration', artist: { id: related, name: '云海' } },
             { type: 'collaboration', artist: { id: artist, name: '青禾' } },
+          ],
+        })
+      const sawano = '60d2ea34-1912-425f-bf9c-fc544e4448cd'
+      const sawanoCredit = [{ name: '澤野弘之', artist: { id: sawano, name: '澤野弘之' } }]
+      const query = url.searchParams.get('query') ?? ''
+      if (entity === 'artist' && query.includes('澤野弘之'))
+        return Response.json({ artists: [sawanoCredit[0].artist] })
+      if (entity === sawano) return Response.json({ relations: [] })
+      if (entity === 'recording' && query.includes(sawano))
+        return Response.json({
+          recordings: [{ title: 'Vogel im Käfig', 'artist-credit': sawanoCredit }],
+        })
+      if (
+        entity === 'release-group' &&
+        query.includes(sawano) &&
+        !query.includes('firstreleasedate')
+      )
+        return Response.json({
+          'release-groups': [
+            {
+              id: first,
+              title: '進撃の巨人',
+              'primary-type': 'Album',
+              'artist-credit': sawanoCredit,
+            },
           ],
         })
       if (entity === 'recording')
@@ -536,12 +566,43 @@ try {
   await played()
   await similar.evaluate((el) => el.scrollIntoView({ block: 'center' }))
   await page.screenshot({ path: path.join(root, 'similar-artists.png') })
+  const home = page.getByRole('region', { name: '歌手主页' })
+  await similar.getByRole('button', { name: '云海', exact: true }).click()
+  await expect(home.getByText('夜风', { exact: true })).toBeVisible()
+  await home.getByRole('button', { name: '返回' }).click()
   await similar.getByRole('button', { name: '关注云海' }).click()
   await expect(similar.getByText('暂无相关歌手。')).toBeVisible()
   await button('云海').click()
+  await expect(home.getByText('夜风', { exact: true })).toBeVisible()
+  await home.getByRole('button', { name: '返回' }).click()
   await expect(similar.getByRole('heading')).toHaveText('与云海相似的歌手')
   await expect(similar.getByText('暂无相关歌手。')).toBeVisible()
 
+  await news().getByRole('button', { name: '管理关注' }).click()
+  await news().getByLabel('要关注的歌手').fill('澤野弘之')
+  await button('查找歌手').click()
+  await button('关注澤野弘之').click()
+  const portrait = news().getByRole('button', { name: '澤野弘之', exact: true })
+  await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(660, 520))
+  await portrait.evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  const savedArtistScroll = await scroll()
+  assert.ok(savedArtistScroll > 0)
+  await portrait.locator('img').click()
+  await expect(home.getByRole('heading', { name: '澤野弘之', exact: true })).toBeVisible()
+  await expect(home.getByText('Vogel im Käfig', { exact: true })).toBeVisible()
+  await home.getByRole('button', { name: '播放', exact: true }).click()
+  await expect.poll(() => app.evaluate(() => globalThis.audioRequests.at(-1))).toBe('/sawano.mp3')
+  await played()
+  await page.screenshot({ path: path.join(root, 'sawano-artist-home.png') })
+  await home.getByRole('button', { name: /進撃の巨人/ }).click()
+  const sawanoAlbum = page.getByRole('region', { name: '专辑主页' })
+  await expect(sawanoAlbum.getByText('1.1 远山', { exact: true })).toBeVisible()
+  await sawanoAlbum.getByRole('button', { name: '返回' }).click()
+  await home.getByRole('button', { name: '返回' }).click()
+  assert.equal(await scroll(), savedArtistScroll)
+  await expect(portrait).toBeInViewport()
+  await page.screenshot({ path: path.join(root, 'sawano-return.png') })
+  await button('取消关注澤野弘之').click()
   await app.close()
   app = await launch()
   page = await app.firstWindow()

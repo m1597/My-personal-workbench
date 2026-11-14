@@ -1,6 +1,7 @@
 import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
-import type { LocalTrack } from './LibraryPane'
+import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
+import type { LocalTrack, PlaylistTrack } from './LibraryPane'
 import { Cover, type Album } from './AlbumBrowser'
 import { TrackMenu } from './TrackMenu'
 import type { SongAPI } from './SongDetails'
@@ -316,7 +317,15 @@ export function NewsTracks({
     </div>
   )
 }
-function Highlights({ id, play }: { id: string; play: PlayRecording }) {
+export function Highlights({
+  id,
+  play,
+  collected,
+}: {
+  id: string
+  play: PlayRecording
+  collected?: PlaylistTrack[]
+}) {
   const [songs, setSongs] = useState<Pick<ReleaseTrack, 'artist' | 'title'>[]>()
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
@@ -347,23 +356,32 @@ function Highlights({ id, play }: { id: string; play: PlayRecording }) {
       if (live.current) setPending(false)
     }
   }
+  const visible = songs?.filter(
+    (s) =>
+      !collected?.some(
+        (r) =>
+          r.available &&
+          normalize(r.title) === normalize(s.title) &&
+          normalize(r.artist) === normalize(s.artist),
+      ),
+  )
   return (
     <div>
       {error && <small role="alert">{error}</small>}
-      {songs ? (
-        songs.length ? (
+      {visible ? (
+        visible.length ? (
           <ul>
-            {songs.map((song) => (
+            {visible.map((song) => (
               <li key={song.title}>
                 <span>{song.title}</span>
                 <Button size="small" disabled={pending} onClick={() => void listen(song)}>
-                  试听
+                  {collected ? '播放' : '试听'}
                 </Button>
               </li>
             ))}
           </ul>
         ) : (
-          <small>暂无正式发行录音。</small>
+          !collected?.length && <small>暂无正式发行录音。</small>
         )
       ) : (
         !error && <small role="status">正在读取代表作…</small>
@@ -372,12 +390,14 @@ function Highlights({ id, play }: { id: string; play: PlayRecording }) {
   )
 }
 function SimilarArtists({
+  openArtist,
   seed,
   followed,
   busy,
   follow,
   play,
 }: {
+  openArtist: (artist: Artist) => void
   seed: Artist
   followed: Artist[]
   busy: boolean
@@ -425,7 +445,9 @@ function SimilarArtists({
             <li key={a.id} className="release-event">
               <div className="release-event-head">
                 <div>
-                  <strong>{a.name}</strong>
+                  <button type="button" className="catalog-text-link" onClick={() => openArtist(a)}>
+                    {a.name}
+                  </button>
                   <small>{a.detail}</small>
                 </div>
                 <Button
@@ -514,11 +536,22 @@ function ReleaseList({
     </ul>
   )
 }
-export function ArtistReleases({ play }: { play: PlayRecording }) {
+export function ArtistReleases({
+  play,
+  local,
+  songs,
+  playCollected,
+}: {
+  play: PlayRecording
+  local: LocalTrack[]
+  songs: PlaylistTrack[]
+  playCollected: (id: string, ids: string[]) => void
+}) {
+  const { locations, layout, openCatalog, catalogBack } = useCatalogNavigation()
   const [selected, setSelected] = useState<Artist>()
-  const [discography, setDiscography] = useState<News[]>()
-  const [artistError, setArtistError] = useState('')
-  const [artistRetry, setArtistRetry] = useState(0)
+  function openArtist(artist: Artist) {
+    openCatalog({ kind: 'artist', artist: artist.name, name: artist.name, artistId: artist.id })
+  }
   const [albums, setAlbums] = useState<Album[]>([])
   useEffect(() => {
     let live = true
@@ -532,24 +565,6 @@ export function ArtistReleases({ play }: { play: PlayRecording }) {
       live = false
     }
   }, [])
-  // biome-ignore lint/correctness/useExhaustiveDependencies: retry explicitly reloads the selected artist.
-  useEffect(() => {
-    let live = true
-    setDiscography(undefined)
-    setArtistError('')
-    if (selected)
-      void window.music
-        .artistReleases(selected.id)
-        .then((rows) => {
-          if (live) setDiscography(rows)
-        })
-        .catch((e) => {
-          if (live) setArtistError(message(e))
-        })
-    return () => {
-      live = false
-    }
-  }, [selected, artistRetry])
   const [followed, setFollowed] = useState<Artist[]>([])
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<Artist[]>()
@@ -594,140 +609,137 @@ export function ArtistReleases({ play }: { play: PlayRecording }) {
     })
   }
   return (
-    <section className="music-release-news" aria-label="关注歌手的新发行">
-      <div className="release-news-column" data-empty={!busy && !status && !news?.length}>
-        <header>
-          <h2>关注歌手的新发行</h2>
-          {!!followed.length && (
-            <Button
-              size="small"
-              disabled={busy}
-              onClick={() => void act(() => load(followed, true))}
-            >
-              刷新发行
-            </Button>
-          )}
-        </header>
-        {busy && <small role="status">正在读取发行资料…</small>}
-        {status && <p role="alert">{status}</p>}
-        {!busy &&
-          !status &&
-          (!followed.length ? (
-            <p>关注歌手后可在这里查看新发行。</p>
-          ) : (
-            news?.length === 0 && <p>近 90 天暂无新发行。</p>
-          ))}
-        <ReleaseList rows={news ?? []} albums={albums} play={play} />
-      </div>
-      <section className="followed-artists" aria-label="我关注的歌手">
-        <header>
-          <h2>我关注的歌手</h2>
-          <Button size="small" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-            管理关注
-          </Button>
-        </header>
-        <div className="followed-artist-grid">
-          {followed.map((artist) => (
-            <button
-              type="button"
-              key={artist.id}
-              aria-pressed={selected?.id === artist.id}
-              onClick={() => setSelected(selected?.id === artist.id ? undefined : artist)}
-            >
-              <ArtistPortrait id={artist.id} />
-              <span>{artist.name}</span>
-            </button>
-          ))}
-        </div>
-        {selected || followed.length === 1 ? (
-          <SimilarArtists
-            key={(selected ?? followed[0]).id}
-            seed={selected ?? followed[0]}
-            followed={followed}
-            busy={busy}
-            follow={(id) => {
-              if (!selected && followed.length === 1) setSelected(followed[0])
-              toggle(id, true)
-            }}
-            play={play}
-          />
-        ) : (
-          followed.length > 1 && <small>选择上方歌手，查看相似歌手与发行。</small>
-        )}
-        {selected && (
-          <section aria-label={selected.name + '的发行'} className="artist-discography">
-            <header>
-              <h3>{selected.name}的发行</h3>
-              <Button size="small" onClick={() => setSelected(undefined)}>
-                收起发行
+    <>
+      <section
+        ref={layout}
+        className="music-release-news"
+        style={locations.length ? { display: 'none' } : undefined}
+        aria-label="关注歌手的新发行"
+      >
+        <div className="release-news-column" data-empty={!busy && !status && !news?.length}>
+          <header>
+            <h2>关注歌手的新发行</h2>
+            {!!followed.length && (
+              <Button
+                size="small"
+                disabled={busy}
+                onClick={() => void act(() => load(followed, true))}
+              >
+                刷新发行
               </Button>
-            </header>
-            {artistError ? (
-              <p role="alert">
-                {artistError}{' '}
-                <Button size="small" onClick={() => setArtistRetry((n) => n + 1)}>
-                  重试
-                </Button>
-              </p>
-            ) : discography ? (
-              discography.length ? (
-                <ReleaseList rows={discography} albums={albums} play={play} />
-              ) : (
-                <p>暂无发行资料。</p>
-              )
-            ) : (
-              <small role="status">正在读取歌手发行…</small>
             )}
-          </section>
-        )}
-        {expanded && (
-          <div className="artist-management">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (query.trim() && !busy)
-                  void act(async () => {
-                    setMatches(await window.music.findArtists(query.trim()))
-                  })
-              }}
-            >
-              <Input
-                aria-label="要关注的歌手"
-                maxLength={160}
-                value={query}
-                placeholder="输入歌手名"
-                onChange={(_, d) => {
-                  setQuery(d.value)
-                  setMatches(undefined)
+          </header>
+          {busy && <small role="status">正在读取发行资料…</small>}
+          {status && <p role="alert">{status}</p>}
+          {!busy &&
+            !status &&
+            (!followed.length ? (
+              <p>关注歌手后可在这里查看新发行。</p>
+            ) : (
+              news?.length === 0 && <p>近 90 天暂无新发行。</p>
+            ))}
+          <ReleaseList rows={news ?? []} albums={albums} play={play} />
+        </div>
+        <section className="followed-artists" aria-label="我关注的歌手">
+          <header>
+            <h2>我关注的歌手</h2>
+            <Button size="small" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+              管理关注
+            </Button>
+          </header>
+          <div className="followed-artist-grid">
+            {followed.map((artist) => (
+              <button
+                type="button"
+                key={artist.id}
+                onClick={() => {
+                  setSelected(artist)
+                  openArtist(artist)
                 }}
-              />
-              <Button size="small" type="submit" disabled={busy || !query.trim()}>
-                查找歌手
-              </Button>
-            </form>
-            {matches?.length === 0 && <p>没有找到匹配的歌手</p>}
-            {matches
-              ?.filter((a) => !followed.some((f) => f.id === a.id))
-              .map((a) => (
+              >
+                <ArtistPortrait id={artist.id} />
+                <span>{artist.name}</span>
+              </button>
+            ))}
+          </div>
+          {selected || followed.length === 1 ? (
+            <SimilarArtists
+              openArtist={openArtist}
+              key={(selected ?? followed[0]).id}
+              seed={selected ?? followed[0]}
+              followed={followed}
+              busy={busy}
+              follow={(id) => {
+                if (!selected && followed.length === 1) setSelected(followed[0])
+                toggle(id, true)
+              }}
+              play={play}
+            />
+          ) : (
+            followed.length > 1 && <small>选择上方歌手，查看歌曲与发行。</small>
+          )}
+          {expanded && (
+            <div className="artist-management">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (query.trim() && !busy)
+                    void act(async () => {
+                      setMatches(await window.music.findArtists(query.trim()))
+                    })
+                }}
+              >
+                <Input
+                  aria-label="要关注的歌手"
+                  maxLength={160}
+                  value={query}
+                  placeholder="输入歌手名"
+                  onChange={(_, d) => {
+                    setQuery(d.value)
+                    setMatches(undefined)
+                  }}
+                />
+                <Button size="small" type="submit" disabled={busy || !query.trim()}>
+                  查找歌手
+                </Button>
+              </form>
+              {matches?.length === 0 && <p>没有找到匹配的歌手</p>}
+              {matches
+                ?.filter((a) => !followed.some((f) => f.id === a.id))
+                .map((a) => (
+                  <div key={a.id}>
+                    {a.name} <small>{a.detail}</small>{' '}
+                    <Button size="small" disabled={busy} onClick={() => toggle(a.id, true)}>
+                      关注{a.name}
+                    </Button>
+                  </div>
+                ))}
+              {followed.map((a) => (
                 <div key={a.id}>
                   {a.name} <small>{a.detail}</small>{' '}
-                  <Button size="small" disabled={busy} onClick={() => toggle(a.id, true)}>
-                    关注{a.name}
+                  <Button size="small" disabled={busy} onClick={() => toggle(a.id, false)}>
+                    取消关注{a.name}
                   </Button>
                 </div>
               ))}
-            {followed.map((a) => (
-              <div key={a.id}>
-                {a.name} <small>{a.detail}</small>{' '}
-                <Button size="small" disabled={busy} onClick={() => toggle(a.id, false)}>
-                  取消关注{a.name}
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
+        </section>
       </section>
-    </section>
+      {locations.map((location, i) => (
+        <div key={JSON.stringify(location)} hidden={i < locations.length - 1}>
+          <LibraryCatalogPage
+            location={location}
+            local={local}
+            songs={songs}
+            play={playCollected}
+            actions={{ play }}
+            open={openCatalog}
+            back={catalogBack}
+          />
+        </div>
+      ))}
+    </>
   )
 }
 const normalize = (v: string) => v.trim().normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ')

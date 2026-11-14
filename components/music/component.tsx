@@ -1504,7 +1504,12 @@ function Music() {
             />
           )
         ) : tab === 'feed' ? (
-          <ArtistReleases play={playSearchResult} />
+          <ArtistReleases
+            play={playSearchResult}
+            local={state?.localTracks ?? []}
+            songs={state?.onlineTracks ?? []}
+            playCollected={(id, ids) => void act(() => playOrdered(id, ids))}
+          />
         ) : tab === 'download' ? (
           <DownloadPane
             preferredQuality={state?.prefs.quality}

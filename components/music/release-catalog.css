@@ -212,3 +212,13 @@
     grid-row: 2;
   }
 }
+
+.catalog-release-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+.catalog-release-link .album-art {
+  width: 48px;
+  flex: none;
+}

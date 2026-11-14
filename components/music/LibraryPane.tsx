@@ -9,9 +9,9 @@ import { PlaylistSortMenu, type Playlist, type PlaylistSorting } from './Playlis
 export type { Playlist } from './PlaylistSortMenu'
 import {
   LibraryCatalogPage,
+  useCatalogNavigation,
   albumArtist,
   knownAlbum,
-  type CatalogLocation,
 } from './LibraryCatalogPage'
 import { TimedPlaylist } from './TimedPlaylist'
 import { TrackMenu } from './TrackMenu'
@@ -19,7 +19,7 @@ import { AlbumBrowser } from './AlbumBrowser'
 import { PlaylistCover } from './PlaylistCover'
 import { InfrequentTracks } from './InfrequentTracks'
 import { RecentHistory } from './LibraryTools'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Checkbox,
@@ -325,25 +325,7 @@ export function LibraryPane({
   const playableMembers = playlistPage
     ? (librarySearch.ids ? rows : members).filter((t) => t.available).map((t) => t.id)
     : []
-  const [locations, setLocations] = useState<CatalogLocation[]>([])
-  const layout = useRef<HTMLDivElement>(null)
-  const scrollPositions = useRef<number[]>([])
-  const restoreTop = useRef<number | null>(null)
-  function openCatalog(location: CatalogLocation) {
-    scrollPositions.current.push(layout.current?.closest('.music-scroll')?.scrollTop ?? 0)
-    restoreTop.current = 0
-    setLocations((stack) => [...stack, location])
-  }
-  function catalogBack() {
-    restoreTop.current = scrollPositions.current.pop() ?? 0
-    setLocations((stack) => stack.slice(0, -1))
-  }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: restore the visible route before paint.
-  useLayoutEffect(() => {
-    if (restoreTop.current !== null)
-      layout.current?.closest('.music-scroll')?.scrollTo(0, restoreTop.current)
-    restoreTop.current = null
-  }, [locations])
+  const { locations, layout, openCatalog, catalogBack } = useCatalogNavigation()
   const choose = (id: string) => {
     setAlbumView(false)
     setSelection(null)
@@ -354,7 +336,9 @@ export function LibraryPane({
   }
   const library = (
     <div
-      ref={layout}
+      ref={(el) => {
+        layout.current = el
+      }}
       className="library-layout"
       style={locations.length ? { display: 'none' } : undefined}
       {...importer.drop}

@@ -136,8 +136,10 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     for (const a of result) related.set(a.id, a)
     return result
   })
+  const knownArtist = (id) =>
+    mbid.test(id) && (artists.has(id) || related.has(id) || followed().some((a) => a.id === id))
   bind('artistHighlights', async (id) => {
-    if (!mbid.test(id) || !related.has(id)) throw Error('请先选择相似歌手')
+    if (!knownArtist(id)) throw Error('请先选择艺人')
     const data = await metadata('recording', {
       query: 'arid:' + id + ' AND status:official',
       limit: '25',
@@ -221,8 +223,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
   }
   const newest = (a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title)
   bind('artistReleases', async (id) => {
-    if (!mbid.test(id) || (!artists.has(id) && !followed().some((artist) => artist.id === id)))
-      throw Error('请先选择艺人')
+    if (!knownArtist(id)) throw Error('请先选择艺人')
     return (await readGroups([id], 'arid:' + id + ' AND status:official')).sort(newest)
   })
   bind('releaseNews', async (refresh = false) => {
