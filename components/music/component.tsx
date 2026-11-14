@@ -152,7 +152,12 @@ type State = {
   hasLibrary: boolean
 }
 type Presentation = 'full' | 'bar' | 'background'
-type Mode = { language?: 'zh-CN' | 'en'; mode: string; presentation: Presentation }
+type Mode = {
+  settingsRequest?: number
+  language?: 'zh-CN' | 'en'
+  mode: string
+  presentation: Presentation
+}
 type PlaybackFailure = {
   message: string
   choices: { key: string; title: string; artist: string; source: string }[]
@@ -473,7 +478,14 @@ function Music() {
         setRepeatOne(s.repeatOne)
       })
       .catch((e) => setError(String(e)))
+    let handledSettings = 0
     const mode = (v: Mode) => {
+      if ((v.settingsRequest ?? 0) > handledSettings) {
+        handledSettings = v.settingsRequest!
+        setGuide(null)
+        setTab('settings')
+      }
+      setLanguage(v.language === 'en' ? 'en' : 'zh-CN')
       setDocked(v.mode === 'docked')
       setPresentation(v.presentation)
     }
@@ -481,12 +493,6 @@ function Music() {
     return window.musicWindow.subscribe(mode)
   }, [])
   useEffect(() => {
-      if ((v.settingsRequest ?? 0) > handledSettings) {
-        handledSettings = v.settingsRequest!
-        setGuide(null)
-        setTab('settings')
-      }
-      setLanguage(v.language === 'en' ? 'en' : 'zh-CN')
     if (tab !== 'library' && tab !== 'playlists') return
     let mounted = true
     const rescan = () =>
@@ -752,13 +758,6 @@ function Music() {
     if (context !== 'clip') clearQuick()
     if (context !== 'transition') fading.current?.()
     const seq = ++epoch.current
-    // Keep queue writes ordered while allowing a new track to interrupt a slow decoder.
-    function startAudio(el: HTMLAudioElement) {
-      if (seq !== epoch.current) return
-      void el.play().catch((error) => {
-        if (seq === epoch.current && error.name !== 'AbortError') setError(String(error))
-      })
-    }
     requested.current = { id, seq, src: current.current === id ? (audio.current?.src ?? '') : '' }
     setPlayError(undefined)
     setOnlineFailure(undefined)
@@ -766,6 +765,13 @@ function Music() {
       id.startsWith('online-recording-') || !!state?.items.find((r) => r.id === id)?.online
     const fail = (reason: unknown) => {
       if (seq === epoch.current) setPlayError({ id, reason: String(reason), online: onlineTrack })
+    }
+    // Keep queue writes ordered while allowing a new track to interrupt a slow decoder.
+    function startAudio(el: HTMLAudioElement) {
+      if (seq !== epoch.current) return
+      void el.play().catch((error) => {
+        if (error.name !== 'AbortError') fail(error)
+      })
     }
     const run = async () => {
       const el = audio.current
@@ -815,6 +821,7 @@ function Music() {
                   0.1
             ? state.position
             : 0
+      requested.current.src = src
       el.src = src
       el.currentTime = startAt ?? (restart ? 0 : resume)
       setTime(el.currentTime)
@@ -822,7 +829,6 @@ function Music() {
       startAudio(el)
     }
     const operation = switching.current.then(run).catch(fail)
-      requested.current.src = src
     switching.current = operation.catch(() => {})
     return operation
   }
@@ -902,6 +908,8 @@ function Music() {
     clearQuick()
     fading.current?.()
     ++epoch.current
+    setPlayError(undefined)
+    setOnlineFailure(undefined)
     if (resolving) await host.lxCancel()
     const el = audio.current
     pausedOnline.current = null
@@ -909,8 +917,6 @@ function Music() {
       el.pause()
       setPaused(true)
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
-    setPlayError(undefined)
-    setOnlineFailure(undefined)
       current.current = ''
       setLoadedId('')
       el.removeAttribute('src')
@@ -1281,6 +1287,8 @@ function Music() {
   }, [paused, canPrevious, canToggle, canNext])
   async function audition(row: Item, key?: string, quality?: string, queueIds = visibleQueue) {
     const request = ++epoch.current
+    setPlayError(undefined)
+    setOnlineFailure(undefined)
     setResolving(true)
     try {
       if (!key || !quality) {
@@ -1288,8 +1296,6 @@ function Music() {
         if (request !== epoch.current) return
         if (!result.items.length) throw Error('音乐源中没有找到此录音')
         const exact = result.items.filter(
-    setPlayError(undefined)
-    setOnlineFailure(undefined)
           (v) =>
             v.title.trim().toLocaleLowerCase() === row.title.trim().toLocaleLowerCase() &&
             v.artist.trim().toLocaleLowerCase() === row.artist.trim().toLocaleLowerCase(),
@@ -2190,14 +2196,6 @@ function Music() {
         <audio
           ref={audio}
           preload="metadata"
-          onPlay={() => setPaused(false)}
-          onPause={() => setPaused(true)}
-          onTimeUpdate={(e) => {
-            setTime(e.currentTarget.currentTime)
-            const clip = clips.current
-            if (
-              clip &&
-              !clip.pending &&
           onPlaying={(e) => {
             if (
               requested.current.src === e.currentTarget.currentSrc &&
@@ -2207,6 +2205,14 @@ function Music() {
               setOnlineFailure(undefined)
             }
           }}
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
+          onTimeUpdate={(e) => {
+            setTime(e.currentTarget.currentTime)
+            const clip = clips.current
+            if (
+              clip &&
+              !clip.pending &&
               !e.currentTarget.paused &&
               current.current === clip.ids[clip.index] &&
               e.currentTarget.currentTime >= clip.until
@@ -2231,14 +2237,6 @@ function Music() {
               attempt.id !== current.current ||
               attempt.seq !== epoch.current
             )
-            if (src.startsWith('fitbay-audio:')) {
-              const id = current.current
-              current.current = ''
-              setLoadedId('')
-              void (
-                e.currentTarget.error?.code === 4 || e.currentTarget.readyState === 0
-                  ? host.mediaFailed(id, src)
-                  : host.release(src)
               return
             if (
               current.current.startsWith('online-recording-') &&
@@ -2280,6 +2278,14 @@ function Music() {
               online: attempt.id.startsWith('online-recording-'),
               reason: e.currentTarget.error?.code === 2 ? 'network' : 'decode',
             })
+            if (src.startsWith('fitbay-audio:')) {
+              const id = current.current
+              current.current = ''
+              setLoadedId('')
+              void (
+                e.currentTarget.error?.code === 4 || e.currentTarget.readyState === 0
+                  ? host.mediaFailed(id, src)
+                  : host.release(src)
               )
                 .then(refresh)
                 .catch(() => {})
