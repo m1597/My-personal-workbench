@@ -19,7 +19,8 @@ import { readCommon } from './music/albums.mjs'
 const identity = (s) => [s.dev, s.ino, s.birthtimeNs].join(':')
 const revision = (s) => [identity(s), s.size, s.mtimeNs].join(':')
 const writeChunk = promisify(write)
-const matchesCopy = (s, version, partial) => s && (partial ? identity(s) : revision(s)) === version
+// An interrupted write has no final size or mtime. The same inode can now contain user edits.
+const matchesCopy = (s, version, partial) => !partial && s && revision(s) === version
 const stat = (file) => lstatSync(file, { bigint: true, throwIfNoEntry: false })
 const safeDir = async (dir) =>
   path.isAbsolute(dir) &&
@@ -35,9 +36,12 @@ const safeName = (name) =>
 export async function recyclableLyrics(db, audio) {
   const lyric = await ownedLyrics(db, audio)
   if (!lyric) return null
+  return (await hasOtherRecording(audio)) ? null : lyric
+}
+async function hasOtherRecording(audio) {
   const current = path.parse(audio)
   const entries = await readdir(current.dir).catch(() => null)
-  if (
+  return (
     !entries ||
     entries.some((name) => {
       const entry = path.parse(name)
@@ -48,8 +52,6 @@ export async function recyclableLyrics(db, audio) {
       )
     })
   )
-    return null
-  return lyric
 }
 export function forgetLocal(store, ids) {
   const db = store.db
@@ -194,11 +196,13 @@ async function moveFavorite(store, row, target, sourceRevision, lyric, onMove, m
   }
   try {
     checkPaths()
-    if (stat(lyricPath(file))) throw Error('目标歌词冲突')
+    if (stat(lyricPath(file)) || (lyric && (await hasOtherRecording(file))))
+      throw Error('目标歌词冲突')
     const audio = await copy(row.file, file)
     const dst = lyricPath(file)
     const s = lyric ? await copy(lyric, dst) : null
     if (lyric && lyric !== (await recyclableLyrics(db, row.file))) throw Error('歌词已变化')
+    if (lyric && (await hasOtherRecording(file))) throw Error('目标目录有同名录音')
     checkPaths()
     if (copies.some(([dst, version]) => revision(stat(dst)) !== version))
       throw Error('目标文件已变化')
@@ -356,10 +360,12 @@ export async function retireDownloads(store, previous, { trash, forget }, signal
   const protectedIds = new Set(rows.filter((r) => r.favorite).map((r) => r.id))
   let failures = 0
   for (const row of rows) {
+    signal.throwIfAborted()
     try {
       if (protectedIds.has(row.id)) continue
       const version = await verifyDownload(row)
       const lyric = await recyclableLyrics(store.db, row.file)
+      signal.throwIfAborted()
       const fresh = store.db
         .prepare('SELECT favorite,file FROM local_tracks WHERE id=?')
         .get(row.id)
@@ -367,6 +373,7 @@ export async function retireDownloads(store, previous, { trash, forget }, signal
         continue
       if (!fresh.favorite) await trashAudio(store, row, lyric, trash, forget)
     } catch {
+      signal.throwIfAborted()
       failures++
     }
   }

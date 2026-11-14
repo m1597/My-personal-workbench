@@ -29,6 +29,7 @@ const manual = path.join(fresh, '手动目录')
 await mkdir(manual)
 await mkdir(path.join(fresh, '古典'))
 await writeFile(path.join(fresh, '古典', '目录冲突.mp3'), '保留这个文件')
+await writeFile(path.join(fresh, '古典', '歌词冲突.wav'), '另一首录音')
 const original = path.resolve('tests/fixtures/local-music/tone.mp3')
 const hash = createHash('sha256')
   .update(await readFile(original))
@@ -50,6 +51,7 @@ for (const title of [
   '手选分类',
   '目录匹配',
   '目录冲突',
+  '歌词冲突',
   '新建分类',
   '冲突',
   '无模型',
@@ -65,7 +67,7 @@ for (const title of [
     file,
     title,
     artist: '艺人',
-    album: ['目录匹配', '目录冲突'].includes(title) ? '古典' : '',
+    album: ['目录匹配', '目录冲突', '歌词冲突'].includes(title) ? '古典' : '',
     language: ['已有分类', '即时归类'].includes(title) ? 'jpn' : undefined,
     duration: 4,
   })
@@ -184,7 +186,7 @@ try {
     )
     .toBe(false)
   assert.equal(await readFile(lyricPath(moved), 'utf8'), '[00:00]我的歌词')
-  for (const title of ['目录匹配', '目录冲突']) {
+  for (const title of ['目录匹配', '目录冲突', '歌词冲突']) {
     await page.getByRole('button', { name: '试听' + title, exact: true }).click()
     await page.getByRole('button', { name: '收藏当前歌曲' }).click()
     await expect(page.getByRole('button', { name: '收藏当前歌曲' })).toHaveAttribute(
@@ -198,6 +200,8 @@ try {
   )
   assert.equal(await readFile(path.join(fresh, '古典', '目录冲突.mp3'), 'utf8'), '保留这个文件')
   assert.ok((await stat(tracks['目录冲突'].file)).isFile())
+  assert.equal(await readFile(lyricPath(tracks['歌词冲突'].file), 'utf8'), '[00:00]我的歌词')
+  await assert.rejects(stat(path.join(fresh, '古典', '歌词冲突.lrc')), { code: 'ENOENT' })
   await page.getByRole('button', { name: '试听手选分类', exact: true }).click()
   await page.getByRole('button', { name: '收藏当前歌曲' }).click()
   await openMusicSettings(page)
@@ -222,7 +226,7 @@ try {
 }
 // The next phase starts with a queued non-favorite and verifies cleanup of that playback state.
 const checkpoint = new MusicStore(music)
-// Interrupted before the new path was committed. Only the partial copy may be removed.
+// An interrupted copy can be edited in place by its owner while Music is closed.
 const interrupted = tracks['目录冲突']
 const partial = path.join(manual, '未完成.mp3')
 await writeFile(partial, 'incomplete')
@@ -240,11 +244,12 @@ checkpoint.db
 checkpoint.set('play-queue', JSON.stringify([tracks['普通歌单歌曲'].item, tracks['已有分类'].id]))
 checkpoint.checkpoint(tracks['普通歌单歌曲'].item, 1)
 checkpoint.db.close()
+await writeFile(partial, '用户重新写入的文件')
 const app = await launch()
 try {
   const page = await app.firstWindow()
   await page.evaluate(() => window.music.state())
-  await assert.rejects(stat(partial), { code: 'ENOENT' })
+  assert.equal(await readFile(partial, 'utf8'), '用户重新写入的文件')
   assert.ok((await stat(interrupted.file)).isFile())
   await page.evaluate(() => window.music.configureModel('deepseek', 'test', 'test-fixture', false))
   await app.evaluate(
@@ -316,7 +321,7 @@ try {
   assert.equal(await readFile(path.join(existing, '冲突.mp3'), 'utf8'), '冲突文件')
   const db = new MusicStore(music)
   try {
-    assert.equal(db.db.prepare('SELECT count(*) AS n FROM recommended_songs').get().n, 16)
+    assert.equal(db.db.prepare('SELECT count(*) AS n FROM recommended_songs').get().n, 17)
     for (const title of ['同内容替换', '旧版无身份']) {
       assert.equal(db.library.row(tracks[title].id).file, tracks[title].file)
       assert.deepEqual(await readFile(tracks[title].file), await readFile(original))
