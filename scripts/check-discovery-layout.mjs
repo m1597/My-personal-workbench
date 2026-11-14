@@ -92,6 +92,29 @@ try {
         assert.ok(Math.abs(frame.x - anchor.x) < 24, name + ' 正文与导航起点错位')
       }
       if (name === '在线找歌') {
+        const platforms = page.getByRole('tablist', { name: '搜索平台' })
+        for (const platform of ['酷狗音乐', 'QQ 音乐', '网易云音乐']) {
+          await platforms.getByRole('tab', { name: platform }).click()
+          const states = await platforms.getByRole('tab').evaluateAll((tabs) =>
+            tabs.map((tab) => {
+              const style = getComputedStyle(tab)
+              return {
+                selected: tab.getAttribute('aria-selected') === 'true',
+                background: style.backgroundColor,
+                border: style.borderTopColor,
+                width: style.borderTopWidth,
+                underline: getComputedStyle(tab, '::after').content,
+              }
+            }),
+          )
+          assert.equal(states.filter((tab) => tab.selected).length, 1)
+          for (const tab of states) {
+            assert.equal(tab.background, 'rgba(0, 0, 0, 0)')
+            assert.equal(tab.underline, 'none')
+            assert.ok(parseFloat(tab.width) > 0 && parseFloat(tab.width) <= 1)
+            assert.equal(tab.border === 'rgba(0, 0, 0, 0)', !tab.selected)
+          }
+        }
         const recent = await box('.search-history')
         assert.ok(
           width > 740 ? recent.x >= frame.x + frame.width : recent.y >= frame.y + frame.height,
