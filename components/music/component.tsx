@@ -417,6 +417,7 @@ function Music() {
     [libraryCollection, setLibraryCollection] = useState('all'),
     [playlistCollection, setPlaylistCollection] = useState('favorites')
   const catalog = useCatalogNavigation(tab)
+  const [libraryVisit, resetLibrary] = useState(0)
   const [online, setOnline] = useState<{
     row: Item
     result: Versions
@@ -1357,7 +1358,18 @@ function Music() {
             setTab(data.value === 'download' ? discoveryMode : String(data.value))
           }}
         >
-          <Tab data-guide-anchor="library" value="library">
+          <Tab
+            data-guide-anchor="library"
+            value="library"
+            onClick={() => {
+              if (tab === 'library') {
+                catalog.closeCatalog()
+                resetLibrary((n) => n + 1)
+                setLibraryCollection('all')
+                setSearch('')
+              }
+            }}
+          >
             曲库
           </Tab>
           <Tab data-guide-anchor="playlists" value="playlists">
@@ -1485,6 +1497,7 @@ function Music() {
           />
         ) : libraryPage ? (
           <LibraryPane
+            key={tab + libraryVisit}
             tasteExclusions={state?.tasteExclusions ?? []}
             setTasteExcluded={(kind, id, excluded) =>
               act(() => host.setTasteExcluded(kind, id, excluded))

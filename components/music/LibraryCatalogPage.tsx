@@ -35,6 +35,11 @@ export function useCatalogNavigation(scope?: string) {
     restoreTop.current = 0
     setLocations((stack) => [...stack, location])
   }
+  function closeCatalog() {
+    scrollPositions.current = []
+    restoreTop.current = 0
+    setLocations([])
+  }
   function catalogBack() {
     restoreTop.current = scrollPositions.current.pop() ?? 0
     setLocations((stack) => stack.slice(0, -1))
@@ -45,7 +50,7 @@ export function useCatalogNavigation(scope?: string) {
       layout.current?.closest('.music-scroll')?.scrollTo(0, restoreTop.current)
     restoreTop.current = null
   }, [locations])
-  return { locations, layout, openCatalog, catalogBack }
+  return { locations, layout, openCatalog, catalogBack, closeCatalog }
 }
 type Props = {
   location: CatalogLocation
@@ -155,7 +160,11 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
     date: '',
   }
   return (
-    <section className="library-catalog-home" aria-label={artistPage ? '歌手主页' : '专辑主页'}>
+    <section
+      className="library-catalog-home"
+      data-artist={artistPage}
+      aria-label={artistPage ? '歌手主页' : '专辑主页'}
+    >
       <Button size="small" appearance="subtle" icon={<ArrowLeft size={16} />} onClick={back}>
         返回
       </Button>
@@ -165,114 +174,126 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
         <h2>{location.name}</h2>
         {!artistPage && <p>{location.artist}</p>}
       </header>
-      {artistPage && <h3>歌曲</h3>}
-      {!!collected.length && (
-        <>
-          {!artistPage && <h3>已收录曲目</h3>}
-          <ol>
-            {collected.map((song) => (
-              <li key={song.id}>
-                <Button
-                  size="small"
-                  appearance="subtle"
-                  icon={<Play size={15} />}
-                  aria-label={'播放' + song.title}
-                  disabled={!song.available}
-                  onClick={() => play(song.id, ids)}
-                />
-                <div>
-                  <strong>{song.title}</strong>
-                  <small>{song.artist}</small>
-                </div>
-                <small>
-                  {song.origin === 'online' && !song.localCopy ? '在线' : '本地'} ·{' '}
-                  {formatTime(song.duration)}
-                </small>
-              </li>
-            ))}
-          </ol>
-        </>
-      )}
-      {artistPage ? (
-        <>
-          {chosen && (
-            <Highlights key={chosen} id={chosen} play={actions.play} collected={collected} />
+      <div className="catalog-columns">
+        <div className="catalog-songs">
+          {artistPage && <h3>歌曲</h3>}
+          {!!collected.length && (
+            <>
+              {!artistPage && <h3>已收录曲目</h3>}
+              <ol>
+                {collected.map((song) => (
+                  <li key={song.id}>
+                    <Button
+                      size="small"
+                      appearance="subtle"
+                      icon={<Play size={15} />}
+                      aria-label={'播放' + song.title}
+                      disabled={!song.available}
+                      onClick={() => play(song.id, ids)}
+                    />
+                    <div>
+                      <strong>{song.title}</strong>
+                      <small>{song.artist}</small>
+                    </div>
+                    <small>
+                      {song.origin === 'online' && !song.localCopy ? '在线' : '本地'} ·{' '}
+                      {formatTime(song.duration)}
+                    </small>
+                  </li>
+                ))}
+              </ol>
+            </>
           )}
-          {!chosen && !collected.length && remote?.length === 0 && <small>暂无歌曲资料。</small>}
-          <h3>专辑与发行</h3>
-          {[...albums.values()].map((a) => (
-            <button
-              type="button"
-              className="catalog-text-link"
-              key={JSON.stringify(a)}
-              onClick={() => open(a)}
-            >
-              {a.name} <small>{a.artist} · 已收录</small>
-            </button>
-          ))}
-          {artists.length > 1 && (
-            <div>
-              <small>选择目录中的同名歌手</small>
-              {artists.map((a) => (
-                <Button
-                  key={a.id}
-                  size="small"
-                  aria-pressed={chosen === a.id}
-                  onClick={() => setChosen(a.id)}
+          {artistPage && (
+            <>
+              {chosen && (
+                <Highlights key={chosen} id={chosen} play={actions.play} collected={collected} />
+              )}
+              {!chosen && !collected.length && remote?.length === 0 && (
+                <small>暂无歌曲资料。</small>
+              )}
+            </>
+          )}
+        </div>
+        <div className="catalog-releases">
+          {artistPage ? (
+            <>
+              <h3>专辑与发行</h3>
+              {[...albums.values()].map((a) => (
+                <button
+                  type="button"
+                  className="catalog-text-link"
+                  key={JSON.stringify(a)}
+                  onClick={() => open(a)}
                 >
-                  {a.name} · {a.detail || a.id}
-                </Button>
+                  {a.name} <small>{a.artist} · 已收录</small>
+                </button>
               ))}
-            </div>
-          )}
-          {status ? (
-            <p role="alert">
-              {status}{' '}
-              <Button size="small" onClick={() => setRetry((n) => n + 1)}>
-                重试
-              </Button>
-            </p>
-          ) : !remote && (chosen || artists.length < 2) ? (
-            <small role="status">正在读取发行目录…</small>
+              {artists.length > 1 && (
+                <div>
+                  <small>选择目录中的同名歌手</small>
+                  {artists.map((a) => (
+                    <Button
+                      key={a.id}
+                      size="small"
+                      aria-pressed={chosen === a.id}
+                      onClick={() => setChosen(a.id)}
+                    >
+                      {a.name} · {a.detail || a.id}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              {status ? (
+                <p role="alert">
+                  {status}{' '}
+                  <Button size="small" onClick={() => setRetry((n) => n + 1)}>
+                    重试
+                  </Button>
+                </p>
+              ) : !remote && (chosen || artists.length < 2) ? (
+                <small role="status">正在读取发行目录…</small>
+              ) : (
+                remote?.length === 0 && !albums.size && <p>暂无发行资料。</p>
+              )}
+              {remote?.map((r) => (
+                <button
+                  type="button"
+                  className="catalog-text-link catalog-release-link"
+                  key={r.id}
+                  onClick={() =>
+                    open({ kind: 'album', name: r.title, artist: location.artist, group: r })
+                  }
+                >
+                  <Cover id={covers.get(JSON.stringify([norm(r.artist), norm(r.title)]))} track />
+                  <span>
+                    {r.title}
+                    <small>
+                      {r.artist} · {r.date} · {r.type}
+                    </small>
+                  </span>
+                </button>
+              ))}
+            </>
           ) : (
-            remote?.length === 0 && !albums.size && <p>暂无发行资料。</p>
+            <>
+              <h3>发行曲目</h3>
+              <NewsTracks
+                group={group}
+                aliases={
+                  location.group && norm(location.group.artist) !== norm(location.artist)
+                    ? [location.artist]
+                    : []
+                }
+                named={!location.group}
+                local={localSongs}
+                playLocal={play}
+                play={actions.play}
+              />
+            </>
           )}
-          {remote?.map((r) => (
-            <button
-              type="button"
-              className="catalog-text-link catalog-release-link"
-              key={r.id}
-              onClick={() =>
-                open({ kind: 'album', name: r.title, artist: location.artist, group: r })
-              }
-            >
-              <Cover id={covers.get(JSON.stringify([norm(r.artist), norm(r.title)]))} track />
-              <span>
-                {r.title}
-                <small>
-                  {r.artist} · {r.date} · {r.type}
-                </small>
-              </span>
-            </button>
-          ))}
-        </>
-      ) : (
-        <>
-          <h3>发行曲目</h3>
-          <NewsTracks
-            group={group}
-            aliases={
-              location.group && norm(location.group.artist) !== norm(location.artist)
-                ? [location.artist]
-                : []
-            }
-            named={!location.group}
-            local={localSongs}
-            playLocal={play}
-            play={actions.play}
-          />
-        </>
-      )}
+        </div>
+      </div>
     </section>
   )
 }

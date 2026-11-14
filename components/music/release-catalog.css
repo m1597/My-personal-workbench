@@ -219,11 +219,37 @@
   color: var(--accent);
 }
 .library-catalog-home {
+  container: catalog-home / inline-size;
   display: grid;
   gap: var(--space-12);
-  max-width: 900px;
-  margin-inline: auto;
+  min-width: 0;
   padding: var(--space-16);
+}
+.catalog-columns,
+.catalog-songs,
+.catalog-releases {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--space-12);
+}
+.library-catalog-home header {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.library-catalog-home :is(li, .catalog-text-link, li strong, li small) {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.library-catalog-home .catalog-releases > button {
+  justify-self: start;
+}
+@container catalog-home (min-width: 640px) {
+  .library-catalog-home[data-artist="true"] .catalog-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--space-20);
+  }
 }
 .library-catalog-home > button:first-child {
   justify-self: start;
