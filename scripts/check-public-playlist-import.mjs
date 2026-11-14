@@ -116,12 +116,10 @@ try {
       row.every((p) => Math.abs(p.button - row[0].button) < 1 && p.bottom === row[0].bottom),
     )
     results.push(row.length)
-    await panel
-      .locator('.public-cards')
-      .screenshot({
-        path: path.join(root, 'cards-' + width + '.png'),
-        style: ':root{background:var(--base)!important}',
-      })
+    await panel.locator('.public-cards').screenshot({
+      path: path.join(root, 'cards-' + width + '.png'),
+      style: ':root{background:var(--base)!important}',
+    })
   }
   assert.ok(results[0] > results[1])
   const action = () => first.getByRole('button', { name: '导入到我的歌单', exact: true }).click()
