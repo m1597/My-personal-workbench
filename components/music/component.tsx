@@ -227,7 +227,7 @@ declare global {
         showLyrics(on: boolean): Promise<void>
         unlockLyrics(): Promise<void>
         onLyricLocked(listener: (locked: boolean) => void): () => void
-        lyricLine(line: string, second?: string): Promise<void>
+        lyricLine(groups: { id: string; original: string; translation?: string }[]): Promise<void>
         removeLocal(id: string | string[]): Promise<void>
         trashLocal(id: string | string[]): Promise<boolean>
         revealTrack(id: string): Promise<void>
@@ -953,16 +953,24 @@ function Music() {
       activeLine = index
     }
   }
-  const currentWords = lines?.[activeLine]
-  const original = currentWords?.[1] || ''
-  const translated = state?.prefs.lyricLanguage === 'bilingual' ? currentWords?.[2] : ''
-  const double = state?.prefs.lyricLayout === 'double'
-  const lyric = translated && !double ? original + ' · ' + translated : original
-  const second = original && double ? translated || lines?.[activeLine + 1]?.[1] || '' : ''
+  const lyricLayout = state?.prefs.lyricLayout
+  const lyricLanguage = state?.prefs.lyricLanguage
   const lyricSize = state?.prefs.lyricSize
   useEffect(() => {
-    if (lyricsOpen && lyricSize) void host.lyricLine(lyric, second).catch(() => {})
-  }, [lyric, second, lyricSize, lyricsOpen])
+    if (!lyricsOpen || !lyricSize) return
+    const groups =
+      lines && activeLine >= 0 && lines[activeLine][1]
+        ? lines
+            .slice(activeLine, activeLine + (lyricLayout === 'double' ? 2 : 1))
+            .filter(([, original]) => original)
+            .map(([at, original, translation]) => ({
+              id: `${now}/${at}`,
+              original,
+              translation: lyricLanguage === 'bilingual' ? translation : undefined,
+            }))
+        : []
+    void host.lyricLine(groups).catch(() => {})
+  }, [lines, now, activeLine, lyricLayout, lyricLanguage, lyricSize, lyricsOpen])
   const clock = formatTime
   const duration =
     audio.current?.duration ||

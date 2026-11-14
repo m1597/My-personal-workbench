@@ -258,6 +258,10 @@ try {
   const restore = button('回到当前歌词')
   // Exercise native Chromium key scrolling while playback crosses a timestamp.
   await currentLine.focus()
+  const volume = await page.locator('audio').evaluate((a) => a.volume)
+  await currentLine.press('ArrowDown')
+  await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  assert.equal(await page.locator('audio').evaluate((a) => a.volume), volume)
   await currentLine.press('PageDown')
   await expect(restore).toBeVisible()
   await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBeGreaterThan(180)

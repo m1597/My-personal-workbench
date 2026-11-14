@@ -159,13 +159,17 @@ export function musicService(
     else store.db.prepare('DELETE FROM state WHERE key=?').run(key)
     return shift
   })
-  bind('lyricLine', (line, second = '') =>
+  bind('lyricLine', (groups) => {
+    if (!Array.isArray(groups) || groups.length > 2) throw Error('歌词组无效')
     overlay.update(
-      typeof line === 'string' ? line.slice(0, 500) : '',
-      typeof second === 'string' ? second.slice(0, 500) : '',
+      groups.map(({ id, original, translation }) => ({
+        id: text(id),
+        original: text(original),
+        translation: text(translation ?? ''),
+      })),
       Number(getMusicPreferences(store).lyricSize),
-    ),
-  )
+    )
+  })
   bind('lyrics', async (id, translations = false) => {
     if (!text(id) || id.startsWith('online-recording-')) return []
     if (grant?.id === id) {

@@ -34,11 +34,15 @@ assert.deepEqual(downloadLrc(bilingual, '', false).split('\r\n').filter(Boolean)
   '[00:00.000]The shore',
   '[00:10.000]The sea',
 ])
-await saveLyrics(store.db, file, async () => bilingual)
-assert.equal(await readFile(lyricPath(file), 'utf8'), bilingual)
+const longLine = 'The last stars above the quiet water '.repeat(4).trim()
+const fixture = `${bilingual}[00:11.000]${longLine}\r\n[00:12.000]The sky\r\n[00:12.000]天空\r\n`
+await saveLyrics(store.db, file, async () => fixture)
+assert.equal(await readFile(lyricPath(file), 'utf8'), fixture)
 assert.deepEqual(await localLines(file, undefined, true), [
   [0, 'The shore', '海岸'],
   [10, 'The sea', '海面'],
+  [11, longLine],
+  [12, 'The sky', '天空'],
 ])
 store.db.close()
 const launch = () =>
@@ -76,14 +80,68 @@ try {
   const open = app.waitForEvent('window')
   await page.getByRole('button', { name: '桌面歌词', exact: true }).click()
   const overlay = await open
-  await expect(overlay.locator('strong')).toHaveText('The shore\n海岸')
-  await expect(overlay.locator('strong')).toHaveCSS('font-size', '30px')
-  await overlay.screenshot({
-    path: path.join(root, '桌面双语.png'),
-    style: ':root{background:#202227}',
-  })
-  await choose('显示行数', '单行')
-  await expect(overlay.locator('strong')).toHaveText('The shore · 海岸')
+  await page.getByRole('button', { name: /^(播放|从 .* 秒继续)$/ }).click()
+  await page.getByRole('button', { name: '暂停', exact: true }).click()
+  const groups = overlay.locator('.lyric-group')
+  for (const [mode, count] of [
+    ['双行', 2],
+    ['单行', 1],
+  ]) {
+    await choose('显示行数', mode)
+    await page.locator('audio').evaluate((audio) => {
+      audio.currentTime = 9
+    })
+    await expect(groups.first().locator('.lyric-original')).toHaveText('The shore')
+    await expect(groups.first().locator('.lyric-translation')).toHaveText('海岸')
+    await expect(groups).toHaveCount(count)
+    await expect(overlay.locator('strong')).toHaveCSS('font-size', '30px')
+    if (count === 2) await expect(groups.nth(1)).toHaveCSS('opacity', '0.66')
+    const capture = overlay.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const samples = []
+          const timer = setInterval(() => {
+            const row = document.querySelector('.lyric-group')
+            samples.push([row?.dataset.id, row && getComputedStyle(row).transform])
+            if (samples.length >= 75) {
+              clearInterval(timer)
+              resolve(samples)
+            }
+          }, 40)
+        }),
+    )
+    await page.locator('audio').evaluate((audio) => audio.play())
+    for (const [i, word] of ['The sea', longLine].entries()) {
+      await expect(groups.first().locator('.lyric-original')).toHaveText(word)
+      await overlay.screenshot({
+        path: path.join(root, `${mode}-${i}.png`),
+        style: ':root{background:#202227}',
+      })
+    }
+    await expect(groups.first().locator('.lyric-translation')).toHaveCount(0)
+    const wrapping = () =>
+      groups
+        .first()
+        .locator('.lyric-original')
+        .evaluate((el) => {
+          const rect = el.getBoundingClientRect()
+          return (
+            rect.height > parseFloat(getComputedStyle(el).lineHeight) * 1.5 &&
+            rect.bottom <= innerHeight + 1
+          )
+        })
+    await expect.poll(wrapping, { message: '长句应在窗口内换行' }).toBe(true)
+    const samples = await capture
+    await writeFile(path.join(root, `${mode}-frames.json`), JSON.stringify(samples))
+    const sliding = new Set(
+      samples.filter(([, transform]) => transform && transform !== 'none').map(([id]) => id),
+    )
+    assert.ok(sliding.size >= 2, '应观察到至少两次歌词组滑动')
+    await page.locator('audio').evaluate((audio) => {
+      audio.pause()
+      audio.currentTime = 6
+    })
+  }
   await page.getByRole('button', { name: '桌面歌词', exact: true }).click()
   await selectMusicSettings(page, '下载')
   await expect(page.getByLabel('同时保存同名 LRC 歌词文件')).toBeChecked()

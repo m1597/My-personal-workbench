@@ -1,3 +1,4 @@
+import '../../examples/component-host/lyric-groups.css'
 import { useEffect, useEffectEvent, useState } from 'react'
 import type { RefObject } from 'react'
 import { Checkbox, Dropdown, Field, Option } from '@fluentui/react-components'
@@ -135,17 +136,21 @@ export function PlayerOptionsPane({
           className="desktop-lyric-preview"
           style={{ fontSize: Number(prefs.lyricSize) }}
         >
-          Along the shore, I hear the wind.
-          {prefs.lyricLayout === 'double' ? (
-            <>
-              <br />
-              {prefs.lyricLanguage === 'bilingual'
-                ? '沿着海岸，听风吹过。'
-                : 'Night falls upon the sea.'}
-            </>
-          ) : (
-            prefs.lyricLanguage === 'bilingual' && ' · 沿着海岸，听风吹过。'
-          )}
+          <div className="lyric-groups">
+            {[
+              ['Along the shore, I hear the wind.', '沿着海岸，听风吹过。'],
+              ['Night falls upon the sea.', '夜色落在海面上。'],
+            ]
+              .slice(0, prefs.lyricLayout === 'double' ? 2 : 1)
+              .map(([original, translation]) => (
+                <div className="lyric-group" key={original}>
+                  <span className="lyric-original">{original}</span>
+                  {prefs.lyricLanguage === 'bilingual' && (
+                    <span className="lyric-translation">{translation}</span>
+                  )}
+                </div>
+              ))}
+          </div>
         </fieldset>
       </section>
     )

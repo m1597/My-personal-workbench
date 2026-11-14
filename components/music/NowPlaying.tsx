@@ -208,7 +208,10 @@ export function NowPlaying({
               ref={viewport}
               aria-label={timed ? '同步歌词' : '歌词文本'}
               onKeyDown={(e) => {
-                if (timed && readingKeys.has(e.key)) browse()
+                if (readingKeys.has(e.key)) {
+                  e.stopPropagation()
+                  if (timed) browse()
+                }
               }}
               onFocus={(e) => {
                 if (timed && e.target.matches('button:focus-visible:not([aria-current])')) {

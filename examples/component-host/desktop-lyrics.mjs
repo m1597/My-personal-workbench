@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url'
 const width = 660
 const height = 90
 const positionKey = 'desktop-lyrics-position'
-function fit(position, area) {
+function fit(position, area, contentHeight = height) {
   const w = Math.min(width, area.width)
-  const h = Math.min(height, area.height)
+  const h = Math.min(contentHeight, area.height)
   return {
     x: Math.max(area.x, Math.min(position.x, area.x + area.width - w)),
     y: Math.max(area.y, Math.min(position.y, area.y + area.height - h)),
@@ -35,9 +35,9 @@ function restoredBounds(saved) {
 
 export function desktopLyrics(getStore, onLockChanged) {
   let win
-  let line = '',
-    second = '',
-    size = 24
+  let groups = [],
+    size = 24,
+    contentHeight = height
   let locked = false
   function setLocked(value) {
     if (!win || win.isDestroyed() || locked === value) return
@@ -47,7 +47,7 @@ export function desktopLyrics(getStore, onLockChanged) {
     onLockChanged(value)
   }
   const publish = () => {
-    if (win && !win.isDestroyed()) win.webContents.send('lyric-line', line, second, size)
+    if (win && !win.isDestroyed()) win.webContents.send('lyric-line', groups, size)
   }
   return {
     unlock() {
@@ -85,10 +85,15 @@ export function desktopLyrics(getStore, onLockChanged) {
 
       function constrain() {
         const bounds = win.getContentBounds()
-        const target = fit(bounds, screen.getDisplayMatching(bounds).workArea)
+        const target = fit(bounds, screen.getDisplayMatching(bounds).workArea, contentHeight)
         if (Object.keys(target).some((key) => bounds[key] !== target[key])) win.setBounds(target)
         return target
       }
+      win.webContents.ipc.on('lyric-height', (event, measured) => {
+        if (event.senderFrame !== win.webContents.mainFrame || !Number.isFinite(measured)) return
+        contentHeight = Math.max(height, Math.ceil(measured))
+        constrain()
+      })
       function remember() {
         const { x, y } = constrain()
         getStore().set(positionKey, JSON.stringify({ x, y }))
@@ -96,7 +101,7 @@ export function desktopLyrics(getStore, onLockChanged) {
       // Pick the cursor's display during native drags so a seam can be crossed in either direction.
       win.on('will-move', (event, bounds) => {
         const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-        const target = fit(bounds, display.workArea)
+        const target = fit(bounds, display.workArea, contentHeight)
         if (Object.keys(target).some((key) => bounds[key] !== target[key])) {
           event.preventDefault()
           win.setBounds(target)
@@ -128,8 +133,8 @@ export function desktopLyrics(getStore, onLockChanged) {
         screen.off('display-metrics-changed', remember)
         screen.off('display-removed', remember)
         win = undefined
-        line = ''
-        second = ''
+        groups = []
+        contentHeight = height
         if (locked) onLockChanged(false)
         locked = false
       })
@@ -140,13 +145,10 @@ export function desktopLyrics(getStore, onLockChanged) {
       })
       void win.loadFile(fileURLToPath(new URL('./lyric-window.html', import.meta.url)))
     },
-    update(value, next, fontSize) {
-      if (value !== line || next !== second || fontSize !== size) {
-        second = next
-        size = fontSize
-        line = value
-        publish()
-      }
+    update(value, fontSize) {
+      groups = value
+      size = fontSize
+      publish()
     },
   }
 }
