@@ -1,4 +1,5 @@
 import { PlaylistImportDialog, usePlaylistImport } from './PlaylistImport'
+import { guardSearchEnter } from './searchSubmit'
 import {
   useSidebarSorting,
   useGroupSorting,
@@ -390,7 +391,7 @@ export function LibraryPane({
               icon={<ListMusic size={16} />}
               onClick={() => choose('infrequent')}
             >
-              不常听
+              重温旧曲
             </Button>
             <Button
               appearance="subtle"
@@ -625,6 +626,7 @@ export function LibraryPane({
                   void librarySearch.submit(collection)
                 }}
                 className="library-search"
+                onKeyDownCapture={guardSearchEnter}
               >
                 <Input
                   aria-label="搜索本地歌曲"

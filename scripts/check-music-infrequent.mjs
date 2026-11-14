@@ -69,7 +69,7 @@ try {
   )
   const button = (name) => page.getByRole('button', { name, exact: true })
   const rows = page.locator('.infrequent-row')
-  await button('不常听').click()
+  await button('重温旧曲').click()
   await expect(rows.locator('strong')).toHaveText(['半年', '旧录音', '长录音'])
   await rows.first().click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '查看文件所在位置' })).toBeVisible()
@@ -82,7 +82,7 @@ try {
   await expect(rows.locator('strong')).toHaveText(['半年'])
   await select('未收听时间', '30 天')
   await expect(rows).toHaveCount(4)
-  await expect(page.getByRole('combobox', { name: '不常听排序' })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: '重温旧曲排序' })).toHaveCount(0)
   await expect(rows.locator('strong')).toHaveText(['半年', '旧录音', '长录音', '整月'])
   for (const name of ['半年', '整月'])
     await page.getByRole('checkbox', { name: '选择' + name }).check()
@@ -153,7 +153,7 @@ try {
   assert.equal(await heard('长录音'), null)
   await audio.evaluate((el) => el.play())
   await expect.poll(() => heard('长录音'), { timeout: 40000, intervals: [500] }).not.toBeNull()
-  await button('不常听').click()
+  await button('重温旧曲').click()
   await expect(rows).toHaveCount(0)
   console.log(
     'PASS 旧库观察起点，三档时间筛选与最久未听优先，多选容量、回收取消、仅移除索引、短歌完整播完和累计播放 30 秒。截图 ' +

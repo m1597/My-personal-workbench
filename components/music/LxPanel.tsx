@@ -13,6 +13,7 @@ import {
   TabList,
 } from '@fluentui/react-components'
 import { TrackMenu } from './TrackMenu'
+import { guardSearchEnter } from './searchSubmit'
 import { DiscoveryInput } from './DiscoveryInput'
 import { X } from 'lucide-react'
 import './search.css'
@@ -303,6 +304,7 @@ export function DownloadPane({
       <div className="search-controls" data-query={hasQuery}>
         <form
           className="download-search"
+          onKeyDownCapture={guardSearchEnter}
           onSubmit={(e) => {
             e.preventDefault()
             if (!busy && name && searchable && !unsupported) void act(() => search())

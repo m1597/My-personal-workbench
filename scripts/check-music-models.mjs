@@ -190,7 +190,7 @@ try {
   await openDiscovery(page, true)
   await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveAttribute(
     'placeholder',
-    '歌手名、歌名，或一句想法都行',
+    '描述你想听什么（选填）',
   )
   await app.evaluate(() => {
     globalThis.providerFixtures = true
@@ -259,7 +259,24 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
             : { canceled: false, filePaths: [directory] }
         }
       }, output)
-      await page.getByRole('button', { name: '生成推荐' }).click()
+      const input = page.getByLabel('想让 AI 推荐什么？（选填）')
+      for (const detail of [{ isComposing: true, keyCode: 229 }, { repeat: true }]) {
+        const allowed = await input.evaluate(
+          (element, detail) =>
+            element.dispatchEvent(
+              new KeyboardEvent('keydown', {
+                key: 'Enter',
+                bubbles: true,
+                cancelable: true,
+                ...detail,
+              }),
+            ),
+          detail,
+        )
+        assert.equal(allowed, false)
+      }
+      assert.equal(await app.evaluate(() => globalThis.folderRequests.length), 0)
+      await input.press('Enter')
       await expect.poll(() => app.evaluate(() => globalThis.folderRequests.length)).toBe(1)
       await expect(page.getByRole('button', { name: '生成推荐' })).toBeEnabled()
       await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveValue('雨天的爵士乐')
@@ -271,9 +288,9 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       assert.deepEqual(await fs.readdir(output), [])
     }
     const previous = await page.evaluate(async () => (await window.music.state()).batches[0]?.id)
-    const description = ['雨天的爵士乐', 'AC/DC', '找和《夜曲》风格相似的歌', '雨天的爵士乐'][index]
+    const description = ['11', 'AC/DC', '找和《夜曲》风格相似的歌', '雨天的爵士乐'][index]
     await page.getByLabel('想让 AI 推荐什么？（选填）').fill(description)
-    await page.getByRole('button', { name: '生成推荐' }).click()
+    await page.getByLabel('想让 AI 推荐什么？（选填）').press('Enter')
     await expect
       .poll(() => page.evaluate(async () => (await window.music.state()).batches[0]?.id))
       .not.toBe(previous)
@@ -418,7 +435,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   )
   const before = (await calls()).length
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('')
-  await page.getByRole('button', { name: '生成推荐' }).click()
+  await page.getByLabel('想让 AI 推荐什么？（选填）').press('Enter')
   await expect(page.locator('.music-list ol li').filter({ hasText: '已入库' })).toHaveCount(4, {
     timeout: 15000,
   })

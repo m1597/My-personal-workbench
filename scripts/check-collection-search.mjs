@@ -113,8 +113,8 @@ try {
     const previous = (await calls()).length
     await input.fill(query)
     assert.equal((await calls()).length, previous)
-    if (mode === 'library') await input.press('Enter')
-    else await press(page.getByRole('button', { name: '提交 AI 搜索' }))
+    await expect(page.getByRole('button', { name: '提交 AI 搜索' })).toBeEnabled()
+    await input.press('Enter')
     await expect(page.getByRole('status').filter({ hasText: 'AI 找到' })).toHaveText(
       'AI 找到 ' + (mode === 'library' ? 2 : 1) + ' 首',
     )

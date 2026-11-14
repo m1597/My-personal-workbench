@@ -68,10 +68,10 @@ export function InfrequentTracks({ rows, days, changeDays, active, playing, play
     }
   }
   return (
-    <section className="local-library infrequent" aria-label="不常听歌曲">
+    <section className="local-library infrequent" aria-label="重温旧曲歌曲">
       <div className="library-title">
         <div>
-          <h2>不常听</h2>
+          <h2>重温旧曲</h2>
           <small>{rows.length} 首歌曲</small>
         </div>
       </div>

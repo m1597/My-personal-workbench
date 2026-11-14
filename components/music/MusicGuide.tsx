@@ -13,7 +13,7 @@ export const guideSteps = [
     page: 'songs',
     target: 'library',
     title: '从曲库播放',
-    text: '在曲库搜索歌名或艺人，单击歌名或行内留白播放。单击歌手名或专辑名可以查看详情。',
+    text: '在曲库搜索歌名或艺人，单击歌名或行内留白播放。点歌手或专辑名看详情，打开「重温旧曲」可按最久未听的顺序回顾歌曲。',
   },
   {
     page: 'playlists',

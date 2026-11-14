@@ -1,4 +1,5 @@
 import { ArtistPortrait } from './ArtistPortrait'
+import { guardSearchEnter } from './searchSubmit'
 import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
@@ -616,7 +617,7 @@ export function ArtistReleases({
   }, [])
   async function search() {
     const term = query.trim()
-    if (!term) return
+    if (!term || searching) return
     const request = ++searchVersion.current
     setSearching(true)
     setSearchError('')
@@ -675,6 +676,7 @@ export function ArtistReleases({
           </header>
           <div className="artist-management">
             <form
+              onKeyDownCapture={guardSearchEnter}
               onSubmit={(e) => {
                 e.preventDefault()
                 void search()

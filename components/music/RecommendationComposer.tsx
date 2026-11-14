@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Button, Input } from '@fluentui/react-components'
 import type { ModelInfo } from './ModelSettings'
 import { DiscoveryInput } from './DiscoveryInput'
+import { guardSearchEnter } from './searchSubmit'
 type Props = {
   savedWeight: number
   models: ModelInfo
@@ -41,6 +42,7 @@ export function RecommendationComposer({
   const busy = submitting || running
   const [error, setError] = useState('')
   async function generate() {
+    if (busy || !validCount) return
     if (!models.providers.find((p) => p.id === models.active)?.hasKey) {
       openSettings()
       return
@@ -76,7 +78,14 @@ export function RecommendationComposer({
           {currentSong?.title ? `以《${currentSong.title}》为参考` : '以当前歌曲为参考'}
         </Button>
       </div>
-      <div className="music-input">
+      <form
+        className="music-input"
+        onKeyDownCapture={guardSearchEnter}
+        onSubmit={(event) => {
+          event.preventDefault()
+          void generate()
+        }}
+      >
         <DiscoveryInput
           ai
           value={description}
@@ -99,11 +108,11 @@ export function RecommendationComposer({
           />
         </label>
         {!busy && (
-          <Button disabled={!validCount} appearance="primary" onClick={() => void generate()}>
+          <Button type="submit" disabled={!validCount} appearance="primary">
             生成推荐
           </Button>
         )}
-      </div>
+      </form>
       <label className="music-recommend-weight">
         本次要求 {effectiveWeight}%
         <input
