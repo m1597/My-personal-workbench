@@ -387,6 +387,7 @@ export class MusicStore {
       }))
     const queue = JSON.parse(this.get('play-queue') || '[]')
     const queued = new Set(queue)
+    const onlineCredits = this.library.credits('online')
     return {
       sidebarOrder: {
         folders: this.sidebarOrder('folders'),
@@ -396,7 +397,8 @@ export class MusicStore {
       onlineTracks: this.db
         .prepare(`SELECT *, 'online' AS origin, 1 AS available,
           (SELECT MIN(c.local) FROM online_local_copies c WHERE c.online=t.id) AS localCopy FROM online_tracks t`)
-        .all(),
+        .all()
+        .map((t) => ({ ...t, artistCredits: onlineCredits.get(t.id) })),
       albumRevision: this.library.albums.revision,
       playlists: this.library.playlists(),
       importJob: this.library.job,

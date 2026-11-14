@@ -1,5 +1,6 @@
+import { CollectedSongRow } from './CollectedSongRow'
+import { SongCredits } from './SongCredits'
 import { BackButton } from './BackButton'
-import { TrackMenu } from './TrackMenu'
 import {
   Button,
   Input,
@@ -12,7 +13,7 @@ import {
 } from '@fluentui/react-components'
 import { ArrowDownUp, Play, Search, Shuffle } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { formatTime, type LocalTrack } from './LibraryPane'
+import type { LocalTrack } from './LibraryPane'
 import { AlbumEditions } from './ReleaseCatalog'
 import './albums.css'
 
@@ -178,7 +179,8 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
           <div>
             <h2>{selected.title}</h2>
             <p>
-              {selected.artist} · {selected.tracks.length} 首歌曲
+              <SongCredits song={{ title: selected.title, artist: selected.artist }} /> ·{' '}
+              {selected.tracks.length} 首歌曲
             </p>
             <Button
               size="small"
@@ -202,26 +204,12 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
             const row = trackMap.get(id)
             if (!row) return null
             return (
-              <TrackMenu key={id} localId={id}>
-                <li data-active={id === active}>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    disabled={!row.available}
-                    icon={<Play size={15} />}
-                    aria-label={'播放' + row.title}
-                    onClick={() => play(id, queue)}
-                  />
-                  <div className="library-name">
-                    <strong title={row.title}>{row.title}</strong>
-                    <small>
-                      {row.artist}
-                      {!row.available && ' · 文件不可用'}
-                    </small>
-                  </div>
-                  <small className="library-time">{formatTime(row.duration)}</small>
-                </li>
-              </TrackMenu>
+              <CollectedSongRow
+                key={id}
+                song={row}
+                active={id === active}
+                play={() => play(id, queue)}
+              />
             )
           })}
         </ol>

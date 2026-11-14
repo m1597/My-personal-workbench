@@ -7,22 +7,26 @@ import {
   MenuPopover,
   MenuTrigger,
 } from '@fluentui/react-components'
-import { Download, ListPlus } from 'lucide-react'
+import { Download, FolderOpen, ListPlus } from 'lucide-react'
 import { RevealTrackContext } from './TrackMenu'
 
 export const RecordingLists = createContext<{ id: string; name: string }[]>([])
 export function OnlineSongRow({
   children,
+  active,
   className,
   localId,
   busy,
+  singleClick = false,
   canPlay = true,
   canDownload = true,
   play,
   download,
   add,
 }: {
+  active?: boolean
   children: ReactNode
+  singleClick?: boolean
   className?: string
   localId?: string
   busy: boolean
@@ -71,11 +75,25 @@ export function OnlineSongRow({
     <Menu openOnContext>
       <MenuTrigger disableButtonEnhancement>
         <li
+          data-active={active}
           className={className}
           // biome-ignore lint/a11y/noNoninteractiveTabindex: Enter provides keyboard playback for the double-clickable recording row.
           tabIndex={0}
+          onClick={(e) => {
+            if (
+              singleClick &&
+              !busy &&
+              canPlay &&
+              e.detail < 2 &&
+              e.target instanceof Element &&
+              e.currentTarget.contains(e.target) &&
+              !e.target.closest('button,a,[role=menuitem]')
+            )
+              play()
+          }}
           onDoubleClick={(e) => {
             if (
+              !singleClick &&
               !busy &&
               canPlay &&
               e.target instanceof Element &&
@@ -96,11 +114,11 @@ export function OnlineSongRow({
             <Button
               size="small"
               appearance="subtle"
-              disabled={busy || !canDownload}
-              aria-label="下载"
-              title="下载"
-              icon={<Download size={16} />}
-              onClick={download}
+              disabled={busy || (!localId && !canDownload)}
+              aria-label={localId ? '查看文件所在位置' : '下载'}
+              title={localId ? '查看文件所在位置' : '下载'}
+              icon={localId ? <FolderOpen size={16} /> : <Download size={16} />}
+              onClick={localId ? () => reveal(localId) : download}
             />
             {addMenu(false)}
           </div>
@@ -111,9 +129,11 @@ export function OnlineSongRow({
           <MenuItem disabled={busy || !canPlay} onClick={play}>
             播放
           </MenuItem>
-          <MenuItem disabled={busy || !canDownload} onClick={download}>
-            下载
-          </MenuItem>
+          {!localId && (
+            <MenuItem disabled={busy || !canDownload} onClick={download}>
+              下载
+            </MenuItem>
+          )}
           {addMenu(true)}
           {localId && <MenuItem onClick={() => reveal(localId)}>查看文件所在位置</MenuItem>}
         </MenuList>

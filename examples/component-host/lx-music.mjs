@@ -230,6 +230,7 @@ async function versions(source, row, signal, limit = 20, page = 1, offset = 0) {
           ...(Array.isArray(s.alias) ? s.alias : []),
           ...(Array.isArray(s.transNames) ? s.transNames : []),
         ].filter((v) => typeof v === 'string'),
+        artistCredits: s.artists?.map((a) => ({ name: a.name })),
         singer: s.artists?.map((a) => a.name).join('/'),
         artistAliases: s.artists?.map((a) =>
           [a.name, ...(a.alias ?? []), a.trans].filter((v) => typeof v === 'string'),
@@ -606,6 +607,14 @@ function recordingId(src, row) {
   return ['number', 'string'].includes(typeof id) && String(id).trim() ? String(id) : null
 }
 // Persist LX recording identifiers only. A provider may put signed URLs in arbitrary search fields.
+function artistCreditNames(row) {
+  return Array.isArray(row.artistCredits)
+    ? row.artistCredits
+        .slice(0, 64)
+        .map((a) => ({ name: text(a?.name) }))
+        .filter((a) => a.name)
+    : undefined
+}
 function durableRecording(src, row) {
   const out = {
     source: src.platform,
@@ -1058,6 +1067,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             ?.id,
           title: text(row.name),
           artist: text(row.singer),
+          artistCredits: artistCreditNames(row),
           album: text(row.albumName),
           duration: durationSeconds(row),
           hasCover: Boolean(
@@ -1119,6 +1129,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         id,
         title: text(row.name),
         artist: text(row.singer),
+        artistCredits: artistCreditNames(row),
         album: text(row.albumName),
         duration: Number.isFinite(row.durationSeconds) ? row.durationSeconds : 0,
       })

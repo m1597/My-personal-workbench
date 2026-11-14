@@ -17,6 +17,7 @@ type Props = {
   title: string
   album?: string
   artist: string
+  artistCredits?: import('./SongCredits').ArtistCredit[]
   coverId?: string
   revision?: number
   lines?: LyricLine[]
@@ -80,6 +81,7 @@ export function NowPlaying({
   trackId,
   title,
   artist,
+  artistCredits,
   album,
   coverId,
   revision,
@@ -201,7 +203,7 @@ export function NowPlaying({
           <h2>{title}</h2>
           {(artist || album) && (
             <p>
-              <SongCredits song={{ title, artist, album }} />
+              <SongCredits song={{ title, artist, artistCredits, album }} />
             </p>
           )}
         </div>

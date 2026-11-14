@@ -125,6 +125,9 @@ export class LocalLibrary {
           )
           .run('音乐源未允许永久保存此录音，或仅提供试听')
       }
+      this.db.exec(
+        'CREATE TABLE IF NOT EXISTS song_artist_credits(track TEXT NOT NULL REFERENCES playlist_recordings(id) ON DELETE CASCADE, position INTEGER NOT NULL, name TEXT NOT NULL, mbid TEXT, PRIMARY KEY(track,position))',
+      )
       const trackColumns = this.db.prepare('PRAGMA table_info(local_tracks)').all()
       if (!trackColumns.some((column) => column.name === 'albumArtist'))
         this.db.exec(`ALTER TABLE local_tracks ADD COLUMN albumArtist TEXT;
@@ -306,6 +309,7 @@ export class LocalLibrary {
       row.discNumber ?? null,
       row.trackNumber ?? null,
     ]
+    const id = replacing ?? existing?.id ?? 'local-' + randomUUID()
     if (replacing || existing)
       this.db
         .prepare(
@@ -317,9 +321,37 @@ export class LocalLibrary {
         .prepare(
           'INSERT INTO local_tracks(path_key,file,title,artist,album,duration,language,albumArtist,discNumber,trackNumber,id,observedAt,size,fileIdentity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
         )
-        .run(...values, 'local-' + randomUUID(), Date.now(), row.size ?? null, row.identity ?? null)
+        .run(...values, id, Date.now(), row.size ?? null, row.identity ?? null)
+    this.saveArtistCredits(id, row.artistCredits)
     this.changed?.()
     return !!(existing || replacing)
+  }
+  saveArtistCredits(id, credits) {
+    if (!Array.isArray(credits)) return
+    this.db.prepare('DELETE FROM song_artist_credits WHERE track=?').run(id)
+    const add = this.db.prepare('INSERT INTO song_artist_credits VALUES(?,?,?,?)')
+    for (const [i, credit] of credits.slice(0, 64).entries()) {
+      if (typeof credit?.name !== 'string' || !credit.name.trim()) continue
+      add.run(
+        id,
+        i,
+        credit.name.trim().slice(0, 256),
+        /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(credit.id) ? credit.id : null,
+      )
+    }
+  }
+  credits(kind) {
+    const result = new Map()
+    const rows = this.db
+      .prepare(
+        'SELECT track,name,mbid AS id FROM song_artist_credits WHERE track LIKE ? ORDER BY track,position',
+      )
+      .all(kind + '-%')
+    for (const { track, name, id } of rows) {
+      if (!result.has(track)) result.set(track, [])
+      result.get(track).push({ name, id })
+    }
+    return result
   }
   list() {
     const rows = this.db
@@ -363,8 +395,10 @@ export class LocalLibrary {
         }
       }
     }
+    const credits = this.credits('local')
     return rows.map(({ file, ...row }) => ({
       ...row,
+      artistCredits: credits.get(row.id),
       folder: row.listed ? directories.get(pathKey(path.dirname(file))) : null,
     }))
   }
@@ -548,7 +582,7 @@ export class LocalLibrary {
     this.db.prepare('DELETE FROM music_roots WHERE dir=?').run(path.dirname(rows[0].file))
     return removed
   }
-  rememberOnline({ id, title, artist, album, duration }) {
+  rememberOnline({ id, title, artist, album, duration, artistCredits }) {
     if (
       !/^online-recording-[a-f0-9]{64}$/.test(id) ||
       [title, artist, album].some((s) => typeof s !== 'string' || s.length > 1024) ||
@@ -561,6 +595,7 @@ export class LocalLibrary {
       .prepare(`INSERT INTO online_tracks VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
       title=excluded.title,artist=excluded.artist,album=excluded.album,duration=excluded.duration`)
       .run(id, title, artist, album, duration)
+    this.saveArtistCredits(id, artistCredits)
     return id
   }
   setMembership(playlist, tracks, added) {

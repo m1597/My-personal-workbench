@@ -14,6 +14,7 @@ export type Versions = {
     localId?: string
     title: string
     artist: string
+    artistCredits?: { name: string; id?: string }[]
     album: string
     hasCover?: boolean
     duration?: number

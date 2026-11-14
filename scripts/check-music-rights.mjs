@@ -238,7 +238,7 @@ try {
     copies.filter({ has: page.getByText(title, { exact: true }) }),
   )
   for (const row of pair) {
-    await expect(row.locator(':scope > .library-artist-link')).toHaveCount(1)
+    await expect(row.locator('.song-credit-links')).toHaveCount(1)
     await expect(row.locator('.library-track-location')).toHaveText('本地')
     await expect(row).not.toContainText('推荐来源')
   }

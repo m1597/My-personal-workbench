@@ -6,6 +6,18 @@ import { audioFileStat, audioTypes, openAudio } from './local-files.mjs'
 const positive = (value) => (Number.isSafeInteger(value) && value > 0 ? value : null)
 export function albumTags(common) {
   return {
+    artistCredits: (common.artists?.length
+      ? common.artists
+      : common.artist
+        ? [common.artist]
+        : []
+    ).map((name, i) => ({
+      name,
+      id:
+        common.musicbrainz_artistid?.length === (common.artists?.length || 1)
+          ? common.musicbrainz_artistid[i]
+          : undefined,
+    })),
     albumArtist: common.albumartist?.trim().slice(0, 2048) || '',
     discNumber: positive(common.disk?.no),
     trackNumber: positive(common.track?.no),

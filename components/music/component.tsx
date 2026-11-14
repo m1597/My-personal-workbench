@@ -1512,6 +1512,7 @@ function Music() {
             }}
             trackId={now}
             title={active?.title ?? '尚未播放'}
+            artistCredits={active && 'artistCredits' in active ? active.artistCredits : undefined}
             artist={active?.artist ?? ''}
             album={active && songAlbum(active)}
             coverId={coverId}

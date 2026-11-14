@@ -23,6 +23,7 @@ export function qqSong(s) {
   return {
     source: 'tx',
     name: s.title || s.name,
+    artistCredits: s.singer?.map((a) => ({ name: a.name })),
     singer: s.singer?.map((a) => a.name).join('、'),
     songmid: s.mid,
     songId: s.id,
@@ -44,6 +45,7 @@ export function kgSong(s) {
   return {
     source: 'kg',
     name: [s.OriSongName || s.SongName, s.Suffix].filter(Boolean).join(' '),
+    artistCredits: s.Singers?.map((a) => ({ name: a.name })),
     singer: s.Singers?.map((a) => a.name).join('、') || s.SingerName,
     albumName: s.AlbumName,
     picUrl: typeof s.Image === 'string' ? s.Image.replace('{size}', '120') : undefined,

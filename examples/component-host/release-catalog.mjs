@@ -191,12 +191,13 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     for (const a of result) related.set(a.id, a)
     return result
   })
+  const creditedArtist=(id)=>getStore().db.prepare("SELECT mbid AS id,name,'' AS detail FROM song_artist_credits WHERE mbid=? LIMIT 1").get(id)
   const knownArtist = (id) =>
     mbid.test(id) &&
     (artists.has(id) ||
       related.has(id) ||
       followed().some((a) => a.id === id) ||
-      !!getStore().db.prepare('SELECT 1 FROM song_artist_credits WHERE mbid=? LIMIT 1').get(id))
+      !!creditedArtist(id))
   bind('artistSongs', async (id, offset = 0) => {
     if (!knownArtist(id) || !Number.isSafeInteger(offset) || offset < 0 || offset > 1000000)
       throw Error('无效的歌手或分页位置')
@@ -329,7 +330,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     if (!mbid.test(id) || typeof on !== 'boolean') throw Error('无效艺人')
     const list = followed()
     if (on && !list.some((a) => a.id === id)) {
-      const artist = artists.get(id) ?? related.get(id)
+      const artist = artists.get(id) ?? related.get(id) ?? creditedArtist(id)
       if (!artist) throw Error('请重新搜索并选择艺人')
       list.push(artist)
     }

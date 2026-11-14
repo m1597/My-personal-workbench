@@ -1,3 +1,4 @@
+import { ArtistLinks } from './SongCredits'
 import { PlaylistImportDialog, usePlaylistImport } from './PlaylistImport'
 import { guardSearchEnter } from './searchSubmit'
 import {
@@ -63,6 +64,7 @@ export type LocalTrack = {
   id: string
   title: string
   artist: string
+  artistCredits?: import('./SongCredits').ArtistCredit[]
   folder: FolderEntry | null
   album: string
   albumArtist?: string | null
@@ -92,7 +94,7 @@ export type ImportJob = {
 }
 export type OnlineTrack = Pick<
   LocalTrack,
-  'id' | 'title' | 'artist' | 'album' | 'duration' | 'available'
+  'id' | 'title' | 'artist' | 'artistCredits' | 'album' | 'duration' | 'available'
 > & { origin: 'online'; localCopy: string | null }
 export type SelectionDownload = {
   id: string
@@ -910,21 +912,7 @@ export function LibraryPane({
                               </small>
                             </div>
                             {t.artist.trim() && !selection ? (
-                              <button
-                                className="catalog-text-link library-artist-link"
-                                type="button"
-                                title={t.artist}
-                                onClick={() =>
-                                  openCatalog({
-                                    kind: 'artist',
-                                    fromSong: t.title,
-                                    name: t.artist,
-                                    artist: t.artist,
-                                  })
-                                }
-                              >
-                                {t.artist}
-                              </button>
+                              <ArtistLinks song={t} open={openCatalog} />
                             ) : (
                               <small title={t.artist}>{t.artist}</small>
                             )}
