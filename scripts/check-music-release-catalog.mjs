@@ -69,6 +69,21 @@ store.library.upsert({
   album: '现场录音',
   duration: 1,
 })
+const navRows = [
+  ...Array.from({ length: 20 }, (_, i) => ['先前歌曲' + i, '测试歌手', '占位']),
+  ['神様のいうとおり', '春間無Nashi', '神様のいうとおり'],
+  ['冬のはなし', 'Given', ''],
+  ['三原色（翻自 YOASOBI）', '小幻', '三原色'],
+  ...Array.from({ length: 15 }, (_, i) => ['其他歌曲' + i, '测试歌手', '占位']),
+]
+const navIds = []
+for (const [i, [title, artist, album]] of navRows.entries()) {
+  const file = path.join(root, 'nav-' + i + '.mp3')
+  await fs.copyFile(tone, file)
+  store.library.upsert({ file, title, artist, album, albumArtist: artist, duration: 3 })
+  navIds.push(store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file).id)
+}
+store.library.createPlaylist('截图歌单', navIds)
 const listId = store.library.createPlaylist('发行试听')
 store.db.close()
 await fs.writeFile(
@@ -80,6 +95,7 @@ lx.on('request',({action,info})=>{
      const title=info.keyword.split(' ')[0]
      return [{id:'missing',name:title,singer:'Aimer',albumName:({Evening:'Instrumental Edition',Daylight:'Tokyo Live'})[title] || 'Studio Recording'}]
    }
+   if(info.keyword==='海へ ギヴン')return [{id:'missing',name:'海へ',singer:'ギヴン',albumName:'海へ'}]
    if(info.keyword==='i beg you yurisa')return [{id:'highlight',name:'i beg you',singer:'yurisa',interval:'04:29'}]
    if(info.keyword==='夜风 云海')return [{id:'highlight',name:'夜风',singer:'云海'}]
    if(info.keyword==='缺少曲 青禾')return [{id:'missing',name:'缺少曲',singer:'青禾',albumName:'山色'}]
@@ -168,6 +184,64 @@ async function launch() {
       globalThis.catalogRequests.push(url.pathname)
       const today = new Date().toISOString().slice(0, 10)
       const entity = url.pathname.split('/').at(-1)
+      const given = '5f077093-f2cd-4839-9158-51db217fba81',
+        release = '12345678-0001-1234-1234-000000000001',
+        edition = '12345678-0002-1234-1234-000000000002'
+      const credit = [
+        { name: 'ギヴン', artist: { name: 'ギヴン', 'sort-name': 'given', id: given } },
+      ]
+      const q = url.searchParams.get('query') ?? ''
+      if (entity === 'recording' && q.includes('冬のはなし'))
+        return Response.json({
+          count: 1,
+          recordings: [{ title: '冬のはなし', 'artist-credit': credit }],
+        })
+      if (entity === 'release-group' && q.includes(given))
+        return Response.json({
+          'release-groups': [
+            {
+              id: release,
+              title: '海へ',
+              'primary-type': 'Album',
+              'artist-credit': credit,
+              'first-release-date': '2024',
+            },
+          ],
+        })
+      if (entity === 'release' && q.includes(release))
+        return Response.json({
+          releases: [{ id: edition, title: '海へ', 'artist-credit': credit }],
+        })
+      if (entity === edition)
+        return Response.json({
+          'artist-credit': credit,
+          media: [{ position: 1, tracks: [{ number: '1', title: '海へ' }] }],
+        })
+      if (entity === 'release' && (q.includes('神様のいうとおり') || q.includes('三原色'))) {
+        const title = q.includes('三原色') ? '三原色' : '神様のいうとおり',
+          artist = title === '三原色' ? '小幻' : '春間無Nashi'
+        const base = title === '三原色' ? '2' : '1'
+        return Response.json({
+          releases: [
+            { id: first, title, 'artist-credit': [{ name: '无关同名艺人' }] },
+            ...['普通版', '豪华版'].map((disambiguation, i) => ({
+              id: `12345678-0003-1234-1234-0000000000${base}${i}`,
+              title,
+              disambiguation,
+              'artist-credit': [{ name: artist }],
+            })),
+          ],
+        })
+      }
+      if (entity.startsWith('12345678-0003-')) {
+        const isMihara = entity.at(-2) === '2'
+        const artist = isMihara ? '小幻' : '春間無Nashi'
+        const title = isMihara ? '三原色（翻自 YOASOBI）' : '神様のいうとおり'
+        return Response.json({
+          'artist-credit': [{ name: artist }],
+          media: [{ position: 1, tracks: [{ number: '1', title }] }],
+        })
+      }
       const wid = '04574440-b752-49eb-8ce7-75aa82113cd6',
         rid = '8efb27e4-aa62-4999-821d-6482df5e7238',
         composer = '67e344da-ec54-4e26-b2a4-8351d744a14c'
@@ -392,13 +466,13 @@ try {
   await expect(news().getByText('初雪', { exact: true })).toBeVisible()
   await expect(news().getByText('旧作')).toHaveCount(0)
   await expect(page.locator('.music-list li')).toHaveCount(0)
-  await expect(news().locator(':scope > ul .release-event-head strong')).toHaveText([
-    '初雪',
-    '薄暮',
-    '映画',
-  ])
+  await expect(
+    news().locator(':is(:scope, .release-news-column) > ul .release-event-head strong'),
+  ).toHaveText(['初雪', '薄暮', '映画'])
   for (const [i, type] of ['单曲', '专辑', '原声带'].entries())
-    await expect(news().locator(':scope > ul .release-event-head small').nth(i)).toContainText(type)
+    await expect(
+      news().locator(':is(:scope, .release-news-column) > ul .release-event-head small').nth(i),
+    ).toContainText(type)
   await news().getByRole('button', { name: '查看曲目' }).first().click()
   const pick = news().getByRole('button', { name: '播放', exact: true }).first()
   await expect(pick).toBeVisible()
@@ -573,6 +647,59 @@ try {
   await button('打开歌词页').click()
   await button('其他演绎').click()
   await expect(details.getByText('资料不足，暂无可确认的其他演绎。')).toBeVisible()
+  await details.getByRole('button', { name: '关闭' }).click()
+  await tab('歌单').click()
+  await button('截图歌单').click()
+  const givenRow = page.locator('.library-row').filter({ hasText: '冬のはなし' })
+  const given = givenRow.getByRole('button', { name: 'Given', exact: true })
+  await given.scrollIntoViewIfNeeded()
+  const navScroll = () => page.locator('.music-scroll').evaluate((el) => el.scrollTop)
+  const savedScroll = await navScroll()
+  assert.ok(savedScroll > 100)
+  await expect(givenRow.locator('.library-album button')).toHaveCount(0)
+  await given.click()
+  const artistHome = page.getByRole('region', { name: '歌手主页' }),
+    albumHome = page.getByRole('region', { name: '专辑主页' })
+  await expect(artistHome.getByRole('heading', { name: 'Given', exact: true })).toBeVisible()
+  const audioBefore = await app.evaluate(() => globalThis.audioRequests.length)
+  await artistHome.getByRole('button', { name: '播放冬のはなし' }).click()
+  await played()
+  assert.equal(await app.evaluate(() => globalThis.audioRequests.length), audioBefore)
+  await expect(artistHome.getByRole('button', { name: /海へ/ })).toBeVisible()
+  await page.screenshot({ path: path.join(root, 'given-home.png') })
+  await artistHome.getByRole('button', { name: /海へ/ }).click()
+  await albumHome.getByRole('button', { name: '播放', exact: true }).click()
+  await expect
+    .poll(() => app.evaluate(() => globalThis.audioRequests.length))
+    .toBeGreaterThan(audioBefore)
+  await played()
+  await expect(albumHome.getByRole('heading', { name: '海へ', exact: true })).toBeVisible()
+  await page.screenshot({ path: path.join(root, 'given-album.png') })
+  await albumHome.getByRole('button', { name: '返回' }).click()
+  await expect(artistHome.getByRole('heading', { name: 'Given' })).toBeVisible()
+  await artistHome.getByRole('button', { name: '返回' }).click()
+  assert.equal(await navScroll(), savedScroll)
+  for (const [title, artist] of [
+    ['神様のいうとおり', '春間無Nashi'],
+    ['三原色', '小幻'],
+  ]) {
+    if (title === '三原色') await page.setViewportSize({ width: 510, height: 850 })
+    await page
+      .locator('.library-row')
+      .filter({ hasText: artist })
+      .getByRole('button', { name: title, exact: true })
+      .click()
+    await expect(albumHome.getByRole('heading', { name: title, exact: true })).toBeVisible()
+    await expect(albumHome.getByText(artist, { exact: true }).first()).toBeVisible()
+    await expect(albumHome.getByText('请选择发行版本以查看曲目。')).toBeVisible()
+    await albumHome.getByRole('combobox', { name: '发行版本' }).click()
+    await expect(page.getByRole('option', { name: /无关同名艺人/ })).toHaveCount(0)
+    await page.getByRole('option', { name: /豪华版/ }).click()
+    await expect(albumHome.getByRole('combobox')).toContainText('豪华版')
+    await expect(albumHome.locator('.release-track-picker li')).toContainText(artist)
+    await page.screenshot({ path: path.join(root, title + '-album.png') })
+    await albumHome.getByRole('button', { name: '返回' }).click()
+  }
   console.log(
     'PASS 同曲版组、逐项播放/时长/下载、关注与跨重启新发行、发行版本切换与缺曲搜索 ' + root,
   )

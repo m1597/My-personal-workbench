@@ -44,6 +44,8 @@ const names = [
   'newsEditions',
   'albumEditions',
   'editionTracks',
+  'namedEditions',
+  'trackArtists',
   'songDetails',
   'workDetails',
   'personWorks',

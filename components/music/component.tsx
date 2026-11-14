@@ -1345,6 +1345,7 @@ function Music() {
                 if (receipt) setRemoval(receipt)
               })
             }
+            onlineSongs={state?.onlineTracks ?? []}
             exportList={(id) => act(() => host.exportPlaylist(id))}
             search={search}
             setSearch={setSearch}

@@ -7,13 +7,19 @@ import {
 } from './SidebarSorting'
 import { PlaylistSortMenu, type Playlist, type PlaylistSorting } from './PlaylistSortMenu'
 export type { Playlist } from './PlaylistSortMenu'
+import {
+  LibraryCatalogPage,
+  albumArtist,
+  knownAlbum,
+  type CatalogLocation,
+} from './LibraryCatalogPage'
 import { TimedPlaylist } from './TimedPlaylist'
 import { TrackMenu } from './TrackMenu'
 import { AlbumBrowser } from './AlbumBrowser'
 import { PlaylistCover } from './PlaylistCover'
 import { InfrequentTracks } from './InfrequentTracks'
 import { RecentHistory } from './LibraryTools'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Checkbox,
@@ -101,6 +107,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   addFavorites: (ids: string[]) => Promise<number | null>
   downloadSelected: (ids: string[]) => Promise<SelectionDownload[]>
   rows: PlaylistTrack[]
+  onlineSongs: OnlineTrack[]
   members: PlaylistTrack[]
   recentImports: boolean
   setRecentImports: (value: boolean) => void
@@ -156,6 +163,7 @@ export function LibraryPane({
   create,
   membership,
   rows,
+  onlineSongs,
   members,
   recentImports,
   setRecentImports,
@@ -311,6 +319,25 @@ export function LibraryPane({
   const playlistPage = scope === 'playlists'
   const importer = usePlaylistImport(playlistPage)
   const playableMembers = playlistPage ? members.filter((t) => t.available).map((t) => t.id) : []
+  const [locations, setLocations] = useState<CatalogLocation[]>([])
+  const layout = useRef<HTMLDivElement>(null)
+  const scrollPositions = useRef<number[]>([])
+  const restoreTop = useRef<number | null>(null)
+  function openCatalog(location: CatalogLocation) {
+    scrollPositions.current.push(layout.current?.closest('.music-scroll')?.scrollTop ?? 0)
+    restoreTop.current = 0
+    setLocations((stack) => [...stack, location])
+  }
+  function catalogBack() {
+    restoreTop.current = scrollPositions.current.pop() ?? 0
+    setLocations((stack) => stack.slice(0, -1))
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: restore the visible route before paint.
+  useLayoutEffect(() => {
+    if (restoreTop.current !== null)
+      layout.current?.closest('.music-scroll')?.scrollTo(0, restoreTop.current)
+    restoreTop.current = null
+  }, [locations])
   const choose = (id: string) => {
     setAlbumView(false)
     setSelection(null)
@@ -319,8 +346,13 @@ export function LibraryPane({
     setLimit(100)
     sentinel.current?.closest('.music-scroll')?.scrollTo(0, 0)
   }
-  return (
-    <div className="library-layout" {...importer.drop}>
+  const library = (
+    <div
+      ref={layout}
+      className="library-layout"
+      style={locations.length ? { display: 'none' } : undefined}
+      {...importer.drop}
+    >
       <Button
         size="small"
         appearance="subtle"
@@ -770,7 +802,25 @@ export function LibraryPane({
                                     : '缺失'}
                               </small>
                             </div>
-                            <small title={t.artist}>{t.artist}</small>
+                            {t.artist.trim() && !selection ? (
+                              <button
+                                className="catalog-text-link library-artist-link"
+                                type="button"
+                                title={t.artist}
+                                onClick={() =>
+                                  openCatalog({
+                                    kind: 'artist',
+                                    fromSong: t.title,
+                                    name: t.artist,
+                                    artist: t.artist,
+                                  })
+                                }
+                              >
+                                {t.artist}
+                              </button>
+                            ) : (
+                              <small title={t.artist}>{t.artist}</small>
+                            )}
                             {failedDownloads.has(t.id) && (
                               <small title={failedDownloads.get(t.id)}>
                                 下载失败 · {failedDownloads.get(t.id)}
@@ -779,7 +829,23 @@ export function LibraryPane({
                             {!t.available && <small>文件不可用</small>}
                           </div>
                           <span className="library-album" title={t.album}>
-                            {t.album || '—'}
+                            {knownAlbum(t.album) && !selection ? (
+                              <button
+                                type="button"
+                                className="catalog-text-link"
+                                onClick={() =>
+                                  openCatalog({
+                                    kind: 'album',
+                                    name: t.album,
+                                    artist: albumArtist(t),
+                                  })
+                                }
+                              >
+                                {t.album}
+                              </button>
+                            ) : (
+                              t.album || '—'
+                            )}
                           </span>
                           <small className="library-time">
                             {t.origin === 'online' && !t.duration ? '—' : formatTime(t.duration)}
@@ -1082,5 +1148,26 @@ export function LibraryPane({
         </Dialog>
       )}
     </div>
+  )
+  return (
+    <>
+      {library}
+      {locations.map((location, i) => (
+        <div
+          key={JSON.stringify([location.kind, location.name, location.artist, location.group?.id])}
+          hidden={i < locations.length - 1}
+        >
+          <LibraryCatalogPage
+            location={location}
+            local={tracks}
+            songs={onlineSongs}
+            play={(id, ids) => playAlbum(id, ids)}
+            actions={releaseActions}
+            back={catalogBack}
+            open={openCatalog}
+          />
+        </div>
+      ))}
+    </>
   )
 }

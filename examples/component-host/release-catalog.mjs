@@ -72,9 +72,32 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
         name: name(x.name),
         detail: [name(x.disambiguation), name(x.country), name(x.type)].filter(Boolean).join(' · '),
       }))
-    artists.clear()
     for (const artist of found) artists.set(artist.id, artist)
     return found
+  })
+  bind('trackArtists', async (title, artist) => {
+    if (!name(title) || !name(artist) || title.length > 256 || artist.length > 256)
+      throw Error('无效歌曲署名')
+    const normalized = (s) => name(s).normalize('NFKC').toLowerCase()
+    const data = await metadata('recording', { query: 'recording:' + quote(title), limit: '100' })
+    if (data.count > 100) return []
+    const matched = new Map()
+    for (const r of data.recordings ?? []) {
+      if (normalized(r.title) !== normalized(title)) continue
+      for (const credit of r['artist-credit'] ?? []) {
+        const a = credit.artist
+        if (
+          !a ||
+          !mbid.test(a.id) ||
+          ![credit.name, a.name, a['sort-name']].some((v) => normalized(v) === normalized(artist))
+        )
+          continue
+        const result = { id: a.id, name: name(a.name), detail: name(a.disambiguation) }
+        matched.set(a.id, result)
+        artists.set(a.id, result)
+      }
+    }
+    return [...matched.values()]
   })
   const related = new Map()
   bind('similarArtists', async (id) => {
@@ -198,8 +221,8 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
   }
   const newest = (a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title)
   bind('artistReleases', async (id) => {
-    if (!mbid.test(id) || !followed().some((artist) => artist.id === id))
-      throw Error('请先关注艺人')
+    if (!mbid.test(id) || (!artists.has(id) && !followed().some((artist) => artist.id === id)))
+      throw Error('请先选择艺人')
     return (await readGroups([id], 'arid:' + id + ' AND status:official')).sort(newest)
   })
   bind('releaseNews', async (refresh = false) => {
@@ -236,6 +259,18 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     const album = (await getStore().library.albums.list()).find((a) => a.id === albumId)
     if (!album) throw Error('本地专辑已变更')
     return findEditions('release:' + quote(album.title) + ' AND artist:' + quote(album.artist))
+  })
+  bind('namedEditions', async (title, artist) => {
+    if (
+      typeof title !== 'string' ||
+      typeof artist !== 'string' ||
+      !name(title) ||
+      !name(artist) ||
+      title.length > 256 ||
+      artist.length > 256
+    )
+      throw Error('无效专辑')
+    return findEditions('release:' + quote(title) + ' AND artist:' + quote(artist))
   })
   async function findEditions(query) {
     const choices = []

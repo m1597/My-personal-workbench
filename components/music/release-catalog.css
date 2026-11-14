@@ -150,3 +150,65 @@
 .missing-track-actions > [role="combobox"] {
   min-width: 0;
 }
+
+.catalog-text-link {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  text-align: start;
+  padding: 0;
+  cursor: pointer;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.catalog-text-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.catalog-text-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.library-artist-link {
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+  align-self: flex-start;
+}
+.library-catalog-home {
+  display: grid;
+  gap: var(--space-12);
+  max-width: 900px;
+  margin-inline: auto;
+  padding: var(--space-16);
+}
+.library-catalog-home > button:first-child {
+  justify-self: start;
+}
+.library-catalog-home h2,
+.library-catalog-home h3,
+.library-catalog-home p {
+  margin: 0;
+}
+.library-catalog-home ol {
+  margin: 0;
+  padding: 0;
+}
+.library-catalog-home li > div {
+  flex: 1;
+  min-width: 0;
+}
+.library-catalog-home small {
+  display: block;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 540px) {
+  .music-shell .library-row > .library-album:has(button) {
+    display: block;
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+}

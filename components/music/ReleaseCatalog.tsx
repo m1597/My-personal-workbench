@@ -16,7 +16,7 @@ type ReleaseTrack = {
   title: string
   artist: string
 }
-type News = { type: string; id: string; title: string; artist: string; date: string }
+export type News = { type: string; id: string; title: string; artist: string; date: string }
 export interface ReleaseAPI extends SongAPI {
   findArtists(term: string): Promise<Artist[]>
   similarArtists(id: string): Promise<Artist[]>
@@ -27,6 +27,8 @@ export interface ReleaseAPI extends SongAPI {
   artistPortrait(id: string): Promise<string | null>
   artistReleases(id: string): Promise<News[]>
   newsEditions(id: string): Promise<Edition[]>
+  trackArtists(title: string, artist: string): Promise<Artist[]>
+  namedEditions(title: string, artist: string): Promise<Edition[]>
   albumEditions(id: string): Promise<Edition[]>
   editionTracks(id: string): Promise<ReleaseTrack[]>
 }
@@ -42,7 +44,11 @@ export interface ReleaseActions {
   add: (playlist: string, key: string) => Promise<void>
   playlists: { id: string; name: string }[]
 }
-async function matchTrack(track: Pick<ReleaseTrack, 'title' | 'artist'>, album = '') {
+async function matchTrack(
+  track: Pick<ReleaseTrack, 'title' | 'artist'>,
+  album = '',
+  requireAlbum = false,
+) {
   const artists = artistNames(track.artist)
   const result = await window.music.lxSearch({ title: track.title, artist: artists[0] ?? '' })
   const matches = result.items.filter(
@@ -51,7 +57,9 @@ async function matchTrack(track: Pick<ReleaseTrack, 'title' | 'artist'>, album =
       (!artists.length || artistNames(item.artist).some((name) => artists.includes(name))) &&
       (item.quality === undefined || item.quality.length > 0),
   )
-  const recording = matches.find((item) => normalize(item.album) === normalize(album)) ?? matches[0]
+  const recording =
+    matches.find((item) => normalize(item.album) === normalize(album)) ??
+    (requireAlbum ? undefined : matches[0])
   if (!recording) throw Error('未找到这首歌的可播放版本')
   return recording
 }
@@ -141,7 +149,21 @@ function MissingTrack({
     </div>
   )
 }
-function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
+export function NewsTracks({
+  group,
+  play,
+  local = [],
+  playLocal,
+  named = false,
+  aliases = [],
+}: {
+  group: News
+  play: PlayRecording
+  local?: LocalTrack[]
+  playLocal?: (id: string, ids: string[]) => void
+  named?: boolean
+  aliases?: string[]
+}) {
   const [pending, setPending] = useState('')
   const [playError, setPlayError] = useState('')
   const attempt = useRef(0)
@@ -155,12 +177,23 @@ function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
   useEffect(() => {
     let active = true
     setError('')
-    void window.music
-      .newsEditions(group.id)
+    const normalized = (s: string) => s.normalize('NFKC').trim().toLowerCase()
+    const list = named
+      ? window.music
+          .namedEditions(group.title, group.artist)
+          .then((rows) =>
+            rows.filter(
+              (r) =>
+                normalized(r.title) === normalized(group.title) &&
+                normalized(r.artist) === normalized(group.artist),
+            ),
+          )
+      : window.music.newsEditions(group.id)
+    void list
       .then((list) => {
         if (!active) return
         setEditions(list)
-        setSelected(list[0]?.id ?? '')
+        setSelected(named && list.length > 1 ? '' : (list[0]?.id ?? ''))
         if (!list.length) setError('此发行暂无正式版本资料。')
       })
       .catch((e) => {
@@ -169,7 +202,7 @@ function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
     return () => {
       active = false
     }
-  }, [group.id, editionRetry])
+  }, [group.id, group.title, group.artist, named, editionRetry])
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry also reloads the currently selected edition.
   useEffect(() => {
     let active = true
@@ -198,11 +231,25 @@ function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
     }
   }, [selected])
   async function listen(track: ReleaseTrack) {
+    const localId = collectedTracks(tracks ?? [], local, group.artist, aliases).get(track)
+    if (localId && playLocal) {
+      playLocal(
+        localId,
+        local.filter((t) => t.available).map((t) => t.id),
+      )
+      return
+    }
     const request = ++attempt.current
     setPending(track.disc + ':' + track.number)
     setPlayError('')
     try {
-      const recording = await matchTrack(track, group.title)
+      let recording: Awaited<ReturnType<typeof matchTrack>>
+      try {
+        recording = await matchTrack(track, group.title, !!playLocal)
+      } catch (e) {
+        if (!aliases.length || normalize(track.artist) !== normalize(group.artist)) throw e
+        recording = await matchTrack({ ...track, artist: aliases[0] }, group.title, !!playLocal)
+      }
       if (attempt.current !== request) return
       await play(recording.key)
     } catch (e) {
@@ -216,10 +263,11 @@ function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
       {editions.length > 1 && (
         <Dropdown
           inlinePopup
-          aria-label="动态发行版本"
+          aria-label={playLocal ? '发行版本' : '动态发行版本'}
           listbox={{ className: 'component-popup' }}
           value={editions.filter((e) => e.id === selected).map(labelEdition)[0] ?? ''}
-          selectedOptions={[selected]}
+          placeholder="选择发行版本"
+          selectedOptions={selected ? [selected] : []}
           onOptionSelect={(_, d) => {
             if (d.optionValue) setSelected(d.optionValue)
           }}
@@ -242,7 +290,9 @@ function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
           </Button>
         </p>
       ) : !tracks ? (
-        <small role="status">正在读取曲目…</small>
+        <small role="status">
+          {!selected && editions.length > 1 ? '请选择发行版本以查看曲目。' : '正在读取曲目…'}
+        </small>
       ) : !tracks.length ? (
         <small>此版本暂无曲目资料。</small>
       ) : (
@@ -675,14 +725,21 @@ export function ArtistReleases({ play }: { play: PlayRecording }) {
   )
 }
 const normalize = (v: string) => v.trim().normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ')
-function collectedTracks(tracks: ReleaseTrack[], local: LocalTrack[]) {
+function collectedTracks(
+  tracks: ReleaseTrack[],
+  local: LocalTrack[],
+  artist = '',
+  aliases: string[] = [],
+) {
   const matched = new Map<ReleaseTrack, string | null>()
   for (const row of local) {
     if (!row.available) continue
     const options = tracks.filter(
       (t) =>
         normalize(row.title) === normalize(t.title) &&
-        normalize(row.artist) === normalize(t.artist) &&
+        (normalize(row.artist) === normalize(t.artist) ||
+          (normalize(t.artist) === normalize(artist) &&
+            aliases.some((a) => normalize(a) === normalize(row.artist)))) &&
         (row.discNumber == null || row.discNumber === t.disc) &&
         (row.trackNumber == null || row.trackNumber === t.position),
     )
