@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import path from 'node:path'
 
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
-const ids = ['wave', 'tags', 'rules']
+const ids = ['wave', 'tags', 'rules', 'path']
 export function musicPlugins(profile, getStore, dialog, nativeImage) {
   const root = path.join(profile, 'fitbay-music', 'plugins')
   let entries

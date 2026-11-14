@@ -1,0 +1,32 @@
+.song-path {
+  display: grid;
+  gap: 12px;
+  max-width: 720px;
+  align-content: start;
+  justify-items: start;
+}
+.song-path p,
+.song-path ol {
+  margin: 0;
+}
+.song-path-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.song-path-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.song-path-controls input {
+  width: 66px;
+}
+.song-path-controls [role="combobox"] {
+  min-width: 140px;
+  max-width: 260px;
+}
+.song-path li {
+  padding: 3px 0;
+}

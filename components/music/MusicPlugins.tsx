@@ -18,7 +18,7 @@ export type PluginRow = {
 export type PluginProps = {
   tracks: LocalTrack[]
   activeId?: string
-  play: (id: string) => void
+  play: (id: string, queue?: string[]) => void
   audio: HTMLAudioElement | null
   refresh: () => Promise<void>
 }
