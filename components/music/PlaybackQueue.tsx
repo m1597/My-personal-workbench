@@ -11,7 +11,7 @@ type Song = {
   localId?: string | null
 }
 function localFile(song: Song) {
-  if (song.origin === 'online') return song.localCopy
+  if (song.origin === 'online') return song.localCopy ? song.id : null
   return song.origin ? song.id : song.localId
 }
 export function PlaybackQueue({

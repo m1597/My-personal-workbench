@@ -215,10 +215,34 @@ try {
     }
   })
   await search()
+  await result().click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '查看文件所在位置' })).toHaveCount(0)
+  await app.evaluate(({ shell }) => {
+    shell.showItemInFolder = (file) => {
+      globalThis.locatedSong = file
+    }
+  })
   await result().getByRole('button', { name: '下载', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已下载并入库')
   const audio = (await fs.readdir(downloads)).filter((f) => f.endsWith('.mp3'))
   assert.equal(audio.length, 1)
+  const locate = async (row) => {
+    await row.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: '查看文件所在位置' }).click()
+    await expect
+      .poll(() => app.evaluate(() => globalThis.locatedSong))
+      .toBe(path.join(downloads, audio[0]))
+    await app.evaluate(() => {
+      globalThis.locatedSong = null
+    })
+  }
+  await locate(result())
+  await search()
+  await locate(result())
+  await tab('歌单').click()
+  await button('路上听').click()
+  await locate(page.locator('.library-row').first())
+
   assert.deepEqual(await fs.readFile(path.join(downloads, audio[0])), await fs.readFile(tone))
   await tab('曲库').click()
   await button('全部歌曲').click()

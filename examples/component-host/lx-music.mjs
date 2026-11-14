@@ -906,6 +906,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         : await downloadResults(src, track, signal)
       signal.throwIfAborted()
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
+      const localCopy = getStore().db.prepare(`SELECT t.id FROM recording_copies c
+        JOIN local_tracks t ON t.id=c.local
+        WHERE c.platform=? AND c.sourceId=? AND t.available=1 AND t.awaitingLocation=0
+        ORDER BY t.id LIMIT 1`)
       const items = []
       for (const row of audition ? rows.slice(0, 20) : rows) {
         if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
@@ -920,6 +924,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         })
         items.push({
           key,
+          localId: localCopy.get(src.platform, String(recordingId(src, row) || ''))?.id,
           title: text(row.name),
           artist: text(row.singer),
           album: text(row.albumName),
@@ -1057,7 +1062,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           undefined,
           url,
         )
-        return detailed ? { file, sources: tried } : file
+        if (!detailed) return file
+        const localId = getStore()
+          .db.prepare('SELECT id FROM local_tracks WHERE file=?')
+          .get(path.join(dir, file))?.id
+        return { file, sources: tried, localId }
       } catch (error) {
         signal.throwIfAborted()
         if (!(error instanceof SourceDownloadError)) throw error

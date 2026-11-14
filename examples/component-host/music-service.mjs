@@ -205,6 +205,15 @@ export function musicService(
     }
   }
   bind('removeFolder', (id) => updateLibrary(() => store.library.removeFolder(text(id))))
+  bind('revealTrack', async (id) => {
+    const track = text(id)
+    const row = track.startsWith('online-recording-')
+      ? await store.library.onlineCopy(track)
+      : store.library.row(track)
+    if (!row || row.awaitingLocation || !(await regularFile(row.file)))
+      throw Error('文件不可用，请重新定位')
+    shell.showItemInFolder(row.file)
+  })
   bind('openFolder', async (id) => {
     const [member] = store.library.folderMembers(text(id))
     const dir = path.dirname(member.file)
