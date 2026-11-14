@@ -1,7 +1,7 @@
 import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { LocalTrack } from './LibraryPane'
-import { Cover, defaultCover, type Album } from './AlbumBrowser'
+import { Cover, type Album } from './AlbumBrowser'
 import './release-catalog.css'
 
 type Artist = { id: string; name: string; detail: string }
@@ -141,7 +141,11 @@ function ArtistPortrait({ id }: { id: string }) {
     }
   }, [id])
   return (
-    <img src={image || defaultCover} alt="" onError={image ? () => setImage(null) : undefined} />
+    <img
+      src={image || './default-artist.webp'}
+      alt=""
+      onError={image ? () => setImage(null) : undefined}
+    />
   )
 }
 function ReleaseList({
