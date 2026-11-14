@@ -64,7 +64,10 @@ try {
     })
     console.log(width, dimensions)
     if (width === 920) {
-      await row.locator('.library-name strong').dispatchEvent('click', { detail: 1 })
+      await row.locator('.library-name strong').click()
+      await expect(row).toHaveAttribute('data-selected', 'true')
+      assert.equal(await page.locator('audio').evaluate((a) => a.paused), true)
+      await row.locator('.library-name strong').dblclick()
       await expect
         .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0.1))
         .toBe(true)

@@ -823,6 +823,9 @@ try {
     }
     await changeSong()
     await row.locator('.library-track-title strong').click()
+    await expect(row).toHaveAttribute('data-selected', 'true')
+    await expect(button('暂停冬のはなし')).toBeVisible()
+    await row.locator('.library-track-title strong').dblclick()
     await isTarget()
     for (const [linkName, region] of [
       ['小幻', '歌手主页'],
@@ -841,6 +844,12 @@ try {
         return { x, y }
       })
       await page.mouse.click(point.x, point.y)
+      await expect(row).toHaveAttribute('data-selected', 'true')
+      await expect(button('暂停冬のはなし')).toBeVisible()
+      await page.mouse.dblclick(point.x, point.y)
+      await isTarget()
+      await changeSong()
+      await link.dblclick({ delay: 120 })
       await isTarget()
       await link.click()
       const opened = page.getByRole('region', { name: region })
