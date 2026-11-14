@@ -262,7 +262,8 @@ if (process.argv.includes('--ui')) {
     await selectMusicSettings(page, '插件')
     await uninstallPublic(page, profile, 'tags')
     console.log(
-      'PASS 公开地址下载、独立安装、查看原图与建议、仅写入所选字段，重启及卸载重装后标签与封面保留。' + dir,
+      'PASS 公开地址下载、独立安装、查看原图与建议、仅写入所选字段，重启及卸载重装后标签与封面保留。' +
+        dir,
     )
   } finally {
     await app.close()

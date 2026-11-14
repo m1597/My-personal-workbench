@@ -65,6 +65,7 @@ import { PlaybackQueue } from './PlaybackQueue'
 import { DownloadTasks } from './DownloadTasks'
 import { VolumeControls } from './VolumeControls'
 import './style.css'
+import './discovery-layout.css'
 const legacySummaries: Record<string, string> = {
   denied: '当前来源明确禁止保存这首歌',
   preview: '当前来源仅提供试听',
@@ -1293,7 +1294,7 @@ function Music() {
           </Button>
         </div>
       )}
-      <main key={tab} className="music-scroll">
+      <main key={tab} className="music-scroll" data-page={tab}>
         {showPlayer ? (
           <NowPlaying
             actions={{
@@ -1344,6 +1345,7 @@ function Music() {
               return ok ? added : null
             }}
             rows={localRows}
+            onlineSongs={state?.onlineTracks ?? []}
             members={categoryRows}
             recentImports={recentImports}
             setRecentImports={setRecentImports}
@@ -1388,7 +1390,6 @@ function Music() {
                 if (receipt) setRemoval(receipt)
               })
             }
-            onlineSongs={state?.onlineTracks ?? []}
             exportList={(id) => act(() => host.exportPlaylist(id))}
             search={search}
             setSearch={setSearch}
@@ -1522,48 +1523,61 @@ function Music() {
             <section className="music-list">
               <div className="music-section-head">
                 <h2>本次推荐</h2>
+                {(batch?.targetCount || legacyDaily) && (
+                  <div className="music-batch-status">
+                    {batch?.targetCount ? (
+                      <div className="music-batch-progress">
+                        <p role="status">
+                          已入库 {rows.length}/{batch.targetCount}
+                          {batch.state === 'completed' && rows.length < batch.targetCount
+                            ? '，部分已下载歌曲已移除或暂不可用'
+                            : running && rows.length >= batch.targetCount
+                              ? '，正在完成本批'
+                              : batch.message && `，${batch.message}`}
+                        </p>
+                        {running && <StopRecommendation refresh={refresh} />}
+                        {batch.state === 'awaiting' && (
+                          <>
+                            <Button
+                              size="small"
+                              onClick={() => void act(() => host.answerShortage(batch.id, false))}
+                            >
+                              保留当前结果
+                            </Button>
+                            <Button
+                              size="small"
+                              onClick={() => void act(() => host.answerShortage(batch.id, true))}
+                            >
+                              扩大到相近歌曲
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <p role="status">已下载 {downloaded.length} 首</p>
+                    )}
+                    {details && (
+                      <details className="music-failure-details">
+                        <summary>查看详情</summary>
+                        <p>{details}</p>
+                      </details>
+                    )}
+                  </div>
+                )}
+                {rows.some((r) => r.daily) && (
+                  <Button
+                    className="music-play-batch"
+                    size="small"
+                    disabled={!downloaded.length}
+                    onClick={() => {
+                      setShuffled(null)
+                      void act(() => play(downloaded[0], downloaded))
+                    }}
+                  >
+                    播放本次推荐
+                  </Button>
+                )}
               </div>
-              {(batch?.targetCount || legacyDaily) && (
-                <div className="music-batch-status">
-                  {batch?.targetCount ? (
-                    <div className="music-batch-progress">
-                      <p role="status">
-                        已入库 {rows.length}/{batch.targetCount}
-                        {batch.state === 'completed' && rows.length < batch.targetCount
-                          ? '，部分已下载歌曲已移除或暂不可用'
-                          : running && rows.length >= batch.targetCount
-                            ? '，正在完成本批'
-                            : batch.message && `，${batch.message}`}
-                      </p>
-                      {running && <StopRecommendation refresh={refresh} />}
-                      {batch.state === 'awaiting' && (
-                        <>
-                          <Button
-                            size="small"
-                            onClick={() => void act(() => host.answerShortage(batch.id, false))}
-                          >
-                            保留当前结果
-                          </Button>
-                          <Button
-                            size="small"
-                            onClick={() => void act(() => host.answerShortage(batch.id, true))}
-                          >
-                            扩大到相近歌曲
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <p role="status">已下载 {downloaded.length} 首</p>
-                  )}
-                  {details && (
-                    <details className="music-failure-details">
-                      <summary>查看详情</summary>
-                      <p>{details}</p>
-                    </details>
-                  )}
-                </div>
-              )}
               {rows.length > 0 ? (
                 <>
                   <div className="music-tools">
@@ -1597,19 +1611,6 @@ function Music() {
                           })
                         }
                       />
-                    )}
-                    {rows.some((r) => r.daily) && (
-                      <Button
-                        className="music-play-batch"
-                        size="small"
-                        disabled={!downloaded.length}
-                        onClick={() => {
-                          setShuffled(null)
-                          void act(() => play(downloaded[0], downloaded))
-                        }}
-                      >
-                        播放本次推荐
-                      </Button>
                     )}
                     {rows.some((r) => r.status === '待匹配') && (
                       <Button
@@ -1673,7 +1674,8 @@ function Music() {
                           dismissed={r.notInterested}
                         >
                           <li data-active={(r.localId ?? r.id) === active?.id}>
-                            <div className="music-track-icon">
+                            <div className="music-track-icon" data-cover={!!r.daily}>
+                              {r.daily && <Cover track id={r.localId ?? undefined} />}
                               {playable(r) ? (
                                 <Button
                                   appearance="subtle"
@@ -1701,16 +1703,18 @@ function Music() {
                                 <span>{r.artist}</span>
                               </div>
                               <p>{r.reason}</p>
-                              {r.status !== '模型推荐' && !(r.daily && r.status === '待重试') && (
-                                <small>
-                                  {r.status}
-                                  {r.recordingAlbum
-                                    ? ' · ' + r.recordingAlbum
-                                    : version
-                                      ? ' · ' + version.album + ' · ' + version.version
-                                      : ''}
-                                </small>
-                              )}
+                              {!r.daily &&
+                                r.status !== '模型推荐' &&
+                                !(r.daily && r.status === '待重试') && (
+                                  <small>
+                                    {r.status}
+                                    {r.recordingAlbum
+                                      ? ' · ' + r.recordingAlbum
+                                      : version
+                                        ? ' · ' + version.album + ' · ' + version.version
+                                        : ''}
+                                  </small>
+                                )}
                               {r.online && !playable(r) && (
                                 <Button
                                   size="small"
@@ -1788,6 +1792,7 @@ function Music() {
                                   </Button>
                                 )}
                             </div>
+                            {r.daily && <small className="daily-row-state">{r.status}</small>}
                             {!r.daily && playable(r) && (
                               <Checkbox
                                 aria-label="保留"

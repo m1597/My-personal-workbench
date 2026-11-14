@@ -595,24 +595,30 @@ export function ArtistReleases({ play }: { play: PlayRecording }) {
   }
   return (
     <section className="music-release-news" aria-label="关注歌手的新发行">
-      <header>
-        <h2>关注歌手的新发行</h2>
-        {!!followed.length && (
-          <Button size="small" disabled={busy} onClick={() => void act(() => load(followed, true))}>
-            刷新发行
-          </Button>
-        )}
-      </header>
-      {busy && <small role="status">正在读取发行资料…</small>}
-      {status && <p role="alert">{status}</p>}
-      {!busy &&
-        !status &&
-        (!followed.length ? (
-          <p>关注歌手后可在这里查看新发行。</p>
-        ) : (
-          news?.length === 0 && <p>近 90 天暂无新发行。</p>
-        ))}
-      <ReleaseList rows={news ?? []} albums={albums} play={play} />
+      <div className="release-news-column" data-empty={!busy && !status && !news?.length}>
+        <header>
+          <h2>关注歌手的新发行</h2>
+          {!!followed.length && (
+            <Button
+              size="small"
+              disabled={busy}
+              onClick={() => void act(() => load(followed, true))}
+            >
+              刷新发行
+            </Button>
+          )}
+        </header>
+        {busy && <small role="status">正在读取发行资料…</small>}
+        {status && <p role="alert">{status}</p>}
+        {!busy &&
+          !status &&
+          (!followed.length ? (
+            <p>关注歌手后可在这里查看新发行。</p>
+          ) : (
+            news?.length === 0 && <p>近 90 天暂无新发行。</p>
+          ))}
+        <ReleaseList rows={news ?? []} albums={albums} play={play} />
+      </div>
       <section className="followed-artists" aria-label="我关注的歌手">
         <header>
           <h2>我关注的歌手</h2>

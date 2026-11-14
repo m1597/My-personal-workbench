@@ -294,103 +294,107 @@ export function DownloadPane({
   }
   return (
     <section className="lx-panel" aria-label="搜索音乐">
-      <form
-        className="download-search"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (!busy && name && hasQuery && !unsupported) void act(() => search())
-        }}
-      >
-        <Input
-          aria-label="搜索关键词"
-          placeholder="输入歌名、艺人或关键词"
-          value={query}
-          maxLength={256}
-          disabled={busy}
-          onChange={(_, data) => {
-            setQuery(data.value)
+      <div className="search-controls" data-query={hasQuery}>
+        <form
+          className="download-search"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!busy && name && hasQuery && !unsupported) void act(() => search())
+          }}
+        >
+          <Input
+            aria-label="搜索关键词"
+            placeholder="输入歌名、艺人或关键词"
+            value={query}
+            maxLength={256}
+            disabled={busy}
+            onChange={(_, data) => {
+              setQuery(data.value)
+              setResult(undefined)
+              setStatus('')
+            }}
+          />
+          <Button
+            type="submit"
+            appearance="primary"
+            disabled={!name || !hasQuery || busy || unsupported}
+          >
+            搜索
+          </Button>
+        </form>
+        <TabList
+          className="search-platforms"
+          size="small"
+          aria-label="搜索平台"
+          selectedValue={platform}
+          onTabSelect={(_, data) => {
+            const next = String(data.value)
+            if (next === platform || busy) return
+            setPlatform(next)
             setResult(undefined)
             setStatus('')
+            if (name && hasQuery && (!available || available.includes(next)))
+              void act(() => search(next))
           }}
-        />
-        <Button
-          type="submit"
-          appearance="primary"
-          disabled={!name || !hasQuery || busy || unsupported}
         >
-          搜索
-        </Button>
-      </form>
-      <TabList
-        className="search-platforms"
-        size="small"
-        aria-label="搜索平台"
-        selectedValue={platform}
-        onTabSelect={(_, data) => {
-          const next = String(data.value)
-          if (next === platform || busy) return
-          setPlatform(next)
-          setResult(undefined)
-          setStatus('')
-          if (name && hasQuery && (!available || available.includes(next)))
-            void act(() => search(next))
-        }}
-      >
-        <Tab value="wy" disabled={busy}>
-          网易云音乐
-        </Tab>
-        <Tab value="tx" disabled={busy}>
-          QQ 音乐
-        </Tab>
-        <Tab value="kg" disabled={busy}>
-          酷狗音乐
-        </Tab>
-      </TabList>
-      {!name && hasQuery && <p>请先到「设置」导入音乐源。</p>}
-      {unsupported && (
-        <p role="status">
-          当前音乐源不支持{platforms[platform as keyof typeof platforms]}
-          的搜索和下载，请更换音乐源。
-        </p>
-      )}
-      {!hasQuery && !busy && history.length > 0 && (
-        <section className="search-history" aria-label="最近搜索">
-          <header>
-            <h2>最近搜索</h2>
-            <Button
-              size="small"
-              appearance="subtle"
-              onClick={() => void act(() => changeHistory('clear'), false)}
-            >
-              清空
-            </Button>
-          </header>
-          <div>
-            {history.map((word) => (
-              <span key={word}>
-                <Button
-                  size="small"
-                  appearance="subtle"
-                  disabled={!name || unsupported}
-                  onClick={() => {
-                    setQuery(word)
-                    void act(() => search(platform, word))
-                  }}
-                >
-                  {word}
-                </Button>
-                <Button
-                  size="small"
-                  appearance="subtle"
-                  aria-label={'删除搜索词 ' + word}
-                  icon={<X size={13} />}
-                  onClick={() => void act(() => changeHistory('remove', word), false)}
-                />
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
+          <Tab value="wy" disabled={busy}>
+            网易云音乐
+          </Tab>
+          <Tab value="tx" disabled={busy}>
+            QQ 音乐
+          </Tab>
+          <Tab value="kg" disabled={busy}>
+            酷狗音乐
+          </Tab>
+        </TabList>
+        {!name && hasQuery && <p>请先到「设置」导入音乐源。</p>}
+        {unsupported && (
+          <p role="status">
+            当前音乐源不支持{platforms[platform as keyof typeof platforms]}
+            的搜索和下载，请更换音乐源。
+          </p>
+        )}
+        {history.length > 0 && (
+          <section className="search-history" aria-label="最近搜索">
+            <header>
+              <h2>最近搜索</h2>
+              <Button
+                disabled={busy}
+                size="small"
+                appearance="subtle"
+                onClick={() => void act(() => changeHistory('clear'), false)}
+              >
+                清空
+              </Button>
+            </header>
+            <div>
+              {history.map((word) => (
+                <span key={word}>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    disabled={busy || !name || unsupported}
+                    onClick={() => {
+                      setQuery(word)
+                      void act(() => search(platform, word))
+                    }}
+                  >
+                    {word}
+                  </Button>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    aria-label={'删除搜索词 ' + word}
+                    disabled={busy}
+                    icon={<X size={13} />}
+                    onClick={() => void act(() => changeHistory('remove', word), false)}
+                  />
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
       {busy ? (
         <div role="status">
           正在处理…{' '}
