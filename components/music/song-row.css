@@ -5,3 +5,15 @@
 [data-song-row] {
   user-select: none;
 }
+
+.music-shell li:is(.highlight-recording,.release-recording) {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:var(--space-8);
+  align-items:center;
+}
+.music-shell .catalog-song-text {display:flex;flex-direction:column;align-items:flex-start;min-width:0;overflow-wrap:anywhere;}
+.music-shell li:is(.highlight-recording,.release-recording) > .search-result-actions {justify-self:end; flex:none;}
+.search-play-cover {position:relative;display:grid;place-items:center;}
+.search-play-cover img,.search-play-cover .row-play {grid-area:1/1;}
+.search-play-cover .row-play {background:rgba(0,0,0,.55);color:white;}

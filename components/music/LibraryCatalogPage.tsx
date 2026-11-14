@@ -73,6 +73,7 @@ type Props = {
 }
 export function LibraryCatalogPage({ location, local, songs, play, actions, back, open }: Props) {
   const artistPage = location.kind === 'artist'
+  const [edition, setEdition] = useState(location.group?.editionId)
   const [artists, setArtists] = useState<Awaited<ReturnType<typeof window.music.findArtists>>>([])
   const [chosen, setChosen] = useState('')
   const [remote, setRemote] = useState<News[]>()
@@ -213,44 +214,53 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
       aria-label={artistPage ? '歌手主页' : '专辑主页'}
     >
       <BackButton onClick={back} />
-      <header>
+      <header className={artistPage ? undefined : 'album-detail-header'}>
         {artistPage && <ArtistPortrait id={chosen} />}
-        <small>{artistPage ? '歌手' : '专辑'}</small>
-        <h2>{location.name}</h2>
         {!artistPage && (
-          <>
-            <Cover id={localSongs.find((s) => s.available)?.id} group={location.group?.id} track />
-            <p>
-              <ArtistLinks
-                song={{
-                  title: location.name,
-                  artist: location.artist,
-                  artistCredits: location.group?.artistCredits,
-                }}
-                open={open}
+          <Cover
+            id={localSongs.find((s) => s.available)?.id}
+            group={location.group?.id}
+            edition={edition}
+            track
+          />
+        )}
+        <div>
+          <small>{artistPage ? '歌手' : '专辑'}</small>
+          <h2>{location.name}</h2>
+          {!artistPage && (
+            <>
+              <p>
+                <ArtistLinks
+                  song={{
+                    title: location.name,
+                    artist: location.artist,
+                    artistCredits: location.group?.artistCredits,
+                  }}
+                  open={open}
+                />
+              </p>
+            </>
+          )}
+          {artistPage && (
+            <div className="artist-home-actions">
+              <FollowButton
+                artist={{ id: chosen, name: location.name, detail: '' }}
+                following={followed.some((a) => a.id === chosen)}
+                disabled={!chosen || pending}
+                toggle={follow}
               />
-            </p>
-          </>
-        )}
-        {artistPage && (
-          <div className="artist-home-actions">
-            <FollowButton
-              artist={{ id: chosen, name: location.name, detail: '' }}
-              following={followed.some((a) => a.id === chosen)}
-              disabled={!chosen || pending}
-              toggle={follow}
-            />
-            <Button
-              size="small"
-              disabled={!chosen}
-              aria-expanded={!!chosen && similar === chosen}
-              onClick={() => setSimilar(similar === chosen ? '' : chosen)}
-            >
-              查找相似歌手
-            </Button>
-          </div>
-        )}
-        {followError && <small role="alert">{followError}</small>}
+              <Button
+                size="small"
+                disabled={!chosen}
+                aria-expanded={!!chosen && similar === chosen}
+                onClick={() => setSimilar(similar === chosen ? '' : chosen)}
+              >
+                查找相似歌手
+              </Button>
+            </div>
+          )}
+          {followError && <small role="alert">{followError}</small>}
+        </div>
       </header>
       {artistPage && chosen && similar === chosen && (
         <SimilarArtists
@@ -343,11 +353,14 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
                   type="button"
                   className="catalog-text-link catalog-release-link"
                   key={r.id}
-                  onClick={() =>
-                    open({ kind: 'album', name: r.title, artist: location.artist, group: r })
-                  }
+                  onClick={() => open({ kind: 'album', name: r.title, artist: r.artist, group: r })}
                 >
-                  <Cover id={covers.get(JSON.stringify([norm(r.artist), norm(r.title)]))} track />
+                  <Cover
+                    id={covers.get(JSON.stringify([norm(r.artist), norm(r.title)]))}
+                    group={r.id}
+                    edition={r.editionId}
+                    track
+                  />
                   <span>
                     {r.title}
                     <small>
@@ -361,6 +374,7 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
             <>
               <h3>发行曲目</h3>
               <NewsTracks
+                onEdition={setEdition}
                 group={group}
                 aliases={
                   location.group && norm(location.group.artist) !== norm(location.artist)

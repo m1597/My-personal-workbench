@@ -1,5 +1,6 @@
+import { useMusicFeedback } from './musicFeedback'
 import { PublicPlaylists } from './PublicPlaylists'
-import { OnlineSongRow } from './OnlineSongRow'
+import { OnlineSongRow,RowPlay } from './OnlineSongRow'
 import { SongCredits } from './SongCredits'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Dropdown, Option, Tab, TabList } from '@fluentui/react-components'
@@ -11,6 +12,7 @@ import { formatTime, type Playlist } from './LibraryPane'
 export type Versions = {
   items: {
     key: string
+    onlineId:string
     localId?: string
     title: string
     artist: string
@@ -134,10 +136,11 @@ export function DownloadPane({
   playlists: Playlist[]
   playPublic: (ids: string[]) => Promise<unknown>
   onPlay: (key: string, quality?: string) => Promise<void>
-  onAdd: (playlist: string, key: string) => Promise<void>
+  onAdd: (playlist: string, key: string) => Promise<boolean>
   refresh: () => Promise<void>
   preferredQuality?: string
 }) {
+  const feedback = useMusicFeedback()
   const [name, setName] = useState(''),
     [result, setResult] = useState<Versions>(),
     [quality, setQuality] = useState(''),
@@ -164,7 +167,7 @@ export function DownloadPane({
     try {
       await fn()
     } catch (e) {
-      if (live.current) setStatus(String(e).split('Error: ').pop() || '操作失败')
+      if (live.current) setStatus(feedback.error(e))
     } finally {
       if (live.current) setOperation('idle')
     }
@@ -176,7 +179,7 @@ export function DownloadPane({
     if (!live.current) return
     setResult(found)
     setQuality(found.quality.includes(preferredQuality) ? preferredQuality : found.quality[0])
-    if (!found.items.length) setStatus('没有找到匹配版本')
+    if (!found.items.length) setStatus(feedback.text('没有找到匹配版本', 'No matching recordings found'))
   }
   useEffect(() => {
     live.current = true
@@ -226,8 +229,8 @@ export function DownloadPane({
             const result = await host.lxDownload(item.key, quality, true)
             if (result) {
               const via =
-                result.sources.length > 1 ? ' · 自动换源：' + result.sources.join(' → ') : ''
-              setStatus('已下载并入库 · ' + result.file + via)
+                result.sources.length > 1 ? feedback.text(' · 自动换源：',' · Switched source: ') + result.sources.join(' → ') : ''
+              setStatus(feedback.text('已下载并入库 · ', 'Downloaded to library · ') + result.file + via)
               if (result.localId)
                 setResult(
                   (previous) =>
@@ -244,12 +247,12 @@ export function DownloadPane({
         }
         add={(id, name) =>
           void act(async () => {
-            await onAdd(id, item.key)
-            if (live.current) setStatus('已加入「' + name + '」')
+            const added = await onAdd(id, item.key)
+            if (live.current) setStatus(feedback.membership(name, added))
           }, false)
         }
       >
-        <ResultCover item={item} />
+        <div className="search-play-cover"><ResultCover item={item}/><RowPlay id={item.onlineId} title={item.title} disabled={busy || item.quality?.length===0} play={()=>void act(()=>onPlay(item.key),false)}/></div>
         <div className="search-track">
           {recordingName(item.title)}
           <small>

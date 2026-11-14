@@ -107,7 +107,7 @@ try {
     for (let j = 0; j < Math.min(4, await rows.count()); j++) {
       const row = rows.nth(j),
         title = await row
-          .locator(':scope > div:first-child > span, :scope > span')
+          .locator('.catalog-song-title')
           .first()
           .textContent()
       await row.dispatchEvent('dblclick')

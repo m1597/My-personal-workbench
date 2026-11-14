@@ -29,6 +29,7 @@ function componentBridge(prefix) {
           show: (settings) => ipcRenderer.invoke('music-prototype:show', settings),
         }
       : {}),
+    stop: () => ipcRenderer.invoke(`${prefix}:stop`),
     close: () => ipcRenderer.invoke(`${prefix}:close`),
     keepRunning: (value) => ipcRenderer.invoke(`${prefix}:keep-running`, value),
     layout: (included) => ipcRenderer.invoke(`${prefix}:layout`, included),

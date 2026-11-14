@@ -182,6 +182,10 @@ async function launch() {
     const artist = '00000000-0000-0000-0000-000000000003'
     const artistCredit = [{ artist: { id: artist, name: '青禾' }, name: '青禾' }]
     globalThis.fetch = async (url, options) => {
+      if(url.hostname==='coverartarchive.org') {
+        const wanted=url.pathname==='/release/00000000-0000-0000-0000-000000000002/front-250' ? 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQD14LAAGcARirKHD3AAAAAElFTkSuQmCC' : 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGN4Vm4NAAPfAZk6qrVNAAAAAElFTkSuQmCC'
+        return new Response(Buffer.from(wanted,'base64'),{headers:{'Content-Type':'image/png'}})
+      }
       if (
         url.origin !== 'https://musicbrainz.org' ||
         !options.headers['User-Agent'].includes('FitBay')
@@ -385,6 +389,7 @@ async function launch() {
             {
               id: first,
               title: '初雪',
+              releases:[{id:first,status:'Official'}],
               'primary-type': 'Single',
               'first-release-date': today,
               'artist-credit': artistCredit,
@@ -562,7 +567,7 @@ try {
       news().locator(':is(:scope, .release-news-column) > ul .release-event-head small').nth(i),
     ).toContainText(type)
   await news().getByRole('button', { name: '查看曲目' }).first().click()
-  const pick = news().getByRole('button', { name: '播放', exact: true }).first()
+  const pick = news().locator('.release-recording .row-play').first()
   await expect(pick).toBeVisible({ timeout: 15000 })
   const selector = news().getByRole('combobox', { name: '动态发行版本' })
   await app.evaluate(() => {
@@ -601,7 +606,7 @@ try {
   await news()
     .getByRole('listitem')
     .filter({ has: page.getByText('1.2 无编号', { exact: true }) })
-    .getByRole('button', { name: '播放', exact: true })
+    .locator('.row-play')
     .last()
     .click()
   await expect(news().getByRole('alert')).toContainText('未找到这首歌的可播放版本')
@@ -738,13 +743,13 @@ try {
   await page.screenshot({ path: path.join(root, 'editions.png') })
   await trackRow('2.2 缺少曲').getByRole('button', { name: '搜索缺曲' }).click()
   const missing = trackRow('2.2 缺少曲')
-  await missing.getByRole('button', { name: '播放', exact: true }).click()
+  await missing.locator('.row-play').click()
   await expect.poll(() => app.evaluate(() => globalThis.audioRequests.at(-1))).toBe('/missing.mp3')
   await played()
   await expect(choose).toContainText('豪华版')
-  await missing.getByRole('combobox', { name: '加入歌单' }).click()
-  await page.getByRole('option', { name: '发行试听' }).click()
-  await expect(missing.getByRole('status')).toHaveText('已加入发行试听')
+  await missing.getByRole('button', { name: '加入歌单' }).click()
+  await page.getByRole('menuitem', { name: '发行试听' }).click()
+  await expect(missing.getByRole('status')).toContainText('发行试听')
   const saved = await page.evaluate(
     async (id) => (await window.music.state()).playlists.find((p) => p.id === id).tracks.length,
     listId,
@@ -882,7 +887,7 @@ try {
   await expect(artistHome.getByRole('button', { name: /海へ/ })).toBeVisible({ timeout: 15000 })
   await page.screenshot({ path: path.join(root, 'given-home.png') })
   await artistHome.getByRole('button', { name: /海へ/ }).click()
-  await albumHome.getByRole('button', { name: '播放', exact: true }).click()
+  await albumHome.locator('.row-play').click()
   await expect
     .poll(() => app.evaluate(() => globalThis.audioRequests.length))
     .toBeGreaterThan(audioBefore)

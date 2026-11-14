@@ -23,6 +23,9 @@ store.set(
   }),
 )
 store.db.close()
+const english = process.env.FITBAY_TEST_LANGUAGE === 'en'
+const label = (zh, en) => english ? en : zh
+await writeFile(path.join(profile, 'interface-language'), english ? 'en' : 'zh-CN')
 const app = await electron.launch({
   args: [
     path.resolve(process.env.FITBAY_TEST_HOST || 'dist/component-prototype/host'),
@@ -122,28 +125,29 @@ try {
     })
   }
   assert.ok(results[0] > results[1])
-  const action = () => first.getByRole('button', { name: '导入到我的歌单', exact: true }).click()
+  const action = () => first.getByRole('button', { name: label('导入到我的歌单', 'Import to my playlists'), exact: true }).click()
   const status = first.getByRole('status')
   await action()
-  await expect(status).toContainText('正在导入')
-  await expect(status).toHaveText('已导入 · 新增 2 首，跳过 0 首')
+  await expect(status).toContainText(label('正在导入', 'Importing'))
+  await expect(status).toHaveText(label('已导入 · 新增 2 首，跳过 0 首', 'Imported · 2 added, 0 skipped'))
   await app.evaluate(() => {
     globalThis.fixtureCycle = 1
   })
   await action()
-  await expect(first.getByRole('alert')).toContainText('503')
+  await expect(first.getByRole('alert')).toContainText(label('503', 'The service returned HTTP 503'))
   await app.evaluate(() => {
     globalThis.fixtureCycle = 2
   })
-  await first.getByRole('button', { name: '重试导入' }).click()
-  await expect(status).toHaveText('已导入 · 新增 1 首，跳过 2 首')
+  await first.getByRole('button', { name: label('重试导入', 'Retry import') }).click()
+  await expect(status).toHaveText(label('已导入 · 新增 1 首，跳过 2 首', 'Imported · 1 added, 2 skipped'))
+  await expect(first.getByRole('alert')).toHaveCount(0)
   await action()
-  await expect(status).toHaveText('已导入 · 全部重复，3 首均已在歌单中')
+  await expect(status).toHaveText(label('已导入 · 全部重复，3 首均已在歌单中', 'No new tracks · All 3 already in the playlist'))
   await expect(cards.nth(1).getByRole('status')).toBeEmpty()
   await first.locator('.public-list-card').click()
-  await expect(panel.getByRole('status').filter({ hasText: '全部重复' })).toBeVisible()
-  await panel.getByRole('button', { name: '导入到我的歌单', exact: true }).click()
-  await expect(panel.getByRole('status').filter({ hasText: '全部重复' })).toBeVisible()
+  await expect(panel.getByRole('status').filter({ hasText: label('全部重复', 'No new tracks') })).toBeVisible()
+  await panel.getByRole('button', { name: label('导入到我的歌单', 'Import to my playlists'), exact: true }).click()
+  await expect(panel.getByRole('status').filter({ hasText: label('全部重复', 'No new tracks') })).toBeVisible()
   const saved = await page.evaluate(async () => {
     const s = await window.music.state()
     const p = s.playlists.filter((p) => p.name === '短片')

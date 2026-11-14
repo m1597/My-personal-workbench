@@ -1,7 +1,6 @@
+import { useMusicFeedback } from './musicFeedback'
 import { useContext, useState } from 'react'
-import { Button } from '@fluentui/react-components'
-import { Play } from 'lucide-react'
-import { OnlineSongRow } from './OnlineSongRow'
+import { OnlineSongRow,RowPlay } from './OnlineSongRow'
 import { ArtistLinks, SongCatalog } from './SongCredits'
 import { formatTime, type PlaylistTrack } from './LibraryPane'
 import type { CatalogLocation } from './LibraryCatalogPage'
@@ -17,16 +16,18 @@ export function CollectedSongRow({
   play(): void
   open?: (v: CatalogLocation) => void
 }) {
+  const feedback = useMusicFeedback()
   const [busy, setBusy] = useState(false),
     [status, setStatus] = useState('')
   const navigate = useContext(SongCatalog)
   const localId = song.origin === 'online' ? song.localCopy : song.id
   async function run(action: () => Promise<string>) {
     setBusy(true)
+    setStatus('')
     try {
       setStatus(await action())
     } catch (e) {
-      setStatus(String(e).split('Error: ').at(-1) || '操作失败')
+      setStatus(feedback.error(e))
     } finally {
       setBusy(false)
     }
@@ -41,26 +42,19 @@ export function CollectedSongRow({
       play={play}
       add={(list, name) =>
         void run(async () => {
-          await window.music.setMembership(list, song.id, true)
-          return '已加入「' + name + '」'
+          const receipt = await window.music.setMembership(list, song.id, true)
+          return feedback.membership(name, Boolean(receipt && 'added' in receipt && receipt.added))
         })
       }
       download={() =>
         void run(async () => {
           const [r] = await window.music.downloadSelection([song.id])
           if (r?.status === 'failed') throw Error(r.error)
-          return r?.status === 'saved' ? '已下载并入库' : '已跳过'
+          return r?.status === 'saved' ? feedback.text('已下载并入库', 'Downloaded to library') : feedback.text('已跳过', 'Skipped')
         })
       }
     >
-      <Button
-        size="small"
-        appearance="subtle"
-        disabled={!song.available}
-        aria-label={'播放' + song.title}
-        icon={<Play size={15} />}
-        onClick={play}
-      />
+      <RowPlay title={song.title} id={song.id} disabled={!song.available} play={play}/>
       <div className="library-name">
         <strong>{song.title}</strong>
         <small>

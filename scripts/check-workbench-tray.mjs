@@ -120,7 +120,7 @@ try {
   await expect(sw('示例组件')).toBeChecked()
   await b('关闭设置').click()
   await b('组件').click()
-  await shell.getByRole('menuitem', { name: '示例组件', exact: true }).click()
+  await shell.getByRole('menuitemcheckbox', { name: '示例组件', exact: true }).click()
   await expect
     .poll(() =>
       shell.evaluate(async () => {

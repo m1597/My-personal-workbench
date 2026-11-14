@@ -135,7 +135,7 @@ try {
   await playing()
   await expect(tabs()).toHaveCount(1)
   await click('组件')
-  await item('示例组件').click()
+  await shell.getByRole('menuitemcheckbox', { name: '示例组件', exact: true }).click()
   await expect(tabs()).toHaveCount(2)
   for (const [name, axis] of [
     ['左右并排', 'width'],

@@ -1,3 +1,4 @@
+import { useMusicFeedback } from './musicFeedback'
 import { songRow, creditClick } from './songRow'
 import { ArtistLinks } from './SongCredits'
 import { PlaylistImportDialog, usePlaylistImport } from './PlaylistImport'
@@ -44,7 +45,7 @@ import {
 } from '@fluentui/react-components'
 import {
   Folder,
-  FileOutput,
+  FileOutput,Download,
   Plus,
   ListMusic,
   ListPlus,
@@ -199,6 +200,7 @@ export function LibraryPane({
   removeFolder,
   openFolder,
 }: Props) {
+  const feedback = useMusicFeedback()
   function tasteMenu(kind: 'folder' | 'playlist', id: string) {
     const excluded = tasteExclusions.some((row) => row.id === id)
     return (
@@ -237,12 +239,12 @@ export function LibraryPane({
   const downloadable = rows.some(
     (r) => r.origin === 'online' && !r.localCopy && selection?.has(r.id),
   )
-  async function download() {
-    if (batchBusy || !downloadable) return
+  async function download(ids=selectedIds) {
+    if (batchBusy || !ids.length) return
     setBatchBusy(true)
     setDownloads([])
     try {
-      setDownloads(await downloadSelected(selectedIds))
+      setDownloads(await downloadSelected(ids))
     } finally {
       setBatchBusy(false)
     }
@@ -256,7 +258,10 @@ export function LibraryPane({
       if (added !== null)
         setFavoriteResult({
           selection,
-          text: `新增收藏 ${added} 首，原已收藏 ${selectedIds.length - added} 首`,
+          text: feedback.text(
+            `新增收藏 ${added} 首，原已收藏 ${selectedIds.length - added} 首`,
+            `Favorites · ${added} added, ${selectedIds.length - added} already saved`,
+          ),
         })
     } finally {
       setBatchBusy(false)
@@ -693,7 +698,7 @@ export function LibraryPane({
                   }}
                 />
               </form>
-              {librarySearch.error && <small role="alert">{librarySearch.error}</small>}
+              {librarySearch.error && <small role="alert">{feedback.error(librarySearch.error)}</small>}
               {librarySearch.enabled && (librarySearch.pending || librarySearch.ids) && (
                 <small role="status">
                   {librarySearch.pending ? '正在搜索…' : 'AI 找到 ' + rows.length + ' 首'}
@@ -718,9 +723,9 @@ export function LibraryPane({
                   <small role="status">已选 {selectedIds.length} 首</small>
                   {!!downloads.length && (
                     <small role="status">
-                      已下载 {downloads.filter((r) => r.status === 'saved').length} 首 · 已跳过{' '}
-                      {downloads.filter((r) => r.status === 'skipped').length} 首 · 失败{' '}
-                      {downloads.filter((r) => r.status === 'failed').length} 首
+                      {feedback.text('已下载 ', 'Downloaded ')}{downloads.filter((r) => r.status === 'saved').length}
+                      {feedback.text(' 首 · 已跳过 ', ' · Skipped ')}{downloads.filter((r) => r.status === 'skipped').length}
+                      {feedback.text(' 首 · 失败 ', ' · Failed ')}{downloads.filter((r) => r.status === 'failed').length}{feedback.text(' 首', '')}
                     </small>
                   )}
                   <Menu>
@@ -805,8 +810,8 @@ export function LibraryPane({
               {job?.started && (
                 <div className="library-job" role="status">
                   <span>
-                    {job.running ? '正在导入' : job.cancelled ? '导入已取消' : '导入完成'} · 新增{' '}
-                    {job.added} · 重复 {job.duplicates} · 失败 {job.failed}
+                    {job.running ? feedback.text('正在导入', 'Importing') : job.cancelled ? feedback.text('导入已取消','Import cancelled') : feedback.text('导入完成','Import complete')}
+                    {feedback.text(' · 新增 ', ' · Added ')}{job.added}{feedback.text(' · 重复 ', ' · Duplicates ')}{job.duplicates}{feedback.text(' · 失败 ', ' · Failed ')}{job.failed}
                   </span>
                   {job.running && (
                     <Button size="small" appearance="subtle" onClick={cancel}>
@@ -827,6 +832,9 @@ export function LibraryPane({
                       <TrackMenu
                         key={t.id}
                         localId={t.origin === 'online' && !t.localCopy ? null : t.id}
+                        play={t.available?()=>playRow(t.id):undefined}
+                        lists={userPlaylists} addTo={id=>void membership(id,t.id,true)}
+                        download={t.origin==='online'&&!t.localCopy?()=>void download([t.id]):undefined}
                         queueable={!!t.available}
                         queueShortcut={keyboardResults}
                         onQueue={(next) => onQueue(t.id, next)}
@@ -917,9 +925,10 @@ export function LibraryPane({
                             ) : (
                               <small title={t.artist}>{t.artist}</small>
                             )}
+                            {downloads.some(d=>d.id===t.id && d.status==='saved') && <small role="status">已下载并入库</small>}
                             {failedDownloads.has(t.id) && (
-                              <small title={failedDownloads.get(t.id)}>
-                                下载失败 · {failedDownloads.get(t.id)}
+                              <small title={feedback.error(failedDownloads.get(t.id))}>
+                                {feedback.text('下载失败', 'Download failed')} · {feedback.error(failedDownloads.get(t.id))}
                               </small>
                             )}
                             {!t.available && <small>文件不可用</small>}
@@ -986,6 +995,7 @@ export function LibraryPane({
                             ) : null}
                             {!selection && (
                               <>
+                                {t.origin==='online' && !t.localCopy && <Button size="small" appearance="subtle" icon={<Download size={16}/>} aria-label={'下载'+t.title} title="下载" disabled={batchBusy} onClick={()=>void download([t.id])}/>}
                                 <Popover>
                                   <PopoverTrigger disableButtonEnhancement>
                                     <Button
@@ -1106,6 +1116,7 @@ export function LibraryPane({
         >
           <DialogSurface className="component-popup library-action-dialog">
             <form
+              onKeyDownCapture={guardSearchEnter}
               onSubmit={async (e) => {
                 e.preventDefault()
                 if (!name.trim() || saving.current) return
@@ -1140,6 +1151,7 @@ export function LibraryPane({
                     </summary>
                     <Input
                       aria-label="筛选本地歌曲"
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
                       placeholder="搜索歌名、艺人或专辑"
                       value={memberQuery}
                       onChange={(_, v) => {
@@ -1171,7 +1183,7 @@ export function LibraryPane({
                       )}
                     </div>
                   </details>
-                  {error && <p role="alert">{error}</p>}
+                  {error && <p role="alert">{feedback.error(error)}</p>}
                 </DialogContent>
                 <DialogActions>
                   <Button disabled={submitting} onClick={() => setCreating(false)}>
@@ -1228,7 +1240,7 @@ export function LibraryPane({
                 ) : (
                   <>删除「{action.name}」及其歌单内的引用。曲库和音乐文件保留。</>
                 )}
-                {failedAction === action && error && <p role="alert">{error}</p>}
+                {failedAction === action && error && <p role="alert">{feedback.error(error)}</p>}
               </DialogContent>
               <DialogActions fluid>
                 {action.kind === 'song' || action.kind === 'batch' ? (

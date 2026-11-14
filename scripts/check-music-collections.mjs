@@ -80,7 +80,11 @@ try {
     await page.getByLabel('歌单名称').fill(name)
     if (name === '收藏') {
       await page.locator('summary').filter({ hasText: '添加本地歌曲（可选）' }).click()
-      await page.getByLabel('筛选本地歌曲').fill('晨间')
+      const filter = page.getByLabel('筛选本地歌曲')
+      await filter.fill('晨间')
+      await filter.press('Enter')
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await expect(filter).toHaveValue('晨间')
       await page.getByRole('dialog').getByRole('checkbox', { name: /晨间/ }).check()
       await page.screenshot({
         path: path.join(evidence, 'new-playlist-members.png'),

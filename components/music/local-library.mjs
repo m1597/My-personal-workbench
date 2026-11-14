@@ -651,6 +651,7 @@ export class LocalLibrary {
       throw Error('未找到歌单')
     const data = JSON.stringify(ids)
     let removal
+    let addedCount = 0
     this.db.exec('BEGIN IMMEDIATE')
     try {
       if (
@@ -689,7 +690,7 @@ export class LocalLibrary {
           )
           .run(data)
       else if (added)
-        this.db
+        addedCount = this.db
           .prepare(
             'INSERT OR IGNORE INTO playlist_tracks(playlist,track,position,addedAt) SELECT ?, value, ? + key, ? FROM json_each(?) ORDER BY key',
           )
@@ -702,7 +703,7 @@ export class LocalLibrary {
               .get(playlist).next,
             Date.now(),
             data,
-          )
+          ).changes
       else
         this.db
           .prepare(
@@ -719,7 +720,7 @@ export class LocalLibrary {
       this.lastRemoval = removal
       return { token: removal.token, count: removal.entries.length, expires: removal.expires }
     }
-    return null
+    return added ? { added: addedCount, skipped: ids.length - addedCount } : null
   }
   undoMembership(token) {
     const saved = this.lastRemoval

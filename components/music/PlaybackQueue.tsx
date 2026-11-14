@@ -3,7 +3,8 @@ import { SongCredits } from './SongCredits'
 import { TrackMenu } from './TrackMenu'
 import { useState } from 'react'
 import { Button, Popover, PopoverSurface, PopoverTrigger } from '@fluentui/react-components'
-import { ListMusic, Play } from 'lucide-react'
+import { RowPlay } from './OnlineSongRow'
+import { ListMusic } from 'lucide-react'
 type Song = {
   id: string
   title: string
@@ -76,13 +77,7 @@ export function PlaybackQueue({
           <TrackMenu localId={localFile(active)}>
             <p {...songRow(() => play(active.id))}>
               当前曲目 · <strong>{active.title}</strong>{' '}
-              <Button
-                appearance="subtle"
-                size="small"
-                icon={<Play size={14} />}
-                aria-label={'播放' + active.title}
-                onClick={() => play(active.id)}
-              />
+              <RowPlay title={active.title} id={active.id} play={() => play(active.id)}/>
               · <SongCredits song={active} beforeOpen={() => setOpen(false)} />
             </p>
           </TrackMenu>
@@ -95,13 +90,7 @@ export function PlaybackQueue({
                 <TrackMenu key={row.id + ':' + occurrence} localId={localFile(row)}>
                   <li {...songRow(() => play(row.id, occurrence))}>
                     <strong>{row.title}</strong>{' '}
-                    <Button
-                      appearance="subtle"
-                      size="small"
-                      icon={<Play size={14} />}
-                      aria-label={'播放' + row.title}
-                      onClick={() => play(row.id, occurrence)}
-                    />
+                    <RowPlay title={row.title} id={row.id} play={() => play(row.id, occurrence)}/>
                     · <SongCredits song={row} beforeOpen={() => setOpen(false)} />
                   </li>
                 </TrackMenu>

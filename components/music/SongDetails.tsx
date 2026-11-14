@@ -1,3 +1,4 @@
+import { useMusicFeedback } from './musicFeedback'
 import { useEffect, useRef, useState } from 'react'
 import {
   Button,
@@ -41,6 +42,7 @@ function Details({
   initial: string
   actions: ReleaseActions
 }) {
+  const feedback = useMusicFeedback()
   const [tab, setTab] = useState(initial)
   const [song, setSong] = useState<Song>()
   const [workId, setWorkId] = useState('')
@@ -124,7 +126,7 @@ function Details({
     try {
       await fn()
     } catch (e) {
-      if (alive.current) setStatus(message(e))
+      if (alive.current) setStatus(feedback.error(e))
     } finally {
       if (alive.current) setBusy('')
     }
@@ -266,8 +268,8 @@ function Details({
                           const id = d.optionValue
                           if (id)
                             void run(v.id, async () => {
-                              await actions.add(id, source.key)
-                              setStatus('已加入' + d.optionText)
+                              const added = await actions.add(id, source.key)
+                              setStatus(feedback.membership(d.optionText ?? '', added))
                             })
                         }}
                       >

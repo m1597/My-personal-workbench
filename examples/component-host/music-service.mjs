@@ -244,10 +244,19 @@ export function musicService(
     return selectLocal(mode)
   })
   bind('albums', () => store.library.albums.list())
-  bind('albumCover', (id) => store.library.albums.cover(id, nativeImage))
+  function coverIds(edition,group) {
+    if([edition,group].some(value=>value!=null && (typeof value!=='string'|| !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value))))throw Error('无效发行标识')
+  }
+  bind('albumCover', (id,edition,group) => {
+    coverIds(edition,group)
+    return store.library.albums.cover(id,nativeImage,undefined,edition,group)
+  })
   bind(
     'trackCover',
-    async (id) => (await store.library.albums.trackCover(id, nativeImage)) || lx.recordingCover(id),
+    async (id,edition,group) => {
+      coverIds(edition,group)
+      return (await store.library.albums.trackCover(id,nativeImage,edition,group)) || (!edition && !group ? lx.recordingCover(id) : null)
+    },
   )
   function checkPlaylist(id) {
     if (

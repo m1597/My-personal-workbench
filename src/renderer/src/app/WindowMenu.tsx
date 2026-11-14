@@ -22,7 +22,11 @@ export function WindowMenu() {
   const t = useTranslation()
   const music = useMusicHostState()
   const sampleState = useMusicHostState(window.componentHost)
+  const sampleRunning = sampleState?.phase === 'ready' || sampleState?.phase === 'attaching'
   const sampleHidden = sampleState?.presentation === 'background'
+  const sampleVisibilityLabel = sampleHidden
+    ? t('显示示例组件', 'Show sample')
+    : t('隐藏示例组件', 'Hide sample')
   const running = music?.phase === 'ready' || music?.phase === 'attaching'
   const hidden = music?.presentation === 'background'
   const visibilityLabel = hidden ? t('显示 Music', 'Show Music') : t('隐藏 Music', 'Hide Music')
@@ -52,6 +56,18 @@ export function WindowMenu() {
     window.addEventListener('fitbay-layout-name', sync)
     return () => window.removeEventListener('fitbay-layout-name', sync)
   }, [inspect])
+  async function toggleRunning(host: Window['componentHost']) {
+    if (!host) return
+    try {
+      const state = await host.status()
+      if (state.phase === 'ready' || state.phase === 'attaching') {
+        await host.stop()
+        setMusicError('')
+      } else setMusicError((await host.open()).error ?? '')
+    } catch (error) {
+      setMusicError(String(error))
+    }
+  }
   function arrange(position: 'right' | 'bottom') {
     if (panels.length !== 2) return
     panels[1].api.moveTo({ group: panels[0].group, position })
@@ -94,8 +110,11 @@ export function WindowMenu() {
             {sample && (
               <MenuSplitGroup>
                 <MenuItem
+                  role="menuitemcheckbox"
+                  aria-checked={sampleRunning}
+                  icon={sampleRunning ? <Check size={16} /> : <Plus size={16} />}
                   aria-label={t('示例组件', 'Sample component')}
-                  onClick={() => void window.componentHost?.open()}
+                  onClick={() => void toggleRunning(window.componentHost)}
                 >
                   {t('示例组件', 'Sample component')}
                   <small>
@@ -108,11 +127,8 @@ export function WindowMenu() {
                 </MenuItem>
                 <MenuItem
                   disabled={sampleState?.phase !== 'ready'}
-                  aria-label={
-                    sampleHidden
-                      ? t('显示示例组件', 'Show sample')
-                      : t('隐藏示例组件', 'Hide sample')
-                  }
+                  aria-label={sampleVisibilityLabel}
+                  title={sampleVisibilityLabel}
                   icon={sampleHidden ? <EyeOff size={16} /> : <Eye size={16} />}
                   onClick={() => void window.componentHost?.toggleVisibility()}
                 />
@@ -125,15 +141,7 @@ export function WindowMenu() {
                   aria-label="Music"
                   aria-checked={running}
                   icon={running ? <Check size={16} /> : <Plus size={16} />}
-                  onClick={async () => {
-                    const host = window.musicDock
-                    if (!host) return
-                    const state = await host.status()
-                    if (state.phase === 'ready' || state.phase === 'attaching') {
-                      await host.close?.()
-                      setMusicError('')
-                    } else setMusicError((await host.open()).error ?? '')
-                  }}
+                  onClick={() => void toggleRunning(window.musicDock)}
                 >
                   <span>Music</span>
                   <small>

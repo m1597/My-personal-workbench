@@ -1,3 +1,4 @@
+import { useMusicFeedback } from './musicFeedback'
 import { songRow } from './songRow'
 import { SongCredits } from './SongCredits'
 import { DiscoveryInput } from './DiscoveryInput'
@@ -63,6 +64,7 @@ export function PublicPlaylists({
   playlists: Playlist[]
   refresh: () => Promise<void>
 }) {
+  const feedback = useMusicFeedback()
   const [platform, setPlatform] = useState('wy'),
     [tag, setTag] = useState(''),
     [page, setPage] = useState(1)
@@ -71,6 +73,7 @@ export function PublicPlaylists({
     [list, setList] = useState<PublicList>()
   const [songs, setSongs] = useState<PublicSong[]>([]),
     [selected, setSelected] = useState<string[]>([])
+  const [addedNotice, setAddedNotice] = useState('')
   const [filter, setFilter] = useState('')
   const [thinking, setThinking] = useState(false)
   const queryVersion = useRef(0)
@@ -94,7 +97,7 @@ export function PublicPlaylists({
       setFilter(keyword)
     } catch (e) {
       if (version === queryVersion.current)
-        setError(String(e).split('Error: ').pop() || '歌单推荐失败')
+        setError(feedback.error(e))
     } finally {
       if (version === queryVersion.current) setThinking(false)
     }
@@ -112,7 +115,7 @@ export function PublicPlaylists({
         if (alive) setTags(v)
       })
       .catch((e) => {
-        if (alive) setError(String(e).split('Error: ').pop() || '读取分类失败')
+        if (alive) setError(feedback.error(e))
       })
     return () => {
       alive = false
@@ -135,7 +138,7 @@ export function PublicPlaylists({
       .catch((e) => {
         if (alive) {
           setLists([])
-          setError(String(e).split('Error: ').pop() || '读取歌单失败')
+          setError(feedback.error(e))
         }
       })
       .finally(() => {
@@ -149,15 +152,21 @@ export function PublicPlaylists({
     if (!keys.length || busy) return
     setBusy(true)
     setError('')
+    setAddedNotice('')
     try {
       const { ids, skipped } = await host.keepPublicSongs(
         keys,
         playlist ? 'save' : keys.length > 1 ? 'queue' : 'play',
       )
-      if (skipped.length) setError('当前音质不可用：' + skipped.join('、'))
+      if (skipped.length) setError(feedback.text('当前音质不可用：', 'Unavailable at this quality: ') + skipped.join(', '))
       if (!ids.length) return
       if (playlist) {
-        await host.setMembership(playlist, ids, true)
+        const receipt = await host.setMembership(playlist, ids, true)
+        if (receipt && 'added' in receipt)
+          setAddedNotice(feedback.text(
+            `已加入 ${receipt.added} 首，原已在歌单中 ${receipt.skipped} 首`,
+            `Added ${receipt.added}, already in playlist ${receipt.skipped}`,
+          ))
         await refresh()
         setSelected([])
       } else {
@@ -165,7 +174,7 @@ export function PublicPlaylists({
         await play(ids)
       }
     } catch (e) {
-      setError(String(e).split('Error: ').pop() || '操作失败')
+      setError(feedback.error(e))
     } finally {
       setBusy(false)
     }
@@ -180,7 +189,7 @@ export function PublicPlaylists({
     activeImports.current.add(key)
     const report = (kind: ImportStatus['kind'], text: string) =>
       setImports((old) => ({ ...old, [key]: { kind, text } }))
-    report('working', '正在导入…')
+    report('working', feedback.text('正在导入…', 'Importing…'))
     try {
       const result = await host.importPublicList(
         platform,
@@ -191,12 +200,18 @@ export function PublicPlaylists({
       report(
         'done',
         result.added
-          ? '已导入 · 新增 ' + result.added + ' 首，跳过 ' + result.skipped + ' 首'
-          : '已导入 · 全部重复，' + result.skipped + ' 首均已在歌单中',
+          ? feedback.text(
+              `已导入 · 新增 ${result.added} 首，跳过 ${result.skipped} 首`,
+              `Imported · ${result.added} added, ${result.skipped} skipped`,
+            )
+          : feedback.text(
+              `已导入 · 全部重复，${result.skipped} 首均已在歌单中`,
+              `No new tracks · All ${result.skipped} already in the playlist`,
+            ),
       )
       await refresh()
     } catch (e) {
-      report('failed', String(e).split('Error: ').pop() || '歌单导入失败')
+      report('failed', feedback.error(e))
     } finally {
       activeImports.current.delete(key)
     }
@@ -212,10 +227,10 @@ export function PublicPlaylists({
           onClick={() => void importList(target)}
         >
           {status?.kind === 'failed'
-            ? '重试导入'
+            ? feedback.text('重试导入', 'Retry import')
             : status?.kind === 'working'
-              ? '正在导入…'
-              : '导入到我的歌单'}
+              ? feedback.text('正在导入…', 'Importing…')
+              : feedback.text('导入到我的歌单', 'Import to my playlists')}
         </Button>
         <small role={status?.kind === 'failed' ? 'alert' : 'status'}>{status?.text}</small>
       </div>
@@ -226,7 +241,7 @@ export function PublicPlaylists({
     <section className="public-playlists" aria-label="公开歌单">
       {list ? (
         <>
-          <BackButton to="playlists" onClick={() => setList(undefined)} />
+          <BackButton to="playlists" onClick={() => { setList(undefined); setAddedNotice('') }} />
           <h2>{list.name}</h2>
           <div className="public-actions">
             <Button
@@ -259,6 +274,7 @@ export function PublicPlaylists({
               ))}
             </Dropdown>
           </div>
+          {addedNotice && <small role="status">{addedNotice}</small>}
           <ul className="public-songs">
             {songs.map((s) => (
               <li

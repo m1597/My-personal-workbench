@@ -1,5 +1,7 @@
-export async function fetchReleaseCover(id, nativeImage) {
-  let url = new URL('https://coverartarchive.org/release-group/' + id + '/front-250')
+export async function fetchReleaseCover(id, nativeImage, edition = false) {
+  let url = new URL(
+    'https://coverartarchive.org/' + (edition ? 'release/' : 'release-group/') + id + '/front-250',
+  )
   const signal = AbortSignal.timeout(8000)
   for (let i = 0; i < 5; i++) {
     const response = await fetch(url, { signal, redirect: 'manual' })

@@ -40,6 +40,7 @@ declare global {
       setLanguage?(value: 'zh-CN' | 'en'): void
       setMaterial?(value: Material): void
       status(): Promise<HostState>
+      stop(): Promise<void>
       close?(): Promise<void>
       restore(): Promise<void>
       open(): Promise<{ ok: boolean; error?: string }>

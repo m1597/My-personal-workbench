@@ -58,6 +58,16 @@ export function userMessage(raw: string, language: Language) {
   if (/NotSupportedError|no supported source|NotAllowedError|NetworkError/i.test(text))
     return playbackReason(text, language, false)
   if (language === 'zh-CN' && /[㐀-鿿]/.test(text)) return text
+  if (language === 'en') {
+    if (/同名歌单/.test(text)) return 'A playlist with this name already exists. Choose another name.'
+    if (/16 MB/.test(text)) return 'Choose an image no larger than 16 MB.'
+    if (/读取这张图片/.test(text)) return 'This image could not be opened. Choose another image.'
+    if (/文件已存在|已有曲库记录/.test(text)) return 'The destination already exists. Choose another folder.'
+    if (/未找到歌单|歌单不存在/.test(text)) return 'The playlist no longer exists.'
+    if (/没有可下载音质|音质不可用/.test(text)) return 'This quality is unavailable. Select another quality or recording.'
+    const http = text.match(/(?:HTTP\s*|状态码\s*[:：]?\s*)([45]\d\d)\b/i)
+    if (http) return `The service returned HTTP ${http[1]}. Please try again.`
+  }
   if (/权限|permission|EACCES/i.test(text))
     return language === 'en'
       ? 'Access was denied. Check the file and folder permissions.'

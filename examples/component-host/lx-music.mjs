@@ -597,6 +597,9 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
     await rm(temp, { force: true })
   }
 }
+function onlineRecordingId(source,platform,recording,publicSearch=false){
+  return 'online-recording-'+createHash('sha256').update(JSON.stringify([source,platform,recording,...(publicSearch?['public']:[])])).digest('hex')
+}
 function recordingId(src, row) {
   const id =
     (src.platform === 'kg' && !src.search ? row.hash : undefined) ??
@@ -1049,6 +1052,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         WHERE c.platform=? AND c.sourceId=? AND (c.artScope=? OR (c.artScope IS NULL AND c.source=?)) AND t.available=1 AND t.awaitingLocation=0
         ORDER BY t.id LIMIT 1`)
       const scope = artworkScope(src)
+      const sourceId=catalog().list().active
       const items = []
       for (const row of audition ? rows.slice(0, 20) : rows) {
         if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
@@ -1062,7 +1066,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           auditionId: typeof id === 'string' && !id.startsWith('local-') ? id : null,
         })
         items.push({
-          key,
+          key, onlineId:onlineRecordingId(sourceId,src.platform,recordingId(src,row)),
           localId: localCopy.get(src.platform, String(recordingId(src, row) || ''), scope, src.name)
             ?.id,
           title: text(row.name),
@@ -1098,20 +1102,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       throw Error('此版本没有可用的录音标识或音质')
     const sourceId = context?.sourceId ?? catalog().list().active
     if (!sourceId) throw Error('请重新选择音乐源')
-    const id =
-      'online-recording-' +
-      createHash('sha256')
-        .update(
-          JSON.stringify([
-            sourceId,
-            src.platform,
-            recording,
-            ...(context?.publicCatalog && selected.platforms?.[match.platform]?.search
-              ? ['public']
-              : []),
-          ]),
-        )
-        .digest('hex')
+    const id=onlineRecordingId(sourceId,src.platform,recording,context?.publicCatalog && selected.platforms?.[match.platform]?.search)
     const { db } = getStore()
     if (!context) db.exec('BEGIN')
     try {

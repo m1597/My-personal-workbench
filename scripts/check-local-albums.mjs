@@ -139,6 +139,24 @@ try {
   await page.screenshot({ scale: 'css', path: path.join(root, 'albums.png') })
   await trioCard.click()
   const detail = page.getByRole('region', { name: '专辑曲目' })
+  for (const [width, height] of [
+    [440, 580],
+    [1100, 720],
+  ]) {
+    await app.evaluate(
+      ({ BaseWindow }, size) => BaseWindow.getAllWindows()[0].setContentSize(...size),
+      [width, height],
+    )
+    const head = detail.locator('.album-detail-header')
+    await expect(head.getByText('Northern Trio', { exact: true })).toBeInViewport()
+    await expect(detail.locator('.album-tracks li').first()).toBeInViewport()
+    await expect(head.locator('img')).toHaveAttribute('src', embedded)
+    await page.screenshot({
+      scale: 'css',
+      path: path.join(root, width + '-本地专辑.png'),
+      style: ':root{background:var(--base)!important}',
+    })
+  }
   const state = () => page.evaluate(() => window.music.state())
   const titles = new Map((await state()).localTracks.map((r) => [r.id, r.title]))
   assert.deepEqual(

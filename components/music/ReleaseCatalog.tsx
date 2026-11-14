@@ -1,5 +1,6 @@
+import { useMusicFeedback } from './musicFeedback'
 import { artistsOf, SongCredits, type ArtistCredit } from './SongCredits'
-import { OnlineSongRow } from './OnlineSongRow'
+import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { ArtistPortrait } from './ArtistPortrait'
 import { guardSearchEnter } from './searchSubmit'
 import { Sparkles } from 'lucide-react'
@@ -23,6 +24,7 @@ type ReleaseTrack = {
   artist: string
 }
 export type News = {
+  editionId?: string
   artistCredits?: ArtistCredit[]
   type: string
   id: string
@@ -53,7 +55,7 @@ export interface ReleaseAPI extends SongAPI {
   followedArtists(): Promise<Artist[]>
   followArtist(id: string, on: boolean): Promise<Artist[]>
   releaseNews(refresh?: boolean): Promise<News[]>
-  releaseCover(id: string): Promise<string | null>
+  releaseCover(id: string, edition?: boolean): Promise<string | null>
   artistPortrait(id: string): Promise<string | null>
   artistReleases(id: string): Promise<News[]>
   newsEditions(id: string): Promise<Edition[]>
@@ -66,7 +68,7 @@ const message = (error: unknown) => String(error).split('Error: ').at(-1) || '�
 type PlayRecording = (key: string) => Promise<void>
 export interface ReleaseActions {
   play: PlayRecording
-  add: (playlist: string, key: string) => Promise<void>
+  add: (playlist: string, key: string) => Promise<boolean>
   playlists: { id: string; name: string }[]
 }
 export async function matchTrack(
@@ -91,7 +93,6 @@ export async function matchTrack(
 function MissingTrack({
   track,
   album,
-  actions,
   onSearch,
   active,
 }: {
@@ -99,8 +100,8 @@ function MissingTrack({
   onSearch: () => void
   track: ReleaseTrack
   album: string
-  actions: ReleaseActions
 }) {
+  const feedback = useMusicFeedback()
   const [recording, setRecording] = useState<Awaited<ReturnType<typeof matchTrack>>>()
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
@@ -110,7 +111,7 @@ function MissingTrack({
     try {
       await action()
     } catch (e) {
-      setStatus(message(e))
+      setStatus(feedback.error(e))
     } finally {
       setBusy(false)
     }
@@ -122,41 +123,6 @@ function MissingTrack({
           <small>
             {[recording.title, recording.artist, recording.album].filter(Boolean).join(' · ')}
           </small>
-          <Button
-            size="small"
-            disabled={busy}
-            onClick={() => void run(() => actions.play(recording.key))}
-          >
-            播放
-          </Button>
-          <Dropdown
-            inlinePopup
-            size="small"
-            aria-label="加入歌单"
-            placeholder="加入歌单"
-            value="加入歌单"
-            selectedOptions={[]}
-            disabled={busy}
-            listbox={{ className: 'component-popup' }}
-            onOptionSelect={(_, d) => {
-              const id = d.optionValue
-              if (id)
-                void run(async () => {
-                  await actions.add(id, recording.key)
-                  setStatus('已加入' + d.optionText)
-                })
-            }}
-          >
-            {actions.playlists.length ? (
-              actions.playlists.map((p) => (
-                <Option key={p.id} value={p.id}>
-                  {p.name}
-                </Option>
-              ))
-            ) : (
-              <Option disabled>请先创建歌单</Option>
-            )}
-          </Dropdown>
         </>
       ) : (
         <Button
@@ -190,6 +156,7 @@ export function NewsTracks({
   playLocal,
   named = false,
   aliases = [],
+  onEdition,
 }: {
   group: News
   play: PlayRecording
@@ -197,9 +164,11 @@ export function NewsTracks({
   playLocal?: (id: string, ids: string[]) => void
   named?: boolean
   aliases?: string[]
+  onEdition?: (id: string) => void
 }) {
   const [pending, setPending] = useState('')
   const [playError, setPlayError] = useState('')
+  const [matched, setMatched] = useState(new Map<ReleaseTrack, string>())
   const attempt = useRef(0)
   const [editions, setEditions] = useState<Edition[]>([])
   const [selected, setSelected] = useState('')
@@ -227,7 +196,10 @@ export function NewsTracks({
       .then((list) => {
         if (!active) return
         setEditions(list)
-        setSelected(named && list.length > 1 ? '' : (list[0]?.id ?? ''))
+        setSelected(
+          list.find((r) => r.id === group.editionId)?.id ??
+            (named && list.length > 1 ? '' : (list[0]?.id ?? '')),
+        )
         if (!list.length) setError('此发行暂无正式版本资料。')
       })
       .catch((e) => {
@@ -236,7 +208,10 @@ export function NewsTracks({
     return () => {
       active = false
     }
-  }, [group.id, group.title, group.artist, named, editionRetry])
+  }, [group.id, group.title, group.artist, group.editionId, named, editionRetry])
+  useEffect(() => {
+    if (selected) onEdition?.(selected)
+  }, [selected, onEdition])
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry also reloads the currently selected edition.
   useEffect(() => {
     let active = true
@@ -298,8 +273,10 @@ export function NewsTracks({
         recording = await matchTrack({ ...track, artist: aliases[0] }, group.title, !!playLocal)
       }
       if (attempt.current !== request) return
-      if (action === 'play') await play(recording.key)
-      else if (action === 'add' && list)
+      if (action === 'play') {
+        setMatched((m) => new Map(m).set(track, recording.onlineId))
+        await play(recording.key)
+      } else if (action === 'add' && list)
         await window.music.setMembership(
           list,
           await window.music.rememberOnline(recording.key),
@@ -312,6 +289,7 @@ export function NewsTracks({
       if (attempt.current === request) setPending('')
     }
   }
+  const localMatches = collectedTracks(tracks ?? [], local, group.artist, aliases)
   return (
     <div className="release-track-picker">
       {editions.length > 1 && (
@@ -356,12 +334,18 @@ export function NewsTracks({
               key={[t.disc, t.number, t.title].join(':')}
               className="release-recording"
               busy={!!pending}
-              localId={collectedTracks(tracks, local, group.artist, aliases).get(t) || undefined}
+              localId={localMatches.get(t) || undefined}
               play={() => void listen(t)}
               download={() => void listen(t, 'download')}
               add={(list) => void listen(t, 'add', list)}
             >
-              <div>
+              <RowPlay
+                id={localMatches.get(t) || matched.get(t)}
+                title={t.title}
+                disabled={!!pending}
+                play={() => void listen(t)}
+              />
+              <div className="catalog-song-text">
                 <strong>
                   {t.disc}.{t.number} {t.title}
                 </strong>
@@ -369,9 +353,6 @@ export function NewsTracks({
                   <SongCredits song={t} />
                 </small>
               </div>
-              <Button size="small" disabled={Boolean(pending)} onClick={() => void listen(t)}>
-                {pending === t.disc + ':' + t.number ? '正在查找…' : '播放'}
-              </Button>
             </OnlineSongRow>
           ))}
         </ol>
@@ -387,7 +368,9 @@ export function CatalogSongRow({
   playLocal,
   album,
   children,
+  displayTitle,
 }: {
+  displayTitle?: string
   song: Pick<ReleaseTrack, 'artist' | 'title' | 'artistCredits'> & { version?: string }
   play: PlayRecording
   localId?: string
@@ -396,6 +379,7 @@ export function CatalogSongRow({
   children?: React.ReactNode
 }) {
   const [error, setError] = useState('')
+  const feedback = useMusicFeedback()
   const [pending, setPending] = useState(false)
   const live = useRef(true)
   useEffect(() => {
@@ -405,6 +389,8 @@ export function CatalogSongRow({
     }
   }, [])
   const [status, setStatus] = useState('')
+  const [resolvedId, setResolvedId] = useState('')
+  const [downloadedId, setDownloadedId] = useState('')
   async function perform(action: 'play' | 'download' | 'add', list?: string, name?: string) {
     setPending(true)
     setError('')
@@ -413,52 +399,63 @@ export function CatalogSongRow({
       if (localId) {
         if (action === 'play') playLocal?.()
         else if (action === 'add' && list) {
-          await window.music.setMembership(list, localId, true)
-          setStatus('已加入「' + name + '」')
+          const receipt = await window.music.setMembership(list, localId, true)
+          setStatus(
+            feedback.membership(
+              name ?? '',
+              Boolean(receipt && 'added' in receipt && receipt.added),
+            ),
+          )
         }
         return
       }
       const recording = await matchTrack(song, album)
       if (!live.current) return
-      if (action === 'play') await play(recording.key)
-      else if (action === 'add' && list) {
+      if (action === 'play') {
+        setResolvedId(recording.onlineId)
+        await play(recording.key)
+      } else if (action === 'add' && list) {
         const reference = await window.music.rememberOnline(recording.key)
-        await window.music.setMembership(list, reference, true)
-        setStatus('已加入「' + name + '」')
+        const receipt = await window.music.setMembership(list, reference, true)
+        setStatus(
+          feedback.membership(name ?? '', Boolean(receipt && 'added' in receipt && receipt.added)),
+        )
       } else {
         const saved = await downloadRecording(recording)
-        if (saved) setStatus('已下载并入库')
+        if (saved) {
+          setDownloadedId(saved.localId || '')
+          setStatus(feedback.text('已下载并入库', 'Downloaded to library'))
+        }
       }
     } catch (e) {
-      if (live.current) setError(message(e))
+      if (live.current) setError(feedback.error(e))
     } finally {
       if (live.current) setPending(false)
     }
   }
   return (
     <OnlineSongRow
-      localId={localId}
+      localId={localId || downloadedId}
       className="highlight-recording"
       busy={pending}
       play={() => void perform('play')}
       download={() => void perform('download')}
       add={(list, name) => void perform('add', list, name)}
     >
-      <div>
-        {!children && (
-          <Button
-            size="small"
-            aria-label={'试听' + song.title}
-            appearance="subtle"
-            onClick={() => void perform('play')}
-            disabled={pending}
-          >
-            播放
-          </Button>
-        )}
-        {children || <span>{song.title}</span>} {song.version && <small>{song.version}</small>}
+      <RowPlay
+        id={localId || resolvedId}
+        title={song.title}
+        disabled={pending}
+        play={() => void perform('play')}
+      />
+      <div className="catalog-song-text">
+        <strong className="catalog-song-title">{displayTitle || song.title}</strong>
         <small>
           <SongCredits song={song} />
+        </small>
+        {song.version && <small>{song.version}</small>}
+        {children}
+        <small>
           {status && <small role="status">{status}</small>}
           {error && <small role="alert">{error}</small>}
         </small>
@@ -531,21 +528,25 @@ export function FollowButton({
   disabled: boolean
   toggle: (id: string, on: boolean) => void
 }) {
+  const feedback = useMusicFeedback()
   return (
     <Button
       size="small"
       className="artist-follow-button"
       disabled={disabled}
-      aria-label={(following ? '取消关注' : '关注') + artist.name}
+      aria-label={
+        (following ? feedback.text('取消关注', 'Unfollow ') : feedback.text('关注', 'Follow ')) +
+        artist.name
+      }
       onClick={() => toggle(artist.id, !following)}
     >
       {following ? (
         <>
-          <span className="follow-status">已关注</span>
-          <span className="follow-cancel">取消关注</span>
+          <span className="follow-status">{feedback.text('已关注', 'Following')}</span>
+          <span className="follow-cancel">{feedback.text('取消关注', 'Unfollow')}</span>
         </>
       ) : (
-        '关注'
+        feedback.text('关注', 'Follow')
       )}
     </Button>
   )
@@ -637,12 +638,15 @@ function ReleaseList({
   rows,
   play,
   albums,
+  openAlbum,
 }: {
   rows: News[]
   play: PlayRecording
   albums: Album[]
+  openAlbum: (r: News) => void
 }) {
   const [openGroup, setOpenGroup] = useState('')
+  const [versions, setVersions] = useState<Record<string, string>>({})
   if (!rows.length) return null
   return (
     <ul>
@@ -650,6 +654,8 @@ function ReleaseList({
         <li key={r.id} className="release-event">
           <div className="release-event-head">
             <Cover
+              group={r.id}
+              edition={versions[r.id] || r.editionId}
               id={
                 albums.find(
                   (album) =>
@@ -659,7 +665,13 @@ function ReleaseList({
               }
             />
             <div>
-              <strong>{r.title}</strong>
+              <button
+                className="catalog-text-link"
+                type="button"
+                onClick={() => openAlbum({ ...r, editionId: versions[r.id] || r.editionId })}
+              >
+                <strong>{r.title}</strong>
+              </button>
               <small>
                 {r.artist} · {r.date} · {r.type}
               </small>
@@ -672,7 +684,13 @@ function ReleaseList({
               {openGroup === r.id ? '收起曲目' : '查看曲目'}
             </Button>
           </div>
-          {openGroup === r.id && <NewsTracks group={r} play={play} />}
+          {openGroup === r.id && (
+            <NewsTracks
+              group={r}
+              play={play}
+              onEdition={(id) => setVersions((v) => (v[r.id] === id ? v : { ...v, [r.id]: id }))}
+            />
+          )}
         </li>
       ))}
     </ul>
@@ -709,6 +727,7 @@ export function ArtistReleases({
   }, [])
   const [followed, setFollowed] = useState<Artist[]>([])
   const [query, setQuery] = useState('')
+  const feedback = useMusicFeedback()
   const [aiSearch, setAiSearch] = useState(false)
   const [matches, setMatches] = useState<Artist[]>()
   const [news, setNews] = useState<News[]>()
@@ -807,7 +826,7 @@ export function ArtistReleases({
             )}
           </header>
           {busy && <small role="status">正在读取发行资料…</small>}
-          {status && <p role="alert">{status}</p>}
+          {status && <p role="alert">{feedback.error(status)}</p>}
           {!busy &&
             !status &&
             (!followed.length ? (
@@ -815,7 +834,14 @@ export function ArtistReleases({
             ) : (
               news?.length === 0 && <p>近 90 天暂无新发行。</p>
             ))}
-          <ReleaseList rows={news ?? []} albums={albums} play={play} />
+          <ReleaseList
+            rows={news ?? []}
+            albums={albums}
+            play={play}
+            openAlbum={(group) =>
+              openCatalog({ kind: 'album', name: group.title, artist: group.artist, group })
+            }
+          />
         </div>
         <section className="followed-artists" aria-label="我关注的歌手">
           <header>
@@ -865,7 +891,7 @@ export function ArtistReleases({
                 查找歌手
               </Button>
             </form>
-            {searchError && <small role="alert">{searchError}</small>}
+            {searchError && <small role="alert">{feedback.error(searchError)}</small>}
             {searching && <small role="status">正在查找歌手…</small>}
             {matches?.length === 0 && <small role="status">没有找到匹配的歌手</small>}
             {matches
@@ -971,11 +997,13 @@ function collectedTracks(
   return matched
 }
 export function AlbumEditions({
+  onEdition,
   album,
   local,
   actions,
   playLocal,
 }: {
+  onEdition: (id: string) => void
   playLocal(id: string): void
   album: Album
   local: LocalTrack[]
@@ -992,6 +1020,7 @@ export function AlbumEditions({
     try {
       if (id) {
         setSelected(id)
+        onEdition(id)
         setTracks(undefined)
         setTracks(await window.music.editionTracks(id))
       } else {
@@ -1046,6 +1075,7 @@ export function AlbumEditions({
               <CatalogSongRow
                 key={[t.disc, t.number, t.title].join(':')}
                 song={t}
+                displayTitle={t.disc+"."+t.number+" "+t.title}
                 play={actions.play}
                 album={album.title}
                 localId={collected.get(t) || undefined}
@@ -1054,11 +1084,6 @@ export function AlbumEditions({
                   if (id) playLocal(id)
                 }}
               >
-                <div>
-                  <strong>
-                    {t.disc}.{t.number} {t.title}
-                  </strong>
-                </div>
                 {collected.has(t) ? (
                   <small>已收录</small>
                 ) : (
@@ -1067,7 +1092,6 @@ export function AlbumEditions({
                     active={openTrack === t}
                     track={t}
                     album={album.title}
-                    actions={actions}
                     onSearch={() => setOpenTrack(t)}
                   />
                 )}

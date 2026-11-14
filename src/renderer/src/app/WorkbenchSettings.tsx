@@ -57,6 +57,7 @@ export function WorkbenchSettings({
   ]
   const keepLabel = t('关闭后继续在后台运行', 'Keep running in background after closing')
   const icons = [Palette, PanelsTopLeft, Boxes]
+  const sampleShowLabel = t('在工作台显示示例组件', 'Show sample in workspace')
   const entries = [
     [
       t('界面语言', 'Interface language'),
@@ -76,8 +77,8 @@ export function WorkbenchSettings({
       t('在工作台显示 Music', 'Show Music in workspace'),
       t('打开音乐设置', 'Open Music settings'),
       'Music · ' + keepLabel,
-      ...(window.componentHost?.sampleEnabled
-        ? [t('示例组件', 'Sample component') + ' · ' + keepLabel]
+      ...(sampleInfo?.installed
+        ? [t('示例组件', 'Sample component') + ' · ' + keepLabel, sampleShowLabel]
         : []),
     ],
   ]
@@ -108,7 +109,7 @@ export function WorkbenchSettings({
   }, [target, inventory, sampleInfo])
   // biome-ignore lint/correctness/useExhaustiveDependencies: An explicit refresh repeats the disk scan.
   useEffect(() => {
-    if (!open || category !== 2) return
+    if (!open) return
     let active = true
     if (window.componentHost?.sampleEnabled)
       void window.componentHost
@@ -130,7 +131,7 @@ export function WorkbenchSettings({
     return () => {
       active = false
     }
-  }, [open, category, revision])
+  }, [open, revision])
   async function showMusic(settings: boolean) {
     try {
       const result = await window.musicDock?.show(settings)
@@ -475,7 +476,7 @@ export function WorkbenchSettings({
                                 : t('运行中', 'Running')
                               : t('未运行', 'Stopped')}
                           </p>
-                          <div>
+                          <div id="setting-2-4">
                             <Button
                               onClick={async () => {
                                 try {
@@ -487,7 +488,7 @@ export function WorkbenchSettings({
                                 }
                               }}
                             >
-                              {t('在工作台显示示例组件', 'Show sample in workspace')}
+                              {sampleShowLabel}
                             </Button>
                           </div>
                         </>

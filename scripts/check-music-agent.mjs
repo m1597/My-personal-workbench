@@ -4,9 +4,14 @@ import { mkdtemp } from 'node:fs/promises'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
 import { _electron as electron } from '@playwright/test'
+import { MusicStore } from '../components/music/store.mjs'
 
 // Exercises the installed Codex MCP client, without a model turn or the user's music profile.
 const profile = await mkdtemp(path.resolve('tmp/music-agent-'))
+// Test manual import starting with an empty source bank after onboarding.
+const store = new MusicStore(path.join(profile, 'fitbay-music'))
+store.set('lx-bootstrap', 'done')
+store.db.close()
 const server = 'fitbay_music'
 async function run(check) {
   const app = await electron.launch({

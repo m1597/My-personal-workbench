@@ -1,3 +1,4 @@
+import { useMusicFeedback } from './musicFeedback'
 import { useRef, useState, type DragEvent } from 'react'
 import {
   Button,
@@ -26,6 +27,7 @@ export type ImportPreview = {
 }
 
 export function usePlaylistImport(active: boolean) {
+  const feedback = useMusicFeedback()
   const [preview, setPreview] = useState<ImportPreview>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -35,7 +37,7 @@ export function usePlaylistImport(active: boolean) {
     if (!files?.length || reading.current) return
     setError('')
     if (files.length !== 1 || !/\.m3u8?$/i.test(files[0].name)) {
-      setError('请一次选择一个 M3U 或 M3U8 文件')
+      setError(feedback.text('请一次选择一个 M3U 或 M3U8 文件', 'Choose one M3U or M3U8 file at a time.'))
       return
     }
     reading.current = true
@@ -43,7 +45,7 @@ export function usePlaylistImport(active: boolean) {
     try {
       setPreview(await window.music.previewPlaylist(files[0]))
     } catch (e) {
-      setError(String(e).split('Error: ').pop() || '无法读取歌单')
+      setError(feedback.error(e))
     } finally {
       reading.current = false
       setLoading(false)
@@ -107,6 +109,7 @@ export function PlaylistImportDialog({
   close: () => void
   error: string
 }) {
+  const feedback = useMusicFeedback()
   const [name, setName] = useState(preview.name)
   const [picks, setPicks] = useState<Record<number, string>>({})
   const [page, setPage] = useState(0)
@@ -142,7 +145,10 @@ export function PlaylistImportDialog({
               <Input value={name} maxLength={80} onChange={(_, d) => setName(d.value)} />
             </Field>
             <p>
-              按原顺序导入 {ordered.size} 首，跳过重复 {duplicates.length} 条。未选择的条目将跳过。
+              {feedback.text(
+                `按原顺序导入 ${ordered.size} 首，跳过重复 ${duplicates.length} 条。未选择的条目将跳过。`,
+                `Import ${ordered.size} tracks in order, skipping ${duplicates.length} duplicates. Unselected entries will be skipped.`,
+              )}
             </p>
             {!!matched.length && (
               <details>
@@ -211,7 +217,7 @@ export function PlaylistImportDialog({
                 </Button>
               </div>
             )}
-            {error && <p role="alert">{error}</p>}
+            {error && <p role="alert">{feedback.error(error)}</p>}
           </DialogContent>
           <DialogActions>
             <Button disabled={busy} onClick={close}>

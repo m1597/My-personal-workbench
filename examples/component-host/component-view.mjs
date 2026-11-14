@@ -455,6 +455,10 @@ export function componentView({
           setPresentation(presentation === 'background' ? 'full' : 'background')
         },
       )
+      ipcMain.handle(music ? 'music-prototype:stop' : 'prototype:stop', (event) => {
+        if (!isShell(event)) throw Error('DENIED')
+        stopComponent()
+      })
       ipcMain.handle(music ? 'music-prototype:close' : 'prototype:close', (event) => {
         if (!isShell(event)) throw Error('DENIED')
         if (keepRunning() && phase === 'ready') setPresentation('background')

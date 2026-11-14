@@ -92,16 +92,22 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
   const releases = new Set()
   const newsGroups = new Set()
   const covers = new Map()
-  bind('releaseCover', async (id) => {
-    if (!mbid.test(id) || !newsGroups.has(id)) throw Error('请先选择发行')
-    const cached = covers.get(id)
+  bind('releaseCover', async (id, edition = false) => {
+    if (
+      typeof edition !== 'boolean' ||
+      !mbid.test(id) ||
+      !(edition ? releases : newsGroups).has(id)
+    )
+      throw Error('请先选择发行')
+    const key = (edition ? 'release:' : 'group:') + id
+    const cached = covers.get(key)
     if (cached && cached.until > Date.now()) return cached.request
     if (covers.size >= 128) covers.delete(covers.keys().next().value)
     const entry = {
       until: Date.now() + 3600000,
-      request: fetchReleaseCover(id, nativeImage).catch(() => null),
+      request: fetchReleaseCover(id, nativeImage, edition).catch(() => null),
     }
-    covers.set(id, entry)
+    covers.set(key, entry)
     if (!(await entry.request)) entry.until = Date.now() + 60000
     return entry.request
   })
@@ -388,8 +394,11 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
           : { Album: '专辑', Single: '单曲', EP: 'EP' }[g['primary-type']]
         if (!type) continue
         newsGroups.add(g.id)
+        const edition = (g.releases ?? []).find((r) => mbid.test(r.id) && r.status === 'Official')
+        if (edition) releases.add(edition.id)
         rows.set(g.id, {
           id: g.id,
+          editionId: edition?.id,
           type,
           title: name(g.title),
           artist: credit(g['artist-credit']),

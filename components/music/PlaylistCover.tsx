@@ -1,3 +1,4 @@
+import { useMusicFeedback } from './musicFeedback'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@fluentui/react-components'
 import { defaultCover, requestCover } from './AlbumBrowser'
@@ -17,6 +18,7 @@ export function PlaylistCover({
   playAll: ReactNode
   revision: number
 }) {
+  const feedback = useMusicFeedback()
   const [custom, setCustom] = useState<string | null>()
   const [error, setError] = useState('')
   const changing = useRef(false)
@@ -39,12 +41,13 @@ export function PlaylistCover({
     if (changing.current) return
     changing.current = true
     setBusy(true)
+    setError('')
     try {
       await window.music.changePlaylistArtwork(id, reset)
       setError('')
       setCustom(await window.music.playlistArtwork(id))
     } catch (e) {
-      setError(String(e).split('Error: ').pop() || '更换封面失败')
+      setError(feedback.error(e))
     } finally {
       changing.current = false
       setBusy(false)

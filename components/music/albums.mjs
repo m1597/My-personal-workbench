@@ -193,17 +193,22 @@ export class AlbumLibrary {
     }
     return null
   }
-  async picture(row, nativeImage, portrait = false) {
+  async picture(row, nativeImage, portrait = false, edition, group) {
     if (!row?.available || row.awaitingLocation || !localFile(row.file)) return null
     const stat = await audioFileStat(row.file)
     if (!stat) return null
     const stamp = [row.file, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':')
-    const key = portrait ? 'portrait:' + row.id : row.id
+    const key =
+      edition || group
+        ? JSON.stringify([row.id, edition, group])
+        : portrait
+          ? 'portrait:' + row.id
+          : row.id
     if (this.noCover.get(key) === stamp) return null
     this.noCover.delete(key)
     const cached = this.coverCache.get(key)
     if (cached?.stamp === stamp) return cached.result
-    const result = this.readPicture(row, nativeImage, portrait)
+    const result = this.readPicture(row, nativeImage, portrait, edition, group)
     this.coverCache.set(key, { stamp, result })
     if (this.coverCache.size > 32) this.coverCache.delete(this.coverCache.keys().next().value)
     if (!(await result) && this.coverCache.get(key)?.stamp === stamp) {
@@ -213,8 +218,12 @@ export class AlbumLibrary {
     }
     return result
   }
-  async readPicture(row, nativeImage, portrait) {
+  async readPicture(row, nativeImage, portrait, edition, group) {
     const common = await readCommon(row.file, false).catch(() => null)
+    if (edition && common?.musicbrainz_albumid && common.musicbrainz_albumid !== edition)
+      return null
+    if (group && common?.musicbrainz_releasegroupid && common.musicbrainz_releasegroupid !== group)
+      return null
     const pictures = (common?.picture ?? []).filter(
       (p) =>
         !portrait ||
@@ -239,7 +248,7 @@ export class AlbumLibrary {
     }
     return null
   }
-  async cover(id, nativeImage, exclude) {
+  async cover(id, nativeImage, exclude, edition, group) {
     if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id)) return null
     this.syncGroups()
     if (!this.groups.has(id)) await this.list()
@@ -248,17 +257,17 @@ export class AlbumLibrary {
       if (track === exclude) continue
       const row = byId.get(track)
       if (!row?.listed || albumId(row) !== id) continue
-      const result = await this.picture(row, nativeImage)
+      const result = await this.picture(row, nativeImage, false, edition, group)
       if (result) return result
     }
     return null
   }
-  async trackCover(track, nativeImage) {
+  async trackCover(track, nativeImage, edition, group) {
     if (typeof track !== 'string' || track.length > 128) return null
     const byId = this.db.prepare('SELECT * FROM local_tracks WHERE id=?')
     const row = byId.get(track)
     if (!row) return null
-    const own = await this.picture(row, nativeImage)
+    const own = await this.picture(row, nativeImage, false, edition, group)
     if (own) return own
     await this.fill(row)
     const current = byId.get(track)
@@ -282,6 +291,6 @@ export class AlbumLibrary {
           .map((r) => r.id),
       )
     }
-    return this.cover(id, nativeImage, track)
+    return this.cover(id, nativeImage, track, edition, group)
   }
 }

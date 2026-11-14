@@ -9,9 +9,14 @@ import {
   MenuPopover,
   MenuTrigger,
 } from '@fluentui/react-components'
-import { Download, FolderOpen, ListPlus } from 'lucide-react'
+import { Download, FolderOpen, ListPlus,Play,Pause } from 'lucide-react'
 import { RevealTrackContext } from './TrackMenu'
 
+export const RowPlayback=createContext({id:'',paused:true,toggle:()=>{}})
+export function RowPlay({id,title,play,disabled=false}:{id?:string;title:string;play():void;disabled?:boolean}){
+  const playback=useContext(RowPlayback), active=!!id && playback.id===id, playing=active && !playback.paused
+  return <Button className="row-play" size="small" appearance="subtle" icon={playing?<Pause size={16}/>:<Play size={16}/>} aria-label={(playing?'暂停':'播放')+title} title={playing?'暂停':'播放'} disabled={disabled} onClick={active?playback.toggle:play}/>
+}
 export const RecordingLists = createContext<{ id: string; name: string }[]>([])
 export function OnlineSongRow({
   children,

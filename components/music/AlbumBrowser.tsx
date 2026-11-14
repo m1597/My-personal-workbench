@@ -27,11 +27,21 @@ export type Album = {
 const pendingCovers = new Map<string, Promise<string | null>>()
 export const defaultCover = './default-cover.png'
 
-export function requestCover(id: string, track: boolean, revision: number) {
-  const key = [revision, track ? 'track' : 'album', id].join(':')
+export function requestCover(
+  id: string,
+  track: boolean,
+  revision: number,
+  edition?: string,
+  group?: string,
+) {
+  const key = [revision, track ? 'track' : 'album', id, edition, group].join(':')
   let request = pendingCovers.get(key)
   if (!request) {
-    request = (track ? window.music.trackCover(id) : window.music.albumCover(id)).finally(() => {
+    request = (
+      track
+        ? window.music.trackCover(id, edition, group)
+        : window.music.albumCover(id, edition, group)
+    ).finally(() => {
       pendingCovers.delete(key)
     })
     pendingCovers.set(key, request)
@@ -43,14 +53,16 @@ export function Cover({
   id,
   track = false,
   group,
+  edition,
   revision = 0,
 }: {
   id?: string
   group?: string
+  edition?: string
   track?: boolean
   revision?: number
 }) {
-  const key = JSON.stringify([id, group])
+  const key = JSON.stringify([id, group, edition])
   const frame = useRef<HTMLSpanElement>(null)
   const [image, setImage] = useState<{
     id: string
@@ -59,13 +71,14 @@ export function Cover({
   }>()
   useEffect(() => {
     const element = frame.current
-    if ((!id && !group) || !element) return
+    if ((!id && !group && !edition) || !element) return
     let alive = true
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
       observer.disconnect()
       void (async () =>
-        (id && (await requestCover(id, track, revision).catch(() => null))) ||
+        (id && (await requestCover(id, track, revision, edition, group).catch(() => null))) ||
+        (edition && (await window.music.releaseCover(edition, true).catch(() => null))) ||
         (group && (await window.music.releaseCover(group))))()
         .then((url) => {
           if (alive && url) setImage({ id: key, revision, url })
@@ -77,7 +90,7 @@ export function Cover({
       alive = false
       observer.disconnect()
     }
-  }, [key, id, group, track, revision])
+  }, [key, id, group, edition, track, revision])
   return (
     <span ref={frame} className="album-art" aria-hidden="true">
       <img
@@ -106,6 +119,7 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [chosen, setChosen] = useState('')
+  const [remoteEdition, setRemoteEdition] = useState<{ album: string; id: string }>()
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<AlbumSort>('name')
   const section = useRef<HTMLElement>(null)
@@ -180,7 +194,11 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
       <section ref={section} aria-label="专辑曲目" className="album-detail">
         <BackButton to="albums" onClick={() => setChosen('')} />
         <header className="album-detail-header">
-          <Cover revision={revision} id={selected.id} />
+          <Cover
+            revision={revision}
+            id={selected.id}
+            edition={remoteEdition?.album === selected.id ? remoteEdition.id : undefined}
+          />
           <div>
             <h2>{selected.title}</h2>
             <p>
@@ -199,6 +217,7 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
           </div>
         </header>
         <AlbumEditions
+          onEdition={(id) => setRemoteEdition({ album: selected.id, id })}
           key={selected.id}
           album={selected}
           local={selected.tracks.flatMap((id) => trackMap.get(id) ?? [])}
