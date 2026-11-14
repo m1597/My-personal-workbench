@@ -4,6 +4,7 @@ import * as reactDOM from 'react-dom'
 import { Button, Checkbox, Dropdown, Input, Option, Tab, TabList } from '@fluentui/react-components'
 import { useEffect, useState, type ComponentType } from 'react'
 import type { LocalTrack } from './LibraryPane'
+import { WavePlaybackSpeed } from './WavePlaybackSpeed'
 import './plugins.css'
 
 export type PluginRow = {
@@ -181,6 +182,7 @@ export function PluginPage({
           ))}
       </TabList>
       {error && <p role="alert">{error}</p>}
+      {loaded?.id === 'wave' && id === 'wave' && <WavePlaybackSpeed audio={props.audio} />}
       {loaded?.id === id && loaded && <loaded.Panel {...props} />}
     </section>
   )

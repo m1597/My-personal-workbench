@@ -19,3 +19,13 @@
     padding: 8px;
   }
 }
+
+.wave-playback-speed {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+.wave-playback-speed [role='combobox'] {
+  min-width: 5rem;
+}

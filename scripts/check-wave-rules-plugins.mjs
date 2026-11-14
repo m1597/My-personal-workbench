@@ -121,13 +121,40 @@ try {
   }
   await wavePanel().getByRole('combobox', { name: '分析歌曲' }).click()
   await page.getByRole('option', { name: '01 波形测试 · 测试曲库' }).click()
-  const rect = await plot.boundingBox()
-  const y = rect.y + rect.height / 2
+  let rect = await plot.boundingBox()
+  let y = rect.y + rect.height / 2
   await page.mouse.click(rect.x + rect.width * 0.35, y)
   await expect.poll(() => page.locator('audio').evaluate((a) => a.currentTime)).toBeGreaterThan(2.6)
+  const speed = page.getByRole('combobox', { name: '试听倍速' })
+  async function measuredRate(expected) {
+    const actual = await page.locator('audio').evaluate(async (a) => {
+      const start = performance.now(),
+        from = a.currentTime
+      await new Promise((resolve) => setTimeout(resolve, 900))
+      return {
+        rate: a.playbackRate,
+        clock: ((a.currentTime - from) * 1000) / (performance.now() - start),
+      }
+    })
+    console.log('试听倍速', expected, '实测音乐秒/秒', actual.clock.toFixed(3))
+    assert.equal(actual.rate, expected)
+    assert.ok(Math.abs(actual.clock - expected) < 0.18, JSON.stringify(actual))
+  }
+  await speed.click()
+  await page.getByRole('option', { name: '2×', exact: true }).click()
+  await measuredRate(2)
+  await speed.click()
+  await page.getByRole('option', { name: '0.5×', exact: true }).click()
+  await measuredRate(0.5)
+  await page.screenshot({ path: path.join(evidence, 'wave-speed.png') })
+  await button('恢复 1×').click()
+  await measuredRate(1)
   await wavePanel().getByRole('textbox', { name: '标记名称' }).fill('鼓点')
   await button('标记当前位置', wavePanel()).click()
   await expect(wavePanel().getByRole('button', { name: /鼓点/ })).toBeVisible()
+  await plot.scrollIntoViewIfNeeded()
+  rect = await plot.boundingBox()
+  y = rect.y + rect.height / 2
   await page.mouse.move(rect.x + rect.width * 0.2, y)
   await page.mouse.down()
   await page.mouse.move(rect.x + rect.width * 0.32, y, { steps: 6 })
@@ -143,6 +170,10 @@ try {
   await page.evaluate(() => delete document.documentElement.dataset.backdrop)
   await page.screenshot({ path: path.join(evidence, 'wave.png') })
   await button('关闭循环', wavePanel()).click()
+  await speed.click()
+  await page.getByRole('option', { name: '1.5×', exact: true }).click()
+  await settings()
+  await expect.poll(() => page.locator('audio').evaluate((a) => a.playbackRate)).toBe(1)
   await restart()
   await checkInstalled(page, profile, ['wave'])
   await button('打开', entry(wave)).click()
