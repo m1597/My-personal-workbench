@@ -23,6 +23,15 @@
   gap: var(--space-8);
   flex: none;
 }
+@media (max-width: 739px) {
+  .library-title:has(> .playlist-cover) {
+    justify-content: flex-start;
+    align-items: center;
+  }
+  .library-title > .playlist-cover + div {
+    flex: 1 0 calc(100% - clamp(64px, 13vw, 96px) - var(--space-8));
+  }
+}
 .timed-playlist {
   display: grid;
   gap: var(--space-10);

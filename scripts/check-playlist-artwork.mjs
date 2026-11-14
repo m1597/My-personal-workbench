@@ -23,6 +23,8 @@ store.library.upsert({
 const member = store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(recording)
 store.library.createPlaylist(groups[1], [member.id])
 store.db.close()
+const english = process.env.FITBAY_TEST_LANGUAGE === 'en'
+await writeFile(path.join(profile, 'interface-language'), english ? 'en' : 'zh-CN')
 
 const expected = new Map()
 async function open() {
@@ -92,6 +94,17 @@ try {
     }, i)
     const file = path.join(root, i + '.png')
     await writeFile(file, Buffer.from(png, 'base64'))
+    if (i === 0) {
+      const bad = path.join(root, 'invalid.png')
+      await writeFile(bad, 'bad image')
+      await choose(app, bad)
+      await button.click()
+      await expect.poll(() => app.evaluate(() => globalThis.pickerCalls)).toBe(1)
+      await app.evaluate(() => globalThis.finishPicker())
+      await expect(page.getByRole('alert')).toHaveText(
+        english ? 'This image could not be opened. Choose another image.' : '无法读取这张图片',
+      )
+    }
     await choose(app, file)
     const image = page.locator('.playlist-cover img')
     await image.click()
@@ -107,6 +120,7 @@ try {
     await expect.poll(() => app.evaluate(() => globalThis.pickerCalls)).toBe(1)
     await app.evaluate(() => globalThis.finishPicker())
     await expect(page.getByRole('button', { name: '恢复自动封面' })).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
     await expect(image).toHaveAttribute('src', /^data:image\/png;base64,/)
     expected.set(name, await image.getAttribute('src'))
     assert.equal(await image.evaluate((img) => img.naturalWidth), 80)
@@ -153,6 +167,30 @@ try {
       'src',
       expected.get(name),
     )
+  }
+  await session.app.evaluate(({ BaseWindow }) => {
+    const w = BaseWindow.getAllWindows()[0]
+    w.setMinimumSize(320, 400)
+    w.setContentSize(420, 660)
+  })
+  for (const name of groups) {
+    const edit = await select(session.page, name)
+    const play = session.page.getByRole('button', { name: '播放全部', exact: true })
+    await expect(edit).toBeInViewport()
+    await expect(play).toBeInViewport()
+    const titleBox = await session.page.locator('.library-title h2').boundingBox()
+    assert.ok(titleBox.width > 170 && titleBox.height < 65, '标题与统计在窄窗中保留独立首行')
+    const [a, b] = await Promise.all([edit.boundingBox(), play.boundingBox()])
+    assert.ok(Math.abs(a.y - b.y) < 1 && b.x >= a.x + a.width - 1)
+    assert.ok(
+      await session.page
+        .locator('.library-title')
+        .evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+    )
+    await session.page.screenshot({
+      path: path.join(root, name + '-420.png'),
+      style: ':root {background:var(--base)!important}',
+    })
   }
   console.log('三类歌单封面、取消、重启、换批及独立恢复已验证', root)
 } finally {
