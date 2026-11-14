@@ -99,7 +99,13 @@ try {
   await expect(page.getByText('近 90 天暂无新发行。')).toBeVisible()
   await expect(btn('青禾').locator('img')).toHaveAttribute('src', /^data:image/)
   await expect(btn('山雀').locator('img')).toHaveAttribute('src', './default-artist.webp')
-  await expect.poll(() => btn('山雀').locator('img').evaluate((img) => img.naturalWidth)).toBe(256)
+  await expect
+    .poll(() =>
+      btn('山雀')
+        .locator('img')
+        .evaluate((img) => img.naturalWidth),
+    )
+    .toBe(256)
   await shot('动态关注')
   await btn('青禾').click()
   const group = page.getByRole('region', { name: '青禾的发行', exact: true })
