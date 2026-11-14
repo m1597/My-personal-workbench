@@ -40,7 +40,9 @@ try {
     .poll(() => app.windows().some((x) => x.url().includes('/music/index.html')))
     .toBe(true)
   const page = app.windows().find((x) => x.url().includes('/music/index.html'))
-  assert.equal((await page.evaluate(() => window.musicWindow.status())).mode, 'docked')
+  await expect
+    .poll(() => page.evaluate(async () => (await window.musicWindow.status()).mode))
+    .toBe('docked')
   const size = async (width) =>
     app.evaluate(({ BrowserWindow }, width) => {
       const w = BrowserWindow.getAllWindows()[0]
@@ -108,6 +110,50 @@ try {
   await expect(search).toHaveValue('')
   await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
   assert.ok(await audio.evaluate((a, p) => a.currentTime >= p, position))
+  const center = async (label) => {
+    const b = await page.getByRole('button', { name: label, exact: true }).boundingBox()
+    const offset = await app.evaluate(
+      ({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]
+          .contentView.children.find((v) => v.webContents?.getURL().includes('/music/index.html'))
+          .getBounds().x,
+    )
+    return offset + b.x + b.width / 2
+  }
+  for (const width of [1100, 410]) {
+    await size(width)
+    const tabs = page.getByRole('tablist', { name: '音乐页面' })
+    const items = tabs.getByRole('tab')
+    const gaps = await items.evaluateAll((els) =>
+      els
+        .slice(1)
+        .map((el, i) => el.getBoundingClientRect().left - els[i].getBoundingClientRect().right),
+    )
+    assert.ok(
+      gaps.every((g) => g >= 0 && g <= 5),
+      JSON.stringify(gaps),
+    )
+    const inactive = items.nth(1)
+    await inactive.hover()
+    assert.equal(await inactive.evaluate((el) => getComputedStyle(el, '::after').display), 'none')
+    await page.screenshot({
+      path: path.join(root, 'full-' + width + '.png'),
+      style: ':root{background:var(--base)!important}',
+    })
+    const before = await center('只显示播放栏')
+    await page.getByRole('button', { name: '只显示播放栏', exact: true }).click()
+    await expect(page.getByRole('button', { name: '展开 Music' })).toBeVisible()
+    const mini = await center('展开 Music')
+    console.log('模式切换中心 X', width, before, mini)
+    await page.screenshot({
+      path: path.join(root, 'mini-' + width + '.png'),
+      style: ':root{background:var(--base)!important}',
+    })
+    assert.ok(Math.abs(before - mini) <= 1, JSON.stringify({ width, before, mini }))
+    await page.getByRole('button', { name: '展开 Music' }).click()
+    await expect(page.getByRole('tab', { name: '曲库', exact: true })).toBeVisible()
+    assert.ok(Math.abs(before - (await center('只显示播放栏'))) <= 1)
+  }
   console.log('PASS 真实停靠窗口连续缩窄/拉宽、搜索滚动返回、重复点曲库与播放连续', root)
 } finally {
   await app.close()

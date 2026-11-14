@@ -1400,14 +1400,7 @@ function Music() {
           <Button
             appearance="subtle"
             size="small"
-            aria-label="只显示播放栏"
-            title="只显示播放栏"
-            icon={<PanelBottomClose size={17} />}
-            onClick={() => void act(() => window.musicWindow.present('bar'))}
-          />
-          <Button
-            appearance="subtle"
-            size="small"
+            className="music-hide-extra"
             aria-label="隐藏到后台"
             title="隐藏到后台"
             icon={<PanelTopClose size={17} />}
@@ -1426,6 +1419,24 @@ function Music() {
             <MenuPopover className="component-popup">
               <MenuList>
                 <MenuItem
+                  className="music-narrow-action"
+                  icon={<CircleHelp size={16} />}
+                  onClick={() => {
+                    if (guide === null) guideOrigin.current = { tab, category: settingsCategory }
+                    visitGuide(0)
+                  }}
+                >
+                  使用引导
+                </MenuItem>
+                <MenuItem
+                  className="music-narrow-action"
+                  icon={<PanelTopClose size={16} />}
+                  onClick={() => void act(() => window.musicWindow.present('background'))}
+                >
+                  隐藏到后台
+                </MenuItem>
+
+                <MenuItem
                   icon={<Settings size={16} />}
                   onClick={() => {
                     setGuide(null)
@@ -1437,6 +1448,15 @@ function Music() {
               </MenuList>
             </MenuPopover>
           </Menu>
+          <Button
+            appearance="subtle"
+            size="small"
+            className="music-collapse"
+            aria-label="只显示播放栏"
+            title="只显示播放栏"
+            icon={<PanelBottomClose size={17} />}
+            onClick={() => void act(() => window.musicWindow.present('bar'))}
+          />
         </div>
       </div>
       {guide !== null && state && (

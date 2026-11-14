@@ -30,7 +30,7 @@ const externalOpen = () =>
 try {
   expect(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio'))).toBe(true)
   const shell = await app.firstWindow()
-  const menu = shell.getByRole('button', { name: '窗口', exact: true })
+  const menu = shell.getByRole('button', { name: '组件', exact: true })
   const musicItem = shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true })
   const reveal = shell.getByRole('menuitem', {
     name: '显示 Music',
@@ -103,7 +103,7 @@ try {
         )
         for (const control of [
           ...(await musicTabs.getByRole('tab').all()),
-          ...(await music.locator('.music-view-actions button').all()),
+          ...(await music.locator('.music-view-actions button:visible').all()),
         ]) {
           await expect(control).toBeInViewport({ ratio: 0.98 })
         }
@@ -114,6 +114,10 @@ try {
           style: ':root { background: var(--base) !important }',
         })
         await music.getByRole('button', { name: '更多音乐操作' }).click()
+        if (width === 440) {
+          await expect(music.getByRole('menuitem', { name: '使用引导' })).toBeVisible()
+          await expect(music.getByRole('menuitem', { name: '隐藏到后台' })).toBeVisible()
+        }
         await music.getByRole('menuitem', { name: '音乐设置' }).click()
         await expect(music.locator('.music-settings')).toBeVisible()
         await music.getByRole('tab', { name: '曲库', exact: true }).click()
@@ -335,7 +339,7 @@ try {
   const other = shell.getByText('可在这里打开其他组件', { exact: true })
   await expect(original).toBeVisible()
   await expect(shell.getByRole('button', { name: '打开 Music', exact: true })).toBeVisible()
-  await shell.getByRole('button', { name: '窗口', exact: true }).click()
+  await shell.getByRole('button', { name: '组件', exact: true }).click()
   await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
   await expect
     .poll(() => daily.windows().some((p) => p.url().includes('/music/index.html')))
