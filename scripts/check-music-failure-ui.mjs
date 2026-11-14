@@ -60,7 +60,7 @@ async function verify(check) {
         )
       }),
     ).toBe(true)
-    await page.getByRole('tab', { name: 'AI 推荐' }).click()
+    await page.getByRole('tab', { name: '智能推荐' }).click()
     await check(page, page.locator('.music-list'))
   } finally {
     await app.close()

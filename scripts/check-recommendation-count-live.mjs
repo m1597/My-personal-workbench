@@ -118,7 +118,7 @@ try {
   assert.ok(before.models.providers.find((p) => p.id === evidence.provider)?.hasKey)
   assert.ok(evidence.source)
   console.log('验收基线', evidence.baseline, evidence.provider, evidence.source)
-  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '智能推荐' }).click()
   const count = page.getByLabel('推荐首数')
   await expect(count).toHaveValue(String(target))
   await count.fill(String(target))

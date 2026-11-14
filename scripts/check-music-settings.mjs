@@ -201,10 +201,10 @@ try {
   await expect(categories.getByRole('button')).toHaveText([
     '本地曲库',
     '音乐源',
+    'MCP',
     '下载',
     '模型与推荐',
     '全局快捷键',
-    'MCP',
   ])
   await player.screenshot({
     path: path.join(evidence, 'settings-narrow-menu.png'),

@@ -48,7 +48,7 @@ export function DownloadTasks({ batch, saved }: { batch?: Batch; saved: number }
         <strong>下载任务</strong>
         {!!batch?.targetCount && (
           <section>
-            <b>AI 推荐</b>
+            <b>智能推荐</b>
             <span>
               已下载 {saved}/{batch.targetCount} 首
             </span>

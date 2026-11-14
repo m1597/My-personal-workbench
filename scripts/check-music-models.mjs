@@ -152,7 +152,7 @@ const app = await launch()
 try {
   await offlineSourceRepository(app)
   const page = await app.firstWindow()
-  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '智能推荐' }).click()
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('雨天的爵士乐')
   await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveAttribute(
     'placeholder',
@@ -214,7 +214,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       await window.music.configureModel(id, p.model, 'fixture-' + id, false)
     }, id)
     await page.reload()
-    await page.getByRole('tab', { name: 'AI 推荐' }).click()
+    await page.getByRole('tab', { name: '智能推荐' }).click()
     if (!index) {
       await app.evaluate(({ dialog }, directory) => {
         globalThis.folderRequests = []
@@ -403,7 +403,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   assert.equal((await fs.readdir(output)).length, 4)
   assert.equal((await page.evaluate(() => window.music.getTasteStatus())).pending, 0)
   const transfers = await app.evaluate(() => globalThis.transfers)
-  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '智能推荐' }).click()
   const artistBatch = await page.evaluate(() => window.music.generate('AC/DC', 'artist', false))
   const artistResult = await page.evaluate(
     async (id) => (await window.music.state()).items.filter((r) => r.batch === id),
@@ -484,7 +484,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   )
   assert.equal(await app.evaluate(() => globalThis.transfers), transfers + 1)
   await page.reload()
-  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '智能推荐' }).click()
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })
@@ -560,7 +560,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     globalThis.queueTracks = true
     globalThis.holdTransfer = true
   })
-  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '智能推荐' }).click()
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(page.getByText(/已入库 4\/5/)).toBeVisible({
     timeout: 30000,
@@ -735,11 +735,14 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       })
     }
   })
-  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '智能推荐' }).click()
   const target = page.getByRole('textbox', { name: '推荐首数' })
   await target.fill('2')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(page.getByText(/已入库 1\/2/)).toBeVisible()
+  await page.locator('.music-list ol li').first().click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '查看文件所在位置' })).toBeVisible()
+  await page.keyboard.press('Escape')
   const progressRow = page.locator('.music-batch-progress')
   const progressBounds = await progressRow.getByRole('status').boundingBox()
   const stopBounds = await progressRow.getByRole('button').boundingBox()

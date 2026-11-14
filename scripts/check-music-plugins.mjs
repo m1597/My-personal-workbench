@@ -64,7 +64,7 @@ try {
       })
       .toBe(true)
     if (id === 'recommend')
-      await expect(page.getByRole('tab', { name: 'AI 推荐' })).toHaveAttribute(
+      await expect(page.getByRole('tab', { name: '智能推荐' })).toHaveAttribute(
         'aria-selected',
         'true',
       )
@@ -89,7 +89,7 @@ try {
     await checkStep(id, 'regular')
   }
   await guide().getByRole('button', { name: '完成' }).click()
-  for (const name of ['曲库', '歌单', '在线找歌', 'AI 推荐', '动态']) {
+  for (const name of ['曲库', '歌单', '在线找歌', '智能推荐', '歌手']) {
     const tab = page.getByRole('tab', { name, exact: true })
     await tab.click()
     await expect(page.getByRole('tab', { name: '扩展', exact: true })).toHaveCount(0)

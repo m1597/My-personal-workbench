@@ -142,7 +142,7 @@ try {
   const page = await app.firstWindow()
   const tabs = page.getByRole('tab')
   await expect(tabs).toHaveCount(5)
-  for (const [index, name] of ['曲库', '歌单', '在线找歌', 'AI 推荐', '动态'].entries())
+  for (const [index, name] of ['曲库', '歌单', '在线找歌', '智能推荐', '歌手'].entries())
     await expect(tabs.nth(index)).toHaveAccessibleName(name)
   await page
     .getByRole('complementary', { name: 'Music 使用引导' })

@@ -66,7 +66,7 @@ try {
   assert.ok(state.models.providers.find((p) => p.id === state.models.active)?.hasKey)
   const taste = await page.evaluate(() => window.music.getTasteStatus())
   assert.ok(taste.consented)
-  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  await page.getByRole('tab', { name: '智能推荐' }).click()
   const preference =
     process.argv[2] ||
     '结合我的审美，发现一些库里没有的旋律性作品。今天想听独立音乐人正式公开免费下载的日系、游戏或轻电子器乐，优先免费的原创录音。'

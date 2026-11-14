@@ -95,7 +95,7 @@ try {
   })
   const shot = (name) => page.screenshot({ path: path.join(root, name + '.png') })
   const btn = (name) => page.getByRole('button', { name, exact: true })
-  await page.getByRole('tab', { name: '动态', exact: true }).click()
+  await page.getByRole('tab', { name: '歌手', exact: true }).click()
   await expect(page.getByText('近 90 天暂无新发行。')).toBeVisible()
   await expect(btn('青禾').locator('img')).toHaveAttribute('src', /^data:image/)
   await expect(btn('山雀').locator('img')).toHaveAttribute('src', './default-artist.webp')
