@@ -9,7 +9,7 @@ import {
   MenuTrigger,
   MenuItemRadio,
 } from '@fluentui/react-components'
-import { ArrowLeft, ArrowDownUp, Play, Search } from 'lucide-react'
+import { ArrowLeft, ArrowDownUp, Play, Search, Shuffle } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatTime, type LocalTrack } from './LibraryPane'
 import { AlbumEditions } from './ReleaseCatalog'
@@ -149,6 +149,10 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
     return result
   }, [listed, query, sort])
   const detailOpen = Boolean(selected)
+  const playableAlbums = useMemo(
+    () => filtered.filter((album) => album.tracks.some((id) => trackMap.get(id)?.available)),
+    [filtered, trackMap],
+  )
   useLayoutEffect(() => {
     const scroll = section.current?.closest('.music-scroll')
     scroll?.scrollTo(0, detailOpen ? 0 : listOffset.current)
@@ -242,6 +246,20 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
         onChange={(_, d) => setSearch(d.value)}
       />
       <div className="album-controls">
+        <Button
+          size="small"
+          icon={<Shuffle size={15} />}
+          disabled={!playableAlbums.length}
+          onClick={() => {
+            const album = playableAlbums[Math.floor(Math.random() * playableAlbums.length)]
+            const queue = album.tracks.filter((id) => trackMap.get(id)?.available)
+            listOffset.current = section.current?.closest('.music-scroll')?.scrollTop ?? 0
+            setChosen(album.id)
+            play(queue[0], queue, true)
+          }}
+        >
+          随机听一张
+        </Button>
         <Menu checkedValues={{ sort: [sort] }}>
           <MenuTrigger disableButtonEnhancement>
             <Button size="small" icon={<ArrowDownUp size={15} />} aria-label="专辑排序">
