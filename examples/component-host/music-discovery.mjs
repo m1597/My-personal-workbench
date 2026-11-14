@@ -105,14 +105,30 @@ const liveAlbum = (name) =>
 export function recordingConstraints(text, prefs) {
   const description = fold(text)
   const choice = (pattern, fallback) => {
+    const kind = '(?:' + pattern + ')'
     const match = description.match(
-      new RegExp('(?:不要|不听|排除|避免|别来)\\s*(?:听)?\\s*(?:' + pattern + ')', 'iu'),
+      new RegExp('(?:不要|不听|排除|避免|别来)\\s*(?:听)?\\s*' + kind, 'iu'),
     )
     if (match) return 'exclude'
+    if (
+      new RegExp(
+        '(?:允许|接受|可以有)\\s*' + kind + '|' + kind + '(?:版)?(?:也|都)?(?:可以|行)',
+        'iu',
+      ).test(description)
+    )
+      return 'any'
     return new RegExp(pattern, 'iu').test(description) ? 'require' : fallback
   }
+  const studio = /录音室|錄音室|\bstudio\b/iu
+  const version = recordingPreference(description.replace(studio, ''))
+  const studioRequirement = studio.test(description)
+    ? /(?:不要|不听|排除|避免|别来)\s*(?:听)?\s*(?:录音室|錄音室|studio)/iu.test(description)
+      ? 'live'
+      : 'no-live'
+    : ''
   return {
-    version: recordingPreference(text),
+    version:
+      version === 'live' && studioRequirement === 'no-live' ? '' : version || studioRequirement,
     editionPreference: prefs.edition,
     cover: choice('翻唱|cover\\b', prefs.cover),
     instrumental: choice('伴奏|纯音乐|instrumental', prefs.instrumental),

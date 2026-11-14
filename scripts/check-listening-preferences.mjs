@@ -24,6 +24,14 @@ assert.ok(
   titleMatch(base, row('晨曲 (Cover. 青禾)', '白露'), recordingConstraints('只听翻唱', prefs)),
 )
 assert.equal(titleMatch(base, row('晨曲'), recordingConstraints('只听翻唱', prefs)), '')
+assert.ok(titleMatch(base, row('晨曲'), recordingConstraints('翻唱也可以', prefs)))
+assert.ok(
+  titleMatch(
+    base,
+    row('晨曲 (Cover. 青禾)', '白露'),
+    recordingConstraints('要录音室版翻唱', prefs),
+  ),
+)
 
 const mode = process.env.FITBAY_SHORTAGE_TEST || 'keep'
 assert.ok(['keep', 'expand', 'auto', 'blank', 'close', 'stop'].includes(mode))
@@ -46,6 +54,7 @@ const files = {}
 for (const [i, title] of songs.entries()) {
   files[title] = path.join(root, title + '.wav')
   await writeFixtureRecording(files[title], 423 + i * 177)
+  files[title + ' (Live)'] = files[title]
 }
 const code = path.join(root, 'source.js')
 await fs.writeFile(
@@ -53,7 +62,7 @@ await fs.writeFile(
   `// @name 独立音质和推荐范围夹具
 lx.on('request',({action,info})=>{
  if(action==='musicUrl')return 'https://1.1.1.1/audio/'+encodeURIComponent(info.musicInfo.name)+'?quality='+info.type
- if(action==='search'){const name=info.keyword.split(' ')[0];return [{name,singer:'青禾',id:name,allowPermanentSave:true}]}
+ if(action==='search'){const name=info.keyword.split(' ')[0];return (name==='深林'?[name]:[name,name+' (Live)']).map(title=>({name:title,singer:'青禾',id:title,allowPermanentSave:true}))}
  return ''
 })
 lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['flac','320k','128k']}}})`,
@@ -232,6 +241,9 @@ try {
       mode === 'auto' || mode === 'expand' ? ['direct', 'related'] : ['direct'],
     )
     assert.equal(prompts[0].profile, '偏爱轻声室内乐')
+    assert.ok(
+      (await app.evaluate(() => globalThis.transfers)).some(([title]) => title === '晨光 (Live)'),
+    )
     if (mode === 'keep') {
       await page.getByRole('tab', { name: '在线找歌' }).click()
       const input = page.getByRole('textbox', { name: '搜索关键词' })
