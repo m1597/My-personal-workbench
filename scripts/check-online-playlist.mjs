@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
 import { offlineSourceRepository } from './music-source-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 
 await mkdir('tmp', { recursive: true })
 const root = await mkdtemp(path.resolve('tmp/online-playlist-'))
@@ -126,8 +127,13 @@ for (const restart of [false, true]) {
       const nextQuality = await app.evaluate(() =>
         globalThis.testOnlineQuality === '320k' ? '128k' : '320k',
       )
-      await pane.getByRole('combobox').click()
-      await pane.getByRole('option', { name: nextQuality }).click()
+      await openMusicSettings(page)
+      await selectMusicSettings(page, '下载')
+      await page.getByRole('combobox', { name: '试听音质' }).click()
+      await page.getByRole('option', { name: nextQuality, exact: true }).click()
+      await page.getByRole('tab', { name: '在线找歌' }).click()
+      await pane.getByRole('textbox').fill('测试在线歌曲')
+      await pane.getByRole('textbox').press('Enter')
       await pane.getByRole('button', { name: '播放', exact: true }).click()
       await expect.poll(() => app.evaluate(() => globalThis.testOnlineQuality)).toBe(nextQuality)
       await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
