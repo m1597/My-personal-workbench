@@ -295,7 +295,7 @@ try {
     await app.evaluate(({ dialog }, file) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
     }, customFile)
-    await choose('更换歌单封面')
+    await choose('更换封面')
     await expect(page.getByRole('button', { name: '恢复自动封面' })).toBeVisible()
     const custom = await images.getAttribute('src')
     await add(ids[4], true)
