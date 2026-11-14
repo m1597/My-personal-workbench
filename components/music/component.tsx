@@ -65,6 +65,7 @@ import {
 } from './LibraryPane'
 import { SongCredits, SongCatalog, songRowClick, songAlbum } from './SongCredits'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
+import { playbackReason, userMessage } from './playbackError'
 import { PlaybackQueue } from './PlaybackQueue'
 import { DownloadTasks } from './DownloadTasks'
 import { VolumeControls } from './VolumeControls'
@@ -348,9 +349,10 @@ function Music() {
   const guideOrigin = useRef({ tab: 'library', category: 'library' as SettingsCategory })
   function visitGuide(step: number) {
     const page = guideSteps[step].page
-    if (page === 'audition') setTab(page)
+    if (page === 'songs') setTab('library')
+    else if (['audition', 'download', 'playlists', 'feed'].some((tab) => tab === page)) setTab(page)
     else {
-      setSettingsCategory(page)
+      setSettingsCategory(page as SettingsCategory)
       setTab('settings')
     }
     setGuide(step)
@@ -479,6 +481,12 @@ function Music() {
     return window.musicWindow.subscribe(mode)
   }, [])
   useEffect(() => {
+      if ((v.settingsRequest ?? 0) > handledSettings) {
+        handledSettings = v.settingsRequest!
+        setGuide(null)
+        setTab('settings')
+      }
+      setLanguage(v.language === 'en' ? 'en' : 'zh-CN')
     if (tab !== 'library' && tab !== 'playlists') return
     let mounted = true
     const rescan = () =>
@@ -689,7 +697,8 @@ function Music() {
   function startTrack(id: string, ids = visibleQueue) {
     if (current.current === id && audio.current) {
       ++epoch.current
-      if (audio.current.paused) return audio.current.play()
+      if (audio.current.paused)
+        return play(id, ids, state?.queueOccurrence, false, state?.pendingAlbum)
       return pauseTrack()
     }
     if (shuffled) setShuffled(shuffleQueue(ids, id))
@@ -750,6 +759,14 @@ function Music() {
         if (seq === epoch.current && error.name !== 'AbortError') setError(String(error))
       })
     }
+    requested.current = { id, seq, src: current.current === id ? (audio.current?.src ?? '') : '' }
+    setPlayError(undefined)
+    setOnlineFailure(undefined)
+    const onlineTrack =
+      id.startsWith('online-recording-') || !!state?.items.find((r) => r.id === id)?.online
+    const fail = (reason: unknown) => {
+      if (seq === epoch.current) setPlayError({ id, reason: String(reason), online: onlineTrack })
+    }
     const run = async () => {
       const el = audio.current
       if (!el || seq !== epoch.current) return
@@ -804,7 +821,8 @@ function Music() {
       await host.playQueue(id, ids, el.currentTime, occurrence, pendingAlbum)
       startAudio(el)
     }
-    const operation = switching.current.then(run)
+    const operation = switching.current.then(run).catch(fail)
+      requested.current.src = src
     switching.current = operation.catch(() => {})
     return operation
   }
@@ -821,7 +839,15 @@ function Music() {
   }
   async function playSearchResult(key: string, quality?: string) {
     const request = ++epoch.current
-    const id = await host.rememberOnline(key, quality)
+    setPlayError(undefined)
+    setOnlineFailure(undefined)
+    let id: string
+    try {
+      id = await host.rememberOnline(key, quality)
+    } catch (error) {
+      if (request === epoch.current) throw Error(playbackReason(String(error), language, true))
+      return
+    }
     if (request !== epoch.current) return
     const ids = queue.includes(id) ? queue : [...queue, id]
     if (shuffled && !shuffled.includes(id)) setShuffled([...shuffled, id])
@@ -883,6 +909,8 @@ function Music() {
       el.pause()
       setPaused(true)
       if (current.current) await host.progress(current.current, el.currentTime, el.duration)
+    setPlayError(undefined)
+    setOnlineFailure(undefined)
       current.current = ''
       setLoadedId('')
       el.removeAttribute('src')
@@ -1260,6 +1288,8 @@ function Music() {
         if (request !== epoch.current) return
         if (!result.items.length) throw Error('音乐源中没有找到此录音')
         const exact = result.items.filter(
+    setPlayError(undefined)
+    setOnlineFailure(undefined)
           (v) =>
             v.title.trim().toLocaleLowerCase() === row.title.trim().toLocaleLowerCase() &&
             v.artist.trim().toLocaleLowerCase() === row.artist.trim().toLocaleLowerCase(),
@@ -1277,7 +1307,7 @@ function Music() {
       await refresh()
       if (request === epoch.current) await play(row.id, queueIds)
     } catch (e) {
-      if (request === epoch.current) throw e
+      if (request === epoch.current) setPlayError({ id: row.id, reason: String(e), online: true })
     } finally {
       setResolving(false)
     }
@@ -1321,8 +1351,12 @@ function Music() {
             setTab(data.value === 'download' ? discoveryMode : String(data.value))
           }}
         >
-          <Tab value="library">曲库</Tab>
-          <Tab value="playlists">歌单</Tab>
+          <Tab data-guide-anchor="library" value="library">
+            曲库
+          </Tab>
+          <Tab data-guide-anchor="playlists" value="playlists">
+            歌单
+          </Tab>
           <Tab value="download">找歌</Tab>
           <Tab value="feed">歌手</Tab>
           {pluginRows.some((r) => r.installed) && <Tab value="extensions">扩展</Tab>}
@@ -1594,10 +1628,6 @@ function Music() {
                   open={(id) => {
                     setSelectedPlugin(id)
                     setTab('extensions')
-                  }}
-                  guide={() => {
-                    guideOrigin.current = { tab, category: settingsCategory }
-                    visitGuide(0)
                   }}
                 />
               }
@@ -1991,6 +2021,7 @@ function Music() {
           <button
             type="button"
             className="music-disc music-cover-button"
+            data-guide-anchor="playback"
             aria-label="打开歌词页"
             title="打开歌词页"
             onClick={openPlayer}
@@ -2167,6 +2198,15 @@ function Music() {
             if (
               clip &&
               !clip.pending &&
+          onPlaying={(e) => {
+            if (
+              requested.current.src === e.currentTarget.currentSrc &&
+              requested.current.seq === epoch.current
+            ) {
+              setPlayError(undefined)
+              setOnlineFailure(undefined)
+            }
+          }}
               !e.currentTarget.paused &&
               current.current === clip.ids[clip.index] &&
               e.currentTarget.currentTime >= clip.until
@@ -2199,16 +2239,101 @@ function Music() {
                 e.currentTarget.error?.code === 4 || e.currentTarget.readyState === 0
                   ? host.mediaFailed(id, src)
                   : host.release(src)
+              return
+            if (
+              current.current.startsWith('online-recording-') &&
+              src.startsWith('fitbay-audio:')
+            ) {
+              const id = current.current,
+                seq = epoch.current,
+                { ids, occurrence } = playBatch.current
+              current.current = ''
+              setLoadedId('')
+              void host
+                .mediaFailed(id, src)
+                .then(async (failure) => {
+                  if (seq !== epoch.current) return
+                  setOnlineFailure({
+                    id,
+                    ids,
+                    occurrence,
+                    message: '音频传输或解码失败',
+                    choices: [],
+                    ...failure,
+                  })
+                  const position = occurrenceIndex(ids, id, occurrence)
+                  const next = ids[position + 1]
+                  if (position >= 0 && next)
+                    await navigate(
+                      next,
+                      ids,
+                      ids.slice(0, position + 1).filter((key) => key === next).length,
+                      true,
+                    )
+                  await refresh()
+                })
+                .catch(() => {})
+              return
+            }
+            setPlayError({
+              id: attempt.id,
+              online: attempt.id.startsWith('online-recording-'),
+              reason: e.currentTarget.error?.code === 2 ? 'network' : 'decode',
+            })
               )
                 .then(refresh)
-                .catch((e) => setError(String(e)))
+                .catch(() => {})
             }
           }}
           onEnded={() => void act(finishTrack)}
         >
           <track kind="captions" />
         </audio>
-        <p role="status">{error}</p>
+        {onlineFailure && (
+          <div role="status">
+            <span>
+              {trackById.get(onlineFailure.id)?.title} ·{' '}
+              {playbackReason(onlineFailure.message, language, true)}
+            </span>
+            {onlineFailure.choices.map((choice) => (
+              <button
+                key={choice.key}
+                onClick={() =>
+                  void act(async () => {
+                    await host.choosePlaybackVersion(onlineFailure.id, choice.key)
+                    await play(
+                      onlineFailure.id,
+                      onlineFailure.ids,
+                      onlineFailure.occurrence,
+                      true,
+                      [],
+                      0,
+                      true,
+                    )
+                    setOnlineFailure(undefined)
+                  })
+                }
+              >
+                {language === 'en' ? 'Play ' : '播放'}
+                {choice.title} · {choice.artist} · {choice.source}
+              </button>
+            ))}
+            <button onClick={() => setOnlineFailure(undefined)}>
+              {language === 'en' ? 'Dismiss' : '关闭播放提示'}
+            </button>
+          </div>
+        )}
+        <p role="status">
+          {playError
+            ? [
+                trackById.get(playError.id)?.title ??
+                  state?.items.find((r) => r.id === playError.id)?.title,
+                playbackReason(playError.reason, language, playError.online),
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : userMessage(error, language)}
+        </p>
       </footer>
     </ComponentTheme>
   )

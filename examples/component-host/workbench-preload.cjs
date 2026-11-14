@@ -59,5 +59,6 @@ contextBridge.exposeInMainWorld('componentHost', {
   ...componentBridge('prototype'),
   setMaterial: (value) => ipcRenderer.send('workbench:material', value),
   sampleEnabled: process.argv.includes('--enable-sample-component'),
+  setLanguage: (language) => ipcRenderer.send('workbench:language', language),
 })
 contextBridge.exposeInMainWorld('musicDock', componentBridge('music-prototype'))

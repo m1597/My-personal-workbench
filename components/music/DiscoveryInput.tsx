@@ -20,7 +20,7 @@ export function DiscoveryInput({
   return (
     <Input
       id={ai ? 'music-description' : 'music-search-keyword'}
-      data-guide-anchor={ai ? 'recommend' : undefined}
+      data-guide-anchor={ai ? 'recommend' : 'online'}
       aria-label={ai ? '想让 AI 推荐什么？（选填）' : '搜索关键词'}
       placeholder={ai ? '写下歌手、风格或场景，也可以留空' : '输入歌名、艺人或关键词'}
       ref={inputRef}
@@ -34,6 +34,7 @@ export function DiscoveryInput({
           size="small"
           appearance={ai ? 'primary' : 'subtle'}
           aria-label="AI 推荐"
+          data-guide-anchor={ai ? undefined : 'ai-toggle'}
           aria-pressed={ai}
           title={ai ? '切换到普通搜索' : '切换到 AI 推荐'}
           icon={<Sparkles size={16} />}

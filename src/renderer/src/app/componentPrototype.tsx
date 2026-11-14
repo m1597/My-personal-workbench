@@ -30,6 +30,7 @@ declare global {
       sampleEnabled?: boolean
       dropZone(value: Region[] | null): void
       setMaterial?(value: Material): void
+      setLanguage?(value: 'zh-CN' | 'en'): void
       overlayFrame?(): Promise<string | null>
       status(): Promise<HostState>
       close?(): Promise<void>

@@ -40,7 +40,22 @@ try {
   )
   const guide = () => page.getByRole('complementary', { name: 'Music 使用引导' })
   const help = page.getByRole('button', { name: '使用引导', exact: true })
-  const steps = ['sources', 'mcp', 'model', 'recommend']
+  const steps = [
+    'import',
+    'library',
+    'playlists',
+    'sources',
+    'online',
+    'ai-toggle',
+    'model',
+    'recommend',
+    'weight',
+    'tasks',
+    'artist',
+    'playback',
+    'plugins',
+    'mcp',
+  ]
   const next = () => guide().getByRole('button', { name: '下一步' }).click()
   await expect(guide()).toBeVisible()
   await expect(help).toBeVisible()
@@ -66,7 +81,8 @@ try {
       .toBe(true)
     if (id === 'recommend')
       await expect(page.getByRole('tab', { name: '找歌' })).toHaveAttribute('aria-selected', 'true')
-    else await expect(page.locator('.music-settings')).toBeVisible()
+    else if (['sources', 'model', 'mcp', 'plugins', 'import'].includes(id))
+      await expect(page.locator('.music-settings')).toBeVisible()
     if (id === 'mcp') {
       await expect(page.locator('.music-settings h2')).toHaveText('MCP')
       await expect(target).toHaveText('复制启动命令')
@@ -104,7 +120,7 @@ try {
       animations: 'disabled',
     })
     await help.click()
-    await expect(guide()).toContainText('导入音乐源')
+    await expect(guide()).toContainText('把音乐加入曲库')
     await guide().getByRole('button', { name: '跳过' }).click()
     await expect(tab).toHaveAttribute('aria-selected', 'true')
   }
@@ -130,7 +146,7 @@ try {
     true,
   )
   assert.equal(await readFile(oldFile, 'utf8'), 'window.legacyPluginStarted = true')
-  console.log('PASS 四页顶栏、四步引导、窄窗、旧插件不加载且原文件保留', root)
+  console.log('PASS 四页顶栏、十四步引导、窄窗、旧插件不加载且原文件保留', root)
 } finally {
   await app.close()
 }

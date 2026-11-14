@@ -45,12 +45,10 @@ export function PluginSettings({
   rows,
   reload,
   open,
-  guide,
 }: {
   rows: PluginRow[]
   reload: () => Promise<void>
   open: (id: string) => void
-  guide: () => void
 }) {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
@@ -75,7 +73,7 @@ export function PluginSettings({
   }
   return (
     <section>
-      <h2>插件</h2>
+      <h2 data-guide-anchor="plugins">插件</h2>
       {rows.map((row) => (
         <article className="music-plugin-row" key={row.id}>
           <div>
@@ -129,9 +127,6 @@ export function PluginSettings({
       ))}
       {busy && <p role="status">正在处理安装包…</p>}
       {message && <p role="status">{message}</p>}
-      <Button appearance="subtle" onClick={guide}>
-        重新查看使用引导
-      </Button>
     </section>
   )
 }

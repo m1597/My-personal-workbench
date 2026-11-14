@@ -108,6 +108,7 @@ export function RecommendationComposer({
         本次要求 {effectiveWeight}%
         <input
           type="range"
+          data-guide-anchor="weight"
           aria-label="本次要求权重"
           aria-valuetext={`本次要求 ${effectiveWeight}%，本地口味 ${100 - effectiveWeight}%`}
           min={0}

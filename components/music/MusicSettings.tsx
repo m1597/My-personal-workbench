@@ -311,6 +311,7 @@ export function MusicSettings({
               </Button>
               <Button
                 disabled={job.running || busy}
+                data-guide-anchor="import"
                 onClick={() => void update(() => window.music.importLocal('folder'), '')}
               >
                 添加文件夹

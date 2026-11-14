@@ -682,6 +682,7 @@ export function ArtistReleases({
             >
               <Input
                 aria-label="要关注的歌手"
+                data-guide-anchor="artist"
                 maxLength={160}
                 value={query}
                 placeholder="输入歌手名"

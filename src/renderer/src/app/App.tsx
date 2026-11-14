@@ -23,6 +23,7 @@ export default function App() {
   const [preferences, setPreferences] = useState(readPreferences)
   useLayoutEffect(() => {
     const root = document.documentElement
+    window.componentHost?.setLanguage?.(preferences.language)
     root.lang = preferences.language
     root.dataset.workbenchFont = preferences.font
     root.dataset.workbenchSize = preferences.size

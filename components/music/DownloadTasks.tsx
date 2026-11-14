@@ -40,6 +40,7 @@ export function DownloadTasks({ batch, saved }: { batch?: Batch; saved: number }
           size="small"
           appearance="subtle"
           aria-label="下载任务"
+          data-guide-anchor="tasks"
           title="下载任务"
           icon={<Download size={17} />}
         />

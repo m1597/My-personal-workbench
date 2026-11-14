@@ -7,6 +7,7 @@ import { watchNativeDock, positionAtRelease, outsideRelease } from './native-doc
 import { musicThumbnails } from './music-thumbnails.mjs'
 export function componentView({
   music,
+  language = 'zh-CN',
   componentRoot,
   here,
   shell,
@@ -50,6 +51,7 @@ export function componentView({
     mode,
     material: mode === 'docked' ? material : undefined,
     presentation,
+    language,
     phase,
     error,
     sessionId,
@@ -344,6 +346,11 @@ export function componentView({
       material = next
       if (mode === 'docked' && view && !view.webContents.isDestroyed())
         view.webContents.send(music ? 'music-sample:state' : 'sample:state', snapshot())
+    setLanguage(next) {
+      language = next
+      if (view && !view.webContents.isDestroyed())
+        view.webContents.send('music-sample:state', snapshot())
+    },
     },
     discover,
     preview,

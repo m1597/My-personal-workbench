@@ -13,6 +13,7 @@ import {
   systemPreferences,
   Menu,
 } from 'electron'
+import { readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { access, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -181,6 +182,13 @@ const shared = {
   supportsAcrylic,
   isQuitting: () => quitting,
 }
+const languageFile = path.join(profile, 'interface-language')
+let language = 'zh-CN'
+try {
+  if (readFileSync(languageFile, 'utf8') === 'en') language = 'en'
+} catch {
+  /* A new profile uses Chinese. */
+}
 const sample = componentView({ ...shared, componentRoot, music: false })
 let closeSourcePipe
 let musicRuntime
@@ -208,6 +216,7 @@ async function loadMusic(root) {
   })
 }
 const music = componentView({
+  language,
   configureSession: async (s, root) => {
     await startMusic(root)
     musicRuntime.register(s)
@@ -295,6 +304,17 @@ else {
             pendingInstall = undefined
           })
         return pendingInstall
+      })
+      ipcMain.on('workbench:language', (event, value) => {
+        if (!isShell(event) || !['zh-CN', 'en'].includes(value) || language === value) return
+        language = value
+        music.setLanguage(value)
+        try {
+          writeFileSync(languageFile + '.tmp', value)
+          renameSync(languageFile + '.tmp', languageFile)
+        } catch {
+          /* The active session still uses the selected language. */
+        }
       })
       ipcMain.on('workbench:material', (event, value) => {
         if (
