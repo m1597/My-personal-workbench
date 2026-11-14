@@ -389,6 +389,36 @@ export function Highlights({
     </div>
   )
 }
+function FollowButton({
+  artist,
+  following,
+  disabled,
+  toggle,
+}: {
+  artist: Artist
+  following: boolean
+  disabled: boolean
+  toggle: (id: string, on: boolean) => void
+}) {
+  return (
+    <Button
+      size="small"
+      className="artist-follow-button"
+      disabled={disabled}
+      aria-label={(following ? '取消关注' : '关注') + artist.name}
+      onClick={() => toggle(artist.id, !following)}
+    >
+      {following ? (
+        <>
+          <span className="follow-status">已关注</span>
+          <span className="follow-cancel">取消关注</span>
+        </>
+      ) : (
+        '关注'
+      )}
+    </Button>
+  )
+}
 function SimilarArtists({
   openArtist,
   seed,
@@ -401,7 +431,7 @@ function SimilarArtists({
   seed: Artist
   followed: Artist[]
   busy: boolean
-  follow: (id: string) => void
+  follow: (id: string, on: boolean) => void
   play: PlayRecording
 }) {
   const [rows, setRows] = useState<Artist[]>()
@@ -424,7 +454,6 @@ function SimilarArtists({
       live = false
     }
   }, [seed.id, retry])
-  const visible = rows?.filter((a) => !followed.some((f) => f.id === a.id))
   return (
     <section className="similar-artists" aria-label="相似歌手">
       <h3>与{seed.name}相似的歌手</h3>
@@ -435,13 +464,13 @@ function SimilarArtists({
             重试
           </Button>
         </small>
-      ) : !visible ? (
+      ) : !rows ? (
         <small role="status">正在查找相似歌手…</small>
-      ) : !visible.length ? (
+      ) : !rows.length ? (
         <small>暂无相关歌手。</small>
       ) : (
         <ul>
-          {visible.map((a) => (
+          {rows.map((a) => (
             <li key={a.id} className="release-event">
               <div className="release-event-head">
                 <div>
@@ -457,9 +486,12 @@ function SimilarArtists({
                 >
                   {open === a.id ? '收起代表作' : '代表作'}
                 </Button>
-                <Button size="small" disabled={busy} onClick={() => follow(a.id)}>
-                  关注{a.name}
-                </Button>
+                <FollowButton
+                  artist={a}
+                  following={followed.some((f) => f.id === a.id)}
+                  disabled={busy}
+                  toggle={follow}
+                />
               </div>
               {open === a.id && <Highlights id={a.id} play={play} />}
             </li>
@@ -571,7 +603,9 @@ export function ArtistReleases({
   const [news, setNews] = useState<News[]>()
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  const searchVersion = useRef(0)
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
   const alive = useRef(true)
   async function act(fn: () => Promise<void>) {
     setBusy(true)
@@ -600,6 +634,21 @@ export function ArtistReleases({
       alive.current = false
     }
   }, [])
+  async function search() {
+    const term = query.trim()
+    if (!term) return
+    const request = ++searchVersion.current
+    setSearching(true)
+    setSearchError('')
+    try {
+      const found = await window.music.findArtists(term)
+      if (alive.current && searchVersion.current === request) setMatches(found)
+    } catch (error) {
+      if (alive.current && searchVersion.current === request) setSearchError(message(error))
+    } finally {
+      if (alive.current && searchVersion.current === request) setSearching(false)
+    }
+  }
   function toggle(id: string, on: boolean) {
     void act(async () => {
       const list = await window.music.followArtist(id, on)
@@ -643,23 +692,61 @@ export function ArtistReleases({
         <section className="followed-artists" aria-label="我关注的歌手">
           <header>
             <h2>我关注的歌手</h2>
-            <Button size="small" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-              管理关注
-            </Button>
           </header>
+          <div className="artist-management">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void search()
+              }}
+            >
+              <Input
+                aria-label="要关注的歌手"
+                maxLength={160}
+                value={query}
+                placeholder="输入歌手名"
+                onChange={(_, d) => {
+                  searchVersion.current++
+                  setQuery(d.value)
+                  setSearchError('')
+                  setSearching(false)
+                  setMatches(undefined)
+                }}
+              />
+              <Button size="small" type="submit" disabled={!query.trim() || searching}>
+                查找歌手
+              </Button>
+            </form>
+            {searchError && <small role="alert">{searchError}</small>}
+            {searching && <small role="status">正在查找歌手…</small>}
+            {matches?.length === 0 && <small role="status">没有找到匹配的歌手</small>}
+            {matches
+              ?.filter((a) => !followed.some((f) => f.id === a.id))
+              .map((a) => (
+                <div className="artist-search-result" key={a.id}>
+                  <span>
+                    {a.name} <small>{a.detail}</small>
+                  </span>
+                  <FollowButton artist={a} following={false} disabled={busy} toggle={toggle} />
+                </div>
+              ))}
+          </div>
           <div className="followed-artist-grid">
             {followed.map((artist) => (
-              <button
-                type="button"
-                key={artist.id}
-                onClick={() => {
-                  setSelected(artist)
-                  openArtist(artist)
-                }}
-              >
-                <ArtistPortrait id={artist.id} />
-                <span>{artist.name}</span>
-              </button>
+              <div className="followed-artist-card" key={artist.id}>
+                <button
+                  className="artist-home-link"
+                  type="button"
+                  onClick={() => {
+                    setSelected(artist)
+                    openArtist(artist)
+                  }}
+                >
+                  <ArtistPortrait id={artist.id} />
+                  <span>{artist.name}</span>
+                </button>
+                <FollowButton artist={artist} following disabled={busy} toggle={toggle} />
+              </div>
             ))}
           </div>
           {selected || followed.length === 1 ? (
@@ -669,60 +756,14 @@ export function ArtistReleases({
               seed={selected ?? followed[0]}
               followed={followed}
               busy={busy}
-              follow={(id) => {
+              follow={(id, on) => {
                 if (!selected && followed.length === 1) setSelected(followed[0])
-                toggle(id, true)
+                toggle(id, on)
               }}
               play={play}
             />
           ) : (
             followed.length > 1 && <small>选择上方歌手，查看歌曲与发行。</small>
-          )}
-          {expanded && (
-            <div className="artist-management">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  if (query.trim() && !busy)
-                    void act(async () => {
-                      setMatches(await window.music.findArtists(query.trim()))
-                    })
-                }}
-              >
-                <Input
-                  aria-label="要关注的歌手"
-                  maxLength={160}
-                  value={query}
-                  placeholder="输入歌手名"
-                  onChange={(_, d) => {
-                    setQuery(d.value)
-                    setMatches(undefined)
-                  }}
-                />
-                <Button size="small" type="submit" disabled={busy || !query.trim()}>
-                  查找歌手
-                </Button>
-              </form>
-              {matches?.length === 0 && <p>没有找到匹配的歌手</p>}
-              {matches
-                ?.filter((a) => !followed.some((f) => f.id === a.id))
-                .map((a) => (
-                  <div key={a.id}>
-                    {a.name} <small>{a.detail}</small>{' '}
-                    <Button size="small" disabled={busy} onClick={() => toggle(a.id, true)}>
-                      关注{a.name}
-                    </Button>
-                  </div>
-                ))}
-              {followed.map((a) => (
-                <div key={a.id}>
-                  {a.name} <small>{a.detail}</small>{' '}
-                  <Button size="small" disabled={busy} onClick={() => toggle(a.id, false)}>
-                    取消关注{a.name}
-                  </Button>
-                </div>
-              ))}
-            </div>
           )}
         </section>
       </section>

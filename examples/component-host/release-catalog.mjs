@@ -104,8 +104,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     if (!mbid.test(id) || !followed().some((a) => a.id === id)) throw Error('请先选择已关注歌手')
     const data = await metadata('artist/' + id, { inc: 'artist-rels+genres' })
     const candidates = new Map()
-    const excluded = new Set(followed().map((a) => a.id))
-    excluded.add(id)
+    const excluded = new Set([id])
     for (const rel of data.relations ?? []) {
       if (rel.type === 'is person') excluded.add(rel.artist?.id)
     }

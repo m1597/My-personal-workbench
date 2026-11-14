@@ -116,7 +116,7 @@ try {
   await expect(group.locator('.album-art img')).toHaveAttribute('src', /^data:image/)
   await shot('往年发行')
   await group.getByRole('button', { name: '返回' }).click()
-  await btn('管理关注').click()
+  await expect(btn('管理关注')).toHaveCount(0)
   await expect(btn('取消关注青禾')).toBeVisible()
   await page.getByRole('tab', { name: '曲库', exact: true }).click()
   for (const [idx, title] of ['暖阳', '深海', '云端'].entries()) {

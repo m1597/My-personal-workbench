@@ -87,7 +87,34 @@
   grid-template-columns: repeat(auto-fill, minmax(min(88px, 100%), 1fr));
   gap: var(--space-8);
 }
-.followed-artist-grid button {
+.followed-artist-card {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: var(--space-4);
+}
+.artist-management form > .fui-Input {
+  flex: 1;
+  min-width: 0;
+}
+.artist-search-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+.artist-follow-button {
+  white-space: nowrap;
+}
+.artist-follow-button .follow-cancel,
+.artist-follow-button:is(:hover, :focus-visible) .follow-status {
+  display: none;
+}
+.artist-follow-button:is(:hover, :focus-visible) .follow-cancel {
+  display: inline;
+}
+.artist-home-link {
   display: grid;
   justify-items: center;
   align-content: start;
@@ -101,22 +128,21 @@
   border-radius: var(--panel-radius);
   cursor: pointer;
 }
-.followed-artist-grid button:hover,
-.followed-artist-grid button[aria-pressed="true"] {
+.artist-home-link:hover {
   background: var(--control);
   border-color: var(--stroke);
 }
-.followed-artist-grid button:focus-visible {
+.artist-home-link:focus-visible {
   outline: 2px solid var(--accent);
 }
-.followed-artist-grid button > .album-art,
-.followed-artist-grid button > img {
+.artist-home-link > .album-art,
+.artist-home-link > img {
   width: min(100%, 60px);
   aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
 }
-.followed-artist-grid button > span:last-child {
+.artist-home-link > span:last-child {
   overflow-wrap: anywhere;
 }
 .release-event-head > .album-art {
