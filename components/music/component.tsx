@@ -1,6 +1,7 @@
 import { useLibrarySearch } from './useLibrarySearch'
 import { useOutputDevice } from './PlayerOptionsPane'
 import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
+import { filterLocalSongs } from './localSearch'
 import { RevealTrackContext, TrackMenu } from './TrackMenu'
 import { Cover, type Album } from './AlbumBrowser'
 import { NowPlaying, type LyricLine } from './NowPlaying'
@@ -583,12 +584,8 @@ function Music() {
     ? librarySearch.ids && searchMembers
       ? librarySearch.ids.flatMap((id) => searchMembers.get(id) ?? [])
       : [...categoryRows]
-    : categoryRows.filter((row) =>
-        [row.title, row.artist, row.album].some((value) =>
-          value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
-        ),
-      )
-  if (!librarySearch.ids && collection === 'all' && recentImports)
+    : filterLocalSongs(categoryRows, search)
+  if (!search.trim() && !librarySearch.ids && collection === 'all' && recentImports)
     localRows.sort((a, b) =>
       a.origin !== 'online' && b.origin !== 'online' ? b.observedAt - a.observedAt : 0,
     )

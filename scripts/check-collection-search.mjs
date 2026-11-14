@@ -10,14 +10,14 @@ const profile = path.join(root, 'profile')
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
 store.set('music-guide-v1', 1)
 store.set('music-media-keys', 'off')
-const titles = ['夜路轻步', '街角慢拍', '正午重鼓']
+const titles = ['夜路轻步', '七里香 Love', '正午重鼓']
 for (const [i, title] of titles.entries()) {
   const file = path.join(root, title + '.wav')
   await writeFixtureRecording(file, i + 1, 10)
   store.library.upsert({
     file,
     title,
-    artist: '测试乐队',
+    artist: ['张佳玲', '周杰伦', '测试乐队'][i],
     album: i === 2 ? '午后专辑' : '散步专辑',
     duration: 10,
     size: (await fs.stat(file)).size,
@@ -34,7 +34,7 @@ store.db.prepare('UPDATE local_tracks SET available=0,favorite=1 WHERE title=?')
 const tracks = store.library.list()
 store.library.createPlaylist(
   '夜行歌单',
-  tracks.filter((t) => t.title !== '街角慢拍').map((t) => t.id),
+  tracks.filter((t) => t.title !== titles[1]).map((t) => t.id),
 )
 store.db.close()
 const app = await electron.launch({
@@ -83,14 +83,30 @@ try {
   await input.fill('散步专辑')
   await expect(rows).toHaveCount(2)
   await input.press('Enter')
-  await input.fill('测试乐队')
-  await expect(rows).toHaveCount(3)
+  for (const [term, count] of [
+    ['测试乐队', 1],
+    ['qilixiang', 1],
+    ['qlx', 1],
+    ['qlxlove', 1],
+    ['zhoujielun', 1],
+    ['zjl', 2],
+  ]) {
+    await input.fill(term)
+    await expect(rows).toHaveCount(count)
+    if (term !== '测试乐队') await expect(rows.filter({ hasText: titles[1] })).toHaveCount(1)
+  }
   assert.equal((await calls()).length, 0)
   for (const mode of ['library', 'playlist']) {
     if (mode === 'playlist') {
       await press(page.getByRole('tab', { name: '歌单', exact: true }))
       await press(page.getByRole('button', { name: '夜行歌单', exact: true }))
       await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+      await input.fill('qlx')
+      await expect(rows).toHaveCount(0)
+      await input.fill('zjl')
+      await expect(rows).toHaveCount(1)
+      await expect(rows.first()).toContainText(titles[0])
+      assert.equal((await calls()).length, 1)
     }
     await press(toggle)
     await expect(toggle).toHaveAttribute('aria-pressed', 'true')
@@ -113,7 +129,7 @@ try {
     )
     await expect(rows).toHaveCount(mode === 'library' ? 2 : 1)
     await expect(rows.filter({ hasText: '正午重鼓' })).toHaveCount(0)
-    const title = mode === 'library' ? '街角慢拍' : '夜路轻步'
+    const title = mode === 'library' ? titles[1] : titles[0]
     await press(page.getByRole('button', { name: '播放' + title, exact: true }))
     await expect
       .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0))

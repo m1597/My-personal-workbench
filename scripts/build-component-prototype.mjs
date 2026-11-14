@@ -48,6 +48,7 @@ for (const [source, output] of [
   for (const file of ['index.html', 'component.json'])
     await cp(`${source}/${file}`, `${root}/${output}/${file}`)
   if (output === 'music') {
+    await cp('node_modules/pinyin-pro/LICENSE', `${root}/music/pinyin-pro-LICENSE.txt`)
     for (const name of ['default-cover.png', 'default-artist.webp']) {
       await cp(`${source}/${name}`, `${root}/music/${name}`)
     }
