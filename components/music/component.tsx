@@ -1396,7 +1396,7 @@ function Music() {
             />
           )
         ) : tab === 'feed' ? (
-          <ArtistReleases search={searchRelease} />
+          <ArtistReleases play={playSearchResult} />
         ) : tab === 'download' ? (
           <DownloadPane
             initialQuery={releaseSearch || undefined}

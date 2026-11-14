@@ -27,7 +27,16 @@ export interface ReleaseAPI {
   editionTracks(id: string): Promise<ReleaseTrack[]>
 }
 const message = (error: unknown) => String(error).split('Error: ').at(-1) || '读取发行资料失败'
-function NewsTracks({ group, search }: { group: News; search: (q: string) => void }) {
+type PlayRecording = (key: string) => Promise<void>
+const artistNames = (name: string) =>
+  normalize(name)
+    .split(/\s*(?:\/|、|;|＆|&|\bfeat\.?\s+|\bfeaturing\s+)\s*/u)
+    .filter(Boolean)
+
+function NewsTracks({ group, play }: { group: News; play: PlayRecording }) {
+  const [pending, setPending] = useState('')
+  const [playError, setPlayError] = useState('')
+  const attempt = useRef(0)
   const [editions, setEditions] = useState<Edition[]>([])
   const [selected, setSelected] = useState('')
   const [tracks, setTracks] = useState<ReleaseTrack[]>()
@@ -72,6 +81,38 @@ function NewsTracks({ group, search }: { group: News; search: (q: string) => voi
       active = false
     }
   }, [selected, trackRetry])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changing edition invalidates pending playback lookup.
+  useEffect(() => {
+    setPending('')
+    setPlayError('')
+    return () => {
+      attempt.current++
+    }
+  }, [selected])
+  async function listen(track: ReleaseTrack) {
+    const request = ++attempt.current
+    setPending(track.disc + ':' + track.number)
+    setPlayError('')
+    try {
+      const artists = artistNames(track.artist)
+      const result = await window.music.lxSearch({ title: track.title, artist: artists[0] ?? '' })
+      if (attempt.current !== request) return
+      const matches = result.items.filter(
+        (item) =>
+          normalize(item.title) === normalize(track.title) &&
+          (!artists.length || artistNames(item.artist).some((name) => artists.includes(name))) &&
+          (item.quality === undefined || item.quality.length > 0),
+      )
+      const recording =
+        matches.find((item) => normalize(item.album) === normalize(group.title)) ?? matches[0]
+      if (!recording) throw Error('未找到这首歌的可播放版本')
+      await play(recording.key)
+    } catch (e) {
+      if (attempt.current === request) setPlayError(track.title + ' · ' + message(e))
+    } finally {
+      if (attempt.current === request) setPending('')
+    }
+  }
   return (
     <div className="release-track-picker">
       {editions.length > 1 && (
@@ -116,13 +157,14 @@ function NewsTracks({ group, search }: { group: News; search: (q: string) => voi
                 </strong>
                 <small>{t.artist}</small>
               </div>
-              <Button size="small" onClick={() => search(t.title + ' ' + t.artist)}>
-                选择版本播放
+              <Button size="small" disabled={Boolean(pending)} onClick={() => void listen(t)}>
+                {pending === t.disc + ':' + t.number ? '正在查找…' : '播放'}
               </Button>
             </li>
           ))}
         </ol>
       )}
+      {playError && <small role="alert">{playError}</small>}
     </div>
   )
 }
@@ -150,11 +192,11 @@ function ArtistPortrait({ id }: { id: string }) {
 }
 function ReleaseList({
   rows,
-  search,
+  play,
   albums,
 }: {
   rows: News[]
-  search: (q: string) => void
+  play: PlayRecording
   albums: Album[]
 }) {
   const [openGroup, setOpenGroup] = useState('')
@@ -187,13 +229,13 @@ function ReleaseList({
               {openGroup === r.id ? '收起曲目' : '查看曲目'}
             </Button>
           </div>
-          {openGroup === r.id && <NewsTracks group={r} search={search} />}
+          {openGroup === r.id && <NewsTracks group={r} play={play} />}
         </li>
       ))}
     </ul>
   )
 }
-export function ArtistReleases({ search }: { search: (query: string) => void }) {
+export function ArtistReleases({ play }: { play: PlayRecording }) {
   const [selected, setSelected] = useState<Artist>()
   const [discography, setDiscography] = useState<News[]>()
   const [artistError, setArtistError] = useState('')
@@ -291,7 +333,7 @@ export function ArtistReleases({ search }: { search: (query: string) => void }) 
         ) : (
           news?.length === 0 && <p>近 90 天暂无新发行。</p>
         ))}
-      <ReleaseList rows={news ?? []} albums={albums} search={search} />
+      <ReleaseList rows={news ?? []} albums={albums} play={play} />
       <section className="followed-artists" aria-label="我关注的歌手">
         <header>
           <h2>我关注的歌手</h2>
@@ -329,7 +371,7 @@ export function ArtistReleases({ search }: { search: (query: string) => void }) 
               </p>
             ) : discography ? (
               discography.length ? (
-                <ReleaseList rows={discography} albums={albums} search={search} />
+                <ReleaseList rows={discography} albums={albums} play={play} />
               ) : (
                 <p>暂无发行资料。</p>
               )
