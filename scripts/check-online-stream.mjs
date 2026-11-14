@@ -45,7 +45,10 @@ async function checkRestoredTrial(profile) {
   const { items } = await handlers.get('lxSearch')({ title: '原查询', artist: '' }, 'wy')
   const id = handlers.get('rememberOnline')(items[0].key, '320k')
   const signal = new AbortController().signal
-  assert.equal(await first.onlineAddress(id)(signal), 'https://1.1.1.1/trial')
+  assert.equal(
+    await first.onlinePlayback(id, id).connect(signal, async (url) => url),
+    'https://1.1.1.1/trial',
+  )
   first.close()
   store.db
     .prepare('UPDATE online_recording_sources SET query=? WHERE id=?')
@@ -55,7 +58,10 @@ async function checkRestoredTrial(profile) {
     .get(id)
   assert.ok(!stored.identifiers.includes('temporary-secret'))
   const restarted = newSession()
-  assert.equal(await restarted.onlineAddress(id)(signal), 'https://1.1.1.1/trial')
+  assert.equal(
+    await restarted.onlinePlayback(id, id).connect(signal, async (url) => url),
+    'https://1.1.1.1/trial',
+  )
   restarted.close()
   store.db.close()
 }

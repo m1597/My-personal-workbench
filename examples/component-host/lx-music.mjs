@@ -1,3 +1,5 @@
+import { playlistPlayback } from './playlist-playback.mjs'
+import { playbackRepositories } from './playback-repositories.mjs'
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
 import {
   titleMatch,
@@ -605,6 +607,7 @@ function recordingId(src, row) {
 function durableRecording(src, row) {
   const out = {
     source: src.platform,
+    nativeCatalog: !src.search,
     name: text(row.name),
     singer: text(row.singer),
     albumName: text(row.albumName),
@@ -616,6 +619,7 @@ function durableRecording(src, row) {
     'id',
     'songmid',
     'songId',
+    'isrc',
     'strMediaMid',
     'albumId',
     'albumMid',
@@ -636,6 +640,7 @@ function durableRecording(src, row) {
     'downloadable',
   ])
     if (typeof row[key] === 'boolean') out[key] = row[key]
+  if (row.freeTrialInfo) out.isPreview = true
   if (Array.isArray(row.types)) {
     out.types = row.types
       .filter((t) => src.quality.includes(t?.type))
@@ -787,9 +792,43 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }
     return bank
   }
+  const repositories = () => playbackRepositories(getStore(), catalog())
+  let playbackRefresh
+  function refreshPlayback(scope) {
+    if (playbackRefresh?.scope === scope) return playbackRefresh.work
+    playbackRefresh?.controller.abort()
+    const controller = new AbortController()
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])
+    const work = Promise.allSettled([
+      bootstrapRun ?? catalog().synchronize(signal),
+      repositories().refresh(signal),
+    ])
+    playbackRefresh = { scope, controller, work }
+    return work
+  }
+  const playback = playlistPlayback({
+    store: getStore,
+    search: downloadResults,
+    identify: recordingId,
+    qualities: recordingQualities,
+    availableSources,
+    address: recordingAddress,
+    preferred: () => getMusicPreferences(getStore()).previewQuality,
+    refresh: refreshPlayback,
+  })
+  bind('setPlaybackRepository', (url, enabled) => {
+    repositories().configure(url, enabled)
+    playbackRefresh?.controller.abort()
+    playbackRefresh = undefined
+  })
+  bind('choosePlaybackVersion', playback.choose)
   bind('lxSources', async () => {
     await catalog().upgrade()
-    return { ...catalog().list(), configuration: catalog().configuration() }
+    return {
+      ...catalog().list(),
+      repositories: repositories().read(),
+      configuration: catalog().configuration(),
+    }
   })
   bind(
     'lxRefreshCatalog',
@@ -1828,82 +1867,14 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     return { record, src }
   }
   return {
-    onlineAddress(id) {
-      const { record, src } = onlineRecording(id)
-      const preferred = getMusicPreferences(getStore()).previewQuality
-      let preferredSource = src
-      const resolve = async (entry, signal) => {
-        const quality = chooseQuality(recordingQualities(src, entry), preferred)
-        if (!quality) throw Error('此版本没有可试听音质')
-        // Only replay platform-native metadata and stable platform recording IDs to alternate resolvers.
-        const alternatives =
-          getStore().get('lx-bootstrap') &&
-          !src.search &&
-          recordingId(src, entry) &&
-          !['preview', 'denied'].includes(permission(src, entry))
-            ? catalog().alternatives(src.platform, quality, src.code)
-            : []
-        if (!alternatives.length) return recordingAddress(src, entry, quality, signal)
-        const probe = async (candidate, work) => {
-          const url = await recordingAddress(candidate, entry, quality, work)
-          const upstream = await openPublic(url, { mediaRange: 'bytes=0-0', signal: work })
-          try {
-            if (
-              ![200, 206].includes(upstream.statusCode) ||
-              !/^(?:audio\/|application\/(?:ogg|octet-stream)|video\/mp4)/i.test(
-                upstream.headers['content-type'] || 'application/octet-stream',
-              )
-            )
-              throw Error('试听地址不可用')
-            return url
-          } finally {
-            upstream.destroy()
-          }
-        }
-        const candidates = [src, ...alternatives].sort(
-          (a, b) =>
-            Number(b.code === preferredSource.code) - Number(a.code === preferredSource.code),
-        )
-        for await (const { src: provider, candidate: url } of availableSources(
-          candidates,
-          probe,
-          signal,
-          4,
-        )) {
-          if (url) {
-            preferredSource = provider
-            return url
-          }
-        }
-        throw Error('已导入音乐源暂时无法播放此录音')
-      }
-      let row = onlineRows.get(id)
-      return async (signal) => {
-        if (!row) {
-          // Only FitBay's own catalog adapters define the complete shape sent to musicUrl.
-          // A custom search can attach arbitrary playback policy or transient tokens to its row.
-          if (!src.search) {
-            try {
-              const saved = JSON.parse(record.identifiers)
-              const url = await resolve(saved, signal)
-              row = saved
-              return url
-            } catch {
-              signal.throwIfAborted()
-            }
-          }
-          const { rows } = await downloadResults(
-            src,
-            JSON.parse(record.query),
-            signal,
-            record.recording,
-          )
-          row = rows[0]
-          if (!row) throw Error('音乐源中已找不到该录音，请重新搜索')
-        }
-        return resolve(row, signal)
-      }
+    onlinePlayback(id, scope) {
+      const record = getStore()
+        .db.prepare('SELECT * FROM online_recording_sources WHERE id=?')
+        .get(id)
+      if (!record) throw Error('歌单录音引用不存在')
+      return playback.open(id, record, onlineRows.get(id), scope)
     },
+    playbackChoices: playback.list,
     startBootstrap,
     synchronizeSources(signal) {
       if (bootstrapRun && !catalog().independentManual()) {
@@ -2069,6 +2040,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
     },
     close() {
+      playback.clear()
+      playbackRefresh?.controller.abort()
+      playbackRefresh = undefined
       clearTimeout(retryTimer)
       bootstrap?.abort()
       bootstrap = undefined

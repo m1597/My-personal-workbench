@@ -15,6 +15,7 @@ type Installed = CatalogEntry & {
   permanentSave: boolean | null
 }
 export type SourceInventory = {
+  repositories?: { configured: string[]; discovered: string[] }
   configuration: string
   catalog: CatalogEntry[]
   installed: Installed[]
@@ -28,6 +29,7 @@ export function MusicSourcesSettings() {
   const [catalogOpen, setCatalogOpen] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [link, setLink] = useState('')
+  const [repository, setRepository] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
   const active = data?.installed.find((item) => item.id === data.active)
@@ -221,6 +223,52 @@ export function MusicSourcesSettings() {
               刷新目录
             </Button>
           </div>
+        </fieldset>
+      )}
+      {catalogOpen && (
+        <fieldset>
+          <legend>播放备用目录</legend>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void run(async () => {
+                await host.setPlaybackRepository(repository.trim(), true)
+                setRepository('')
+              })
+            }}
+          >
+            <Input
+              aria-label="备用目录地址"
+              placeholder="目录清单 URL"
+              value={repository}
+              onChange={(_, d) => setRepository(d.value)}
+            />
+            <Button type="submit" disabled={busy || !repository.trim()}>
+              添加目录
+            </Button>
+          </form>
+          {data?.repositories?.configured.map((url) => (
+            <p key={url}>
+              {url}{' '}
+              <Button
+                disabled={busy}
+                onClick={() => void run(() => host.setPlaybackRepository(url, false))}
+              >
+                移除目录
+              </Button>
+            </p>
+          ))}
+          {data?.repositories?.discovered.map((url) => (
+            <p key={url}>
+              发现的目录 · {url}{' '}
+              <Button
+                disabled={busy}
+                onClick={() => void run(() => host.setPlaybackRepository(url, true))}
+              >
+                使用此目录
+              </Button>
+            </p>
+          ))}
         </fieldset>
       )}
       {status && <span role="status">{status}</span>}

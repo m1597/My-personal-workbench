@@ -373,7 +373,7 @@ export function musicService(
     grant?.controller?.abort()
     grant = null
   }
-  bind('localSource', async (id) => {
+  bind('localSource', async (id, scope) => {
     releaseGrant()
     const play = playbackEpoch
     const epoch = viewEpoch
@@ -391,11 +391,11 @@ export function musicService(
         }
         return grant.url
       }
-      const address = lx.onlineAddress(id)
+      const playback = lx.onlinePlayback(id, typeof scope === 'string' ? scope.slice(0, 128) : id)
       store.release()
       grant = {
         id,
-        address,
+        connect: playback.connect,
         controller: new AbortController(),
         url: 'fitbay-audio://track/' + randomUUID(),
       }
@@ -466,8 +466,12 @@ export function musicService(
   bind('mediaFailed', (id, url) => {
     if (grant && grant.id === id && grant.url === url) {
       if (grant.controller) {
+        const failure = {
+          message: grant.failure || '音频传输或解码失败',
+          choices: lx.playbackChoices(id),
+        }
         releaseGrant()
-        return
+        return failure
       }
       if (grant.audition) {
         store.status(id, '文件缺失')

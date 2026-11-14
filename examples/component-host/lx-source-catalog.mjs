@@ -456,7 +456,7 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     const health = validReport ? report : JSON.parse(get('lx-source-health') || 'null')
     const included = new Set(index.map((row) => row.id))
     const removed = (origin) =>
-      !included.has(origin) && completeTree && !gitBlobs.has(origin + '/latest.js')
+      !origin.startsWith('backup-') && !included.has(origin) && completeTree && !gitBlobs.has(origin + '/latest.js')
     const retained = entries().filter((row) => !included.has(row.id) && !removed(row.id))
     const dead = (origin) => ['失效', '停用', '已停用'].includes(health?.[origin])
     transaction(() => {

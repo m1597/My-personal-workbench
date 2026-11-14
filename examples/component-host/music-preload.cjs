@@ -9,6 +9,8 @@ const names = [
   'unlockLyrics',
   'lyricLine',
   'lxSources',
+  'choosePlaybackVersion',
+  'setPlaybackRepository',
   'lxRefreshCatalog',
   'lxImportSelected',
   'lxSelectSource',

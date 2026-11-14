@@ -151,7 +151,11 @@ type State = {
   hasLibrary: boolean
 }
 type Presentation = 'full' | 'bar' | 'background'
-type Mode = { mode: string; presentation: Presentation }
+type Mode = { language?: 'zh-CN' | 'en'; mode: string; presentation: Presentation }
+type PlaybackFailure = {
+  message: string
+  choices: { key: string; title: string; artist: string; source: string }[]
+}
 declare global {
   interface Window {
     music: LibraryToolsAPI &
@@ -180,6 +184,8 @@ declare global {
         onLyricsSaved(listener: () => void): () => void
         onLibraryChanged(listener: (removed: string[]) => void): () => void
         onSourcesChanged(listener: () => void): () => void
+        setPlaybackRepository(url: string, enabled: boolean): Promise<void>
+        choosePlaybackVersion(id: string, key: string): Promise<void>
         lxSources(): Promise<SourceInventory>
         lxRefreshCatalog(): Promise<SourceInventory>
         lxImportSelected(ids: string[]): Promise<{ origin: string; id?: string; error?: string }[]>
@@ -239,8 +245,8 @@ declare global {
         renamePlaylist(id: string, name: string): Promise<void>
         deletePlaylist(id: string): Promise<void>
         relocateLocal(id: string): Promise<void>
-        mediaFailed(id: string, url: string): Promise<void>
-        localSource(id: string): Promise<string>
+        mediaFailed(id: string, url: string): Promise<void | PlaybackFailure>
+        localSource(id: string, scope?: string): Promise<string>
         rememberOnline(key: string, quality?: string): Promise<string>
         downloadSelection(ids: string[]): Promise<SelectionDownload[]>
         dismissRecommendation(id: string): Promise<void>
@@ -383,6 +389,13 @@ function Music() {
     [loadedId, setLoadedId] = useState(''),
     [error, setError] = useState(''),
     [docked, setDocked] = useState(false)
+  const [language, setLanguage] = useState<'zh-CN' | 'en'>('zh-CN')
+  const [playError, setPlayError] = useState<{ id: string; reason: string; online: boolean }>()
+  const requested = useRef({ id: '', seq: 0, src: '' })
+  const [onlineFailure, setOnlineFailure] = useState<
+    PlaybackFailure & { id: string; ids: string[]; occurrence: number }
+  >()
+  const playBatch = useRef({ scope: '', ids: [] as string[], occurrence: 0 })
   const [presentation, setPresentation] = useState<Presentation>('full')
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>('library')
   function openSettings(category: SettingsCategory) {
@@ -747,8 +760,18 @@ function Music() {
       const local = trackById.get(id)
       const item = state?.items.find((r) => r.id === id)
       const stream = local || id.startsWith('online-recording-') || item?.online || item?.daily
+      const batch = playBatch.current
+      if (
+        !batch.scope ||
+        (ids[0] === id && occurrence === 0 && restart) ||
+        batch.ids.length !== ids.length ||
+        ids.some((key, i) => batch.ids[i] !== key)
+      )
+        batch.scope = crypto.randomUUID()
+      batch.ids = ids
+      batch.occurrence = occurrence
       const src = stream
-        ? await host.localSource(id)
+        ? await host.localSource(id, batch.scope)
         : URL.createObjectURL(new Blob([await host.bytes(id)], { type: 'audio/wav' }))
       if (seq !== epoch.current) {
         if (!stream) URL.revokeObjectURL(src)
@@ -2158,11 +2181,13 @@ function Music() {
           onError={(e) => {
             if (!current.current) return
             const src = e.currentTarget.currentSrc
-            if (!src || src !== e.currentTarget.src) return
-            setError(
-              current.current.startsWith('online-recording-')
-                ? '在线音频播放失败，请重试或更换音乐源'
-                : '音频播放失败，请检查文件是否可用',
+            const attempt = requested.current
+            if (
+              !src ||
+              src !== e.currentTarget.src ||
+              src !== attempt.src ||
+              attempt.id !== current.current ||
+              attempt.seq !== epoch.current
             )
             if (src.startsWith('fitbay-audio:')) {
               const id = current.current
