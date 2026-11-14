@@ -175,7 +175,12 @@
 .library-artist-link {
   font-size: var(--font-size-caption);
   color: var(--text-secondary);
-  align-self: flex-start;
+  justify-self: start;
+  width: fit-content;
+}
+.library-row .library-album .catalog-text-link {
+  width: fit-content;
+  vertical-align: middle;
 }
 .library-catalog-home {
   display: grid;

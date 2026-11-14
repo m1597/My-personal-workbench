@@ -784,13 +784,16 @@ export function LibraryPane({
                             : {})}
                           data-active={active === t.id}
                           className="library-row"
-                          onDoubleClick={(e) => {
+                          onClick={(e) => {
                             if (
+                              e.detail < 2 &&
                               !selection &&
                               t.available &&
                               e.target instanceof Element &&
                               e.currentTarget.contains(e.target) &&
-                              !e.target.closest('button, input, .track-actions, [role="button"]')
+                              !e.target.closest(
+                                'button, input, label, .track-actions, [role="button"]',
+                              )
                             )
                               playRow(t.id)
                           }}

@@ -711,6 +711,56 @@ try {
   await details.getByRole('button', { name: '关闭' }).click()
   await tab('歌单').click()
   await button('截图歌单').click()
+  for (const area of ['歌单', '曲库']) {
+    await tab(area).click()
+    if (area === '曲库') await button('全部歌曲').click()
+    const row = page
+      .locator('.library-row')
+      .filter({ has: page.getByText('三原色（翻自 YOASOBI）', { exact: true }) })
+    const changeSong = async () => {
+      await button('播放冬のはなし').click()
+      await played()
+    }
+    const isTarget = async () => {
+      await expect(row.getByRole('button', { name: '暂停三原色（翻自 YOASOBI）' })).toBeVisible()
+      await played()
+      await expect(page.getByRole('region', { name: '歌手主页' })).toHaveCount(0)
+      await expect(page.getByRole('region', { name: '专辑主页' })).toHaveCount(0)
+    }
+    await changeSong()
+    await row.locator('.library-track-title strong').click()
+    await isTarget()
+    for (const [linkName, region] of [
+      ['小幻', '歌手主页'],
+      ['三原色', '专辑主页'],
+    ]) {
+      await changeSong()
+      const link = row.getByRole('button', { name: linkName, exact: true })
+      await link.scrollIntoViewIfNeeded()
+      const point = await link.evaluate((el) => {
+        const r = el.getBoundingClientRect(),
+          parent = el.parentElement.getBoundingClientRect()
+        if (r.right + 4 >= parent.right) throw Error('文本链接占满列宽')
+        const x = r.right + 4,
+          y = r.top + r.height / 2
+        if (document.elementFromPoint(x, y)?.closest('button')) throw Error('文字旁误命中链接')
+        return { x, y }
+      })
+      await page.mouse.click(point.x, point.y)
+      await isTarget()
+      await link.click()
+      const opened = page.getByRole('region', { name: region })
+      await expect(opened.getByRole('heading', { name: linkName, exact: true })).toBeVisible()
+      await opened.getByRole('button', { name: '返回' }).click()
+    }
+    await button('多选').click()
+    await row.getByRole('checkbox').check()
+    await expect(row.getByRole('checkbox')).toBeChecked()
+    await expect(row.locator('button.catalog-text-link')).toHaveCount(0)
+    await button('退出多选').click()
+  }
+  await tab('歌单').click()
+  await button('截图歌单').click()
   const givenRow = page.locator('.library-row').filter({ hasText: '冬のはなし' })
   const given = givenRow.getByRole('button', { name: 'Given', exact: true })
   await given.scrollIntoViewIfNeeded()

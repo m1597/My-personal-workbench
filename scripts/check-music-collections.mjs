@@ -349,14 +349,12 @@ try {
   await button('确认移除文件夹').click()
   await page.getByRole('tab', { name: '歌单', exact: true }).click()
   await button('收藏').click()
-  await page.locator('.library-name strong').dblclick()
+  await page.locator('.library-name strong').click()
   await expect(button('暂停晨间')).toBeVisible()
   await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('全部歌曲').click()
   await expect(page.locator('.library-name strong')).toHaveText(['雨夜'])
   await page.locator('.library-name strong').click()
-  await expect(button('播放雨夜')).toBeVisible()
-  await page.locator('.library-name strong').dblclick()
   await expect(button('暂停雨夜')).toBeVisible()
   await button('管理歌单雨夜').click()
   await expect(button('暂停雨夜')).toBeVisible()
@@ -458,7 +456,7 @@ try {
   await expect(button('部分回收')).toHaveCount(0)
   await assert.rejects(stat(retryFiles[1]), { code: 'ENOENT' })
   console.log(
-    'PASS 单选、全选当前结果、批量加入和移除歌单、失效批次回滚、文件夹移除保留歌单播放、重命名、删除歌单、单歌移除范围、双击播放、回收站取消/失败/成功。截图 ' +
+    'PASS 单选、全选当前结果、批量加入和移除歌单、失效批次回滚、文件夹移除保留歌单播放、重命名、删除歌单、单歌移除范围、单击播放、回收站取消/失败/成功。截图 ' +
       evidence,
   )
 } finally {
