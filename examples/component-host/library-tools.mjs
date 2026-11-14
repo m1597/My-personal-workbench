@@ -121,7 +121,7 @@ export async function applyRelocation(library, preview, selections) {
     throw e
   }
 }
-export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch) {
+export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch, archiveFavorites) {
   bind('previewPlaylist', (file) => previewPlaylist(getStore().library, file))
   let pending,
     busy = false
@@ -136,7 +136,7 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
         busy = false
       }
     }
-  bind('setFavorite', (tracks, on) => {
+  bind('setFavorite', async (tracks, on) => {
     const ids = [...new Set(Array.isArray(tracks) ? tracks : [tracks])]
     if (!ids.length || ids.some((id) => typeof id !== 'string') || typeof on !== 'boolean')
       throw Error('收藏操作无效')
@@ -173,12 +173,24 @@ export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch)
           ),
           Number(on),
         ).changes
+      if (on && getStore().get('auto-sort-favorites') === 'on') {
+        db.prepare(`INSERT OR IGNORE INTO favorite_sort_pending(local,reason)
+          SELECT d.local,'正在归类' FROM daily_downloads d JOIN local_tracks t ON t.id=d.local AND d.file=t.file
+          WHERE d.local IN (SELECT value FROM json_each(?)) AND t.favorite=1 AND t.awaitingLocation=0
+          AND NOT EXISTS(SELECT 1 FROM recording_copies c WHERE c.local=t.id AND c.automatic=0)`).run(
+          data,
+        )
+      } else if (!on)
+        db.prepare(
+          'DELETE FROM favorite_sort_pending WHERE local IN (SELECT value FROM json_each(?))',
+        ).run(data)
       db.exec('COMMIT')
     } catch (e) {
       db.exec('ROLLBACK')
       throw e
     }
     if (changed) library.changed?.()
+    if (on && getStore().get('auto-sort-favorites') === 'on') await archiveFavorites(ids)
     return changed
   })
   bind('recentHistory', async (before) => {

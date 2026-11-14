@@ -166,7 +166,7 @@ type PlaybackFailure = {
 }
 declare global {
   interface Window {
-    music: LibraryToolsAPI &
+    music: MusicFavoriteSortAPI & LibraryToolsAPI &
       ReleaseAPI & {
         analysisRecording(id: string): Promise<Uint8Array | null>
         albums(): Promise<Album[]>

@@ -1,12 +1,25 @@
 import path from 'node:path'
 import { createHash } from 'node:crypto'
-import { constants, lstatSync, realpathSync, unlinkSync } from 'node:fs'
-import { copyFile, lstat, mkdir, readdir, realpath } from 'node:fs/promises'
+import {
+  closeSync,
+  fstatSync,
+  fsyncSync,
+  lstatSync,
+  openSync,
+  realpathSync,
+  unlinkSync,
+  write,
+} from 'node:fs'
+import { lstat, mkdir, open, readdir, realpath } from 'node:fs/promises'
+import { promisify } from 'node:util'
 import { audioTypes, confirmedMissing, openAudio, pathKey } from './music/local-files.mjs'
 import { lyricPath, ownedLyrics } from './music-lyrics.mjs'
+import { readCommon } from './music/albums.mjs'
 
 const identity = (s) => [s.dev, s.ino, s.birthtimeNs].join(':')
 const revision = (s) => [identity(s), s.size, s.mtimeNs].join(':')
+const writeChunk = promisify(write)
+const matchesCopy = (s, version, partial) => s && (partial ? identity(s) : revision(s)) === version
 const stat = (file) => lstatSync(file, { bigint: true, throwIfNoEntry: false })
 const safeDir = async (dir) =>
   path.isAbsolute(dir) &&
@@ -19,11 +32,6 @@ const safeName = (name) =>
   !/[<>:"/\\|?*\p{Cc}]/u.test(name) &&
   !/[. ]$/.test(name) &&
   !/^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i.test(name)
-function metadata(value) {
-  return typeof value === 'string' && !/[\\/\p{Cc}]/u.test(value) && !/^[a-z]:/i.test(value)
-    ? value.slice(0, 200)
-    : ''
-}
 export async function recyclableLyrics(db, audio) {
   const lyric = await ownedLyrics(db, audio)
   if (!lyric) return null
@@ -129,84 +137,52 @@ async function verifyDownload(row) {
     await handle.close()
   }
 }
-async function directories(store) {
-  const ignored = new Set(
-    ['music-manual-dir', 'music-recommend-dir', 'music-category-root']
-      .map((k) => store.get(k))
-      .filter(Boolean)
-      .map(pathKey),
-  )
-  const dirs = new Set(
-    store.db
-      .prepare('SELECT file FROM local_tracks WHERE listed=1 AND awaitingLocation=0')
-      .all()
-      .map((r) => path.dirname(r.file)),
-  )
-  const root = store.get('music-category-root')
-  if (root && (await safeDir(root)))
-    for (const entry of await readdir(root, { withFileTypes: true }))
-      if (entry.isDirectory()) dirs.add(path.join(root, entry.name))
-  const result = []
-  for (const dir of dirs) {
-    const name = path.basename(dir)
-    if (!ignored.has(pathKey(dir)) && safeName(name) && (await safeDir(dir).catch(() => false)))
-      result.push({ id: result.length + 1, name, dir })
-  }
-  return result
-}
-async function classify(store, row, model, chooseRoot, signal) {
-  const options = await directories(store)
-  const choice = await model(
-    {
-      title: metadata(row.title),
-      artist: metadata(row.artist),
-      album: metadata(row.album),
-      ...(metadata(row.language) ? { language: metadata(row.language) } : {}),
-      categories: options.map(({ id, name }) => ({ id, name })),
-    },
-    signal,
-  )
-  signal.throwIfAborted()
-  if (choice.category !== undefined) return options.find((r) => r.id === choice.category)?.dir
-  const name = choice.newCategory
-  if (!safeName(name)) return
-  const same = options.filter((r) => r.name.toLowerCase() === name.toLowerCase())
-  if (same.length) return same.length === 1 ? same[0].dir : undefined
-  let root = store.get('music-category-root')
-  if (!root) {
-    root = await chooseRoot()
-    signal.throwIfAborted()
-    if (!root || !(await safeDir(root))) return
-    store.set('music-category-root', root)
-  }
-  if (!(await safeDir(root))) return
-  const dir = path.join(root, name)
-  if (pathKey(path.dirname(dir)) !== pathKey(root)) return
-  await mkdir(dir).catch((e) => {
-    if (e.code !== 'EEXIST') throw e
-  })
-  if (await safeDir(dir)) return dir
-}
-async function moveFavorite(store, row, target, sourceRevision, lyric, onMove, signal) {
+async function moveFavorite(store, row, target, sourceRevision, lyric, onMove, manual) {
   const db = store.db
   const file = path.join(target, path.basename(row.file))
   if (pathKey(file) === pathKey(row.file)) return
   // Copy exclusively before switching the index. A power loss always leaves a playable copy.
   const copies = []
   const sources = []
+  db.prepare('INSERT INTO favorite_moves VALUES(?,?,?,?,?)').run(row.id, row.file, file, '[]', '[]')
   const copy = async (src, dst) => {
     const old = stat(src)
-    await copyFile(src, dst, constants.COPYFILE_EXCL)
-    const created = stat(dst)
-    copies.push([dst, revision(created)])
-    sources.push([src, revision(old)])
+    const save = () =>
+      db
+        .prepare('UPDATE favorite_moves SET copies=?,sources=? WHERE local=?')
+        .run(JSON.stringify(copies), JSON.stringify(sources), row.id)
+    const input = await open(src, 'r')
+    let fd, created
+    try {
+      fd = openSync(dst, 'wx')
+      copies.push([dst, identity(fstatSync(fd, { bigint: true })), true])
+      sources.push([src, revision(old)])
+      save()
+      for await (const chunk of input.createReadStream({ autoClose: false })) {
+        let offset = 0
+        while (offset < chunk.length) {
+          const { bytesWritten } = await writeChunk(fd, chunk, offset, chunk.length - offset, null)
+          if (!bytesWritten) throw Error('无法写入目标文件')
+          offset += bytesWritten
+        }
+      }
+      fsyncSync(fd)
+      created = fstatSync(fd, { bigint: true })
+    } finally {
+      if (fd !== undefined) closeSync(fd)
+      await input.close()
+    }
+    if (identity(stat(dst)) !== identity(created)) throw Error('目标文件已替换')
+    created = stat(dst)
+    copies[copies.length - 1] = [dst, revision(created)]
+    save()
     if (created.size !== old.size || revision(stat(src)) !== revision(old))
       throw Error('源文件已变化')
     return created
   }
   const checkPaths = () => {
-    signal.throwIfAborted()
     if (
+      (!manual && store.get('auto-sort-favorites') !== 'on') ||
       pathKey(realpathSync(target)) !== pathKey(target) ||
       pathKey(realpathSync(row.file)) !== pathKey(row.file) ||
       !db
@@ -242,23 +218,136 @@ async function moveFavorite(store, row, target, sourceRevision, lyric, onMove, s
       identity(audio),
       row.id,
     )
+    db.prepare('DELETE FROM daily_downloads WHERE local=? AND file=?').run(row.id, row.file)
+    db.prepare('DELETE FROM favorite_sort_pending WHERE local=?').run(row.id)
     db.exec('COMMIT')
   } catch (e) {
     if (db.isTransaction) db.exec('ROLLBACK')
-    for (const [dst, version] of copies)
-      if (stat(dst) && revision(stat(dst)) === version) unlinkSync(dst)
+    for (const [dst, version, partial] of copies)
+      if (matchesCopy(stat(dst), version, partial)) unlinkSync(dst)
+    db.prepare('DELETE FROM favorite_moves WHERE local=?').run(row.id)
     throw e
   }
   onMove(row.id, file)
   for (const [src, version] of sources)
     if (stat(src) && revision(stat(src)) === version) unlinkSync(src)
+  db.prepare('DELETE FROM favorite_moves WHERE local=?').run(row.id)
 }
-export async function retireDownloads(
-  store,
-  previous,
-  { model, chooseRoot, trash, forget, onMove },
-  signal,
-) {
+export function recoverFavoriteMoves(store) {
+  for (const row of store.db.prepare('SELECT * FROM favorite_moves').all()) {
+    const file = store.db.prepare('SELECT file FROM local_tracks WHERE id=?').get(row.local)?.file
+    if (file !== row.original && file !== row.destination) continue
+    const cleanup = JSON.parse(file === row.original ? row.copies : row.sources)
+    const retained = JSON.parse(file === row.original ? row.sources : row.copies)
+    try {
+      if (!stat(file) || retained.some(([p, v]) => !stat(p) || revision(stat(p)) !== v)) continue
+      for (const [p, v, partial] of cleanup) if (matchesCopy(stat(p), v, partial)) unlinkSync(p)
+      store.db.prepare('DELETE FROM favorite_moves WHERE local=?').run(row.local)
+    } catch {
+      /* A playing file may remain locked until the next startup. */
+    }
+  }
+}
+
+const languages = {
+  jpn: '日语',
+  ja: '日语',
+  eng: '英语',
+  en: '英语',
+  zho: '华语',
+  chi: '华语',
+  zh: '华语',
+  kor: '韩语',
+  ko: '韩语',
+}
+const genres = {
+  pop: '流行',
+  rock: '摇滚',
+  classical: '古典',
+  jazz: '爵士',
+  soundtrack: '原声',
+  electronic: '电子',
+  folk: '民谣',
+}
+export async function sortFavorite(store, id, manualDirectory, onMove) {
+  const db = store.db
+  const row = db
+    .prepare(`SELECT d.*, t.id,t.artist,t.album,t.language,t.title FROM daily_downloads d JOIN local_tracks t
+    ON t.id=d.local AND t.file=d.file WHERE t.id=? AND t.favorite=1 AND t.awaitingLocation=0
+    AND NOT EXISTS(SELECT 1 FROM recording_copies c WHERE c.local=t.id AND c.automatic=0)`)
+    .get(id)
+  if (!row) return
+  const pending = (reason) =>
+    db
+      .prepare(
+        'INSERT OR REPLACE INTO favorite_sort_pending SELECT t.id,? FROM local_tracks t JOIN daily_downloads d ON d.local=t.id AND d.file=t.file WHERE t.id=? AND t.favorite=1',
+      )
+      .run(reason, id)
+  try {
+    const verified = await verifyDownload(row)
+    if (!verified) {
+      pending('原文件身份或内容已变化')
+      return
+    }
+    let target = manualDirectory
+    if (!target) {
+      const root = store.get('music-category-root')
+      if (!root || !(await safeDir(root))) {
+        pending('请先选择分类根目录')
+        return
+      }
+      const tags = await readCommon(row.file, true).catch(() => null)
+      const names = [...new Set((tags?.genre ?? []).filter(safeName))]
+      const language = row.language || tags?.language
+      const languageName =
+        (typeof language === 'string' &&
+          Object.hasOwn(languages, language.toLowerCase()) &&
+          languages[language.toLowerCase()]) ||
+        (Object.values(languages).includes(language) ? language : '')
+      const choices = [
+        row.artist,
+        row.album,
+        ...names,
+        ...names.map((n) => genres[n.toLowerCase()]),
+        languageName,
+      ].filter(safeName)
+      const dirs = await readdir(root, { withFileTypes: true })
+      const matching = dirs.filter(
+        (d) => d.isDirectory() && choices.some((n) => n.toLowerCase() === d.name.toLowerCase()),
+      )
+      if (matching.length === 1) target = path.join(root, matching[0].name)
+      else if (!matching.length) {
+        const name =
+          names.length === 1
+            ? genres[names[0].toLowerCase()] || names[0]
+            : !names.length && languageName
+        if (name && safeName(name)) {
+          target = path.join(root, name)
+          await mkdir(target).catch((e) => {
+            if (e.code !== 'EEXIST') throw e
+          })
+        }
+      }
+    }
+    if (
+      !target ||
+      !(await safeDir(target)) ||
+      pathKey(target) === pathKey(path.dirname(row.file))
+    ) {
+      pending('请为这首歌选择分类文件夹')
+      return
+    }
+    const lyric = await recyclableLyrics(db, row.file)
+    if (!lyric && stat(lyricPath(row.file))) {
+      pending('现有歌词未经确认或与其他录音共用，已保留原位')
+      return
+    }
+    await moveFavorite(store, row, target, verified, lyric, onMove, Boolean(manualDirectory))
+  } catch {
+    pending('文件冲突、正在使用或目录不可用，请另选文件夹或重试')
+  }
+}
+export async function retireDownloads(store, previous, { trash, forget }, signal) {
   const rows = store.db
     .prepare(`SELECT d.*,t.title,t.artist,t.album,t.language,t.favorite,t.id FROM daily_downloads d
     JOIN local_tracks t ON d.local=t.id AND d.file=t.file WHERE d.batch=? AND t.awaitingLocation=0
@@ -266,13 +355,9 @@ export async function retireDownloads(
     .all(previous)
   const protectedIds = new Set(rows.filter((r) => r.favorite).map((r) => r.id))
   let failures = 0
-  const favorites = []
   for (const row of rows) {
     try {
-      if (protectedIds.has(row.id)) {
-        favorites.push(row)
-        continue
-      }
+      if (protectedIds.has(row.id)) continue
       const version = await verifyDownload(row)
       const lyric = await recyclableLyrics(store.db, row.file)
       const fresh = store.db
@@ -280,28 +365,10 @@ export async function retireDownloads(
         .get(row.id)
       if (!version || !fresh || fresh.file !== row.file || revision(stat(row.file)) !== version)
         continue
-      if (fresh.favorite) favorites.push(row)
-      else await trashAudio(store, row, lyric, trash, forget)
+      if (!fresh.favorite) await trashAudio(store, row, lyric, trash, forget)
     } catch {
       failures++
     }
   }
-  let rootPrompt
-  const selectRoot = () => (rootPrompt ??= chooseRoot())
-  const archive = async () => {
-    for (const row of favorites) {
-      try {
-        signal.throwIfAborted()
-        const dir = await classify(store, row, model, selectRoot, signal)
-        if (!dir) continue
-        const version = await verifyDownload(row)
-        const lyric = await recyclableLyrics(store.db, row.file)
-        signal.throwIfAborted()
-        if (version) await moveFavorite(store, row, dir, version, lyric, onMove, signal)
-      } catch {
-        if (signal.aborted) return
-      }
-    }
-  }
-  return { archive, failures }
+  return { failures }
 }

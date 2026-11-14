@@ -9,6 +9,95 @@ import { MusicSourcesSettings } from './MusicSourcesSettings'
 import { PlayerOptionsPane } from './PlayerOptionsPane'
 import './settings.css'
 
+type SortInfo = {
+  enabled: boolean
+  root: string
+  pending: { id: string; title: string; reason: string }[]
+}
+declare global {
+  interface MusicFavoriteSortAPI {
+    favoriteSortInfo(): Promise<SortInfo>
+    setFavoriteSort(enabled: boolean): Promise<void>
+    chooseFavoriteSortDirectory(id?: string): Promise<void>
+  }
+}
+function FavoriteSortSettings() {
+  const [info, setInfo] = useState<SortInfo>()
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    let mounted = true
+    window.music
+      .favoriteSortInfo()
+      .then((result) => {
+        if (mounted) setInfo(result)
+      })
+      .catch(() => {
+        if (mounted) setMessage('无法读取归类设置')
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+  async function run(action: () => Promise<void>) {
+    setBusy(true)
+    setMessage('')
+    try {
+      await action()
+      setInfo(await window.music.favoriteSortInfo())
+    } catch (e) {
+      setMessage(String(e).split('Error: ').pop() || '归类未完成')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="favorite-sort-settings">
+      <Checkbox
+        label="收藏推荐歌曲后自动归类"
+        disabled={busy || !info}
+        checked={info?.enabled ?? false}
+        onChange={(_, d) => void run(() => window.music.setFavoriteSort(d.checked === true))}
+      />
+      {info?.enabled && (
+        <>
+          <div className="settings-directory">
+            <div>
+              <strong>收藏分类根目录</strong>
+              <span>{info.root || '未选择'}</span>
+            </div>
+            <Button
+              disabled={busy}
+              size="small"
+              onClick={() => void run(() => window.music.chooseFavoriteSortDirectory())}
+            >
+              选择分类根目录
+            </Button>
+          </div>
+          <p>推荐先存入推荐下载目录。收藏后按标签匹配分类，不确定时保留在原目录。</p>
+        </>
+      )}
+      {info?.pending.map((row) => (
+        <div key={row.id} className="settings-directory">
+          <div>
+            <strong>{row.title}</strong>
+            <span>{row.reason}</span>
+          </div>
+          <Button
+            disabled={busy}
+            size="small"
+            aria-label={'为' + row.title + '选择文件夹'}
+            onClick={() => void run(() => window.music.chooseFavoriteSortDirectory(row.id))}
+          >
+            选择文件夹
+          </Button>
+        </div>
+      ))}
+      {message && <small role="alert">{message}</small>}
+    </div>
+  )
+}
+
 const categories = [
   { id: 'library', name: '本地曲库', icon: Library },
   { id: 'sources', name: '音乐源', icon: AudioLines },
@@ -349,6 +438,7 @@ export function MusicSettings({
         {category === 'downloads' && (
           <section>
             <h2>下载</h2>
+            <FavoriteSortSettings />
             {preference('previewQuality', '试听音质', {
               fast: '快速试听（最低可用音质）',
               ...Object.fromEntries(qualities.map((q) => [q, q])),

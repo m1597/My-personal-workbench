@@ -31,7 +31,7 @@ async function readTags(file, skipCovers) {
   }
 }
 
-async function readCommon(file, skipCovers) {
+export async function readCommon(file, skipCovers) {
   return (await readTags(file, skipCovers))?.common
 }
 

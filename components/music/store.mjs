@@ -73,6 +73,8 @@ export class MusicStore {
     this.db.exec(`CREATE TABLE IF NOT EXISTS daily_downloads(
       local TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE,
       batch TEXT NOT NULL,file TEXT NOT NULL,digest TEXT NOT NULL,identity TEXT);
+      CREATE TABLE IF NOT EXISTS favorite_moves(local TEXT PRIMARY KEY, original TEXT NOT NULL, destination TEXT NOT NULL, copies TEXT NOT NULL, sources TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS favorite_sort_pending(local TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE, reason TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS pending_trash(local TEXT PRIMARY KEY,file TEXT NOT NULL);`)
     if (
       !this.db

@@ -9,6 +9,8 @@ import { localLines } from './music-lyrics.mjs'
 import {
   forgetLocal,
   recoverTrash,
+  recoverFavoriteMoves,
+  sortFavorite,
   recyclableLyrics,
   retireDownloads,
   trashAudio,
@@ -59,11 +61,20 @@ export function musicService(
     if (!store) {
       const root = path.join(profile, 'fitbay-music')
       store = new MusicStore(root)
+      recoverRenames(store)
+      recoverFavoriteMoves(store)
       recoveringTrash = recoverTrash(store, forgetTracks, (file) => shell.trashItem(file))
       taste = new MusicTaste(store, root, (data, signal) =>
         requestMusicModel(store, safeStorage, 'profile', data, signal),
       )
       store.library.changed = queueTasteUpdate
+      if (store.get('auto-sort-favorites') === 'on') {
+        const ids = store.db
+          .prepare("SELECT local FROM favorite_sort_pending WHERE reason='正在归类'")
+          .all()
+          .map((row) => row.local)
+        if (ids.length) recoveringTrash = recoveringTrash.then(() => archiveFavorites(ids))
+      }
     }
   }
   const overlay = desktopLyrics(
@@ -75,7 +86,7 @@ export function musicService(
   const shortcuts = musicShortcuts()
   const sessions = new WeakSet()
   let musicView
-  const archiveJobs = new Set()
+  let sorting = Promise.resolve()
   const bind = (name, fn) =>
     ipcMain.handle('music:' + name, async (event, ...args) => {
       if (!isSender(event)) throw Error('DENIED')
@@ -280,12 +291,65 @@ export function musicService(
     await store.library.refresh()
     await reconcileRecycled(store, forgetTracks)
   })
+  function archiveFavorites(ids, target) {
+    const run = async () => {
+      for (const id of ids) {
+        if (!target && store.get('auto-sort-favorites') !== 'on') return
+        await sortFavorite(store, id, target, (moved, file) => {
+          if ((grant?.libraryId ?? grant?.id) === moved) grant.file = file
+          if (musicView && !musicView.isDestroyed()) musicView.send('music:library-changed', [])
+        })
+      }
+    }
+    const job = sorting.then(run)
+    sorting = job.catch(() => {})
+    return job
+  }
+  bind('favoriteSortInfo', () => ({
+    enabled: store.get('auto-sort-favorites') === 'on',
+    root: store.get('music-category-root') || '',
+    pending: store.db
+      .prepare(
+        'SELECT p.local AS id,t.title,p.reason FROM favorite_sort_pending p JOIN local_tracks t ON t.id=p.local WHERE t.favorite=1 ORDER BY t.favoritedAt DESC',
+      )
+      .all(),
+  }))
+  bind('setFavoriteSort', (enabled) => {
+    if (typeof enabled !== 'boolean') throw Error('无效的分类选项')
+    store.set('auto-sort-favorites', enabled ? 'on' : 'off')
+  })
+  bind('chooseFavoriteSortDirectory', async (id) => {
+    if (
+      id !== undefined &&
+      !store.db
+        .prepare(
+          'SELECT 1 FROM favorite_sort_pending p JOIN local_tracks t ON t.id=p.local WHERE p.local=? AND t.favorite=1',
+        )
+        .get(text(id))
+    )
+      throw Error('歌曲已移除')
+    if (localDialog) throw Error('请先关闭当前文件选择窗口')
+    localDialog = true
+    const epoch = viewEpoch
+    try {
+      const choice = await dialog.showOpenDialog({
+        title: id ? '选择这首歌的分类文件夹' : '选择收藏歌曲分类根目录',
+        properties: ['openDirectory', 'createDirectory'],
+      })
+      if (choice.canceled || !choice.filePaths.length || epoch !== viewEpoch) return
+      if (id) await archiveFavorites([id], choice.filePaths[0])
+      else store.set('music-category-root', choice.filePaths[0])
+    } finally {
+      localDialog = false
+    }
+  })
   registerLibraryTools(
     bind,
     () => store,
     () => taste,
     dialog,
     () => viewEpoch,
+    archiveFavorites,
   )
   bind('renamePlaylist', (id, name) => store.library.renamePlaylist(text(id), name))
   bind('deletePlaylist', (id) => store.library.deletePlaylist(text(id)))
@@ -722,41 +786,16 @@ export function musicService(
         update('cancelled', '本次推荐已终止（' + signal.reason.message + '）')
       signal.addEventListener('abort', recordCancellation, { once: true })
       try {
-        const { archive, failures } = await retireDownloads(
+        const { failures } = await retireDownloads(
           store,
           previous,
           {
             forget: forgetTracks,
             trash: (file) => shell.trashItem(file),
-            model: (payload, abort) =>
-              requestMusicModel(store, safeStorage, 'classify', payload, abort),
-            chooseRoot: async () => {
-              if (localDialog) return
-              const epoch = viewEpoch
-              localDialog = true
-              try {
-                const result = await dialog.showOpenDialog({
-                  title: '选择收藏歌曲分类根目录',
-                  properties: ['openDirectory', 'createDirectory'],
-                })
-                if (!result.canceled && epoch === viewEpoch) return result.filePaths[0]
-              } finally {
-                localDialog = false
-              }
-            },
-            onMove: (id, file) => {
-              if ((grant?.libraryId ?? grant?.id) === id) grant.file = file
-              if (musicView && !musicView.isDestroyed()) musicView.send('music:library-changed', [])
-            },
           },
           signal,
         )
         if (failures) cleanupMessage = ' · 上轮有 ' + failures + ' 首未能完整回收'
-        const generation = pending
-        archiveJobs.add(generation)
-        void archive()
-          .catch(() => {})
-          .finally(() => archiveJobs.delete(generation))
         if (
           !store.get('music-recommend-dir') &&
           !(await chooseMusicDirectory('recommend', signal))
@@ -1165,7 +1204,7 @@ export function musicService(
     dispose(reason = '音乐组件已关闭') {
       collectionSearch?.abort()
       pending?.abort(new DOMException(reason, 'AbortError'))
-      for (const generation of archiveJobs) generation.abort()
+
       overlay.show(false)
       lx.close()
       clearTimeout(updateTimer)

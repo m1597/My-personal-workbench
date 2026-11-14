@@ -1,4 +1,5 @@
 import { openDiscovery } from './discovery-fixture.mjs'
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 import path from 'node:path'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
@@ -24,13 +25,17 @@ const daily = path.join(root, '推荐'),
   existing = path.join(root, '古典'),
   fresh = path.join(root, '新分类')
 for (const dir of [daily, existing, fresh]) await mkdir(dir)
+const manual = path.join(fresh, '手动目录')
+await mkdir(manual)
+await mkdir(path.join(fresh, '古典'))
+await writeFile(path.join(fresh, '古典', '目录冲突.mp3'), '保留这个文件')
 const original = path.resolve('tests/fixtures/local-music/tone.mp3')
 const hash = createHash('sha256')
   .update(await readFile(original))
   .digest('hex')
 const store = new MusicStore(music)
 store.set('music-guide-v1', '1')
-const batch = store.saveSuggestions('第一轮', [], '待处理', undefined, 9)
+const batch = store.saveSuggestions('第一轮', [], '待处理', undefined, 16)
 const list = store.library.createPlaylist('普通歌单')
 store.set('music-recommend-dir', daily)
 const tracks = {}
@@ -41,6 +46,10 @@ for (const title of [
   '同内容替换',
   '旧版无身份',
   '已有分类',
+  '即时归类',
+  '手选分类',
+  '目录匹配',
+  '目录冲突',
   '新建分类',
   '冲突',
   '无模型',
@@ -56,8 +65,8 @@ for (const title of [
     file,
     title,
     artist: '艺人',
-    album: '',
-    language: title === '已有分类' ? 'jpn' : undefined,
+    album: ['目录匹配', '目录冲突'].includes(title) ? '古典' : '',
+    language: ['已有分类', '即时归类'].includes(title) ? 'jpn' : undefined,
     duration: 4,
   })
   const id = store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file).id
@@ -138,16 +147,96 @@ try {
   await expect(row).toHaveCount(0)
   await heart.click()
   await expect(row).toBeVisible()
+  await openMusicSettings(page)
+  await selectMusicSettings(page, '下载')
+  const enabled = page.getByRole('checkbox', { name: '收藏推荐歌曲后自动归类' })
+  await expect(enabled).not.toBeChecked()
+  await enabled.check()
+  await favoriteSession.evaluate(
+    ({ dialog }, { fresh, manual }) => {
+      dialog.showOpenDialog = async (options) => ({
+        canceled: false,
+        filePaths: [options.title === '选择收藏歌曲分类根目录' ? fresh : manual],
+      })
+    },
+    { fresh, manual },
+  )
+  await page.getByRole('button', { name: '选择分类根目录' }).click()
+  await expect(page.getByText(fresh, { exact: true })).toBeVisible()
+  await openDiscovery(page, true)
+  await page.getByRole('button', { name: '试听即时归类', exact: true }).click()
+  await page.getByRole('button', { name: '收藏当前歌曲' }).click()
+  const moved = path.join(fresh, '日语', '即时归类.mp3')
+  await expect
+    .poll(() =>
+      stat(moved).then(
+        () => true,
+        () => false,
+      ),
+    )
+    .toBe(true)
+  await expect
+    .poll(() =>
+      stat(tracks['即时归类'].file).then(
+        () => true,
+        () => false,
+      ),
+    )
+    .toBe(false)
+  assert.equal(await readFile(lyricPath(moved), 'utf8'), '[00:00]我的歌词')
+  for (const title of ['目录匹配', '目录冲突']) {
+    await page.getByRole('button', { name: '试听' + title, exact: true }).click()
+    await page.getByRole('button', { name: '收藏当前歌曲' }).click()
+    await expect(page.getByRole('button', { name: '收藏当前歌曲' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  }
+  assert.equal(
+    await readFile(lyricPath(path.join(fresh, '古典', '目录匹配.mp3')), 'utf8'),
+    '[00:00]我的歌词',
+  )
+  assert.equal(await readFile(path.join(fresh, '古典', '目录冲突.mp3'), 'utf8'), '保留这个文件')
+  assert.ok((await stat(tracks['目录冲突'].file)).isFile())
+  await page.getByRole('button', { name: '试听手选分类', exact: true }).click()
+  await page.getByRole('button', { name: '收藏当前歌曲' }).click()
+  await openMusicSettings(page)
+  await selectMusicSettings(page, '下载')
+  await expect(page.getByRole('button', { name: '为目录冲突选择文件夹' })).toBeVisible()
   await page.screenshot({
-    path: path.join(root, '播放栏收藏.png'),
-    animations: 'disabled',
-    style: ':root { background: var(--base) !important }',
+    path: path.join(root, '收藏归类设置.png'),
+    style: ':root {background:var(--base)!important}',
   })
+  await page.getByRole('button', { name: '为手选分类选择文件夹' }).click()
+  await expect
+    .poll(() =>
+      stat(path.join(manual, '手选分类.mp3')).then(
+        () => true,
+        () => false,
+      ),
+    )
+    .toBe(true)
+  await enabled.uncheck()
 } finally {
   await favoriteSession.close()
 }
 // The next phase starts with a queued non-favorite and verifies cleanup of that playback state.
 const checkpoint = new MusicStore(music)
+// Interrupted before the new path was committed. Only the partial copy may be removed.
+const interrupted = tracks['目录冲突']
+const partial = path.join(manual, '未完成.mp3')
+await writeFile(partial, 'incomplete')
+const idOf = (s) => [s.dev, s.ino, s.birthtimeNs].join(':')
+const versionOf = (s) => [idOf(s), s.size, s.mtimeNs].join(':')
+checkpoint.db
+  .prepare('INSERT INTO favorite_moves VALUES(?,?,?,?,?)')
+  .run(
+    interrupted.id,
+    interrupted.file,
+    partial,
+    JSON.stringify([[partial, idOf(await stat(partial, { bigint: true })), true]]),
+    JSON.stringify([[interrupted.file, versionOf(await stat(interrupted.file, { bigint: true }))]]),
+  )
 checkpoint.set('play-queue', JSON.stringify([tracks['普通歌单歌曲'].item, tracks['已有分类'].id]))
 checkpoint.checkpoint(tracks['普通歌单歌曲'].item, 1)
 checkpoint.db.close()
@@ -155,6 +244,8 @@ const app = await launch()
 try {
   const page = await app.firstWindow()
   await page.evaluate(() => window.music.state())
+  await assert.rejects(stat(partial), { code: 'ENOENT' })
+  assert.ok((await stat(interrupted.file)).isFile())
   await page.evaluate(() => window.music.configureModel('deepseek', 'test', 'test-fixture', false))
   await app.evaluate(
     ({ shell, dialog, net }, { root, fresh }) => {
@@ -183,17 +274,8 @@ try {
       }
       globalThis.fetch = async (_url, { body }) => {
         const payload = JSON.parse(JSON.parse(body).messages[1].content)
-        if (!payload.categories) return new Response('', { status: 503 })
-        globalThis.fixture.requests.push(payload)
-        if (payload.title === '无模型') return new Response('', { status: 503 })
-        const category = payload.categories.find((c) => c.name === '古典').id
-        const response =
-          payload.title === '越界'
-            ? { newCategory: '../escape' }
-            : payload.title === '新建分类'
-              ? { newCategory: '器乐' }
-              : { category }
-        return Response.json({ choices: [{ message: { content: JSON.stringify(response) } }] })
+        if (payload.categories) globalThis.fixture.requests.push(payload)
+        return new Response('', { status: 503 })
       }
     },
     { root, fresh },
@@ -207,19 +289,9 @@ try {
     /请先结束/,
   )
   await generate
-  await expect.poll(() => app.evaluate(() => globalThis.fixture.requests.length)).toBe(5)
   const fixture = await app.evaluate(() => globalThis.fixture)
-  assert.equal(fixture.roots, 1)
-  for (const request of fixture.requests) {
-    const fields = ['album', 'artist', 'categories', 'title']
-    if (request.title === '已有分类') {
-      assert.equal(request.language, 'jpn')
-      fields.push('language')
-    }
-    assert.deepEqual(Object.keys(request).sort(), fields.sort())
-    for (const cat of request.categories) assert.deepEqual(Object.keys(cat).sort(), ['id', 'name'])
-    assert.ok(!JSON.stringify(request).includes(root))
-  }
+  assert.equal(fixture.roots, 0)
+  assert.deepEqual(fixture.requests, [])
   const s = await page.evaluate(() => window.music.state())
   assert.equal(s.batches.length, 1)
   assert.equal(s.batches[0].state, 'blocked')
@@ -244,7 +316,7 @@ try {
   assert.equal(await readFile(path.join(existing, '冲突.mp3'), 'utf8'), '冲突文件')
   const db = new MusicStore(music)
   try {
-    assert.equal(db.db.prepare('SELECT count(*) AS n FROM recommended_songs').get().n, 12)
+    assert.equal(db.db.prepare('SELECT count(*) AS n FROM recommended_songs').get().n, 16)
     for (const title of ['同内容替换', '旧版无身份']) {
       assert.equal(db.library.row(tracks[title].id).file, tracks[title].file)
       assert.deepEqual(await readFile(tracks[title].file), await readFile(original))
@@ -255,24 +327,11 @@ try {
         .get(tracks['普通歌单歌曲'].id).n,
       0,
     )
-    for (const [title, target] of [
-      ['已有分类', existing],
-      ['新建分类', path.join(fresh, '器乐')],
-    ]) {
+    for (const title of ['已有分类', '新建分类', '无模型', '越界']) {
       const { id, file } = tracks[title]
-      const moved = path.join(target, path.basename(file))
-      assert.equal(db.library.row(id).file, moved)
+      assert.equal(db.library.row(id).file, file)
       assert.equal(db.library.row(id).favorite, 1)
-      assert.ok(
-        db.library
-          .playlists()
-          .find((p) => p.id === list)
-          .tracks.includes(id),
-      )
-      assert.ok(db.db.prepare('SELECT 1 FROM local_play_history WHERE track=?').get(id))
-      assert.equal(await ownedLyrics(db.db, moved), lyricPath(moved))
-      await assert.rejects(stat(file), { code: 'ENOENT' })
-      await assert.rejects(stat(lyricPath(file)), { code: 'ENOENT' })
+      assert.equal(await ownedLyrics(db.db, file), lyricPath(file))
     }
   } finally {
     db.db.close()
@@ -291,6 +350,29 @@ try {
     }, tracks[title].id)
     assert.equal(ok, true)
   }
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
+  const navigation = page.getByRole('button', { name: '歌单导航' })
+  if (await navigation.isVisible()) await navigation.click()
+  await page.getByRole('button', { name: '普通歌单', exact: true }).click()
+  const track = page
+    .locator('.library-row')
+    .filter({ has: page.getByText('即时归类', { exact: true }) })
+  await track.getByRole('button', { name: '播放即时归类', exact: true }).click()
+  await expect
+    .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0.2))
+    .toBe(true)
+  const restored = await page.evaluate(
+    async (id) => ({ state: await window.music.state(), lyrics: await window.music.lyrics(id) }),
+    tracks['即时归类'].id,
+  )
+  assert.equal(restored.state.current, tracks['即时归类'].id)
+  assert.ok(restored.state.queue.includes(tracks['即时归类'].id))
+  assert.ok(JSON.stringify(restored.lyrics).includes('我的歌词'))
+  assert.equal(restored.state.localTracks.find((t) => t.id === tracks['即时归类'].id).favorite, 1)
+  await page.screenshot({
+    path: path.join(root, '重启后原歌单播放.png'),
+    style: ':root {background:var(--base)!important}',
+  })
   await page.evaluate(() => window.music.generate('第三轮', 'auto', false, 1))
   assert.deepEqual((await app.evaluate(() => globalThis.fixture.trashed)).sort(), fixture.trashed)
   console.log(
