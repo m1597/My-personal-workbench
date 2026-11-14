@@ -132,26 +132,56 @@ export function PublicPlaylists({
       setBusy(false)
     }
   }
-  const [notice, setNotice] = useState('')
+  type ImportStatus = { kind: 'working' | 'done' | 'failed'; text: string }
+  const [imports, setImports] = useState<Record<string, ImportStatus>>({})
+  const activeImports = useRef(new Set<string>())
+  const importKey = (target: PublicList) => platform + '/' + target.id
   async function importList(target: PublicList) {
-    if (busy) return
-    setBusy(true)
-    setNotice('')
-    setError('')
+    const key = importKey(target)
+    if (activeImports.current.has(key)) return
+    activeImports.current.add(key)
+    const report = (kind: ImportStatus['kind'], text: string) =>
+      setImports((old) => ({ ...old, [key]: { kind, text } }))
+    report('working', '正在导入…')
     try {
-      await host.importPublicList(
+      const result = await host.importPublicList(
         platform,
         target.id,
         target.name,
         list === target ? songs.map((song) => song.key) : undefined,
       )
+      report(
+        'done',
+        result.added
+          ? '已导入 · 新增 ' + result.added + ' 首，跳过 ' + result.skipped + ' 首'
+          : '全部重复 · 跳过 ' + result.skipped + ' 首',
+      )
       await refresh()
-      setNotice('已导入到我的歌单：' + target.name)
     } catch (e) {
-      setError(String(e).split('Error: ').pop() || '歌单导入失败')
+      report('failed', String(e).split('Error: ').pop() || '歌单导入失败')
     } finally {
-      setBusy(false)
+      activeImports.current.delete(key)
     }
+  }
+  function importControl(target: PublicList, disabled = false) {
+    const status = imports[importKey(target)]
+    return (
+      <div className="public-import">
+        <Button
+          size="small"
+          appearance="subtle"
+          disabled={disabled || status?.kind === 'working'}
+          onClick={() => void importList(target)}
+        >
+          {status?.kind === 'failed'
+            ? '重试导入'
+            : status?.kind === 'working'
+              ? '正在导入…'
+              : '导入到我的歌单'}
+        </Button>
+        <small role={status?.kind === 'failed' ? 'alert' : 'status'}>{status?.text}</small>
+      </div>
+    )
   }
   const visible = lists
   return (
@@ -168,9 +198,7 @@ export function PublicPlaylists({
             >
               播放全部
             </Button>
-            <Button disabled={busy || loading} onClick={() => void importList(list)}>
-              导入到我的歌单
-            </Button>
+            {importControl(list, loading)}
             <Dropdown
               inlinePopup
               listbox={{ className: 'component-popup' }}
@@ -305,14 +333,7 @@ export function PublicPlaylists({
                       {[l.author, l.count && l.count + ' 次播放'].filter(Boolean).join(' · ')}
                     </small>
                   </button>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    disabled={busy}
-                    onClick={() => void importList(l)}
-                  >
-                    导入到我的歌单
-                  </Button>
+                  {importControl(l)}
                 </article>
               ))}
             </div>
@@ -329,7 +350,6 @@ export function PublicPlaylists({
           </div>
         </>
       )}
-      {notice && <p role="status">{notice}</p>}
       {loading && <p role="status">正在读取歌单…</p>}
       {error && <p role="alert">{error}</p>}
     </section>

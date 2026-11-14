@@ -108,7 +108,7 @@ try {
   const other = panel.locator('.public-cards article').filter({ hasNotText: evidence.list }).first()
   const cardName = await other.locator('strong').textContent()
   await other.getByRole('button', { name: '导入到我的歌单' }).click()
-  await expect(panel.getByRole('status')).toContainText(cardName, { timeout: 60000 })
+  await expect(other.getByRole('status')).toContainText('已导入 · 新增', { timeout: 60000 })
   const cardCount = await page.evaluate(
     async (name) =>
       (await window.music.state()).playlists.find((p) => p.name === name)?.tracks.length,
@@ -191,9 +191,11 @@ try {
   assert.ok(evidence.single && evidence.all && evidence.queue.sameOrder, JSON.stringify(evidence))
   const title = evidence.list
   await panel.getByRole('button', { name: '导入到我的歌单', exact: true }).click()
-  await expect(panel.getByRole('status').filter({ hasText: '已导入到我的歌单' })).toBeVisible({
-    timeout: 60000,
-  })
+  await expect(panel.getByRole('status').filter({ hasText: /已导入 · 新增|全部重复/ })).toBeVisible(
+    {
+      timeout: 60000,
+    },
+  )
   const imported = await page.evaluate(async (title) => {
     const state = await window.music.state()
     const list = state.playlists.find((p) => p.name === title)

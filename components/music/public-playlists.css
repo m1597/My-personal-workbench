@@ -23,7 +23,8 @@
 }
 .public-cards article {
   display: grid;
-  align-content: start;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
   gap: var(--space-4);
   min-width: 0;
 }
@@ -65,5 +66,18 @@
 .public-songs li > div {
   min-width: 0;
   flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.public-import {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+}
+.public-import small {
+  overflow-wrap: anywhere;
+}
+.public-list-card strong,
+.public-list-card small {
   overflow-wrap: anywhere;
 }

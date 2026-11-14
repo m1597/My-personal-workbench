@@ -1208,11 +1208,25 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         }
         ids.push(keepRecording(record, undefined, context))
       }
-      const playlist = options.title
-        ? getStore().library.createPlaylist(options.title, ids, true)
-        : undefined
+      let imported
+      if (options.title) {
+        const library = getStore().library
+        const title = options.title.trim()
+        const playlist =
+          db.prepare('SELECT id FROM playlists WHERE name=? COLLATE NOCASE').get(title)?.id ??
+          library.createPlaylist(title, [], true)
+        const added = Number(
+          db
+            .prepare(`INSERT OR IGNORE INTO playlist_tracks(playlist,track,position,addedAt)
+          SELECT ?, value, (SELECT COALESCE(MAX(position),-1)+1 FROM playlist_tracks WHERE playlist=?) + key, ?
+          FROM json_each(?) ORDER BY key`)
+            .run(playlist, playlist, Date.now(), JSON.stringify(ids)).changes,
+        )
+        imported = { playlist, added, skipped: ids.length - added }
+      }
       db.exec('COMMIT')
-      return { ids, skipped, playlist }
+      if (imported?.added) getStore().library.changed?.()
+      return { ids, skipped, imported }
     } catch (error) {
       db.exec('ROLLBACK')
       throw error
@@ -1233,7 +1247,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         })
       )
         throw Error('歌单内容已过期，请重新打开')
-      return persistPublic(snapshot, { title }).playlist
+      return persistPublic(snapshot, { title }).imported
     }
     const rows = await publicSongs(platform, id)
     if (!rows.length) throw Error('此歌单没有在线曲目')
@@ -1243,7 +1257,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       return key
     })
     try {
-      return persistPublic(keys, { title }).playlist
+      return persistPublic(keys, { title }).imported
     } finally {
       for (const key of keys) collectionRows.delete(key)
     }

@@ -191,7 +191,7 @@ declare global {
           id: string,
           title: string,
           snapshot?: string[],
-        ): Promise<string>
+        ): Promise<{ playlist: string; added: number; skipped: number }>
         playlistArtwork(id: string): Promise<string | null>
         changePlaylistArtwork(id: string, reset: boolean): Promise<void>
         musicGuide(): Promise<{ seen: boolean; script: string }>
