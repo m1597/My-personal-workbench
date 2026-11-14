@@ -26,19 +26,26 @@ export function useOutputDevice(
       const devices = await outputs()
       if (!alive) return
       const previousDefault = previous?.find((d) => d.deviceId === 'default')
-      const nextDefault = devices.find((d) => d.deviceId === 'default')
+      const endpoints =
+        previous?.filter(
+          (d) => d.deviceId && !['default', 'communications'].includes(d.deviceId),
+        ) ?? []
+      const defaultLabel = previousDefault?.label.replace(/^.*?\s+-\s+/, '')
+      const byLabel = endpoints.filter((d) => defaultLabel && d.label === defaultLabel)
+      const byGroup = endpoints.filter(
+        (d) => previousDefault?.groupId && d.groupId === previousDefault.groupId,
+      )
       const previousOutput = sinkChoice
-        ? previous?.find((d) => d.deviceId === sinkChoice)
-        : previousDefault
-      const removed =
-        previousOutput &&
-        (sinkChoice
-          ? !devices.some((d) => d.deviceId === sinkChoice)
-          : nextDefault?.label !== previousOutput.label ||
-            nextDefault?.groupId !== previousOutput.groupId)
+        ? endpoints.find((d) => d.deviceId === sinkChoice)
+        : byLabel.length === 1
+          ? byLabel[0]
+          : byGroup.length === 1
+            ? byGroup[0]
+            : undefined
       if (
-        removed &&
-        (sinkChoice || headset(previousOutput.label)) &&
+        previousOutput &&
+        !devices.some((d) => d.deviceId === previousOutput.deviceId) &&
+        (sinkChoice || headset(previousOutput.label) || headset(previousDefault?.label || '')) &&
         unplug === 'pause' &&
         !el.paused
       )

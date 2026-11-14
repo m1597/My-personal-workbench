@@ -25,6 +25,10 @@ store.set('music-guide-v1', 1)
 store.checkpoint(id, 6)
 store.set('play-queue', JSON.stringify([id]))
 const bilingual = downloadLrc(original, translation, true)
+assert.equal(
+  downloadLrc('[offset:100]\n[00:01.200]original', '[00:01.100]译文', true),
+  '[00:01.100]original\r\n[00:01.100]译文\r\n',
+)
 assert.equal(downloadLrc(original, translation, false), original)
 assert.deepEqual(downloadLrc(bilingual, '', false).split('\r\n').filter(Boolean), [
   '[00:00.000]The shore',
@@ -156,6 +160,33 @@ try {
   })
   await expect.poll(() => audio().evaluate((a) => a.paused)).toBe(true)
   await expect.poll(() => audio().evaluate((a) => a.sinkId)).toBe('')
+  await choose('播放输出设备', '跟随系统')
+  const endpoints = [
+    { kind: 'audiooutput', deviceId: 'usb-test', label: '测试耳机', groupId: 'a' },
+    { kind: 'audiooutput', deviceId: 'speaker-test', label: '测试扬声器', groupId: 'b' },
+  ]
+  async function deviceChange(defaultIndex, connected) {
+    await page.evaluate(
+      async ({ defaultIndex, connected, endpoints }) => {
+        const physical = endpoints[defaultIndex]
+        globalThis.testOutputList = [
+          { ...physical, deviceId: 'default', label: '默认 - ' + physical.label },
+          ...connected.map((i) => endpoints[i]),
+        ]
+        navigator.mediaDevices.dispatchEvent(new Event('devicechange'))
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      },
+      { defaultIndex, connected, endpoints },
+    )
+  }
+  await deviceChange(0, [0, 1])
+  await audio().evaluate((a) => a.play())
+  await deviceChange(1, [0, 1])
+  const clockAt = await audio().evaluate((a) => a.currentTime)
+  await expect.poll(() => audio().evaluate((a) => a.currentTime)).toBeGreaterThan(clockAt + 0.2)
+  await deviceChange(0, [0, 1])
+  await deviceChange(1, [1])
+  await expect.poll(() => audio().evaluate((a) => a.paused)).toBe(true)
   console.log('PASS 歌词设置、双语 LRC、重启三种策略、后台与输出设备断开', root)
 } finally {
   await app.close()

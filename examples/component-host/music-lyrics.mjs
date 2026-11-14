@@ -15,8 +15,11 @@ export function lyricLines(raw, translations = false) {
     if (!tags) continue
     for (const match of tags[1].matchAll(/\[(\d+):(\d+)(?:[.:](\d+))?\]/g)) {
       if (Number(match[2]) >= 60) continue
-      const at =
-        Number(match[1]) * 60 + Number(match[2]) + Number('0.' + (match[3] || 0)) - offset / 1000
+      const millis =
+        (Number(match[1]) * 60 + Number(match[2])) * 1000 +
+        Number((match[3] || '').padEnd(3, '0')) -
+        offset
+      const at = millis / 1000
       // Bilingual LRC sidecars place the original before its translation at the same timestamp.
       const word = tags[2].trim()
       const words = result.get(at) ?? []
