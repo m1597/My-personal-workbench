@@ -161,7 +161,7 @@ type Mode = {
 }
 type PlaybackFailure = {
   message: string
-  choices: { key: string; title: string; artist: string; source: string }[]
+  choices: { key: string; title: string; artist: string; source: string; duration: number }[]
 }
 declare global {
   interface Window {
@@ -765,14 +765,14 @@ function Music() {
     pendingAlbum: string[] = [],
     startAt?: number,
     renewGrant = false,
-    context?: 'clip' | 'transition',
+    context?: 'clip' | 'transition' | 'skipFailed',
   ) {
     if (context !== 'clip') clearQuick()
     if (context !== 'transition') fading.current?.()
     const seq = ++epoch.current
     requested.current = { id, seq, src: current.current === id ? (audio.current?.src ?? '') : '' }
     setPlayError(undefined)
-    setOnlineFailure(undefined)
+    if (context !== 'skipFailed') setOnlineFailure(undefined)
     const onlineTrack =
       id.startsWith('online-recording-') || !!state?.items.find((r) => r.id === id)?.online
     const fail = (reason: unknown) => {
@@ -850,10 +850,11 @@ function Music() {
     occurrence = 0,
     restart = false,
     pendingAlbum: string[] = [],
+    context?: 'skipFailed',
   ) {
     const row = state?.items.find((r) => r.id === id)
     if (row?.online && !playable(row)) await audition(row, undefined, undefined, ids)
-    else await play(id, ids, occurrence, restart, pendingAlbum)
+    else await play(id, ids, occurrence, restart, pendingAlbum, undefined, false, context)
   }
   async function playSearchResult(key: string, quality?: string) {
     const request = ++epoch.current
@@ -2247,7 +2248,6 @@ function Music() {
               requested.current.seq === epoch.current
             ) {
               setPlayError(undefined)
-              setOnlineFailure(undefined)
             }
           }}
           onPlay={() => setPaused(false)}
@@ -2312,6 +2312,8 @@ function Music() {
                       ids,
                       ids.slice(0, position + 1).filter((key) => key === next).length,
                       true,
+                      [],
+                      'skipFailed',
                     )
                   await refresh()
                 })
@@ -2367,6 +2369,7 @@ function Music() {
               >
                 {language === 'en' ? 'Play ' : '播放'}
                 {choice.title} · {choice.artist} · {choice.source}
+                {choice.duration > 0 && ` · ${formatTime(choice.duration)}`}
               </button>
             ))}
             <button onClick={() => setOnlineFailure(undefined)}>

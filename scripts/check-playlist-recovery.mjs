@@ -20,11 +20,12 @@ if(action==='search'){
 const title=titles.find(t=>info.keyword.includes(t));
 if(!title)return [];
 const live=role==='备用' && title==='晚风';
-return {hasMore:false,items:[{name:title+(live?' (Live)':''),singer:'夹具艺人',id:title+(live?'live':''),durationSeconds:20}]};
+const row={name:title+(live?' (Live)':''),singer:'夹具艺人',albumName:'夹具专辑',id:title+(live?'live':''),durationSeconds:live?200:20};
+return {hasMore:false,items:live?[row,{...row,id:title+'otherLive',durationSeconds:302}]:[row]};
 }
 const id=info.musicInfo.id;
 if(role==='原源' || !(role==='备用'&&['轻云','归途','晚风live'].includes(id) || role==='新增'&&id==='细雨'))return 'https://1.1.1.1/fail';
-return 'https://1.1.1.1/audio/'+encodeURIComponent(id);
+return 'https://1.1.1.1/audio/'+encodeURIComponent(id)+'?issued='+Date.now();
 });lx.send('inited',{sources:{wy:{actions:['musicUrl','search'],qualitys:['128k']}}})`
 }
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
@@ -61,6 +62,10 @@ try {
         if (url.hostname !== '1.1.1.1') return previous(url, options, done)
         const pathname = decodeURIComponent(url.pathname)
         globalThis.testPlaybackEvents.push(pathname)
+        if (pathname === '/audio/轻云') {
+          globalThis.issuedURLs ??= []
+          globalThis.issuedURLs.push(url.href)
+        }
         const body = pathname.startsWith('/audio/')
           ? fs.readFileSync(tone)
           : Buffer.from(
@@ -77,7 +82,7 @@ try {
         req.end = () =>
           done(
             Object.assign(Readable.from([body]), {
-              statusCode: pathname === '/fail' ? 403 : 200,
+              statusCode: pathname === '/fail' || globalThis.expired === url.href ? 403 : 200,
               headers: {
                 'content-type': pathname.startsWith('/audio/') ? 'audio/wav' : 'text/plain',
                 'content-length': String(body.length),
@@ -150,10 +155,20 @@ try {
   await end()
   await playing(3)
   const choose = page.getByRole('button', { name: /播放晚风.*Live/ })
-  await expect(choose).toBeVisible()
+  await expect(choose).toHaveCount(2)
+  await expect(choose.first()).toContainText('3:20')
+  await expect(choose.last()).toContainText('5:02')
   await page.screenshot({ path: path.join(root, '版本选择.png') })
-  await press(choose)
+  await press(choose.first())
   await playing(2)
+  await app.evaluate(() => {
+    globalThis.expired = globalThis.issuedURLs[0]
+  })
+  await press(page.getByRole('button', { name: '播放轻云', exact: true }))
+  await playing(0)
+  const renewed = await app.evaluate(() => globalThis.issuedURLs)
+  assert.equal(renewed[0], renewed[1])
+  assert.notEqual(renewed[1], renewed[2])
   const events = await app.evaluate(() => globalThis.testPlaybackEvents)
   assert.equal(events.filter((p) => p === '/manifest').length, 1)
   assert.equal(events.filter((p) => p === '/untrusted').length, 0)

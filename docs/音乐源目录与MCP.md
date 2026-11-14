@@ -94,3 +94,17 @@ node scripts/check-music-source-live.mjs fish
 在「设置 → 音乐源 → 音源目录 → 播放备用目录」添加公网清单 URL。清单格式为 `{"sources":[{"url":"./source.js"}],"repositories":["https://example.org/more.json"]}`。已安装来源全败时，同一播放队列共享一次目录刷新，新增或更新且通过原沙箱能力检查的脚本随后参与重试。清单列出的其他目录需手动选择「使用此目录」才会纳入刷新。单曲播放失败不影响该源对其他录音的可用性。
 
 专项 `scripts/check-playlist-recovery.mjs` 使用独立桌面静音播放四条在线引用，检查 403、备用同录音、一次共享刷新、版本选择、续播、原次序以及未授权目录零请求。公网专项 `scripts/check-playlist-recovery-live.mjs` 读取变量 `FITBAY_TEST_LIVE_LIBRARY` 指定的首开测试数据库，从中复制已导入的公开源到新 profile；可设置 `FITBAY_PLAYBACK_PLATFORM=tx` 走 QQ 真实搜索。原源故障由夹具注入，其余源与媒体请求访问公网。
+### 首播与重播实测
+
+仅在内存保存最近 32 条已成功播放的地址，最长 45 秒。复用前核对录音、脚本和试听音质；手动换源或关闭 Music 清空缓存。已失效的缓存地址会触发重新取址。每次上游请求仍检查公网地址，媒体连接池按已核验的网络地址隔离。进度条拖动使用原有 Range 校验。
+
+2026-11-14，独立桌面、静音、全新测试 profile，使用 QQ 的 Kevin MacLeod《Monkeys Spinning Monkeys》，MID 为 `000l6b9v0OZO45`，同一 Hello World 脚本，128k，实际解码 125.075351 秒。下表为从用户触发到各阶段的秒数。每格是一次公网样本。
+
+| 播放入口 | 取得媒体 URL | 首段 | playing |
+| --- | ---: | ---: | ---: |
+| FitBay 找歌，优化前 / 后 | 2.732 / 1.820 | 4.003 / 2.850 | 4.190 / 3.144 |
+| FitBay 重启后歌单首播，优化前 / 后 | 1.229 / 1.536 | 2.457 / 2.602 | 2.924 / 2.859 |
+| FitBay 切走再播，优化前 / 后 | 1.297 / 复用 | 2.317 / 1.190 | 2.374 / 1.238 |
+| 洛雪桌面 2.12.6 找歌 | 3.257 | 3.488 | 3.518 |
+
+FitBay 从宿主记录取址、字节和 Chromium 的 playing。洛雪独立进程使用已配置的同一源脚本，以 DevTools 收到媒体请求的时间计作 URL 可用，首段来自 Network.dataReceived，playing 来自真实音频元素。两版 FitBay 均实际拖至 82 秒后继续播放。冷播仍受源和公网影响。可通过 `scripts/check-playback-latency-fitbay.mjs` 和 `scripts/check-playback-latency-lx.mjs` 复验。

@@ -841,6 +841,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   )
   bind('lxSelectSource', (id) => {
     catalog().select(id)
+    playback.clear()
     matches.clear()
   })
   bind('lxInfo', () => source()?.name ?? '')

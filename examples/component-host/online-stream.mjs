@@ -1,10 +1,11 @@
+import { channel } from 'node:diagnostics_channel'
 import { Readable } from 'node:stream'
 import { openPublic } from './lx-net.mjs'
 
 const maxBytes = 512 * 1024 * 1024
 const rangeSyntax = /^bytes=(?:\d+-\d*|-\d+)$/
 
-function describe(upstream) {
+function mediaHeaders(upstream) {
   const status = upstream.statusCode
   const contentRange = upstream.headers['content-range']
   if (status === 416) {
@@ -58,11 +59,12 @@ export async function onlineStream(request, grant) {
         let input
         try {
           input = await openPublic(url, {
+            playback: true,
             method: request.method,
             mediaRange: range,
             signal: AbortSignal.any([work, deadline.signal]),
           })
-          describe(input)
+          mediaHeaders(input)
           return input
         } catch (error) {
           input?.destroy()
@@ -84,7 +86,7 @@ export async function onlineStream(request, grant) {
         }
         break
       }
-    const { status, headers } = describe(upstream)
+    const { status, headers } = mediaHeaders(upstream)
     if (request.method === 'HEAD' || status === 416) {
       upstream.destroy()
       return new Response(null, { status, headers })
@@ -94,6 +96,8 @@ export async function onlineStream(request, grant) {
       let received = 0
       try {
         for await (const chunk of upstream) {
+          if (!received)
+            channel('fitbay.music.playback').publish({ stage: 'first-bytes', id: grant.id })
           received += chunk.length
           if (received > maxBytes) throw Error('音频超过单曲大小限制')
           yield chunk

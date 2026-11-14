@@ -20,6 +20,7 @@ export function playlistPlayback({
   preferred,
   refresh,
 }) {
+  const recent = new Map()
   const choices = new Map(),
     overrides = new Map()
   const sourceRows = () =>
@@ -33,6 +34,7 @@ export function playlistPlayback({
       title: recordingDisplayTitle(v.row),
       artist: v.row.singer || '',
       source: v.src.name,
+      duration: Number(v.row.durationSeconds) || 0,
     }))
   }
   function choose(id, key) {
@@ -44,13 +46,18 @@ export function playlistPlayback({
   function open(id, original, cached, scope) {
     const saved = JSON.parse(original.identifiers),
       variants = new Map()
-    const originalDefinition = sourceRows().find(
-      (provider) => provider.id === original.source,
-    )?.source
+    const installed = sourceRows()
+    const originalDefinition = installed.find((provider) => provider.id === original.source)?.source
     const nativeCatalog =
       saved.nativeCatalog ?? originalDefinition?.platforms?.[original.platform]?.search === false
     const selected = overrides.get(id)
-    let winner = selected,
+    const previous = recent.get(id)
+    const reusable =
+      previous &&
+      previous.expires > Date.now() &&
+      previous.preference === preferred() &&
+      installed.some(({ source }) => source.code === previous.src.code)
+    let winner = selected ?? (reusable ? previous : undefined),
       refreshed = false
     overrides.delete(id)
     choices.delete(id)
@@ -104,7 +111,7 @@ export function playlistPlayback({
             break
           }
           if (match || normalized(found.name) === normalized(saved.name)) {
-            const label = [found.name, found.singer, found.albumName].map(normalized).join('\0')
+            const label = JSON.stringify([src.platform, src.search ? provider.id : '', hasId])
             if (variants.size < 20 && !variants.has(label))
               variants.set(label, { key: randomUUID(), src, row: found })
           }
@@ -128,10 +135,26 @@ export function playlistPlayback({
     }
     return {
       async connect(signal, connect) {
+        // Cached addresses stay in memory and still go through the public-media transport.
         // A renewed URL can be necessary for a range seek after a signed URL expires.
         if (winner) {
           try {
-            return await connect(await resolve(winner.src, winner.row, signal), signal)
+            if (winner.url && winner.expires > Date.now()) {
+              try {
+                const response = await connect(winner.url, signal)
+                playbackEvents.publish({ stage: 'cached-headers', id, source: winner.src.name })
+                return response
+              } catch {
+                signal.throwIfAborted()
+                recent.delete(id)
+                winner.url = undefined
+              }
+            }
+            const url = await resolve(winner.src, winner.row, signal)
+            const response = await connect(url, signal)
+            winner = { ...winner, url, expires: Date.now() + 45000, preference: preferred() }
+            if (!selected) recent.set(id, winner)
+            return response
           } catch (error) {
             signal.throwIfAborted()
             if (selected) throw error
@@ -148,7 +171,13 @@ export function playlistPlayback({
           )
           const pending = sources
             .filter(({ src }) => !attempted.has(src.platform + '\0' + src.code))
-            .sort((a, b) => Number(b.id === original.source) - Number(a.id === original.source))
+            .sort(
+              (a, b) =>
+                2 * Number(b.src.platform === original.platform) +
+                Number(b.id === original.source) -
+                (2 * Number(a.src.platform === original.platform) +
+                  Number(a.id === original.source)),
+            )
           const probe = (provider, work) =>
             trySource(provider, AbortSignal.any([work, AbortSignal.timeout(6500)]))
           for await (const attempt of availableSources(pending, probe, signal, 3)) {
@@ -164,7 +193,13 @@ export function playlistPlayback({
             try {
               const response = await connect(attempt.candidate.url, signal)
               playbackEvents.publish({ stage: 'headers', id, source: attempt.candidate.src.name })
-              winner = attempt.candidate
+              winner = {
+                ...attempt.candidate,
+                expires: Date.now() + 45000,
+                preference: preferred(),
+              }
+              if (recent.size >= 32) recent.delete(recent.keys().next().value)
+              recent.set(id, winner)
               choices.delete(id)
               return response
             } catch (e) {
@@ -197,6 +232,7 @@ export function playlistPlayback({
     list,
     choose,
     clear() {
+      recent.clear()
       choices.clear()
       overrides.clear()
     },

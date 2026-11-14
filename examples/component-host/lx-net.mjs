@@ -4,6 +4,34 @@ import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import ipaddr from 'ipaddr.js'
 
+// A reusable media socket must connect to the exact public address validated for
+// this request. Keep pools separate by protocol and bind each pool to that peer.
+const mediaPools = new Map()
+function mediaAgent(protocol, peer) {
+  const key = protocol + ' ' + peer.family + ' ' + peer.address
+  let agent = mediaPools.get(key)
+  if (!agent) {
+    if (mediaPools.size >= 16) return false
+    const Agent = protocol === 'https:' ? https.Agent : http.Agent
+    agent = new Agent({ keepAlive: true, maxFreeSockets: 1, maxSockets: 4, timeout: 10000 })
+    mediaPools.set(key, agent)
+    const observed = new WeakSet()
+    agent.on('free', (socket) => {
+      if (observed.has(socket)) return
+      observed.add(socket)
+      socket.once('close', () => {
+        if (
+          mediaPools.get(key) === agent &&
+          !Object.keys(agent.sockets).length &&
+          !Object.keys(agent.freeSockets).length
+        )
+          mediaPools.delete(key)
+      })
+    })
+  }
+  return agent
+}
+
 async function lookupPublicHost(hostname, signal) {
   signal?.throwIfAborted()
   if (!signal) return lookup(hostname, { all: true })
@@ -88,7 +116,7 @@ async function openRedirect(input, options, redirects, peers) {
       {
         method,
         headers,
-        agent: false,
+        agent: options.playback ? mediaAgent(url.protocol, peer) : false,
         autoSelectFamily: false,
         family: peer.family,
         lookup: (_name, _opts, cb) => cb(null, peer.address, peer.family),
