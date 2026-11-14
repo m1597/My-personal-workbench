@@ -65,6 +65,7 @@ import {
 } from './LibraryPane'
 import { SongCredits, SongCatalog, songRowClick, songAlbum } from './SongCredits'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
+import { MusicLanguage } from './BackButton'
 import { playbackReason, userMessage } from './playbackError'
 import { PlaybackQueue } from './PlaybackQueue'
 import { DownloadTasks } from './DownloadTasks'
@@ -2389,7 +2390,9 @@ function Music() {
   )
   return (
     <RevealTrackContext.Provider value={(id) => void act(() => host.revealTrack(id))}>
-      <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
+      <MusicLanguage.Provider value={language}>
+        <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
+      </MusicLanguage.Provider>
     </RevealTrackContext.Provider>
   )
 }

@@ -16,12 +16,12 @@ export function ArtistPortrait({ id }: { id: string }) {
   }, [id])
   const image = id && source?.id === id && source.image
   return (
-    <img
-      className="catalog-artist-portrait"
-      data-fallback={!image}
-      alt=""
-      src={image || './default-artist.webp'}
-      onError={image ? () => setSource({ id, image: null }) : undefined}
-    />
+    <span className="catalog-artist-portrait" data-fallback={!image}>
+      <img
+        alt=""
+        src={image || './default-artist.webp'}
+        onError={image ? () => setSource({ id, image: null }) : undefined}
+      />
+    </span>
   )
 }

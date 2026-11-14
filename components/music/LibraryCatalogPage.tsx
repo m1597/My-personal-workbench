@@ -1,7 +1,8 @@
+import { BackButton } from './BackButton'
 import { ArtistPortrait } from './ArtistPortrait'
 import { Button } from '@fluentui/react-components'
 import { Cover } from './AlbumBrowser'
-import { ArrowLeft, Play } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { formatTime, type PlaylistTrack, type LocalTrack } from './LibraryPane'
 import { Highlights, NewsTracks, type News, type ReleaseActions } from './ReleaseCatalog'
@@ -165,9 +166,7 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
       data-artist={artistPage}
       aria-label={artistPage ? '歌手主页' : '专辑主页'}
     >
-      <Button size="small" appearance="subtle" icon={<ArrowLeft size={16} />} onClick={back}>
-        返回
-      </Button>
+      <BackButton onClick={back} />
       <header>
         {artistPage && <ArtistPortrait id={chosen} />}
         <small>{artistPage ? '歌手' : '专辑'}</small>

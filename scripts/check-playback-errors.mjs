@@ -52,6 +52,15 @@ for (const language of ['zh-CN', 'en']) {
       style: ':root{background:var(--base)!important}',
     })
     assert.ok(await app.evaluate(({ app }) => app.commandLine.hasSwitch('mute-audio')))
+    await page.getByRole('button', { name: '打开歌词页' }).click()
+    const backLabel = language === 'en' ? 'Back' : '返回'
+    const back = page.getByRole('region', { name: '播放页' }).getByRole('button', {
+      name: backLabel,
+      exact: true,
+    })
+    await expect(back).toHaveAttribute('title', backLabel)
+    assert.equal(await back.innerText(), '')
+    await back.click()
     // Reject the older play promise after a later successful resume of this recording.
     await page.evaluate(() => {
       const el = document.querySelector('audio')

@@ -1,3 +1,4 @@
+import { BackButton } from './BackButton'
 import { TrackMenu } from './TrackMenu'
 import {
   Button,
@@ -9,7 +10,7 @@ import {
   MenuTrigger,
   MenuItemRadio,
 } from '@fluentui/react-components'
-import { ArrowLeft, ArrowDownUp, Play, Search, Shuffle } from 'lucide-react'
+import { ArrowDownUp, Play, Search, Shuffle } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatTime, type LocalTrack } from './LibraryPane'
 import { AlbumEditions } from './ReleaseCatalog'
@@ -171,15 +172,7 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
     const queue = selected.tracks.filter((id) => trackMap.get(id)?.available)
     return (
       <section ref={section} aria-label="专辑曲目" className="album-detail">
-        <Button
-          className="album-back"
-          size="small"
-          appearance="subtle"
-          icon={<ArrowLeft size={16} />}
-          onClick={() => setChosen('')}
-        >
-          返回专辑
-        </Button>
+        <BackButton to="albums" onClick={() => setChosen('')} />
         <header className="album-detail-header">
           <Cover revision={revision} id={selected.id} />
           <div>

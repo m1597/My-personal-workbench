@@ -51,6 +51,46 @@ try {
   )
   await page.getByRole('tab', { name: '歌手', exact: true }).click()
   const button = (name) => page.getByRole('button', { name, exact: true })
+  for (const width of [1080, 420]) {
+    await app.evaluate(({ BaseWindow }, width) => {
+      const w = BaseWindow.getAllWindows().find((w) => w.getTitle() === 'Music')
+      w.setMinimumSize(320, 400)
+      w.setContentSize(width, 680)
+    }, width)
+    await expect.poll(() => page.evaluate(() => innerWidth)).toBeLessThanOrEqual(width + 20)
+    for (const artist of [photo, missing]) {
+      const image = button(artist.name).first().locator('img')
+      await expect(image).toHaveAttribute(
+        'src',
+        artist === photo ? /^data:image\/jpeg/ : /default-artist.webp$/,
+        { timeout: 45000 },
+      )
+      assert.ok(
+        await image.evaluate((el) => {
+          const ring = el.parentElement,
+            r = ring.getBoundingClientRect(),
+            a = el.getBoundingClientRect()
+          return (
+            Math.abs(r.width - r.height) < 1 &&
+            Math.abs(a.width - a.height) < 1 &&
+            getComputedStyle(ring).borderRadius === '50%' &&
+            getComputedStyle(el).objectFit === 'cover'
+          )
+        }),
+      )
+    }
+    const columns = await page.evaluate(() => {
+      const l = document.querySelector('.followed-artists').getBoundingClientRect(),
+        r = document.querySelector('.release-news-column').getBoundingClientRect()
+      return { left: l.x, right: r.x, top: l.y, bottom: r.y, width: l.width, other: r.width }
+    })
+    if (width > 500) assert.ok(columns.right > columns.left && columns.width > columns.other * 0.78)
+    else assert.ok(columns.bottom > columns.top)
+    await page.screenshot({
+      path: path.join(root, 'following-' + width + '.png'),
+      style: ':root{background:var(--base)!important}',
+    })
+  }
   const card = button(photo.name).first().locator('img')
   await expect(card).toHaveAttribute('src', /^data:image\/jpeg/, { timeout: 45000 })
   const image = await card.getAttribute('src')
@@ -61,7 +101,11 @@ try {
     path: path.join(root, 'artist-photo.png'),
     style: ':root{background:var(--base)!important}',
   })
-  await home.getByRole('button', { name: '返回' }).click()
+  const back = home.getByRole('button', { name: '返回', exact: true })
+  await expect(back).toHaveAttribute('title', '返回')
+  assert.equal(await back.innerText(), '')
+  assert.ok((await back.boundingBox()).width >= 40)
+  await back.click()
   await button(missing.name).first().click()
   await expect(home.locator('header img')).toHaveAttribute('src', './default-artist.webp')
   await page.screenshot({

@@ -104,7 +104,7 @@
 }
 @media (min-width: 740px) {
   .music-scroll[data-page="feed"] .music-release-news {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-columns: minmax(0, 0.46fr) minmax(0, 0.54fr);
     gap: var(--space-16);
   }
   .music-release-news .release-news-column {

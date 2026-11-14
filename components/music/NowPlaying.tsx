@@ -1,6 +1,6 @@
+import { BackButton } from './BackButton'
 import { SongCredits } from './SongCredits'
 import { Button, Popover, PopoverTrigger, PopoverSurface } from '@fluentui/react-components'
-import { ArrowLeft } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { defaultCover, requestCover } from './AlbumBrowser'
 import { SongDetails } from './SongDetails'
@@ -146,9 +146,7 @@ export function NowPlaying({
   return (
     <section className="now-playing" aria-label="播放页">
       <div className="now-playing-toolbar">
-        <Button appearance="subtle" size="small" icon={<ArrowLeft size={16} />} onClick={back}>
-          返回
-        </Button>
+        <BackButton onClick={back} />
         {trackId && <SongDetails trackId={trackId} actions={actions} />}
         {timed && (
           <Popover positioning="below-end">
