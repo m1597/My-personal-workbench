@@ -839,12 +839,15 @@ export function LibraryPane({
                           {...(currentPlaylist?.sort === 'custom' && !selection
                             ? sortableTrack(collection, t.id)
                             : {})}
+                          {...songRow(() => {
+                            if (t.available) playRow(t.id)
+                          }, !selection)}
                           data-active={active === t.id}
                           className="library-row"
-                          tabIndex={keyboardResults ? 0 : undefined}
+                          tabIndex={keyboardResults ? 0 : -1}
                           onKeyDown={(e) => {
                             if (
-                              !keyboardResults ||
+                              selection ||
                               e.target !== e.currentTarget ||
                               e.altKey ||
                               e.ctrlKey ||
@@ -852,6 +855,12 @@ export function LibraryPane({
                               e.nativeEvent.isComposing
                             )
                               return
+                            if (!e.shiftKey && e.key === 'Enter') {
+                              e.preventDefault()
+                              if (!e.repeat && t.available) playRow(t.id)
+                              return
+                            }
+                            if (!keyboardResults) return
                             if (!e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
                               e.preventDefault()
                               focusResult(index + (e.key === 'ArrowDown' ? 1 : -1))
@@ -859,19 +868,6 @@ export function LibraryPane({
                               e.preventDefault()
                               if (!e.repeat && t.available) onQueue(t.id, false)
                             }
-                          }}
-                          onClick={(e) => {
-                            if (
-                              e.detail < 2 &&
-                              !selection &&
-                              t.available &&
-                              e.target instanceof Element &&
-                              e.currentTarget.contains(e.target) &&
-                              !e.target.closest(
-                                'button, input, label, .track-actions, [data-audio-drag], [role="button"]',
-                              )
-                            )
-                              playRow(t.id)
                           }}
                         >
                           {selection ? (
@@ -933,12 +929,15 @@ export function LibraryPane({
                               <button
                                 type="button"
                                 className="catalog-text-link"
-                                onClick={() =>
-                                  openCatalog({
-                                    kind: 'album',
-                                    name: t.album,
-                                    artist: albumArtist(t),
-                                  })
+                                data-song-credit=""
+                                onClick={(e) =>
+                                  creditClick(e, () =>
+                                    openCatalog({
+                                      kind: 'album',
+                                      name: t.album,
+                                      artist: albumArtist(t),
+                                    }),
+                                  )
                                 }
                               >
                                 {t.album}
