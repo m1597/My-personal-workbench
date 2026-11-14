@@ -52,6 +52,7 @@ export function usePlaylistImport(active: boolean) {
   const isFile = (event: DragEvent) => active && event.dataTransfer.types.includes('Files')
   return {
     preview,
+    error,
     close: () => setPreview(undefined),
     drop: {
       onDragOverCapture(event: DragEvent) {
@@ -73,11 +74,11 @@ export function usePlaylistImport(active: boolean) {
           size="small"
           icon={<FileInput size={16} />}
           disabled={loading}
-          title="选择或拖入 M3U / M3U8 歌单"
+          aria-label="导入歌单"
+          aria-busy={loading}
+          title={loading ? '正在读取歌单…' : '导入 M3U / M3U8 歌单'}
           onClick={() => input.current?.click()}
-        >
-          {loading ? '读取中…' : '导入歌单'}
-        </Button>
+        />
         <input
           ref={input}
           type="file"
@@ -88,7 +89,6 @@ export function usePlaylistImport(active: boolean) {
             e.target.value = ''
           }}
         />
-        {error && <small role="alert">{error}</small>}
       </>
     ),
   }

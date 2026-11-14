@@ -617,8 +617,11 @@ li[data-active="true"] .music-track-icon,
 .folder-line [aria-expanded="true"] svg {
   transform: rotate(90deg);
 }
-.playlist-heading {
-  justify-content: space-between;
+.playlist-heading h3 {
+  margin-inline-end: auto;
+}
+.playlist-heading > button {
+  flex: none;
 }
 .playlist-form {
   flex-wrap: wrap;

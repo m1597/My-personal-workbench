@@ -66,6 +66,23 @@ try {
   const page = await app.firstWindow()
   await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(1100, 780))
   await page.getByRole('tab', { name: '歌单', exact: true }).click()
+  const heading = page.locator('.playlist-heading')
+  const importButton = heading.getByRole('button', { name: '导入歌单' })
+  const createButton = heading.getByRole('button', { name: '新建歌单' })
+  await expect(importButton).toHaveAttribute('title', '导入 M3U / M3U8 歌单')
+  await expect(importButton).toHaveText('')
+  assert.ok((await importButton.boundingBox()).x < (await createButton.boundingBox()).x)
+  await heading.screenshot({
+    path: path.join(root, '歌单导航.png'),
+    style: ':root{background:var(--base)!important}',
+  })
+  const chooser = page.waitForEvent('filechooser')
+  await importButton.click()
+  await (await chooser).setFiles(file)
+  await expect(page.getByRole('dialog').getByRole('textbox', { name: '歌单名称' })).toHaveValue(
+    '旧时光',
+  )
+  await page.getByRole('dialog').getByRole('button', { name: '取消' }).click()
   const bounds = await page.locator('.library-layout').boundingBox()
   const cdp = await page.context().newCDPSession(page)
   // Chromium creates File objects backed by real paths, exactly as in an OS file drop.

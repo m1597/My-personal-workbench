@@ -445,11 +445,13 @@ export function LibraryPane({
             </Button>
             <div className="playlist-heading">
               <h3>我的歌单</h3>
+              {importer.trigger}
               <Button
                 appearance="subtle"
                 size="small"
                 icon={<Plus size={16} />}
                 aria-label="新建歌单"
+                title="新建歌单"
                 onClick={() => {
                   setName('')
                   setInitialMembers([])
@@ -459,7 +461,7 @@ export function LibraryPane({
                 }}
               />
             </div>
-            {importer.trigger}
+            {importer.error && <small role="alert">{importer.error}</small>}
             {orderedSidebarItems(playlists, sidebarOrder?.playlists).map((list) => {
               const trigger = (
                 <Button
