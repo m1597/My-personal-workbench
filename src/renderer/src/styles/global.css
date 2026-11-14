@@ -157,10 +157,18 @@ svg {
 .dockview-theme-workbench .dv-default-tab .dv-default-tab-content {
   padding-right: var(--space-5);
 }
+.dockview-theme-workbench .dv-right-actions-container > .dv-react-part {
+  display: flex;
+  align-items: center;
+}
 .dockview-theme-workbench .header-action {
   width: 26px;
   height: 28px;
   margin-right: var(--space-3);
+  background: transparent;
+}
+.dockview-theme-workbench .header-action:is(:hover, :focus-visible) {
+  background: var(--hover);
 }
 .module-navigation,
 .inspector {
