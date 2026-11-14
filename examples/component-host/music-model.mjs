@@ -75,7 +75,7 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
         : purpose === 'profile'
           ? profileInstructions
           : recommendationInstructions +
-            ' 本次输入非空时以输入为准，个人偏好只用于同等候选取舍；空白时按个人偏好。按 recording 的版本、翻唱、伴奏偏好处理，明确输入优先。scope=direct 时只给与本次主题直接相关的候选；可信直接候选已经用尽时，返回 directExhausted:true，songs 可以为空，不要凑数。scope=related 才允许靠近主题的相邻风格，并在 reason 解释联系。'
+            ' 生成和补推时按 requestWeight 与 tasteWeight 的百分比权衡本次输入和已授权口味，权重为零的因素不参与。每首歌曲另附 requestFit 和 tasteFit 两个 0 到 100 的整数，分别独立衡量对本次输入、已提供口味的吻合度；缺乏对应信息填 50。理由说明具体依据。若给出 douyinChart，只有其中的同名同署名录音可作为已核验的热门作品；按权重兼顾口味及榜单名次，100%要求时仅从榜单选择。榜单缺失时不得声称已上榜。按 recording 的版本、翻唱、伴奏偏好处理。scope=direct 时只给直接相关的候选；可信直接候选已经用尽时返回 directExhausted:true，songs 可以为空。scope=related 才允许靠近主题的相邻风格，并在 reason 解释联系。'
   const { active, accounts } = config(store),
     p = providers[active],
     account = accounts[active]
@@ -209,7 +209,17 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
       songs:
         parsed.directExhausted === true && Array.isArray(parsed.songs) && !parsed.songs.length
           ? []
-          : validateSuggestions(parsed.songs, { songPunctuation: true, partial: true }),
+          : validateSuggestions(
+              parsed.songs.map(({ requestFit, tasteFit, ...song }) => song),
+              { songPunctuation: true, partial: true },
+            ).map((song, i) => {
+              const source = parsed.songs[i]
+              const fit = (key) =>
+                Number.isInteger(source[key]) && source[key] >= 0 && source[key] <= 100
+                  ? source[key]
+                  : 50
+              return { ...song, requestFit: fit('requestFit'), tasteFit: fit('tasteFit') }
+            }),
       directExhausted: parsed.directExhausted === true,
       requestedArtist:
         typeof parsed.requestedArtist === 'string' && parsed.requestedArtist.length <= 300

@@ -28,3 +28,15 @@
   justify-content: space-between;
   gap: 8px;
 }
+.music-recommend-weight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--colorNeutralForeground2);
+  font-size: 12px;
+}
+.music-recommend-weight input {
+  width: min(160px, 30vw);
+  accent-color: var(--colorBrandForeground1);
+}

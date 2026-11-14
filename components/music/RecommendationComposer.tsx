@@ -3,6 +3,7 @@ import { Button, Input } from '@fluentui/react-components'
 import type { ModelInfo } from './ModelSettings'
 import { DiscoveryInput } from './DiscoveryInput'
 type Props = {
+  savedWeight: number
   models: ModelInfo
   onGenerating(busy: boolean): void
   activeTarget?: number | null
@@ -17,6 +18,7 @@ type Props = {
   openSettings(): void
 }
 export function RecommendationComposer({
+  savedWeight,
   models,
   activeTarget,
   running,
@@ -32,6 +34,8 @@ export function RecommendationComposer({
 }: Props) {
   const input = useRef<HTMLInputElement>(null)
   const [submitting, setBusy] = useState(false)
+  const [weight, setWeight] = useState(savedWeight)
+  const effectiveWeight = description.trim() ? weight : 0
   const target = Number(count)
   const validCount = /^\d+$/.test(count) && Number.isSafeInteger(target) && target > 0
   const busy = submitting || running
@@ -45,7 +49,7 @@ export function RecommendationComposer({
     setBusy(true)
     setError('')
     try {
-      await window.music.generate(description, 'auto', false, target)
+      await window.music.generate(description, 'auto', false, target, effectiveWeight)
       await refresh()
     } catch (e) {
       setError(String(e).split('Error: ').pop() || '推荐失败')
@@ -100,6 +104,26 @@ export function RecommendationComposer({
           </Button>
         )}
       </div>
+      <label className="music-recommend-weight">
+        本次要求 {effectiveWeight}%
+        <input
+          type="range"
+          aria-label="本次要求权重"
+          aria-valuetext={`本次要求 ${effectiveWeight}%，本地口味 ${100 - effectiveWeight}%`}
+          min={0}
+          max={100}
+          value={effectiveWeight}
+          disabled={busy || !description.trim()}
+          onChange={(event) => {
+            const next = event.currentTarget.valueAsNumber
+            setWeight(next)
+            void window.music
+              .setListeningPreference('requestWeight', String(next))
+              .catch(() => setError('未能保存推荐权重'))
+          }}
+        />
+        本地口味 {100 - effectiveWeight}%
+      </label>
       {!validCount && <small>请输入大于零的整数。</small>}
       {error && <p role="alert">{error}</p>}
     </section>

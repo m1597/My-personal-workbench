@@ -7,6 +7,10 @@ const choices = {
   instrumental: ['requested', 'any', 'prefer'],
 }
 export function setListeningPreference(store, key, value) {
+  if (key === 'requestWeight' && typeof value === 'string' && /^(?:100|[1-9]?\d)$/.test(value)) {
+    store.set('music-pref-requestWeight', value)
+    return
+  }
   if (!Object.hasOwn(choices, key) || !choices[key].includes(value)) throw Error('无效的音乐偏好')
   store.set('music-pref-' + key, value)
 }
@@ -61,6 +65,9 @@ export function getMusicPreferences(store) {
   const quality = store.get('music-quality')
   const level = Number(store.get('music-volume') || 100)
   return {
+    requestWeight: /^(?:100|[1-9]?\d)$/.test(store.get('music-pref-requestWeight'))
+      ? Number(store.get('music-pref-requestWeight'))
+      : 80,
     ...Object.fromEntries(
       Object.entries(choices).map(([key, values]) => {
         const value = store.get('music-pref-' + key)

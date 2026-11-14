@@ -179,6 +179,11 @@ export function titleMatch(item, row, constraints = {}) {
       if (['requested', 'exclude'].includes(constraints.instrumental) && kind === 'instrumental')
         continue
       if (!sameArtist && !(cover && artistMatches(item.artist, cover))) continue
+      if (
+        constraints.exactChart &&
+        (!sameArtist || kind !== request.kind || key(request.detail) !== key(primary.detail))
+      )
+        continue
       if (request.kind && request.kind !== kind && !(request.kind === 'original' && !kind)) continue
       if (
         request.origin &&

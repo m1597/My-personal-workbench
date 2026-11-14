@@ -41,6 +41,7 @@ export type PlayerOptions = {
   sink: string
 }
 export type MusicPreferences = PlayerOptions & {
+  requestWeight: number
   previewQuality: string
   shortage: string
   edition: string
