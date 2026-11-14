@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webUtils } = require('electron')
 const names = [
   'musicGuide',
   'copyMcpCommand',
@@ -103,6 +103,8 @@ bridge.onLyricsSaved = (listener) => {
   const notify = () => listener()
   ipcRenderer.on('music:lyrics-saved', notify)
   return () => ipcRenderer.removeListener('music:lyrics-saved', notify)
+bridge.previewPlaylist = (file) =>
+  ipcRenderer.invoke('music:previewPlaylist', webUtils.getPathForFile(file))
 }
 bridge.onLibraryChanged = (listener) => {
   const notify = (_, removed) => listener(removed)

@@ -1,3 +1,4 @@
+import { PlaylistImportDialog, usePlaylistImport } from './PlaylistImport'
 import {
   useSidebarSorting,
   useGroupSorting,
@@ -305,9 +306,10 @@ export function LibraryPane({
     sentinel.current?.closest('.music-scroll')?.scrollTo(0, 0)
   }
   return (
-    <div className="library-layout">
+    <div className="library-layout" {...importer.drop}>
       <Button
         size="small"
+  const importer = usePlaylistImport(playlistPage)
         appearance="subtle"
         className="library-nav-toggle"
         icon={<PanelLeft size={15} />}
@@ -418,6 +420,7 @@ export function LibraryPane({
                   {list.name}
                 </Button>
               )
+            {importer.trigger}
               return (
                 <Menu key={list.id} openOnContext>
                   <MenuTrigger disableButtonEnhancement>{trigger}</MenuTrigger>
@@ -882,6 +885,15 @@ export function LibraryPane({
                 } finally {
                   saving.current = false
                   setSubmitting(false)
+      {playlistPage && importer.preview && (
+        <PlaylistImportDialog
+          preview={importer.preview}
+          tracks={tracks}
+          create={create}
+          close={importer.close}
+          error={error}
+        />
+      )}
                 }
               }}
             >

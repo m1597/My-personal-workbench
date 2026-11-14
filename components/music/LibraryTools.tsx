@@ -28,6 +28,7 @@ type Move = {
   }[]
 }
 export type LibraryToolsAPI = {
+  previewPlaylist(file: File): Promise<import('./PlaylistImport').ImportPreview>
   recentHistory(cursor?: HistoryRow): Promise<HistoryRow[]>
   setFavorite(ids: string | string[], on: boolean): Promise<number>
   exportLibrary(): Promise<boolean>

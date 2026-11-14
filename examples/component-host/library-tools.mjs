@@ -1,3 +1,4 @@
+import { previewPlaylist } from './playlist-import.mjs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { open, writeFile, rename, rm, lstat } from 'node:fs/promises'
@@ -121,6 +122,7 @@ export async function applyRelocation(library, preview, selections) {
   }
 }
 export function registerLibraryTools(bind, getStore, getTaste, dialog, getEpoch) {
+  bind('previewPlaylist', (file) => previewPlaylist(getStore().library, file))
   let pending,
     busy = false
   const action =

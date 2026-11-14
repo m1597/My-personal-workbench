@@ -1,0 +1,26 @@
+.playlist-import-content,
+.playlist-import-row,
+.playlist-import-options {
+  display: grid;
+  gap: var(--space-8);
+}
+.playlist-import-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.playlist-import-content pre {
+  max-height: 12em;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.playlist-import-options {
+  max-height: 12em;
+  overflow: auto;
+}
+.playlist-import-row {
+  padding-block: var(--space-8);
+  border-block-start: 1px solid var(--stroke);
+}
+.playlist-import-row .fui-Dropdown {
+  min-width: 0;
+}
