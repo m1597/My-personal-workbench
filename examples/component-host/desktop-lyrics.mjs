@@ -35,7 +35,9 @@ function restoredBounds(saved) {
 
 export function desktopLyrics(getStore, onLockChanged) {
   let win
-  let line = ''
+  let line = '',
+    second = '',
+    size = 24
   let locked = false
   function setLocked(value) {
     if (!win || win.isDestroyed() || locked === value) return
@@ -45,7 +47,7 @@ export function desktopLyrics(getStore, onLockChanged) {
     onLockChanged(value)
   }
   const publish = () => {
-    if (win && !win.isDestroyed()) win.webContents.send('lyric-line', line)
+    if (win && !win.isDestroyed()) win.webContents.send('lyric-line', line, second, size)
   }
   return {
     unlock() {
@@ -127,6 +129,7 @@ export function desktopLyrics(getStore, onLockChanged) {
         screen.off('display-removed', remember)
         win = undefined
         line = ''
+        second = ''
         if (locked) onLockChanged(false)
         locked = false
       })
@@ -137,8 +140,10 @@ export function desktopLyrics(getStore, onLockChanged) {
       })
       void win.loadFile(fileURLToPath(new URL('./lyric-window.html', import.meta.url)))
     },
-    update(value) {
-      if (value !== line) {
+    update(value, next, fontSize) {
+      if (value !== line || next !== second || fontSize !== size) {
+        second = next
+        size = fontSize
         line = value
         publish()
       }

@@ -27,6 +27,7 @@ const names = [
   'setListeningPreference',
   'answerShortage',
   'setMusicOutput',
+  'setPlayerOption',
   'setMusicShortcut',
   'setMusicMediaKeys',
   'chooseMusicDirectory',

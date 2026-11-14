@@ -21,6 +21,35 @@ export const mediaBindings = {
   next: 'MediaNextTrack',
 }
 
+const options = {
+  lyricSize: ['18', '24', '30'],
+  lyricLayout: ['single', 'double'],
+  lyricLanguage: ['original', 'bilingual'],
+  lrcSave: ['on', 'off'],
+  lrcLanguage: ['original', 'bilingual'],
+  startup: ['pause', 'resume', 'beginning'],
+  unplug: ['pause', 'continue'],
+}
+const defaults = {
+  lyricSize: '24',
+  lyricLayout: 'single',
+  lyricLanguage: 'original',
+  lrcSave: 'on',
+  lrcLanguage: 'original',
+  startup: 'pause',
+  unplug: 'continue',
+  sink: '',
+}
+export function setPlayerOption(store, key, value) {
+  if (
+    typeof key !== 'string' ||
+    !Object.hasOwn(defaults, key) ||
+    typeof value !== 'string' ||
+    (key === 'sink' ? value.length > 256 : !options[key].includes(value))
+  )
+    throw Error('无效的播放设置')
+  store.set('player-option-' + key, value)
+}
 export function getMusicPreferences(store) {
   const quality = store.get('music-quality')
   const level = Number(store.get('music-volume') || 100)
@@ -29,6 +58,15 @@ export function getMusicPreferences(store) {
       Object.entries(choices).map(([key, values]) => {
         const value = store.get('music-pref-' + key)
         return [key, values.includes(value) ? value : values[0]]
+      }),
+    ),
+    ...Object.fromEntries(
+      Object.entries(defaults).map(([key, fallback]) => {
+        const saved = store.get('player-option-' + key)
+        return [
+          key,
+          (key === 'sink' ? saved?.length <= 256 : options[key].includes(saved)) ? saved : fallback,
+        ]
       }),
     ),
     volume: Number.isInteger(level) && level >= 1 && level <= 100 ? level : 100,

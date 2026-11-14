@@ -6,7 +6,7 @@ import { lstat, open } from 'node:fs/promises'
 const maximum = 512 * 1024
 export const lyricPath = (file) => path.join(path.dirname(file), path.parse(file).name + '.lrc')
 const digest = (data) => createHash('sha256').update(data).digest('hex')
-export function lyricLines(raw) {
+export function lyricLines(raw, translations = false) {
   if (typeof raw !== 'string' || Buffer.byteLength(raw) > maximum) return []
   const offset = Number(raw.match(/^\s*\[offset:([+-]?\d+)\]/im)?.[1] ?? 0)
   const result = new Map()
@@ -18,15 +18,45 @@ export function lyricLines(raw) {
       const at =
         Number(match[1]) * 60 + Number(match[2]) + Number('0.' + (match[3] || 0)) - offset / 1000
       // Bilingual LRC sidecars place the original before its translation at the same timestamp.
-      if (!result.get(at)) result.set(at, tags[2].trim())
+      const word = tags[2].trim()
+      const words = result.get(at) ?? []
+      if (word && !words.includes(word) && words.length < (translations ? 2 : 1)) words.push(word)
+      result.set(at, words)
     }
   }
-  if (result.size) return [...result].sort((a, b) => a[0] - b[0])
+  if (result.size)
+    return [...result]
+      .sort((a, b) => a[0] - b[0])
+      .map(([at, words]) => [at, ...(words.length ? words : [''])])
   return raw
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line && !/^\[(?:[a-z]+:|\d+:)/i.test(line))
     .map((line) => [null, line])
+}
+export function downloadLrc(original, translation, bilingual) {
+  const rows = lyricLines(original, true)
+  if (!rows.length) return ''
+  if (rows[0][0] === null) return original
+  // Preserve original LRC formatting when there is no second language to add or remove.
+  if (!rows.some((row) => row.length > 2) && (!bilingual || !translation)) return original
+  const translated = new Map(lyricLines(translation))
+  const meta = original.split(/\r?\n/).filter((line) => /^\s*\[(?:ar|al|ti|by|re|ve):/i.test(line))
+  for (const [at, word, inline] of rows) {
+    const millis = Math.max(0, Math.round(at * 1000))
+    const stamp =
+      '[' +
+      String(Math.floor(millis / 60000)).padStart(2, '0') +
+      ':' +
+      String(Math.floor(millis / 1000) % 60).padStart(2, '0') +
+      '.' +
+      String(millis % 1000).padStart(3, '0') +
+      ']'
+    meta.push(stamp + word)
+    const extra = inline || translated.get(at)
+    if (bilingual && extra && extra !== word) meta.push(stamp + extra)
+  }
+  return meta.join('\r\n') + '\r\n'
 }
 async function content(file) {
   const stat = await lstat(file)
@@ -75,10 +105,10 @@ function matchesTags(raw, track) {
   b.title = plain(b.title)
   return titleMatch(a, b) === 'exact' || titleMatch(b, a) === 'exact'
 }
-export async function localLines(audio, track) {
+export async function localLines(audio, track, translations = false) {
   try {
     const raw = (await content(lyricPath(audio))).toString('utf8')
-    return matchesTags(raw, track) ? lyricLines(raw) : []
+    return matchesTags(raw, track) ? lyricLines(raw, translations) : []
   } catch {
     return []
   }

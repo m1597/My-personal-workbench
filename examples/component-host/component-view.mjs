@@ -211,10 +211,19 @@ export function componentView({
     const root = await discover()
     if (!root || restoreWindow?.isDestroyed()) return false
     view?.webContents.close()
-    const isolated = session.fromPartition(`component-${sessionId}`)
+    const isolated = session.fromPartition(
+      music ? 'persist:fitbay-music-player' : `component-${sessionId}`,
+    )
     await configureSession?.(isolated, root)
-    isolated.setPermissionRequestHandler((_, __, callback) => callback(false))
-    isolated.setPermissionCheckHandler(() => false)
+    const allowOutput = (contents, permission) =>
+      !!music &&
+      permission === 'speaker-selection' &&
+      contents === view?.webContents &&
+      contents?.getURL().split('?')[0] === pathToFileURL(path.join(root, 'index.html')).href
+    isolated.setPermissionRequestHandler((contents, permission, callback) =>
+      callback(allowOutput(contents, permission)),
+    )
+    isolated.setPermissionCheckHandler(allowOutput)
     const allowed = new Set(
       ['index.html', 'component.js', 'component.css'].map(
         (file) => pathToFileURL(path.join(root, file)).href,

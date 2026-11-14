@@ -139,7 +139,10 @@ const choose = (file) =>
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] })
   }, file)
 try {
-  const page = await app.firstWindow()
+  await expect
+    .poll(() => app.windows().some((p) => p.url().includes('/music/index.html')))
+    .toBe(true)
+  const page = app.windows().find((p) => p.url().includes('/music/index.html'))
   const tabs = page.getByRole('tab')
   await expect(tabs).toHaveCount(5)
   for (const [index, name] of ['曲库', '歌单', '在线找歌', '智能推荐', '歌手'].entries())
@@ -235,7 +238,7 @@ try {
   }
   await page.getByRole('tab', { name: '在线找歌' }).click()
   const pane = page.getByRole('region', { name: '搜索音乐' })
-  const find = pane.getByRole('button', { name: '搜索' })
+  const find = pane.getByRole('button', { name: '搜索', exact: true })
   const query = pane.getByRole('textbox', { name: '搜索关键词' })
   if (!live) {
     await expect(find).toBeDisabled()
@@ -243,22 +246,24 @@ try {
     await expect(pane.getByRole('combobox', { name: '从曲库选择' })).toHaveCount(0)
     await query.fill('只搜艺人')
     await query.press('Enter')
-    await expect(pane.getByText('只搜艺人', { exact: true })).toBeVisible()
+    await expect(pane.locator('.search-track').getByText('只搜艺人', { exact: true })).toBeVisible()
     await expect(pane.getByText('1 个版本', { exact: true })).toBeVisible()
     await query.fill('手动歌名')
     await find.click()
-    await expect(pane.getByText('手动歌名', { exact: true })).toBeVisible()
+    await expect(pane.locator('.search-track').getByText('手动歌名', { exact: true })).toBeVisible()
     await query.fill('手动歌名 手动艺人')
     await find.click()
     await pane.getByRole('button', { name: '取消', exact: true }).click()
     await find.click()
-    await expect(pane.getByText('手动歌名 手动艺人', { exact: true })).toBeVisible()
+    await expect(
+      pane.locator('.search-track').getByText('手动歌名 手动艺人', { exact: true }),
+    ).toBeVisible()
     await expect(pane.getByRole('listitem')).toHaveCount(50)
     for (const title of ['摘要版本', '平台版本', '分页录音25']) {
       await expect(pane.getByText(title, { exact: true })).toHaveCount(1)
     }
     await pane.getByRole('tab', { name: 'QQ 音乐' }).click()
-    await expect(pane.getByText('QQ独有版本')).toBeVisible()
+    await expect(pane.locator('.search-track').getByText('QQ独有版本')).toBeVisible()
     await expect(pane.getByRole('listitem')).toHaveCount(1)
     await expect(query).toHaveValue('手动歌名 手动艺人')
     await pane.getByRole('tab', { name: '酷狗音乐' }).click()
@@ -282,7 +287,7 @@ try {
     )
     const results = pane.getByRole('list')
     await expect.poll(() => results.evaluate((el) => el.clientHeight)).toBeGreaterThan(380)
-    assert.ok(await results.evaluate((el) => el.scrollHeight > el.clientHeight))
+    await expect.poll(() => results.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
     const resultBounds = await results.boundingBox()
     const playerBounds = await page.locator('.music-player').boundingBox()
     assert.ok(playerBounds.y - resultBounds.y - resultBounds.height < 48)

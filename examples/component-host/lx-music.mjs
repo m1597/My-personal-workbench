@@ -13,7 +13,7 @@ import { CatalogUnavailable, platformSearch } from './lx-platform-search.mjs'
 import { describeFailure } from './music-download-diagnosis.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
 import { publishDaily } from './music-recording-identity.mjs'
-import { saveLyrics } from './music-lyrics.mjs'
+import { saveLyrics, downloadLrc } from './music-lyrics.mjs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream, lstatSync, unlinkSync } from 'node:fs'
@@ -1080,6 +1080,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     )
   }
   async function saveRecordingLyrics(src, row, audio, signal) {
+    if (getStore().get('player-option-lrcSave') === 'off') return
     const saved = await saveLyrics(getStore().db, audio, async () => {
       const timeout = AbortSignal.any([signal, AbortSignal.timeout(6000)])
       let result = row.lyric
@@ -1099,13 +1100,17 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         }
       }
       const raw = typeof result === 'string' ? result : result?.lyric
-      if (raw) return raw
+      const bilingual = getStore().get('player-option-lrcLanguage') === 'bilingual'
+      if (raw) return downloadLrc(raw, result?.tlyric || row.tlyric, bilingual)
       const id = recordingId(src, row)
       if (src.platform !== 'wy' || !/^\d+$/.test(id)) return ''
-      const response = await sourceRequest('https://music.163.com/api/song/lyric?lv=1&id=' + id, {
-        signal: timeout,
-      })
-      return response.body?.lrc?.lyric
+      const response = await sourceRequest(
+        'https://music.163.com/api/song/lyric?lv=1&tv=1&id=' + id,
+        {
+          signal: timeout,
+        },
+      )
+      return downloadLrc(response.body?.lrc?.lyric, response.body?.tlyric?.lyric, bilingual)
     }).catch(() => false)
     if (saved) lyricsSaved?.()
   }

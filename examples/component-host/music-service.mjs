@@ -21,6 +21,7 @@ import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import {
   getMusicPreferences,
+  setPlayerOption,
   setMusicOutput,
   setMusicQuality,
   setListeningPreference,
@@ -137,28 +138,41 @@ export function musicService(
   }
   bind('showLyrics', (on) => overlay.show(on === true))
   bind('unlockLyrics', () => overlay.unlock())
-  bind('lyricLine', (line) => overlay.update(typeof line === 'string' ? line.slice(0, 500) : ''))
-  bind('lyrics', async (id) => {
+  bind('lyricLine', (line, second = '') =>
+    overlay.update(
+      typeof line === 'string' ? line.slice(0, 500) : '',
+      typeof second === 'string' ? second.slice(0, 500) : '',
+      Number(getMusicPreferences(store).lyricSize),
+    ),
+  )
+  bind('lyrics', async (id, translations = false) => {
     if (!text(id) || id.startsWith('online-recording-')) return []
     if (grant?.id === id) {
       const track = grant.audition
         ? store.metadata(store.item(id).track)
         : store.library.row(grant.libraryId ?? id)
-      return localLines(grant.file, track)
+      return localLines(grant.file, track, translations === true)
     }
     if (id.startsWith('local-')) {
       const track = store.library.row(id)
-      return track.awaitingLocation ? [] : localLines(track.file, track)
+      return track.awaitingLocation ? [] : localLines(track.file, track, translations === true)
     }
     const library = store.db
       .prepare(
         'SELECT t.file,t.title,t.artist,t.awaitingLocation FROM recommended_items r JOIN local_tracks t ON t.id=r.local WHERE r.item=?',
       )
       .get(id)
-    if (library) return library.awaitingLocation ? [] : localLines(library.file, library)
+    if (library)
+      return library.awaitingLocation
+        ? []
+        : localLines(library.file, library, translations === true)
     const item = store.item(id)
     if (!item.track || !['已入库', '就绪'].includes(item.status)) return []
-    return localLines(store.local(item.track) ?? store.file(id), store.metadata(item.track))
+    return localLines(
+      store.local(item.track) ?? store.file(id),
+      store.metadata(item.track),
+      translations === true,
+    )
   })
   bind('importLocal', (mode) => {
     if (!['folder', 'files'].includes(mode)) throw Error('导入方式无效')
@@ -508,6 +522,7 @@ export function musicService(
       throw Error('此批次没有待确认的范围选择')
     shortageDecision.answer(expand)
   })
+  bind('setPlayerOption', (key, value) => setPlayerOption(store, key, value))
   bind('setMusicOutput', (volume, muted) => setMusicOutput(store, volume, muted))
   bind('setMusicShortcut', (action, key) => shortcuts.setCustom(store, action, key))
   bind('setMusicMediaKeys', (enabled) => shortcuts.setMedia(store, enabled))

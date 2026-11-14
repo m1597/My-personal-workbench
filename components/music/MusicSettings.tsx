@@ -5,6 +5,7 @@ import { LibraryTools } from './LibraryTools'
 import type { ImportJob } from './LibraryPane'
 import { AudioLines, Download, Keyboard, Library, PanelLeft, Plug, Sparkles } from 'lucide-react'
 import { MusicSourcesSettings } from './MusicSourcesSettings'
+import { PlayerOptionsPane } from './PlayerOptionsPane'
 import './settings.css'
 
 const categories = [
@@ -13,6 +14,8 @@ const categories = [
   { id: 'mcp', name: 'MCP', icon: Plug },
   { id: 'downloads', name: '下载', icon: Download },
   { id: 'model', name: '模型与推荐', icon: Sparkles },
+  { id: 'lyrics', name: '歌词', icon: AudioLines },
+  { id: 'playback', name: '播放', icon: AudioLines },
   { id: 'keys', name: '全局快捷键', icon: Keyboard },
   { id: 'plugins', name: '插件', icon: Plug },
 ] as const
@@ -27,7 +30,17 @@ export type TasteStatus = {
   error: string
 }
 export type TransportAction = 'toggle' | 'previous' | 'next'
-export type MusicPreferences = {
+export type PlayerOptions = {
+  lyricSize: string
+  lyricLayout: string
+  lyricLanguage: string
+  lrcSave: string
+  lrcLanguage: string
+  startup: string
+  unplug: string
+  sink: string
+}
+export type MusicPreferences = PlayerOptions & {
   previewQuality: string
   shortage: string
   edition: string
@@ -352,6 +365,13 @@ export function MusicSettings({
             </p>
           </section>
         )}
+        {(category === 'lyrics' || category === 'playback') && (
+          <PlayerOptionsPane
+            category={category}
+            prefs={prefs}
+            change={(key, value) => update(() => window.music.setPlayerOption(key, value), '')}
+          />
+        )}
         {category === 'downloads' && (
           <section>
             <h2>下载</h2>
@@ -377,6 +397,23 @@ export function MusicSettings({
                 ))}
               </Dropdown>
             </Field>
+            <Checkbox
+              label="同时保存同名 LRC 歌词文件"
+              checked={prefs.lrcSave === 'on'}
+              onChange={(_, d) =>
+                void update(() => window.music.setPlayerOption('lrcSave', d.checked ? 'on' : 'off'))
+              }
+            />
+            <Checkbox
+              label="有译文时同时保存译文"
+              disabled={prefs.lrcSave !== 'on'}
+              checked={prefs.lrcLanguage === 'bilingual'}
+              onChange={(_, d) =>
+                void update(() =>
+                  window.music.setPlayerOption('lrcLanguage', d.checked ? 'bilingual' : 'original'),
+                )
+              }
+            />
             {(['manual', 'recommend'] as const).map((kind) => {
               const title = kind === 'manual' ? '手动下载目录' : '推荐下载目录'
               const dir = kind === 'manual' ? prefs.manualDir : prefs.recommendDir

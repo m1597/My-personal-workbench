@@ -1,3 +1,4 @@
+import { useOutputDevice } from './PlayerOptionsPane'
 import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
 import { RevealTrackContext, TrackMenu } from './TrackMenu'
 import { Cover, type Album } from './AlbumBrowser'
@@ -160,6 +161,10 @@ declare global {
         setMusicQuality(quality: string): Promise<void>
         setListeningPreference(key: string, value: string): Promise<void>
         answerShortage(batch: string, expand: boolean): Promise<void>
+        setPlayerOption(
+          key: keyof import('./MusicSettings').PlayerOptions,
+          value: string,
+        ): Promise<void>
         setMusicOutput(volume: number, muted: boolean): Promise<void>
         setMusicShortcut(action: TransportAction, key: string): Promise<void>
         setMusicMediaKeys(enabled: boolean): Promise<void>
@@ -212,11 +217,11 @@ declare global {
         importLocal(mode: 'folder' | 'files'): Promise<void>
         cancelImport(): Promise<void>
         refreshLocal(): Promise<void>
-        lyrics(id: string): Promise<LyricLine[]>
+        lyrics(id: string, translations?: boolean): Promise<LyricLine[]>
         showLyrics(on: boolean): Promise<void>
         unlockLyrics(): Promise<void>
         onLyricLocked(listener: (locked: boolean) => void): () => void
-        lyricLine(line: string): Promise<void>
+        lyricLine(line: string, second?: string): Promise<void>
         removeLocal(id: string | string[]): Promise<void>
         trashLocal(id: string | string[]): Promise<boolean>
         revealTrack(id: string): Promise<void>
@@ -754,7 +759,7 @@ function Music() {
             ? state.position
             : 0
       el.src = src
-      el.currentTime = startAt ?? resume
+      el.currentTime = startAt ?? (restart ? 0 : resume)
       setTime(el.currentTime)
       await host.playQueue(id, ids, el.currentTime, occurrence, pendingAlbum)
       startAudio(el)
@@ -889,7 +894,7 @@ function Music() {
     function refreshLyrics() {
       const request = ++revision
       void host
-        .lyrics(now)
+        .lyrics(now, true)
         .then((lines) => {
           if (request === revision) setLyrics({ id: now, lines })
         })
@@ -912,10 +917,16 @@ function Music() {
       activeLine = index
     }
   }
-  const lyric = lines?.[activeLine]?.[1] ?? ''
+  const currentWords = lines?.[activeLine]
+  const original = currentWords?.[1] || ''
+  const translated = state?.prefs.lyricLanguage === 'bilingual' ? currentWords?.[2] : ''
+  const double = state?.prefs.lyricLayout === 'double'
+  const lyric = translated && !double ? original + ' · ' + translated : original
+  const second = original && double ? translated || lines?.[activeLine + 1]?.[1] || '' : ''
+  const lyricSize = state?.prefs.lyricSize
   useEffect(() => {
-    if (lyricsOpen) void host.lyricLine(lyric).catch(() => {})
-  }, [lyric, lyricsOpen])
+    if (lyricsOpen && lyricSize) void host.lyricLine(lyric, second).catch(() => {})
+  }, [lyric, second, lyricSize, lyricsOpen])
   const clock = formatTime
   const duration =
     audio.current?.duration ||
@@ -928,6 +939,36 @@ function Music() {
     !current.current && active && available.has(active.id)
       ? '从 ' + Math.floor(elapsed) + ' 秒继续'
       : '播放'
+  const pauseOnDisconnect = useEffectEvent(() => {
+    void act(pauseTrack)
+  })
+  useOutputDevice(audio, state?.prefs, pauseOnDisconnect, setError)
+  const startupApplied = useRef(false)
+  const restorePlayback = useEffectEvent(() => {
+    if (!state || startupApplied.current) return
+    startupApplied.current = true
+    if (
+      state.prefs.startup === 'pause' ||
+      !state.current ||
+      !navigable.has(state.current) ||
+      current.current ||
+      epoch.current
+    )
+      return
+    void act(() =>
+      navigate(
+        state.current,
+        queue.length ? queue : [state.current],
+        state.queueOccurrence,
+        state.prefs.startup === 'beginning',
+        state.pendingAlbum,
+      ),
+    )
+  })
+  const hasSnapshot = !!state
+  useEffect(() => {
+    if (hasSnapshot) restorePlayback()
+  }, [hasSnapshot])
   function togglePlayback() {
     if (clips.current?.pending || (audio.current && !audio.current.paused)) {
       ++epoch.current
@@ -1048,6 +1089,8 @@ function Music() {
     let applied = level
     fading.current = stop
     try {
+      if (el.sinkId) await tail.setSinkId(el.sinkId)
+      if (!live) return
       await tail.play()
       if (!live) return
       applied = 0

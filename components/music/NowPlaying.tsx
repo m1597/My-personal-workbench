@@ -8,7 +8,7 @@ import './now-playing.css'
 
 const readingKeys = new Set(['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'])
 
-export type LyricLine = [number | null, string]
+export type LyricLine = [number | null, string, string?]
 
 type Props = {
   actions: ReleaseActions
