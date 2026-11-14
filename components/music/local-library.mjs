@@ -344,6 +344,9 @@ export class LocalLibrary {
     if (!members.length) throw Error('未找到文件夹')
     return members
   }
+  folderId(file) {
+    return folderKey(path.dirname(file))
+  }
   playlists() {
     const lists = this.db
       .prepare('SELECT id,name,sort,descending FROM playlists ORDER BY rowid')
@@ -418,11 +421,12 @@ export class LocalLibrary {
         .run(id, Date.now(), JSON.stringify(members))
       if (inserted.changes !== members.length) throw Error('所选本地曲目已移除，请刷新后重试')
       this.db.exec('RELEASE new_playlist')
-      return id
     } catch (error) {
       this.db.exec('ROLLBACK TO new_playlist; RELEASE new_playlist')
       throw error
     }
+    if (members.length) this.changed?.()
+    return id
   }
   renamePlaylist(id, name) {
     if (
@@ -492,6 +496,7 @@ export class LocalLibrary {
   deletePlaylist(id) {
     if (!this.db.prepare('DELETE FROM playlists WHERE id=?').run(id).changes)
       throw Error('未找到歌单')
+    this.changed?.()
   }
   removeFolder(id) {
     if (this.worker) throw Error('请等待当前导入结束')

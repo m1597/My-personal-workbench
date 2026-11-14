@@ -123,6 +123,7 @@ import { DownloadPane } from './LxPanel'
 import type { LibraryToolsAPI } from './LibraryTools'
 import type { Versions } from './LxPanel'
 type State = {
+  tasteExclusions: { kind: 'folder' | 'playlist'; id: string; name: string }[]
   prefs: MusicPreferences
   models: ModelInfo
   items: Item[]
@@ -239,6 +240,7 @@ declare global {
         state(): Promise<State>
         draft(s: string): Promise<void>
         getTasteStatus(): Promise<TasteStatus>
+        setTasteExcluded(kind: 'folder' | 'playlist', id: string, excluded: boolean): Promise<void>
         setTasteConsent(value: boolean): Promise<TasteStatus>
         prepareRecommendation(id: string, key?: string): Promise<void>
         recommendationChoices(id: string): Promise<Versions['items']>
@@ -1256,6 +1258,10 @@ function Music() {
           />
         ) : libraryPage ? (
           <LibraryPane
+            tasteExclusions={state?.tasteExclusions ?? []}
+            setTasteExcluded={(kind, id, excluded) =>
+              act(() => host.setTasteExcluded(kind, id, excluded))
+            }
             scope={inPlaylists ? 'playlists' : 'library'}
             releaseActions={{
               play: playSearchResult,

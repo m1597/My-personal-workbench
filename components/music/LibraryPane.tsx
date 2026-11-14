@@ -91,6 +91,8 @@ export type PlaylistTrack = LocalTrack | OnlineTrack
 export const formatTime = (t: number) =>
   Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0')
 interface Props extends SidebarSorting, PlaylistSorting {
+  tasteExclusions: { id: string }[]
+  setTasteExcluded: (kind: 'folder' | 'playlist', id: string, excluded: boolean) => Promise<boolean>
   scope: 'library' | 'playlists'
   releaseActions: import('./ReleaseCatalog').ReleaseActions
   albumRevision: number
@@ -132,6 +134,8 @@ interface Props extends SidebarSorting, PlaylistSorting {
   removeFolder: (id: string) => Promise<boolean>
 }
 export function LibraryPane({
+  tasteExclusions,
+  setTasteExcluded,
   scope,
   releaseActions,
   albumRevision,
@@ -176,6 +180,14 @@ export function LibraryPane({
   removeFolder,
   openFolder,
 }: Props) {
+  function tasteMenu(kind: 'folder' | 'playlist', id: string) {
+    const excluded = tasteExclusions.some((row) => row.id === id)
+    return (
+      <MenuItem onClick={() => void setTasteExcluded(kind, id, !excluded)}>
+        {excluded ? '恢复参与智能推荐' : '不参与智能推荐'}
+      </MenuItem>
+    )
+  }
   const [limit, setLimit] = useState(100)
   const [albumView, setAlbumView] = useState(false)
   const showAlbums = collection === 'all' && albumView
@@ -371,6 +383,7 @@ export function LibraryPane({
                 <MenuPopover className="component-popup">
                   <MenuList>
                     <MenuItem onClick={() => openFolder(node.id)}>打开文件所在位置</MenuItem>
+                    {tasteMenu('folder', node.id)}
                     <MenuItem onClick={() => setAction({ kind: 'folder', ...node })}>
                       从曲库移除文件夹
                     </MenuItem>
@@ -439,6 +452,7 @@ export function LibraryPane({
                           <MenuItem onClick={() => setAction({ kind: 'deleteList', ...list })}>
                             删除歌单
                           </MenuItem>
+                          {tasteMenu('playlist', list.id)}
                         </>
                       )}
                       <MenuItem onClick={() => void exportList(list.id)}>导出为 M3U8</MenuItem>

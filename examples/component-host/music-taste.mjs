@@ -13,6 +13,38 @@ export class MusicTaste {
     this.controller = null
     this.error = ''
   }
+  exclusions() {
+    return JSON.parse(this.store.get('taste-exclusions') || '[]')
+  }
+  setExcluded(kind, id, excluded) {
+    if (
+      !['folder', 'playlist'].includes(kind) ||
+      typeof id !== 'string' ||
+      id.length > 120 ||
+      typeof excluded !== 'boolean'
+    )
+      throw Error('无效的推荐偏好设置')
+    const current = this.exclusions()
+    const next = current.filter((row) => row.kind !== kind || row.id !== id)
+    const alreadyExcluded = next.length !== current.length
+    if (excluded === alreadyExcluded) return
+    if (excluded) {
+      const name =
+        kind === 'folder'
+          ? this.store.library.list().find((t) => t.folder?.id === id)?.folder.name
+          : this.store.db.prepare('SELECT name FROM playlists WHERE id=?').get(id)?.name
+      if (!name) throw Error('找不到要排除的文件夹或歌单')
+      next.push({ kind, id, name })
+    }
+    this.store.set('taste-exclusions', JSON.stringify(next))
+    this.controller?.abort()
+  }
+  policy() {
+    return this.exclusions()
+      .map(({ id }) => id)
+      .sort()
+      .join(',')
+  }
   document() {
     const restored = this.store.get('restored-taste-document')
     if (restored) return JSON.parse(restored)
@@ -25,14 +57,18 @@ export class MusicTaste {
   }
   // Fingerprints are local only. Identical metadata across duplicate files contributes once.
   delta(doc) {
+    const excluded = this.exclusions()
+    const folders = new Set(excluded.filter((row) => row.kind === 'folder').map((row) => row.id))
+    const playlists = excluded.filter((row) => row.kind === 'playlist').map((row) => row.id)
     const seen = new Set(doc.incorporated)
     const pending = []
     const tracks = this.store.db
-      .prepare(`SELECT t.title,t.artist,t.album,t.favorite,
-      EXISTS(SELECT 1 FROM playlist_tracks p WHERE p.track=t.id) AS liked,
+      .prepare(`SELECT t.title,t.artist,t.album,t.favorite,t.file,
+      EXISTS(SELECT 1 FROM playlist_tracks p WHERE p.track=t.id OR p.track IN (SELECT online FROM online_local_copies WHERE local=t.id)) AS liked,
+      EXISTS(SELECT 1 FROM playlist_tracks p WHERE (p.track=t.id OR p.track IN (SELECT online FROM online_local_copies WHERE local=t.id)) AND p.playlist IN (SELECT value FROM json_each(?))) AS excluded,
       (t.importedOrigin='daily' OR EXISTS(SELECT 1 FROM recording_copies v WHERE v.local=t.id AND v.automatic=1)) AS automatic
       FROM local_tracks t ORDER BY t.rowid`)
-      .all()
+      .all(JSON.stringify(playlists))
     for (const track of tracks) {
       const clean = (value) =>
         String(value ?? '')
@@ -49,9 +85,11 @@ export class MusicTaste {
         Object.values(meta).some((value) => /([a-z]:[\\/]|\\\\|https?:\/\/|^\/)/i.test(value))
       )
         continue
+      const suppressed =
+        track.excluded || (folders.size && folders.has(this.store.library.folderId(track.file)))
       for (const signal of [
-        ...(track.automatic ? [] : ['曲库新增']),
-        ...(track.liked ? ['主动加入自建歌单'] : []),
+        ...(!suppressed && !track.automatic ? ['曲库新增'] : []),
+        ...(!suppressed && track.liked ? ['主动加入自建歌单'] : []),
         ...(track.favorite ? ['主动收藏'] : []),
       ]) {
         const data = { ...meta, signal }
@@ -64,12 +102,31 @@ export class MusicTaste {
     }
     return pending
   }
+  changes() {
+    const doc = this.document()
+    const policy = this.policy()
+    if (!policy && !doc.policy) return { doc, delta: this.delta(doc), rebuild: false }
+    const all = this.delta({ incorporated: [] })
+    const keys = new Set(all.map((entry) => entry.key))
+    const rebuild = policy !== (doc.policy || '') || doc.incorporated.some((key) => !keys.has(key))
+    const seen = new Set(doc.incorporated)
+    return rebuild
+      ? { doc: { text: '', updatedAt: '', incorporated: [], policy }, delta: all, rebuild }
+      : { doc, delta: all.filter((entry) => !seen.has(entry.key)), rebuild }
+  }
   status() {
     const consented = this.store.get('taste-consent') === '1'
+    const playlists = this.store.db.prepare('SELECT name FROM playlists WHERE id=?')
+    const exclusions = this.exclusions().flatMap((entry) => {
+      if (entry.kind === 'folder') return [entry]
+      const list = playlists.get(entry.id)
+      return list ? [{ ...entry, name: list.name }] : []
+    })
     try {
-      const doc = this.document()
-      const pending = consented ? this.delta(doc).length : 0
+      const { doc, delta } = consented ? this.changes() : { doc: this.document(), delta: [] }
+      const pending = delta.length
       return {
+        exclusions,
         consented,
         updatedAt: doc.updatedAt,
         pending,
@@ -87,7 +144,14 @@ export class MusicTaste {
                   : '等待曲库歌曲',
       }
     } catch {
-      return { consented, updatedAt: '', pending: 0, error: '审美文档无法读取', status: '待重试' }
+      return {
+        exclusions,
+        consented,
+        updatedAt: '',
+        pending: 0,
+        error: '审美文档无法读取',
+        status: '待重试',
+      }
     }
   }
   consent(value) {
@@ -122,9 +186,10 @@ export class MusicTaste {
     return this.pending
   }
   async update(signal) {
-    let doc = this.document()
+    const changes = this.changes()
+    let doc = changes.doc
+    const { delta, rebuild } = changes
     try {
-      const delta = this.delta(doc)
       for (let i = 0; i < delta.length; i += 50) {
         const chunk = delta.slice(i, i + 50)
         const text = await this.request(
@@ -134,12 +199,15 @@ export class MusicTaste {
         signal.throwIfAborted()
         doc = {
           version: 1,
+          policy: doc.policy,
           text,
           updatedAt: new Date().toISOString(),
           incorporated: [...doc.incorporated, ...chunk.map((x) => x.key)],
         }
       }
-      if (delta.length) {
+      if (delta.length || rebuild) {
+        signal.throwIfAborted()
+        if (!delta.length) doc = { ...doc, version: 1, updatedAt: new Date().toISOString() }
         const temp = this.file + '.' + randomUUID() + '.tmp'
         try {
           writeFileSync(temp, JSON.stringify(doc), { flag: 'wx' })
@@ -154,7 +222,7 @@ export class MusicTaste {
     } catch (e) {
       if (signal.aborted) return ''
       this.error = String(e.message || '更新失败')
-      return this.document().text
+      return rebuild ? '' : this.document().text
     }
   }
 }

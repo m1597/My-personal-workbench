@@ -481,6 +481,7 @@ export function musicService(
   })
   bind('state', () => ({
     ...store.snapshot(),
+    tasteExclusions: taste.exclusions(),
     models: modelInfo(store),
     prefs: {
       ...getMusicPreferences(store),
@@ -537,6 +538,10 @@ export function musicService(
     updateTimer.unref()
   }
   bind('getTasteStatus', () => taste.status())
+  bind('setTasteExcluded', (kind, id, excluded) => {
+    taste.setExcluded(kind, id, excluded)
+    queueTasteUpdate()
+  })
   bind('setTasteConsent', (value) => {
     taste.consent(value)
     if (!value) pending?.abort(new DOMException('已撤回审美资料授权', 'AbortError'))
@@ -615,7 +620,8 @@ export function musicService(
         signal.throwIfAborted()
         if (!store.get('lx-source'))
           throw Error('目录和已导入的音乐源均不可用，请在设置中检查音乐源')
-        const profile = await taste.refresh(signal)
+        let profilePolicy = taste.policy()
+        let profile = await taste.refresh(signal)
         signal.throwIfAborted()
         const seen = []
         const history = store.db
@@ -684,6 +690,11 @@ export function musicService(
           }
           work.throwIfAborted()
           update('running', round > 1 ? '正在补推候选歌曲' : '正在生成候选歌曲')
+          if (profilePolicy !== taste.policy()) {
+            profilePolicy = taste.policy()
+            profile = await taste.refresh(work)
+            work.throwIfAborted()
+          }
           const remaining = targetCount - represented.length
           const excluded = [...(profile ? history.slice(-20) : []), ...seen.slice(-100)].map(
             ({ title, artist }) => ({ title, artist }),

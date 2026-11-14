@@ -78,6 +78,7 @@ const names = [
   'draft',
   'generate',
   'getTasteStatus',
+  'setTasteExcluded',
   'setTasteConsent',
   'dismissRecommendation',
   'prepareRecommendation',
