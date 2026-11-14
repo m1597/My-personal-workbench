@@ -11,7 +11,7 @@ const credit = (entries) =>
   (entries ?? []).map((x) => (x.name || x.artist?.name || '') + (x.joinphrase || '')).join('')
 let queue = Promise.resolve()
 let nextRequest = 0
-async function fetchMetadata(entity, params) {
+async function fetchMetadata(entity, params, attempt = 0) {
   const url = new URL('https://musicbrainz.org/ws/2/' + entity)
   url.search = new URLSearchParams({ ...params, fmt: 'json' })
   const ready = queue.then(async () => {
@@ -20,8 +20,9 @@ async function fetchMetadata(entity, params) {
   })
   queue = ready.catch(() => {})
   await ready
+  let response
   try {
-    const response = await fetch(url, {
+    response = await fetch(url, {
       headers: {
         'User-Agent': 'FitBay/0.1 (https://github.com/m1597/My-personal-workbench)',
         Accept: 'application/json',
@@ -29,11 +30,25 @@ async function fetchMetadata(entity, params) {
       signal: AbortSignal.timeout(12000),
       redirect: 'error',
     })
-    if (!response.ok) throw Error()
-    return await response.json()
-  } catch {
-    throw Error('MusicBrainz 暂时无法访问，请稍后重试')
+  } catch (error) {
+    const cause = error.cause?.code || error.name
+    throw Error('MusicBrainz 连接失败（' + cause + '），请重试')
   }
+  if (!response.ok) {
+    if ([429, 503].includes(response.status)) {
+      const value = response.headers.get('Retry-After')
+      const wait = value
+        ? /^\d+$/.test(value)
+          ? Number(value) * 1000
+          : Date.parse(value) - Date.now()
+        : 1600
+      if (Number.isFinite(wait))
+        nextRequest = Math.max(nextRequest, Date.now() + Math.min(3600000, Math.max(1050, wait)))
+      if (!attempt && wait <= 5000) return fetchMetadata(entity, params, 1)
+    }
+    throw Error('MusicBrainz 返回 HTTP ' + response.status + '，请稍后重试')
+  }
+  return response.json()
 }
 export function registerReleaseCatalog(bind, getStore, nativeImage) {
   const responses = new Map()
@@ -61,18 +76,38 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
   }
   registerSongDetails(bind, getStore, metadata)
   const artists = new Map()
+  function artistCredits(entries) {
+    return (entries ?? []).flatMap((c) => {
+      if (!mbid.test(c.artist?.id)) return []
+      const a = {
+        id: c.artist.id,
+        name: name(c.name || c.artist.name),
+        detail: name(c.artist.disambiguation),
+      }
+      artists.set(a.id, a)
+      return [{ name: a.name, id: a.id }]
+    })
+  }
   const releases = new Set()
   const newsGroups = new Set()
   const followed = () => JSON.parse(getStore().get('followed-musicbrainz-artists') || '[]')
   let cachedNews
   bind('findArtists', async (term) => {
     if (!name(term) || term.length > 160) throw Error('请输入艺人名称')
-    const data = await metadata('artist', { query: 'artist:' + quote(term.trim()), limit: '12' })
+    const data = await metadata('artist', {
+      query: '(artist:' + quote(term.trim()) + ' OR alias:' + quote(term.trim()) + ')',
+      limit: '12',
+    })
     const found = (data.artists ?? [])
       .filter((x) => mbid.test(x.id))
       .map((x) => ({
         id: x.id,
         name: name(x.name),
+        aliases: [
+          ...new Set(
+            [x['sort-name'], ...(x.aliases ?? []).map((a) => a.name)].map(name).filter(Boolean),
+          ),
+        ],
         detail: [name(x.disambiguation), name(x.country), name(x.type)].filter(Boolean).join(' · '),
       }))
     for (const artist of found) artists.set(artist.id, artist)
@@ -82,8 +117,10 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     if (!name(title) || !name(artist) || title.length > 256 || artist.length > 256)
       throw Error('无效歌曲署名')
     const normalized = (s) => name(s).normalize('NFKC').toLowerCase()
-    const data = await metadata('recording', { query: 'recording:' + quote(title), limit: '100' })
-    if (data.count > 100) return []
+    const data = await metadata('recording', {
+      query: 'recording:' + quote(title) + ' AND artist:' + quote(artist),
+      limit: '100',
+    })
     const matched = new Map()
     for (const r of data.recordings ?? []) {
       if (normalized(r.title) !== normalized(title)) continue
@@ -104,7 +141,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
   })
   const related = new Map()
   bind('similarArtists', async (id) => {
-    if (!mbid.test(id) || !followed().some((a) => a.id === id)) throw Error('请先选择已关注歌手')
+    if (!knownArtist(id)) throw Error('请先选择艺人')
     const data = await metadata('artist/' + id, { inc: 'genres+artist-rels' })
     const excluded = new Set([
       id,
@@ -155,7 +192,62 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     return result
   })
   const knownArtist = (id) =>
-    mbid.test(id) && (artists.has(id) || related.has(id) || followed().some((a) => a.id === id))
+    mbid.test(id) &&
+    (artists.has(id) ||
+      related.has(id) ||
+      followed().some((a) => a.id === id) ||
+      !!getStore().db.prepare('SELECT 1 FROM song_artist_credits WHERE mbid=? LIMIT 1').get(id))
+  bind('artistSongs', async (id, offset = 0) => {
+    if (!knownArtist(id) || !Number.isSafeInteger(offset) || offset < 0 || offset > 1000000)
+      throw Error('无效的歌手或分页位置')
+    const db = getStore().db
+    db.exec(
+      'CREATE TABLE IF NOT EXISTS artist_song_pages(artist TEXT,offset INTEGER,payload TEXT NOT NULL,updated INTEGER NOT NULL,PRIMARY KEY(artist,offset))',
+    )
+    const cache = db
+      .prepare('SELECT payload,updated FROM artist_song_pages WHERE artist=? AND offset=?')
+      .get(id, offset)
+    if (cache && Date.now() - cache.updated < 3600000) return JSON.parse(cache.payload)
+    try {
+      const data = await metadata('recording', {
+        artist: id,
+        limit: '30',
+        offset: String(offset),
+        inc: 'artist-credits',
+      })
+      const total = data['recording-count'],
+        rows = data.recordings
+      if (!Number.isSafeInteger(total) || !Array.isArray(rows))
+        throw Error('MusicBrainz 曲目目录响应不完整')
+      const page = {
+        total,
+        next: rows.length && offset + rows.length < total ? offset + rows.length : null,
+        songs: rows
+          .filter((r) => mbid.test(r.id) && name(r.title))
+          .map((r) => ({
+            id: r.id,
+            title: name(r.title),
+            artist: credit(r['artist-credit']),
+            artistCredits: artistCredits(r['artist-credit']),
+            version: name(r.disambiguation),
+          })),
+      }
+      db.prepare('INSERT OR REPLACE INTO artist_song_pages VALUES(?,?,?,?)').run(
+        id,
+        offset,
+        JSON.stringify(page),
+        Date.now(),
+      )
+      db.exec(
+        'DELETE FROM artist_song_pages WHERE rowid IN (SELECT rowid FROM artist_song_pages ORDER BY updated DESC LIMIT -1 OFFSET 300)',
+      )
+      return page
+    } catch (e) {
+      if (cache)
+        return { ...JSON.parse(cache.payload), notice: String(e.message) + '；显示已缓存的目录。' }
+      throw e
+    }
+  })
   bind('artistHighlights', async (id) => {
     if (!knownArtist(id)) throw Error('请先选择艺人')
     const data = await metadata('recording', {
@@ -183,9 +275,17 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
         return true
       })
       .slice(0, 5)
-      .map((r) => ({ title: name(r.title), artist: credit(r['artist-credit']) }))
+      .map((r) => ({
+        title: name(r.title),
+        artist: credit(r['artist-credit']),
+        artistCredits: artistCredits(r['artist-credit']),
+      }))
   })
-  bind('followedArtists', followed)
+  bind('followedArtists', () => {
+    const list = followed()
+    for (const artist of list) artists.set(artist.id, artist)
+    return list
+  })
   const portraits = new Map()
   let portraitQueue = Promise.resolve()
   bind('artistPortrait', async (id) => {
@@ -266,6 +366,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
           type,
           title: name(g.title),
           artist: credit(g['artist-credit']),
+          artistCredits: artistCredits(g['artist-credit']),
           date,
         })
       }
@@ -362,6 +463,9 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
         number: t.number,
         position: t.position ?? (/^\d+$/.test(t.number) ? Number(t.number) : null),
         title: name(t.title ?? t.recording?.title),
+        artistCredits: artistCredits(
+          t['artist-credit'] ?? t.recording?.['artist-credit'] ?? data['artist-credit'],
+        ),
         artist: credit(
           t['artist-credit'] ?? t.recording?.['artist-credit'] ?? data['artist-credit'],
         ),

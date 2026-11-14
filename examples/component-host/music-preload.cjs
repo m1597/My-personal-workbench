@@ -49,6 +49,7 @@ const names = [
   'followedArtists',
   'similarArtists',
   'artistHighlights',
+  'artistSongs',
   'followArtist',
   'releaseNews',
   'artistReleases',

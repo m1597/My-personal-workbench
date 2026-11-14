@@ -1,11 +1,20 @@
+import { ArtistLinks, hasArtist } from './SongCredits'
+import { CollectedSongRow } from './CollectedSongRow'
 import { BackButton } from './BackButton'
+import { ArtistSongs } from './ArtistSongs'
 import { ArtistPortrait } from './ArtistPortrait'
 import { Button } from '@fluentui/react-components'
 import { Cover } from './AlbumBrowser'
-import { Play } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { formatTime, type PlaylistTrack, type LocalTrack } from './LibraryPane'
-import { Highlights, NewsTracks, type News, type ReleaseActions } from './ReleaseCatalog'
+import type { PlaylistTrack, LocalTrack } from './LibraryPane'
+import {
+  FollowButton,
+  SimilarArtists,
+  Highlights,
+  NewsTracks,
+  type News,
+  type ReleaseActions,
+} from './ReleaseCatalog'
 const norm = (s: string) => s.normalize('NFKC').trim().toLowerCase()
 export const knownAlbum = (album: string) =>
   !!album.trim() && !['—', '-', '未知专辑', 'unknown album'].includes(norm(album))
@@ -69,6 +78,43 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
   const [remote, setRemote] = useState<News[]>()
   const [status, setStatus] = useState('')
   const [retry, setRetry] = useState(0)
+  const [followed, setFollowed] = useState<
+    Awaited<ReturnType<typeof window.music.followedArtists>>
+  >([])
+  const [pending, setPending] = useState(false)
+  const [followError, setFollowError] = useState('')
+  const [similar, setSimilar] = useState('')
+  useEffect(() => {
+    let live = true,
+      changed = false
+    const update = (e: Event) => {
+      changed = true
+      setFollowed((e as CustomEvent<typeof followed>).detail)
+    }
+    window.addEventListener('music-followed-artists', update)
+    void window.music
+      .followedArtists()
+      .then((list) => {
+        if (live && !changed) setFollowed(list)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+      window.removeEventListener('music-followed-artists', update)
+    }
+  }, [])
+  async function follow(id: string, on: boolean) {
+    setFollowError('')
+    setPending(true)
+    try {
+      const list = await window.music.followArtist(id, on)
+      window.dispatchEvent(new CustomEvent('music-followed-artists', { detail: list }))
+    } catch (e) {
+      setFollowError(String(e).split('Error: ').at(-1) || '未能更新关注')
+    } finally {
+      setPending(false)
+    }
+  }
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry reruns the selected lookup.
   useEffect(() => {
     if (!artistPage) return
@@ -84,8 +130,8 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
         : []
       return fromTrack.length
         ? fromTrack
-        : (await window.music.findArtists(location.name)).filter(
-            (a) => norm(a.name) === norm(location.name),
+        : (await window.music.findArtists(location.name)).filter((a) =>
+            [a.name, ...(a.aliases ?? [])].some((value) => norm(value) === norm(location.name)),
           )
     }
     void lookup()
@@ -124,7 +170,7 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
     (t) =>
       t.listed &&
       (artistPage
-        ? norm(t.artist) === norm(location.artist)
+        ? hasArtist(t, location.artist, location.artistId || chosen)
         : [location.artist, location.group?.artist ?? location.artist].some(
             (a) => norm(albumArtist(t)) === norm(a),
           ) && norm(t.album) === norm(location.name)),
@@ -134,7 +180,7 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
     if (
       song.origin !== 'online' ||
       !(artistPage
-        ? norm(song.artist) === norm(location.artist)
+        ? hasArtist(song, location.artist, location.artistId || chosen)
         : norm(song.album) === norm(location.name) && norm(song.artist) === norm(location.artist))
     )
       continue
@@ -171,34 +217,67 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
         {artistPage && <ArtistPortrait id={chosen} />}
         <small>{artistPage ? '歌手' : '专辑'}</small>
         <h2>{location.name}</h2>
-        {!artistPage && <p>{location.artist}</p>}
+        {!artistPage && (
+          <>
+            <Cover id={localSongs.find((s) => s.available)?.id} track />
+            <p>
+              <ArtistLinks
+                song={{
+                  title: location.name,
+                  artist: location.artist,
+                  artistCredits: location.group?.artistCredits,
+                }}
+                open={open}
+              />
+            </p>
+          </>
+        )}
+        {artistPage && (
+          <div className="artist-home-actions">
+            <FollowButton
+              artist={{ id: chosen, name: location.name, detail: '' }}
+              following={followed.some((a) => a.id === chosen)}
+              disabled={!chosen || pending}
+              toggle={follow}
+            />
+            <Button
+              size="small"
+              disabled={!chosen}
+              aria-expanded={!!chosen && similar === chosen}
+              onClick={() => setSimilar(similar === chosen ? '' : chosen)}
+            >
+              查找相似歌手
+            </Button>
+          </div>
+        )}
+        {followError && <small role="alert">{followError}</small>}
       </header>
+      {artistPage && chosen && similar === chosen && (
+        <SimilarArtists
+          seed={{ id: chosen, name: location.name, detail: '' }}
+          followed={followed}
+          busy={pending}
+          follow={follow}
+          play={actions.play}
+          openArtist={(artist) =>
+            open({ kind: 'artist', name: artist.name, artist: artist.name, artistId: artist.id })
+          }
+        />
+      )}
       <div className="catalog-columns">
         <div className="catalog-songs">
-          {artistPage && <h3>歌曲</h3>}
+          {artistPage && !!collected.length && <h3>曲库已收录</h3>}
           {!!collected.length && (
             <>
               {!artistPage && <h3>已收录曲目</h3>}
               <ol>
                 {collected.map((song) => (
-                  <li key={song.id}>
-                    <Button
-                      size="small"
-                      appearance="subtle"
-                      icon={<Play size={15} />}
-                      aria-label={'播放' + song.title}
-                      disabled={!song.available}
-                      onClick={() => play(song.id, ids)}
-                    />
-                    <div>
-                      <strong>{song.title}</strong>
-                      <small>{song.artist}</small>
-                    </div>
-                    <small>
-                      {song.origin === 'online' && !song.localCopy ? '在线' : '本地'} ·{' '}
-                      {formatTime(song.duration)}
-                    </small>
-                  </li>
+                  <CollectedSongRow
+                    key={song.id}
+                    song={song}
+                    play={() => play(song.id, ids)}
+                    open={open}
+                  />
                 ))}
               </ol>
             </>
@@ -206,7 +285,11 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
           {artistPage && (
             <>
               {chosen && (
-                <Highlights key={chosen} id={chosen} play={actions.play} collected={collected} />
+                <div key={chosen}>
+                  <h3>代表作</h3>
+                  <Highlights id={chosen} play={actions.play} collected={collected} />
+                  <ArtistSongs id={chosen} play={actions.play} />
+                </div>
               )}
               {!chosen && !collected.length && remote?.length === 0 && (
                 <small>暂无歌曲资料。</small>

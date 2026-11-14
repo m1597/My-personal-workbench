@@ -1,3 +1,4 @@
+import { artistsOf, SongCredits, type ArtistCredit } from './SongCredits'
 import { OnlineSongRow } from './OnlineSongRow'
 import { ArtistPortrait } from './ArtistPortrait'
 import { guardSearchEnter } from './searchSubmit'
@@ -10,21 +11,44 @@ import { TrackMenu } from './TrackMenu'
 import type { SongAPI } from './SongDetails'
 import './release-catalog.css'
 
-type Artist = { id: string; name: string; detail: string }
+type Artist = { id: string; name: string; detail: string; aliases?: string[] }
 type Edition = { id: string; title: string; artist: string; detail: string }
 const labelEdition = (c: Edition) => [c.title, c.artist, c.detail].filter(Boolean).join(' · ')
 type ReleaseTrack = {
+  artistCredits?: ArtistCredit[]
   position: number | null
   disc: number
   number: string
   title: string
   artist: string
 }
-export type News = { type: string; id: string; title: string; artist: string; date: string }
+export type News = {
+  artistCredits?: ArtistCredit[]
+  type: string
+  id: string
+  title: string
+  artist: string
+  date: string
+}
 export interface ReleaseAPI extends SongAPI {
   findArtists(term: string): Promise<Artist[]>
   similarArtists(id: string): Promise<Artist[]>
-  artistHighlights(id: string): Promise<Pick<ReleaseTrack, 'artist' | 'title'>[]>
+  artistHighlights(id: string): Promise<Pick<ReleaseTrack, 'artist' | 'title' | 'artistCredits'>[]>
+  artistSongs(
+    id: string,
+    offset: number,
+  ): Promise<{
+    total: number
+    next: number | null
+    notice?: string
+    songs: {
+      id: string
+      title: string
+      artist: string
+      artistCredits?: ArtistCredit[]
+      version: string
+    }[]
+  }>
   followedArtists(): Promise<Artist[]>
   followArtist(id: string, on: boolean): Promise<Artist[]>
   releaseNews(refresh?: boolean): Promise<News[]>
@@ -38,27 +62,22 @@ export interface ReleaseAPI extends SongAPI {
 }
 const message = (error: unknown) => String(error).split('Error: ').at(-1) || '读取发行资料失败'
 type PlayRecording = (key: string) => Promise<void>
-const artistNames = (name: string) =>
-  normalize(name)
-    .split(/\s*(?:\/|、|;|＆|&|\bfeat\.?\s+|\bfeaturing\s+)\s*/u)
-    .filter(Boolean)
-
 export interface ReleaseActions {
   play: PlayRecording
   add: (playlist: string, key: string) => Promise<void>
   playlists: { id: string; name: string }[]
 }
-async function matchTrack(
+export async function matchTrack(
   track: Pick<ReleaseTrack, 'title' | 'artist'>,
   album = '',
   requireAlbum = false,
 ) {
-  const artists = artistNames(track.artist)
+  const artists = artistsOf(track).map((a) => normalize(a.name))
   const result = await window.music.lxSearch({ title: track.title, artist: artists[0] ?? '' })
   const matches = result.items.filter(
     (item) =>
       normalize(item.title) === normalize(track.title) &&
-      (!artists.length || artistNames(item.artist).some((name) => artists.includes(name))) &&
+      (!artists.length || artistsOf(item).some((a) => artists.includes(normalize(a.name)))) &&
       (item.quality === undefined || item.quality.length > 0),
   )
   const recording =
@@ -153,6 +172,15 @@ function MissingTrack({
     </div>
   )
 }
+async function downloadRecording(recording: Awaited<ReturnType<typeof matchTrack>>) {
+  const prefs = (await window.music.state()).prefs
+  const quality =
+    recording.quality === undefined || recording.quality.includes(prefs.quality)
+      ? prefs.quality
+      : recording.quality[0]
+  if (!quality) throw Error('该录音没有可下载音质')
+  return window.music.lxDownload(recording.key, quality, true)
+}
 export function NewsTracks({
   group,
   play,
@@ -234,9 +262,22 @@ export function NewsTracks({
       attempt.current++
     }
   }, [selected])
-  async function listen(track: ReleaseTrack) {
+  async function listen(
+    track: ReleaseTrack,
+    action: 'play' | 'download' | 'add' = 'play',
+    list?: string,
+  ) {
     const localId = collectedTracks(tracks ?? [], local, group.artist, aliases).get(track)
     if (localId && playLocal) {
+      if (action === 'add' && list) {
+        try {
+          await window.music.setMembership(list, localId, true)
+        } catch (e) {
+          setPlayError(message(e))
+        }
+        return
+      }
+      if (action !== 'play') return
       playLocal(
         localId,
         local.filter((t) => t.available).map((t) => t.id),
@@ -255,7 +296,14 @@ export function NewsTracks({
         recording = await matchTrack({ ...track, artist: aliases[0] }, group.title, !!playLocal)
       }
       if (attempt.current !== request) return
-      await play(recording.key)
+      if (action === 'play') await play(recording.key)
+      else if (action === 'add' && list)
+        await window.music.setMembership(
+          list,
+          await window.music.rememberOnline(recording.key),
+          true,
+        )
+      else await downloadRecording(recording)
     } catch (e) {
       if (attempt.current === request) setPlayError(track.title + ' · ' + message(e))
     } finally {
@@ -302,22 +350,99 @@ export function NewsTracks({
       ) : (
         <ol>
           {tracks.map((t) => (
-            <li key={[t.disc, t.number, t.title].join(':')}>
+            <OnlineSongRow
+              key={[t.disc, t.number, t.title].join(':')}
+              className="release-recording"
+              busy={!!pending}
+              localId={collectedTracks(tracks, local, group.artist, aliases).get(t) || undefined}
+              play={() => void listen(t)}
+              download={() => void listen(t, 'download')}
+              add={(list) => void listen(t, 'add', list)}
+            >
               <div>
                 <strong>
                   {t.disc}.{t.number} {t.title}
                 </strong>
-                <small>{t.artist}</small>
+                <small>
+                  <SongCredits song={t} />
+                </small>
               </div>
               <Button size="small" disabled={Boolean(pending)} onClick={() => void listen(t)}>
                 {pending === t.disc + ':' + t.number ? '正在查找…' : '播放'}
               </Button>
-            </li>
+            </OnlineSongRow>
           ))}
         </ol>
       )}
       {playError && <small role="alert">{playError}</small>}
     </div>
+  )
+}
+export function CatalogSongRow({
+  song,
+  play,
+}: {
+  song: Pick<ReleaseTrack, 'artist' | 'title' | 'artistCredits'> & { version?: string }
+  play: PlayRecording
+}) {
+  const [error, setError] = useState('')
+  const [pending, setPending] = useState(false)
+  const live = useRef(true)
+  useEffect(() => {
+    live.current = true
+    return () => {
+      live.current = false
+    }
+  }, [])
+  const [status, setStatus] = useState('')
+  async function perform(action: 'play' | 'download' | 'add', list?: string, name?: string) {
+    setPending(true)
+    setError('')
+    setStatus('')
+    try {
+      const recording = await matchTrack(song)
+      if (!live.current) return
+      if (action === 'play') await play(recording.key)
+      else if (action === 'add' && list) {
+        const reference = await window.music.rememberOnline(recording.key)
+        await window.music.setMembership(list, reference, true)
+        setStatus('已加入「' + name + '」')
+      } else {
+        const saved = await downloadRecording(recording)
+        if (saved) setStatus('已下载并入库')
+      }
+    } catch (e) {
+      if (live.current) setError(message(e))
+    } finally {
+      if (live.current) setPending(false)
+    }
+  }
+  return (
+    <OnlineSongRow
+      className="highlight-recording"
+      busy={pending}
+      play={() => void perform('play')}
+      download={() => void perform('download')}
+      add={(list, name) => void perform('add', list, name)}
+    >
+      <div>
+        <Button
+          size="small"
+          aria-label={'试听' + song.title}
+          appearance="subtle"
+          onClick={() => void perform('play')}
+          disabled={pending}
+        >
+          播放
+        </Button>
+        <span>{song.title}</span> {song.version && <small>{song.version}</small>}
+        <small>
+          <SongCredits song={song} />
+          {status && <small role="status">{status}</small>}
+          {error && <small role="alert">{error}</small>}
+        </small>
+      </div>
+    </OnlineSongRow>
   )
 }
 export function Highlights({
@@ -329,9 +454,8 @@ export function Highlights({
   play: PlayRecording
   collected?: PlaylistTrack[]
 }) {
-  const [songs, setSongs] = useState<Pick<ReleaseTrack, 'artist' | 'title'>[]>()
+  const [songs, setSongs] = useState<Pick<ReleaseTrack, 'artist' | 'title' | 'artistCredits'>[]>()
   const [error, setError] = useState('')
-  const [pending, setPending] = useState(false)
   const live = useRef(false)
   useEffect(() => {
     live.current = true
@@ -347,39 +471,6 @@ export function Highlights({
       live.current = false
     }
   }, [id])
-  const [status, setStatus] = useState('')
-  async function perform(
-    song: Pick<ReleaseTrack, 'artist' | 'title'>,
-    action: 'play' | 'download' | 'add',
-    list?: string,
-    name?: string,
-  ) {
-    setPending(true)
-    setError('')
-    setStatus('')
-    try {
-      const recording = await matchTrack(song)
-      if (!live.current) return
-      if (action === 'play') await play(recording.key)
-      else if (action === 'add' && list) {
-        const reference = await window.music.rememberOnline(recording.key)
-        await window.music.setMembership(list, reference, true)
-        setStatus('已加入「' + name + '」')
-      } else {
-        const prefs = (await window.music.state()).prefs
-        const quality = recording.quality?.includes(prefs.quality)
-          ? prefs.quality
-          : recording.quality?.[0]
-        if (!quality) throw Error('该录音没有可下载音质')
-        const saved = await window.music.lxDownload(recording.key, quality, true)
-        if (saved) setStatus('已下载并入库')
-      }
-    } catch (e) {
-      if (live.current) setError(message(e))
-    } finally {
-      if (live.current) setPending(false)
-    }
-  }
   const visible = songs?.filter(
     (s) =>
       !collected?.some(
@@ -391,22 +482,12 @@ export function Highlights({
   )
   return (
     <div>
-      {status && <small role="status">{status}</small>}
       {error && <small role="alert">{error}</small>}
       {visible ? (
         visible.length ? (
           <ul>
             {visible.map((song) => (
-              <OnlineSongRow
-                key={song.title}
-                className="highlight-recording"
-                busy={pending}
-                play={() => void perform(song, 'play')}
-                download={() => void perform(song, 'download')}
-                add={(list, name) => void perform(song, 'add', list, name)}
-              >
-                <span>{song.title}</span>
-              </OnlineSongRow>
+              <CatalogSongRow key={song.title} song={song} play={play} />
             ))}
           </ul>
         ) : (
@@ -418,7 +499,7 @@ export function Highlights({
     </div>
   )
 }
-function FollowButton({
+export function FollowButton({
   artist,
   following,
   disabled,
@@ -448,7 +529,7 @@ function FollowButton({
     </Button>
   )
 }
-function SimilarArtists({
+export function SimilarArtists({
   openArtist,
   seed,
   followed,
@@ -611,6 +692,7 @@ export function ArtistReleases({
   const [news, setNews] = useState<News[]>()
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  const newsVersion = useRef(0)
   const searchVersion = useRef(0)
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState('')
@@ -629,8 +711,13 @@ export function ArtistReleases({
   async function load(list: Artist[], force = false) {
     if (!alive.current) return
     setFollowed(list)
-    const data = list.length ? await window.music.releaseNews(force) : []
-    if (alive.current) setNews(data)
+    const version = ++newsVersion.current
+    try {
+      const data = list.length ? await window.music.releaseNews(force) : []
+      if (alive.current && version === newsVersion.current) setNews(data)
+    } catch (error) {
+      if (alive.current && version === newsVersion.current) setStatus(message(error))
+    }
   }
   const initialLoad = useEffectEvent(
     () => void act(async () => load(await window.music.followedArtists())),
@@ -657,12 +744,21 @@ export function ArtistReleases({
       if (alive.current && searchVersion.current === request) setSearching(false)
     }
   }
+  const syncFollowed = useEffectEvent((event: Event) => {
+    const list = (event as CustomEvent<Artist[]>).detail
+    setNews(undefined)
+    void load(list)
+  })
+  useEffect(() => {
+    const update = (event: Event) => syncFollowed(event)
+    window.addEventListener('music-followed-artists', update)
+    return () => window.removeEventListener('music-followed-artists', update)
+  }, [])
   function toggle(id: string, on: boolean) {
     void act(async () => {
       const list = await window.music.followArtist(id, on)
+      window.dispatchEvent(new CustomEvent('music-followed-artists', { detail: list }))
       if (!on && selected?.id === id) setSelected(undefined)
-      setNews(undefined)
-      await load(list)
     })
   }
   return (
@@ -756,6 +852,21 @@ export function ArtistReleases({
                   <span>{artist.name}</span>
                 </button>
                 <FollowButton artist={artist} following disabled={busy} toggle={toggle} />
+                <Button
+                  size="small"
+                  appearance="subtle"
+                  aria-label={'查找与' + artist.name + '相似的歌手'}
+                  onClick={() => {
+                    setSelected(artist)
+                    requestAnimationFrame(() =>
+                      layout.current
+                        ?.querySelector('.similar-artists')
+                        ?.scrollIntoView({ block: 'nearest' }),
+                    )
+                  }}
+                >
+                  相似歌手
+                </Button>
               </div>
             ))}
           </div>
