@@ -1,3 +1,4 @@
+import { ArtistPortrait } from './ArtistPortrait'
 import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
@@ -473,6 +474,7 @@ function SimilarArtists({
           {rows.map((a) => (
             <li key={a.id} className="release-event">
               <div className="release-event-head">
+                <ArtistPortrait id={a.id} />
                 <div>
                   <button type="button" className="catalog-text-link" onClick={() => openArtist(a)}>
                     {a.name}
@@ -499,28 +501,6 @@ function SimilarArtists({
         </ul>
       )}
     </section>
-  )
-}
-function ArtistPortrait({ id }: { id: string }) {
-  const [image, setImage] = useState<string | null>(null)
-  useEffect(() => {
-    let live = true
-    void window.music
-      .artistPortrait(id)
-      .then((src) => {
-        if (live) setImage(src)
-      })
-      .catch(() => {})
-    return () => {
-      live = false
-    }
-  }, [id])
-  return (
-    <img
-      src={image || './default-artist.webp'}
-      alt=""
-      onError={image ? () => setImage(null) : undefined}
-    />
   )
 }
 function ReleaseList({

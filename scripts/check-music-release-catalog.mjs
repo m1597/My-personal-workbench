@@ -187,6 +187,7 @@ async function launch() {
         !options.headers['User-Agent'].includes('FitBay')
       )
         throw Error('外部请求未隔离')
+      if (url.searchParams.get('inc') === 'url-rels') return Response.json({ relations: [] })
       globalThis.catalogRequests.push(url.pathname)
       const today = new Date().toISOString().slice(0, 10)
       const entity = url.pathname.split('/').at(-1)

@@ -1,3 +1,4 @@
+import { loadArtistPortrait } from './artist-portrait.mjs'
 import { registerSongDetails } from './song-details.mjs'
 import { setTimeout as delay } from 'node:timers/promises'
 
@@ -185,10 +186,34 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
       .map((r) => ({ title: name(r.title), artist: credit(r['artist-credit']) }))
   })
   bind('followedArtists', followed)
+  const portraits = new Map()
   bind('artistPortrait', async (id) => {
-    const artist = mbid.test(id) && followed().find((a) => a.id === id)
-    if (!artist) throw Error('请先关注艺人')
-    return getStore().library.albums.artistPortrait(artist.name, nativeImage)
+    if (!knownArtist(id)) throw Error('请先选择艺人')
+    const store = getStore()
+    store.db.exec(
+      'CREATE TABLE IF NOT EXISTS artist_portraits(id TEXT PRIMARY KEY,image TEXT,expires INTEGER NOT NULL)',
+    )
+    const cached = store.db
+      .prepare('SELECT image FROM artist_portraits WHERE id=? AND expires>?')
+      .get(id, Date.now())
+    if (cached) return cached.image
+    if (portraits.has(id)) return portraits.get(id)
+    const artist = artists.get(id) ?? related.get(id) ?? followed().find((a) => a.id === id)
+    const request = (async () => {
+      const local = await store.library.albums.artistPortrait(artist.name, nativeImage)
+      const image = local || (await loadArtistPortrait(id, metadata, nativeImage))
+      store.db
+        .prepare('INSERT OR REPLACE INTO artist_portraits VALUES(?,?,?)')
+        .run(id, image, Date.now() + (image ? 30 : 1) * 86400000)
+      store.db
+        .prepare(
+          'DELETE FROM artist_portraits WHERE id IN (SELECT id FROM artist_portraits ORDER BY expires DESC LIMIT -1 OFFSET 500)',
+        )
+        .run()
+      return image
+    })().finally(() => portraits.delete(id))
+    portraits.set(id, request)
+    return request
   })
   bind('followArtist', (id, on) => {
     if (!mbid.test(id) || typeof on !== 'boolean') throw Error('无效艺人')

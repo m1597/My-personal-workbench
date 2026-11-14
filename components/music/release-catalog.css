@@ -263,3 +263,23 @@
   width: 48px;
   flex: none;
 }
+
+.catalog-artist-portrait {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.library-catalog-home header > .catalog-artist-portrait {
+  float: left;
+  width: 64px;
+  height: 64px;
+  margin-inline-end: var(--space-12);
+}
+.song-credit-links {
+  overflow-wrap: anywhere;
+}
+
+.catalog-artist-portrait[data-fallback="true"] {
+  filter: grayscale(0.75) hue-rotate(26deg);
+}

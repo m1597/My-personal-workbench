@@ -1,3 +1,4 @@
+import { ArtistPortrait } from './ArtistPortrait'
 import { Button } from '@fluentui/react-components'
 import { Cover } from './AlbumBrowser'
 import { ArrowLeft, Play } from 'lucide-react'
@@ -152,6 +153,7 @@ export function LibraryCatalogPage({ location, local, songs, play, actions, back
         返回
       </Button>
       <header>
+        {artistPage && <ArtistPortrait id={chosen} />}
         <small>{artistPage ? '歌手' : '专辑'}</small>
         <h2>{location.name}</h2>
         {!artistPage && <p>{location.artist}</p>}
