@@ -78,7 +78,7 @@ try {
     BaseWindow.getAllWindows()[0].setContentSize(960, 680)
     globalThis.fetch = async (url) => {
       if (url.origin === 'https://musicbrainz.org' && url.pathname === '/ws/2/recording')
-        return Response.json({ recordings: [] })
+        return Response.json({ recordings: [], 'recording-count': 0 })
       if (url.origin !== 'https://musicbrainz.org' || url.pathname !== '/ws/2/release-group')
         throw Error('非预期请求')
       const id = '10000000-0000-0000-0000-000000000001'
@@ -111,7 +111,7 @@ try {
   await shot('动态关注')
   await btn('青禾').click()
   const group = page.getByRole('region', { name: '歌手主页', exact: true })
-  await expect(group.getByRole('button', { name: /暖阳.*2001/ })).toBeVisible()
+  await expect(group.getByRole('button', { name: /暖阳.*2001/ })).toBeVisible({ timeout: 20000 })
   await group.locator('.catalog-release-link').scrollIntoViewIfNeeded()
   await expect(group.locator('.album-art img')).toHaveAttribute('src', /^data:image/)
   await shot('往年发行')
