@@ -244,36 +244,45 @@ export function musicService(
     const row = store.db.prepare('SELECT image FROM playlist_artwork WHERE id=?').get(id)
     return row ? 'data:image/png;base64,' + Buffer.from(row.image).toString('base64') : null
   })
+  let choosingPlaylistArtwork = false
   bind('changePlaylistArtwork', async (id, reset) => {
     checkPlaylist(id)
+    if (choosingPlaylistArtwork) return
     if (reset === true) {
       store.db.prepare('DELETE FROM playlist_artwork WHERE id=?').run(id)
       return
     }
-    const selected = await dialog.showOpenDialog({
-      title: '选择歌单封面',
-      properties: ['openFile'],
-      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
-    })
-    if (selected.canceled) return
-    const file = selected.filePaths[0]
-    const stat = await lstat(file)
-    if (!stat.isFile() || stat.size > 16 * 1024 * 1024) throw Error('请选择 16 MB 以内的图片')
-    const image = nativeImage.createFromBuffer(await readFile(file))
-    if (image.isEmpty()) throw Error('无法读取这张图片')
-    const { width, height } = image.getSize()
-    const size = Math.min(width, height)
-    const bytes = image
-      .crop({
-        x: Math.floor((width - size) / 2),
-        y: Math.floor((height - size) / 2),
-        width: size,
-        height: size,
+    choosingPlaylistArtwork = true
+    try {
+      const selected = await dialog.showOpenDialog({
+        title: '选择歌单封面',
+        properties: ['openFile'],
+        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
       })
-      .resize({ width: Math.min(512, size) })
-      .toPNG()
-    checkPlaylist(id)
-    store.db.prepare('INSERT OR REPLACE INTO playlist_artwork(id,image) VALUES(?,?)').run(id, bytes)
+      if (selected.canceled) return
+      const file = selected.filePaths[0]
+      const stat = await lstat(file)
+      if (!stat.isFile() || stat.size > 16 * 1024 * 1024) throw Error('请选择 16 MB 以内的图片')
+      const image = nativeImage.createFromBuffer(await readFile(file))
+      if (image.isEmpty()) throw Error('无法读取这张图片')
+      const { width, height } = image.getSize()
+      const size = Math.min(width, height)
+      const bytes = image
+        .crop({
+          x: Math.floor((width - size) / 2),
+          y: Math.floor((height - size) / 2),
+          width: size,
+          height: size,
+        })
+        .resize({ width: Math.min(512, size) })
+        .toPNG()
+      checkPlaylist(id)
+      store.db
+        .prepare('INSERT OR REPLACE INTO playlist_artwork(id,image) VALUES(?,?)')
+        .run(id, bytes)
+    } finally {
+      choosingPlaylistArtwork = false
+    }
   })
   bind('moveSidebarItem', (group, id, target, after) =>
     store.moveSidebarItem(group, id, target, after),

@@ -37,11 +37,18 @@ async function select(page, name) {
   if ((await nav.isVisible()) && (await nav.getAttribute('aria-expanded')) === 'false')
     await nav.click()
   await page.getByRole('button', { name, exact: true }).click()
-  return page.getByRole('button', { name: '更换歌单封面' })
+  return page.getByRole('button', { name: '更换封面', exact: true })
 }
 async function choose(app, file) {
   await app.evaluate(({ dialog }, file) => {
-    dialog.showOpenDialog = async () => ({ canceled: !file, filePaths: file ? [file] : [] })
+    globalThis.pickerCalls = 0
+    dialog.showOpenDialog = async () => {
+      globalThis.pickerCalls++
+      await new Promise((resolve) => {
+        globalThis.finishPicker = resolve
+      })
+      return { canceled: !file, filePaths: file ? [file] : [] }
+    }
   }, file)
 }
 let session = await open()
@@ -61,12 +68,29 @@ try {
     const file = path.join(root, i + '.png')
     await writeFile(file, Buffer.from(png, 'base64'))
     await choose(app, file)
-    await button.click()
+    const image = page.locator('.playlist-cover img')
+    await image.click()
+    await page.evaluate(() => window.music.state())
+    assert.equal(await app.evaluate(() => globalThis.pickerCalls), 0)
+    await expect(button).toBeVisible()
+    await button.evaluate((el) => {
+      el.click()
+      el.click()
+      el.click()
+    })
+    await expect(button).toBeDisabled()
+    await expect.poll(() => app.evaluate(() => globalThis.pickerCalls)).toBe(1)
+    await app.evaluate(() => globalThis.finishPicker())
     await expect(page.getByRole('button', { name: '恢复自动封面' })).toBeVisible()
-    const image = button.locator('img')
     await expect(image).toHaveAttribute('src', /^data:image\/png;base64,/)
     expected.set(name, await image.getAttribute('src'))
     assert.equal(await image.evaluate((img) => img.naturalWidth), 80)
+    await choose(app, null)
+    await button.click()
+    await expect.poll(() => app.evaluate(() => globalThis.pickerCalls)).toBe(1)
+    await app.evaluate(() => globalThis.finishPicker())
+    await expect(button).toBeEnabled()
+    await expect(image).toHaveAttribute('src', expected.get(name))
     await rename(file, file + '.moved')
   }
   assert.equal(new Set(expected.values()).size, 3)
@@ -79,12 +103,16 @@ try {
   next.db.close()
   session = await open()
   for (const name of groups) {
-    const button = await select(session.page, name)
-    await expect(button.locator('img')).toHaveAttribute('src', expected.get(name))
-    await session.page.screenshot({ path: path.join(root, name + '.png') })
+    await select(session.page, name)
+    await expect(session.page.locator('.playlist-cover img')).toHaveAttribute(
+      'src',
+      expected.get(name),
+    )
+    await session.page.screenshot({
+      path: path.join(root, name + '.png'),
+      style: ':root {background:var(--base)!important}',
+    })
   }
-  await choose(session.app, null)
-  await session.page.getByRole('button', { name: '更换歌单封面' }).click()
   await expect(session.page.locator('.playlist-cover img')).toHaveAttribute(
     'src',
     expected.get('歌曲推荐'),
@@ -95,8 +123,11 @@ try {
     './default-cover.png',
   )
   for (const name of groups.slice(0, 2)) {
-    const button = await select(session.page, name)
-    await expect(button.locator('img')).toHaveAttribute('src', expected.get(name))
+    await select(session.page, name)
+    await expect(session.page.locator('.playlist-cover img')).toHaveAttribute(
+      'src',
+      expected.get(name),
+    )
   }
   console.log('三类歌单封面、取消、重启、换批及独立恢复已验证', root)
 } finally {

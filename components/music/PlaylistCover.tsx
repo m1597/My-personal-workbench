@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Button } from '@fluentui/react-components'
 import { defaultCover, requestCover } from './AlbumBrowser'
 
 import './playlist-cover.css'
@@ -14,6 +15,8 @@ export function PlaylistCover({
 }) {
   const [custom, setCustom] = useState<string | null>()
   const [error, setError] = useState('')
+  const changing = useRef(false)
+  const [busy, setBusy] = useState(false)
   useEffect(() => {
     let alive = true
     window.music
@@ -29,12 +32,18 @@ export function PlaylistCover({
     }
   }, [id])
   async function change(reset: boolean) {
+    if (changing.current) return
+    changing.current = true
+    setBusy(true)
     try {
       await window.music.changePlaylistArtwork(id, reset)
       setError('')
       setCustom(await window.music.playlistArtwork(id))
     } catch (e) {
       setError(String(e).split('Error: ').pop() || '更换封面失败')
+    } finally {
+      changing.current = false
+      setBusy(false)
     }
   }
   const [automatic, setAutomatic] = useState<{ id: string; revision: number; url: string }>()
@@ -56,17 +65,19 @@ export function PlaylistCover({
     defaultCover
   return (
     <div className="playlist-artwork">
-      <button
-        type="button"
-        className="playlist-cover"
-        onClick={() => void change(false)}
-        title="更换歌单封面"
-        aria-label="更换歌单封面"
-      >
-        <img src={src} alt="" />
-      </button>
+      <div className="playlist-cover">
+        <img src={src} alt="歌单封面" />
+      </div>
+      <Button size="small" disabled={busy} onClick={() => void change(false)}>
+        更换封面
+      </Button>
       {custom && (
-        <button className="catalog-text-link" type="button" onClick={() => void change(true)}>
+        <button
+          className="catalog-text-link"
+          type="button"
+          disabled={busy}
+          onClick={() => void change(true)}
+        >
           恢复自动封面
         </button>
       )}
