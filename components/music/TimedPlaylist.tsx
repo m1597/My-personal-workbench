@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Button, Input, Popover, PopoverSurface, PopoverTrigger } from '@fluentui/react-components'
 import { ChevronDown } from 'lucide-react'
 import { formatTime, type LocalTrack, type PlaylistTrack } from './LibraryPane'
@@ -8,14 +8,17 @@ type Entry = { id: string; duration: number }
 function fitTracks(rows: Entry[], seconds: number) {
   if (!Number.isSafeInteger(seconds) || seconds < 1) return []
   if (rows.reduce((sum, t) => sum + t.duration, 0) <= seconds) return rows
-  // Round costs up so the actual full recordings always fit. Bound memory for long time slots.
-  const unit = Math.max(1, Math.ceil(seconds / 32768))
-  const capacity = Math.floor(seconds / unit)
+  // Use the tracks' common millisecond precision before coarsening very large searches.
+  const milliseconds = rows.map((row) => Math.ceil(row.duration * 1000))
+  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a)
+  const budget = seconds * 1000
+  const unit = Math.max(milliseconds.reduce(gcd, budget), Math.ceil(budget / 131072))
+  const capacity = Math.floor(budget / unit)
   const last = new Int32Array(capacity + 1).fill(-1)
   last[0] = -2
   let best = 0
-  for (const [i, row] of rows.entries()) {
-    const cost = Math.ceil(row.duration / unit)
+  for (const [i, duration] of milliseconds.entries()) {
+    const cost = Math.ceil(duration / unit)
     for (let total = Math.min(capacity, best + cost); total >= cost; total--) {
       if (last[total] !== -1 || last[total - cost] === -1) continue
       last[total] = i
@@ -25,9 +28,9 @@ function fitTracks(rows: Entry[], seconds: number) {
   }
   const chosen: Entry[] = []
   while (best > 0) {
-    const track = rows[last[best]]
-    chosen.push(track)
-    best -= Math.ceil(track.duration / unit)
+    const index = last[best]
+    chosen.push(rows[index])
+    best -= Math.ceil(milliseconds[index] / unit)
   }
   return chosen.reverse()
 }
@@ -42,6 +45,7 @@ export function TimedPlaylist({
   play(id: string, queue: string[], whole: boolean): void
 }) {
   const [open, setOpen] = useState(false)
+  const minutesInput = useId()
   const [minutes, setMinutes] = useState('25')
   const target = Number(minutes) * 60
   const valid =
@@ -82,9 +86,14 @@ export function TimedPlaylist({
       </PopoverTrigger>
       <PopoverSurface className="component-popup timed-playlist" aria-label="按可用时间排歌">
         <strong>按可用时间排歌</strong>
-        <label>
+        <label htmlFor={minutesInput}>
           可用时间（分钟）
-          <Input value={minutes} inputMode="decimal" onChange={(_, d) => setMinutes(d.value)} />
+          <Input
+            id={minutesInput}
+            value={minutes}
+            inputMode="decimal"
+            onChange={(_, d) => setMinutes(d.value)}
+          />
         </label>
         <p role="status">
           {!valid

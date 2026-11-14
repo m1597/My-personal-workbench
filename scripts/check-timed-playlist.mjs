@@ -9,7 +9,7 @@ const store = new MusicStore(path.join(profile, 'fitbay-music'))
 const name = '下班路上'
 const playlist = store.library.createPlaylist(name)
 for (const minutes of [14, 13, 12]) {
-  const duration = minutes * 60
+  const duration = minutes * 60 + (minutes === 13 ? -0.5 : minutes === 12 ? 0.5 : 0)
   const title = minutes + '分钟录音'
   const file = path.join(root, title + '.wav')
   const bytes = duration * 8000
@@ -92,7 +92,7 @@ try {
     a.currentTime = a.duration - 0.2
   })
   await expect(page.locator('.music-transport strong')).toHaveText('12分钟录音')
-  await expect.poll(() => audio.evaluate((a) => !a.paused && a.duration === 720)).toBe(true)
+  await expect.poll(() => audio.evaluate((a) => !a.paused && a.duration === 720.5)).toBe(true)
   await audio.evaluate((a) => {
     a.currentTime = a.duration - 0.2
   })
