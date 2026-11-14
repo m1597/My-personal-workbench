@@ -1,8 +1,9 @@
-import { SongCredits, songRowClick } from './SongCredits'
+import { songRow } from './songRow'
+import { SongCredits } from './SongCredits'
 import { TrackMenu } from './TrackMenu'
 import { useState } from 'react'
 import { Button, Popover, PopoverSurface, PopoverTrigger } from '@fluentui/react-components'
-import { ListMusic } from 'lucide-react'
+import { ListMusic, Play } from 'lucide-react'
 type Song = {
   id: string
   title: string
@@ -65,16 +66,23 @@ export function PlaybackQueue({
           icon={<ListMusic size={17} />}
         />
       </PopoverTrigger>
-      <PopoverSurface className="component-popup music-queue" aria-label="播放队列">
+      <PopoverSurface
+        data-song-list=""
+        className="component-popup music-queue"
+        aria-label="播放队列"
+      >
         <strong>播放队列</strong>
         {active && (
           <TrackMenu localId={localFile(active)}>
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: The track title button supports keyboard playback. */}
-            <p onClick={(e) => songRowClick(e, () => play(active.id))}>
-              当前曲目 ·{' '}
-              <button type="button" className="catalog-text-link" onClick={() => play(active.id)}>
-                {active.title}
-              </button>{' '}
+            <p {...songRow(() => play(active.id))}>
+              当前曲目 · <strong>{active.title}</strong>{' '}
+              <Button
+                appearance="subtle"
+                size="small"
+                icon={<Play size={14} />}
+                aria-label={'播放' + active.title}
+                onClick={() => play(active.id)}
+              />
               · <SongCredits song={active} beforeOpen={() => setOpen(false)} />
             </p>
           </TrackMenu>
@@ -85,15 +93,15 @@ export function PlaybackQueue({
             {upcoming.map(({ row, occurrence }) => {
               return (
                 <TrackMenu key={row.id + ':' + occurrence} localId={localFile(row)}>
-                  {/* biome-ignore lint/a11y/useKeyWithClickEvents: The track title button supports keyboard playback. */}
-                  <li onClick={(e) => songRowClick(e, () => play(row.id, occurrence))}>
-                    <button
-                      type="button"
-                      className="catalog-text-link"
+                  <li {...songRow(() => play(row.id, occurrence))}>
+                    <strong>{row.title}</strong>{' '}
+                    <Button
+                      appearance="subtle"
+                      size="small"
+                      icon={<Play size={14} />}
+                      aria-label={'播放' + row.title}
                       onClick={() => play(row.id, occurrence)}
-                    >
-                      {row.title}
-                    </button>{' '}
+                    />
                     · <SongCredits song={row} beforeOpen={() => setOpen(false)} />
                   </li>
                 </TrackMenu>

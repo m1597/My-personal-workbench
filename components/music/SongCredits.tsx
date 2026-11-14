@@ -1,17 +1,8 @@
 import { createContext, useContext } from 'react'
-import type { MouseEvent } from 'react'
+import { creditClick } from './songRow'
 import { knownAlbum, type CatalogLocation } from './LibraryCatalogPage'
 
 export const SongCatalog = createContext<(location: CatalogLocation) => void>(() => {})
-export function songRowClick(event: MouseEvent, play: () => void) {
-  if (
-    event.detail < 2 &&
-    event.target instanceof Element &&
-    event.currentTarget.contains(event.target) &&
-    !event.target.closest('button,a,input,select,label,[role="button"],[role="menuitem"]')
-  )
-    play()
-}
 export type ArtistCredit = { name: string; id?: string | null }
 type Credit = {
   artistCredits?: ArtistCredit[]
@@ -64,14 +55,17 @@ export function ArtistLinks({ song, open }: { song: Credit; open: (v: CatalogLoc
             <button
               className="catalog-text-link library-artist-link"
               type="button"
-              onClick={() =>
-                open({
-                  kind: 'artist',
-                  name: a.name,
-                  artist: a.name,
-                  artistId: a.id || undefined,
-                  fromSong: song.title,
-                })
+              data-song-credit=""
+              onClick={(e) =>
+                creditClick(e, () =>
+                  open({
+                    kind: 'artist',
+                    name: a.name,
+                    artist: a.name,
+                    artistId: a.id || undefined,
+                    fromSong: song.title,
+                  }),
+                )
               }
             >
               {a.name}
@@ -100,8 +94,11 @@ export function SongCredits({ song, beforeOpen }: { song: Credit; beforeOpen?():
           <button
             className="catalog-text-link"
             type="button"
-            onClick={() =>
-              show({ kind: 'album', name: album, artist: song.albumArtist || song.artist })
+            data-song-credit=""
+            onClick={(e) =>
+              creditClick(e, () =>
+                show({ kind: 'album', name: album, artist: song.albumArtist || song.artist }),
+              )
             }
           >
             {album}

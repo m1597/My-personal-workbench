@@ -1,3 +1,5 @@
+import { songRow } from './songRow'
+import { SongCredits } from './SongCredits'
 import { DiscoveryInput } from './DiscoveryInput'
 import { BackButton } from './BackButton'
 import { Button, Checkbox, Dropdown, Option, Tab, TabList } from '@fluentui/react-components'
@@ -259,7 +261,12 @@ export function PublicPlaylists({
           </div>
           <ul className="public-songs">
             {songs.map((s) => (
-              <li key={s.key}>
+              <li
+                key={s.key}
+                {...songRow(() => {
+                  if (!busy) void action([s.key])
+                })}
+              >
                 <Checkbox
                   aria-label={'选择 ' + s.title}
                   checked={selected.includes(s.key)}
@@ -272,7 +279,7 @@ export function PublicPlaylists({
                 <div>
                   <strong>{s.title}</strong>
                   <small>
-                    {s.artist} {s.album && ' · ' + s.album}
+                    <SongCredits song={s} />
                   </small>
                 </div>
                 <Button

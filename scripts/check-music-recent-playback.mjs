@@ -88,12 +88,12 @@ try {
   evidence.today = await history
     .locator('section')
     .filter({ has: page.getByRole('heading', { name: '今天', exact: true }) })
-    .locator('li > .fui-Button:first-child')
+    .locator('li > strong')
     .allTextContents()
   evidence.yesterday = await history
     .locator('section')
     .filter({ has: page.getByRole('heading', { name: '昨天', exact: true }) })
-    .locator('li > .fui-Button:first-child')
+    .locator('li > strong')
     .allTextContents()
   await page.screenshot({
     path: path.join(root, '两次完整播放.png'),
@@ -116,14 +116,14 @@ try {
   await openHistory(page)
   await expect(history.getByRole('button', { name: /昨日曲目/ })).toBeVisible()
   evidence.afterFileRemoval = await history
-    .locator('li > .fui-Button:first-child')
+    .locator('li > strong')
     .allTextContents()
   await app.close()
   app = await launch()
   const reopened = await app.firstWindow()
   const restored = await openHistory(reopened)
   await expect(restored.getByRole('button', { name: /昨日曲目/ })).toBeVisible()
-  evidence.reopened = await restored.locator('li > .fui-Button:first-child').allTextContents()
+  evidence.reopened = await restored.locator('li > strong').allTextContents()
   await writeFile(path.join(root, 'result.json'), JSON.stringify(evidence, null, 2))
   console.log(JSON.stringify(evidence), root)
   assert.deepEqual(evidence.playCounts, [1, 2, 3])

@@ -1,3 +1,5 @@
+import './song-row.css'
+import { songRow } from './songRow'
 import { createContext, useContext, type ReactNode } from 'react'
 import {
   Button,
@@ -17,7 +19,6 @@ export function OnlineSongRow({
   className,
   localId,
   busy,
-  singleClick = false,
   canPlay = true,
   canDownload = true,
   play,
@@ -26,7 +27,6 @@ export function OnlineSongRow({
 }: {
   active?: boolean
   children: ReactNode
-  singleClick?: boolean
   className?: string
   localId?: string
   busy: boolean
@@ -75,33 +75,13 @@ export function OnlineSongRow({
     <Menu openOnContext>
       <MenuTrigger disableButtonEnhancement>
         <li
+          {...songRow(() => {
+            if (!busy && canPlay) play()
+          })}
           data-active={active}
           className={className}
           // biome-ignore lint/a11y/noNoninteractiveTabindex: Enter provides keyboard playback for the double-clickable recording row.
           tabIndex={0}
-          onClick={(e) => {
-            if (
-              singleClick &&
-              !busy &&
-              canPlay &&
-              e.detail < 2 &&
-              e.target instanceof Element &&
-              e.currentTarget.contains(e.target) &&
-              !e.target.closest('button,a,[role=menuitem]')
-            )
-              play()
-          }}
-          onDoubleClick={(e) => {
-            if (
-              !singleClick &&
-              !busy &&
-              canPlay &&
-              e.target instanceof Element &&
-              e.currentTarget.contains(e.target) &&
-              !e.target.closest('button,a,[role=menuitem]')
-            )
-              play()
-          }}
           onKeyDown={(e) => {
             if (e.target === e.currentTarget && e.key === 'Enter' && !busy && canPlay) {
               e.preventDefault()

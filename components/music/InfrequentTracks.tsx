@@ -1,3 +1,5 @@
+import { songRow } from './songRow'
+import { SongCredits } from './SongCredits'
 import { TrackMenu } from './TrackMenu'
 import { useState } from 'react'
 import {
@@ -125,7 +127,16 @@ export function InfrequentTracks({ rows, days, changeDays, active, playing, play
           <ul>
             {sorted.map((t) => (
               <TrackMenu key={t.id} localId={t.id}>
-                <li className="infrequent-row">
+                <li
+                  className="infrequent-row"
+                  {...songRow(() => {
+                    if (t.available)
+                      play(
+                        t.id,
+                        sorted.filter((track) => track.available).map((track) => track.id),
+                      )
+                  })}
+                >
                   <Checkbox
                     aria-label={'选择' + t.title}
                     checked={selected.has(t.id)}
@@ -153,7 +164,9 @@ export function InfrequentTracks({ rows, days, changeDays, active, playing, play
                   />
                   <div className="library-name">
                     <strong>{t.title}</strong>
-                    <small>{t.artist}</small>
+                    <small>
+                      <SongCredits song={t} />
+                    </small>
                     <small>
                       {t.lastHeardAt
                         ? '上次收听 ' + new Date(t.lastHeardAt).toLocaleDateString('zh-CN')

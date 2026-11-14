@@ -1,3 +1,4 @@
+import { songRow, creditClick } from './songRow'
 import { ArtistLinks } from './SongCredits'
 import { PlaylistImportDialog, usePlaylistImport } from './PlaylistImport'
 import { guardSearchEnter } from './searchSubmit'

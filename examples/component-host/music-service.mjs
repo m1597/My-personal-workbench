@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process'
 import { registerCleanup, recoverRenames } from './library-cleanup.mjs'
 import { reconcileRecycled } from './recycled-tracks.mjs'
 import { libraryTools, callLibraryTool } from './music-mcp-library.mjs'
@@ -115,9 +116,27 @@ export function musicService(
   bind('pluginDownload', (id) => plugins.download(id))
   bind('pluginRemove', (id) => plugins.remove(id))
   bind('pluginCall', (id, action, args) => plugins.call(id, action, args))
-  bind('musicGuide', () => ({
+  let mouseInterval
+  function doubleClickTime() {
+    if (process.platform !== 'win32') return 500
+    mouseInterval ??= new Promise((resolve) => {
+      const reg = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe')
+      execFile(
+        reg,
+        ['query', 'HKCU\\Control Panel\\Mouse', '/v', 'DoubleClickSpeed'],
+        { windowsHide: true, timeout: 1200 },
+        (error, out) => {
+          const value = Number(/DoubleClickSpeed\s+REG_SZ\s+(\d+)/i.exec(out)?.[1])
+          resolve(!error && value >= 1 && value <= 5000 ? value : 500)
+        },
+      )
+    })
+    return mouseInterval
+  }
+  bind('musicGuide', async () => ({
     seen: Boolean(store.get('music-guide-v1')),
     script: mcpScript,
+    doubleClickMs: await doubleClickTime(),
   }))
   bind('copyMcpCommand', () => clipboard.writeText(`node "${mcpScript}"`))
   const agents = musicMcpAgents(profile, mcpScript, () => store)

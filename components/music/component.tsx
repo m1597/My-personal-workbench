@@ -1,3 +1,4 @@
+import { songRow, setSongDoubleClickTime, cancelCredit } from './songRow'
 import { recordShortcut, shortcutInput } from './recordShortcut'
 import { useLibrarySearch } from './useLibrarySearch'
 import { useOutputDevice } from './PlayerOptionsPane'
@@ -64,7 +65,7 @@ import {
   type SelectionDownload,
   type ImportJob,
 } from './LibraryPane'
-import { SongCredits, SongCatalog, songRowClick, songAlbum } from './SongCredits'
+import { SongCredits, SongCatalog, songAlbum } from './SongCredits'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
 import { RecordingLists } from './OnlineSongRow'
 import { MusicLanguage } from './BackButton'
@@ -195,7 +196,7 @@ declare global {
         ): Promise<{ playlist: string; added: number; skipped: number }>
         playlistArtwork(id: string): Promise<string | null>
         changePlaylistArtwork(id: string, reset: boolean): Promise<void>
-        musicGuide(): Promise<{ seen: boolean; script: string }>
+        musicGuide(): Promise<{ seen: boolean; script: string; doubleClickMs: number }>
         copyMcpCommand(): Promise<void>
         markMusicGuide(): Promise<void>
         setMusicQuality(quality: string): Promise<void>
@@ -418,6 +419,7 @@ function Music() {
       .musicGuide()
       .then(async (info) => {
         if (!alive) return
+        setSongDoubleClickTime(info.doubleClickMs)
         setScript(info.script)
         if (!info.seen) {
           startFirstGuide()
@@ -966,6 +968,10 @@ function Music() {
     if (clean) await host.clean()
   }
   const selected = rows.filter((i) => i.checked)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changing recordings invalidates a pending credit click.
+  useEffect(() => {
+    cancelCredit()
+  }, [now])
   const active = trackById.get(now) ?? state?.items.find((i) => i.id === now)
   const localMode = active ? 'duration' in active : libraryPage
   const elapsed = current.current ? time : (state?.position ?? 0)
@@ -1954,15 +1960,12 @@ function Music() {
                           onDismiss={() => void act(() => host.dismissRecommendation(r.id))}
                           dismissed={r.notInterested}
                         >
-                          {/* biome-ignore lint/a11y/useKeyWithClickEvents: The recording has its own keyboard-accessible play button. */}
                           <li
                             data-active={(r.localId ?? r.id) === active?.id}
-                            onClick={(e) =>
-                              songRowClick(e, () => {
-                                if (playable(r)) void act(() => startTrack(r.localId ?? r.id))
-                                else if (r.online) void act(() => audition(r))
-                              })
-                            }
+                            {...songRow(() => {
+                              if (playable(r)) void act(() => startTrack(r.localId ?? r.id))
+                              else if (r.online) void act(() => audition(r))
+                            })}
                           >
                             <div
                               className="music-track-icon"

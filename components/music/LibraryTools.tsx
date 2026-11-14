@@ -1,4 +1,5 @@
-import { SongCredits, songRowClick } from './SongCredits'
+import { songRow } from './songRow'
+import { SongCredits } from './SongCredits'
 import { TrackMenu } from './TrackMenu'
 import { useEffect, useState } from 'react'
 import { Button, Dropdown, Option } from '@fluentui/react-components'
@@ -83,7 +84,7 @@ export function RecentHistory({
   const group = (t: number) =>
     t >= today.getTime() ? '今天' : t >= yesterday.getTime() ? '昨天' : '更早'
   return (
-    <section className="local-library music-library-tools" aria-label="最近播放">
+    <section data-song-list="" className="local-library music-library-tools" aria-label="最近播放">
       <h2>最近播放</h2>
       {!rows.length && (
         <p>
@@ -101,23 +102,20 @@ export function RecentHistory({
                   const t = items.get(r.track)
                   return (
                     t && (
-                      <TrackMenu key={r.track} localId={r.track}>
-                        {/* biome-ignore lint/a11y/useKeyWithClickEvents: The song title button provides keyboard playback. */}
+                      <TrackMenu key={r.event} localId={r.track}>
                         <li
-                          onClick={(e) =>
-                            songRowClick(e, () => {
-                              if (t.available) play(r.track, queue)
-                            })
-                          }
+                          {...songRow(() => {
+                            if (t.available) play(r.track, queue)
+                          })}
                         >
                           <Button
                             appearance="subtle"
                             disabled={!t.available}
                             icon={<Play size={15} />}
+                            aria-label={'播放' + t.title}
                             onClick={() => play(r.track, queue)}
-                          >
-                            {t.title}
-                          </Button>
+                          />
+                          <strong>{t.title}</strong>
                           <SongCredits song={t} />
                           <small>{new Date(r.playedAt).toLocaleString('zh-CN')}</small>
                         </li>

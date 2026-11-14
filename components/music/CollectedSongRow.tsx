@@ -36,7 +36,6 @@ export function CollectedSongRow({
       active={active}
       className="catalog-recording"
       busy={busy}
-      singleClick={!!localId}
       canPlay={!!song.available}
       localId={localId || undefined}
       play={play}

@@ -437,7 +437,6 @@ export function CatalogSongRow({
   }
   return (
     <OnlineSongRow
-      singleClick={!!localId}
       localId={localId}
       className="highlight-recording"
       busy={pending}
