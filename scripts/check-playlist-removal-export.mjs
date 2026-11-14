@@ -101,9 +101,11 @@ try {
   await click(button('出门 歌单'))
   await click(button('歌单排序'))
   await click(page.getByRole('menuitemradio', { name: '歌名', exact: true }))
+  await expect(button('歌单排序')).toHaveText('歌名 · 升序')
   await click(button('歌单排序'))
   await click(page.getByRole('menuitemradio', { name: '降序', exact: true }))
-  await expect(names).not.toHaveText(initial.map((id) => titles[ids.indexOf(id)]))
+  await expect(button('歌单排序')).toHaveText('歌名 · 降序')
+  await expect(names).toHaveText(['夏日 海岸', '山间 小路', '晨光 初现'])
   const output = path.join(evidence, '出门 歌单.m3u8')
   await app.evaluate(({ dialog }, filePath) => {
     dialog.showSaveDialog = async (options) => {
