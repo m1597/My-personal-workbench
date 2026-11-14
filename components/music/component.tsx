@@ -168,6 +168,7 @@ declare global {
           value: string,
         ): Promise<void>
         setMusicOutput(volume: number, muted: boolean): Promise<void>
+        setShortcutEnabled(scope: 'app' | 'global', enabled: boolean): Promise<void>
         setMusicShortcut(action: TransportAction, key: string): Promise<void>
         setMusicMediaKeys(enabled: boolean): Promise<void>
         chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
@@ -985,12 +986,53 @@ function Music() {
       void act(pauseTrack)
     } else void act(resumeOrStart)
   }
+  const volumeStep = useRef<((delta: number) => void) | null>(null)
   const transport = useEffectEvent((action: TransportAction) => {
-    if (action === 'toggle') togglePlayback()
+    if (action === 'volumeUp' || action === 'volumeDown')
+      volumeStep.current?.(action === 'volumeUp' ? 5 : -5)
+    else if (action === 'toggle') togglePlayback()
     else if (action === 'previous' && preceding >= 0) void act(() => navigateAt(preceding))
     else if (action === 'next' && canNext) void act(next)
   })
   useEffect(() => window.musicWindow.onTransport((action) => transport(action)), [])
+  const localShortcut = useEffectEvent((e: globalThis.KeyboardEvent) => {
+    if (
+      !state?.prefs.appKeys ||
+      e.defaultPrevented ||
+      e.isComposing ||
+      e.repeat ||
+      e.altKey ||
+      e.ctrlKey ||
+      e.metaKey ||
+      e.shiftKey
+    )
+      return
+    if (
+      !(e.target instanceof Element) ||
+      e.target.closest(
+        'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"],[role="slider"],[role="menu"],[role="listbox"],[role="tablist"],[role="dialog"]',
+      )
+    )
+      return
+    if (e.key === ' ' && e.target.closest('button,a,[role="button"]')) return
+    const bindings: Record<string, TransportAction> = {
+      ' ': 'toggle',
+      ArrowLeft: 'previous',
+      ArrowRight: 'next',
+      ArrowUp: 'volumeUp',
+      ArrowDown: 'volumeDown',
+    }
+    const action = bindings[e.key]
+    if (action) {
+      e.preventDefault()
+      transport(action)
+    }
+  })
+  useEffect(() => {
+    const keydown = (e: globalThis.KeyboardEvent) => localShortcut(e)
+    window.addEventListener('keydown', keydown)
+    return () => window.removeEventListener('keydown', keydown)
+  }, [])
   const canPrevious = preceding >= 0
   const canToggle = Boolean(primary)
   const canNext =
@@ -1992,6 +2034,7 @@ function Music() {
           {state && (
             <VolumeControls
               compact={presentation === 'bar'}
+              stepRef={volumeStep}
               initial={state.prefs}
               audio={audio}
               onError={setError}

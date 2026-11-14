@@ -205,6 +205,17 @@ export function LibraryPane({
   const [albumView, setAlbumView] = useState(false)
   const showAlbums = collection === 'all' && albumView
   const [selection, setSelection] = useState<Set<string> | null>(null)
+  const resultList = useRef<HTMLUListElement>(null)
+  const keyboardResults = Boolean(search.trim() && !librarySearch.enabled && !selection)
+  function focusResult(index: number) {
+    const target = Math.max(0, Math.min(index, rows.length - 1))
+    const focus = () =>
+      resultList.current?.querySelectorAll<HTMLElement>('.library-row')[target]?.focus()
+    if (target >= limit) {
+      setLimit(target + 100)
+      requestAnimationFrame(focus)
+    } else focus()
+  }
   const [batchBusy, setBatchBusy] = useState(false)
   const [downloads, setDownloads] = useState<SelectionDownload[]>([])
   const failedDownloads = new Map(
@@ -631,6 +642,21 @@ export function LibraryPane({
                   }
                   contentBefore={<Search size={16} />}
                   value={search}
+                  onKeyDown={(e) => {
+                    if (
+                      keyboardResults &&
+                      rows.length &&
+                      e.key === 'ArrowDown' &&
+                      !e.altKey &&
+                      !e.ctrlKey &&
+                      !e.shiftKey &&
+                      !e.metaKey &&
+                      !e.nativeEvent.isComposing
+                    ) {
+                      e.preventDefault()
+                      focusResult(0)
+                    }
+                  }}
                   onChange={(_, v) => {
                     if (selection) setSelection(new Set())
                     setSearch(v.value)
@@ -766,12 +792,13 @@ export function LibraryPane({
                     <span>专辑</span>
                     <span>时长</span>
                   </div>
-                  <ul>
-                    {rows.slice(0, limit).map((t) => (
+                  <ul ref={resultList}>
+                    {rows.slice(0, limit).map((t, index) => (
                       <TrackMenu
                         key={t.id}
                         localId={t.origin === 'online' && !t.localCopy ? null : t.id}
                         queueable={!!t.available}
+                        queueShortcut={keyboardResults}
                         onQueue={(next) => onQueue(t.id, next)}
                         onDismiss={
                           collection === 'system-recommendations' ? () => dismiss(t.id) : undefined
@@ -784,6 +811,25 @@ export function LibraryPane({
                             : {})}
                           data-active={active === t.id}
                           className="library-row"
+                          tabIndex={keyboardResults ? 0 : undefined}
+                          onKeyDown={(e) => {
+                            if (
+                              !keyboardResults ||
+                              e.target !== e.currentTarget ||
+                              e.altKey ||
+                              e.ctrlKey ||
+                              e.metaKey ||
+                              e.nativeEvent.isComposing
+                            )
+                              return
+                            if (!e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                              e.preventDefault()
+                              focusResult(index + (e.key === 'ArrowDown' ? 1 : -1))
+                            } else if (e.key === 'Enter' && e.shiftKey) {
+                              e.preventDefault()
+                              if (!e.repeat && t.available) onQueue(t.id, false)
+                            }
+                          }}
                           onClick={(e) => {
                             if (
                               e.detail < 2 &&

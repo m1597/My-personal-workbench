@@ -826,3 +826,7 @@ li[data-active="true"] .music-track-icon,
 .library-search .fui-Input {
   width: 100%;
 }
+.library-row[tabindex="0"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

@@ -62,7 +62,7 @@ try {
   await player.getByRole('button', { name: '播放A', exact: true }).click({ timeout: 5000 })
   await openMusicSettings(player)
   await expect(player.locator('.music-settings h2')).toHaveText(['本地曲库', '曲库管理'])
-  for (const name of ['音乐源', 'MCP', '下载', '模型与推荐', '全局快捷键']) {
+  for (const name of ['音乐源', 'MCP', '下载', '模型与推荐', '快捷键']) {
     await selectMusicSettings(player, name)
     await expect(player.locator('.music-settings h2')).toHaveText([name])
     if (name === '音乐源') await expect(player.getByText('复制启动命令')).toHaveCount(0)
@@ -85,6 +85,7 @@ try {
   for (const input of await player.locator('.settings-shortcut input').all())
     await expect(input).toHaveAttribute('readonly', '')
   const prefs = () => player.evaluate(async () => (await window.music.state()).prefs)
+  await player.getByLabel('启用全局快捷键').check()
   const combo = 'Ctrl+Alt+Shift+F10'
   const record = async (label, accelerator) => {
     const field = player.getByRole('textbox', { name: label, exact: true })
@@ -187,7 +188,7 @@ try {
     e.scrollTop = 0
   })
   await player.screenshot({ path: path.join(evidence, 'settings.png') })
-  await selectMusicSettings(player, '全局快捷键')
+  await selectMusicSettings(player, '快捷键')
   await player.getByRole('textbox', { name: '上一首', exact: true }).scrollIntoViewIfNeeded()
   await player.screenshot({ path: path.join(evidence, 'shortcuts.png') })
   await app.evaluate(({ BrowserWindow }) => {
@@ -206,7 +207,7 @@ try {
     '模型与推荐',
     '歌词',
     '播放',
-    '全局快捷键',
+    '快捷键',
     '插件',
   ])
   await player.screenshot({

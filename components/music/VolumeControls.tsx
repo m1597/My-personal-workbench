@@ -5,10 +5,12 @@ import type { MusicPreferences } from './MusicSettings'
 
 export function VolumeControls({
   compact = false,
+  stepRef,
   initial,
   audio,
   onError,
 }: {
+  stepRef: RefObject<((delta: number) => void) | null>
   compact?: boolean
   initial: Pick<MusicPreferences, 'volume' | 'muted'>
   audio: RefObject<HTMLAudioElement | null>
@@ -29,6 +31,15 @@ export function VolumeControls({
     setOutput({ volume: level, muted: silent })
     void window.music.setMusicOutput(level, silent).catch(() => onError('音量设置未能保存'))
   }
+  useLayoutEffect(() => {
+    stepRef.current = (delta) => {
+      const level = Math.max(0, Math.min(100, (muted ? 0 : volume) + delta))
+      change(level || volume, level === 0)
+    }
+    return () => {
+      stepRef.current = null
+    }
+  })
   function leave(event: FocusEvent<HTMLElement>) {
     if (!event.currentTarget.closest('.music-volume')?.contains(event.relatedTarget))
       setExpanded(false)

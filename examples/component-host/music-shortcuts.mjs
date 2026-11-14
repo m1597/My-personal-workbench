@@ -1,5 +1,9 @@
 import { globalShortcut } from 'electron'
-import { getMusicPreferences, mediaBindings as media } from './music-preferences.mjs'
+import {
+  defaultShortcuts,
+  getMusicPreferences,
+  mediaBindings as media,
+} from './music-preferences.mjs'
 
 function accelerator(value) {
   if (value === '') return ''
@@ -65,14 +69,30 @@ export function musicShortcuts() {
       sender.once('destroyed', release)
       sender.once('render-process-gone', release)
       const prefs = getMusicPreferences(store)
-      for (const [action, key] of Object.entries(media)) {
-        if (prefs.mediaKeys) attempt(key, action)
-        attempt(prefs.shortcuts[action], action)
+      if (prefs.globalKeys) {
+        if (prefs.mediaKeys) for (const [action, key] of Object.entries(media)) attempt(key, action)
+        for (const [action, key] of Object.entries(prefs.shortcuts)) attempt(key, action)
       }
     },
     failures: () => Array.from(failures),
+    setEnabled(store, scope, enabled) {
+      if (!['app', 'global'].includes(scope) || typeof enabled !== 'boolean')
+        throw Error('快捷键设置无效')
+      store.set('music-' + scope + '-keys', enabled ? 'on' : 'off')
+      if (scope === 'global') {
+        const prefs = getMusicPreferences(store)
+        const bindings = [
+          ...Object.entries(prefs.shortcuts),
+          ...Object.entries(media).filter(() => prefs.mediaKeys),
+        ]
+        for (const [action, key] of bindings) {
+          if (enabled) attempt(key, action)
+          else remove(key)
+        }
+      }
+    },
     setCustom(store, action, raw) {
-      if (!Object.hasOwn(media, action)) throw Error('未知的播放操作')
+      if (!Object.hasOwn(defaultShortcuts, action)) throw Error('未知的播放操作')
       const key = accelerator(raw)
       const prefs = getMusicPreferences(store)
       if (
@@ -81,7 +101,7 @@ export function musicShortcuts() {
       )
         throw Error('该组合已分配给另一个播放操作')
       const previous = prefs.shortcuts[action]
-      add(key, action)
+      if (prefs.globalKeys) add(key, action)
       try {
         store.set('shortcut-' + action, key)
       } catch (error) {
@@ -94,7 +114,7 @@ export function musicShortcuts() {
       if (typeof enabled !== 'boolean') throw Error('媒体键设置无效')
       store.set('music-media-keys', enabled ? 'on' : 'off')
       for (const [action, key] of Object.entries(media)) {
-        if (enabled) attempt(key, action)
+        if (enabled && getMusicPreferences(store).globalKeys) attempt(key, action)
         else remove(key)
       }
     },

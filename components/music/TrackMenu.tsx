@@ -7,6 +7,7 @@ export function TrackMenu({
   children,
   queueable,
   onQueue,
+  queueShortcut,
   localId,
   dismissed,
   onDismiss,
@@ -15,6 +16,7 @@ export function TrackMenu({
   localId?: string | null
   queueable?: boolean
   onQueue?(next: boolean): void
+  queueShortcut?: boolean
   dismissed?: boolean
   onDismiss?(): void
 }) {
@@ -31,7 +33,11 @@ export function TrackMenu({
               <MenuItem disabled={!queueable} onClick={() => onQueue(true)}>
                 下一首播放
               </MenuItem>
-              <MenuItem disabled={!queueable} onClick={() => onQueue(false)}>
+              <MenuItem
+                secondaryContent={queueShortcut ? 'Shift+Enter' : undefined}
+                disabled={!queueable}
+                onClick={() => onQueue(false)}
+              >
                 加入队列
               </MenuItem>
             </>

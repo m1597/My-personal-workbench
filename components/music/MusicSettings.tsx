@@ -16,7 +16,7 @@ const categories = [
   { id: 'model', name: '模型与推荐', icon: Sparkles },
   { id: 'lyrics', name: '歌词', icon: AudioLines },
   { id: 'playback', name: '播放', icon: AudioLines },
-  { id: 'keys', name: '全局快捷键', icon: Keyboard },
+  { id: 'keys', name: '快捷键', icon: Keyboard },
   { id: 'plugins', name: '插件', icon: Plug },
 ] as const
 export type SettingsCategory = (typeof categories)[number]['id']
@@ -29,7 +29,7 @@ export type TasteStatus = {
   pending: number
   error: string
 }
-export type TransportAction = 'toggle' | 'previous' | 'next'
+export type TransportAction = 'toggle' | 'previous' | 'next' | 'volumeUp' | 'volumeDown'
 export type PlayerOptions = {
   lyricSize: string
   lyricLayout: string
@@ -51,11 +51,19 @@ export type MusicPreferences = PlayerOptions & {
   manualDir: string
   recommendDir: string
   quality: string
+  appKeys: boolean
+  globalKeys: boolean
   mediaKeys: boolean
   shortcuts: Record<TransportAction, string>
   shortcutFailures: string[]
 }
-const actions = { toggle: '播放 / 暂停', previous: '上一首', next: '下一首' } as const
+const actions = {
+  toggle: '播放 / 暂停',
+  previous: '上一首',
+  next: '下一首',
+  volumeUp: '提高音量',
+  volumeDown: '降低音量',
+} as const
 const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
 
 function recordedKey(e: KeyboardEvent<HTMLInputElement>) {
@@ -525,9 +533,25 @@ export function MusicSettings({
         )}
         {category === 'keys' && (
           <section>
-            <h2>全局快捷键</h2>
+            <h2>快捷键</h2>
+            <Checkbox
+              label="启用应用内快捷键"
+              checked={prefs.appKeys}
+              onChange={(_, d) =>
+                void update(() => window.music.setShortcutEnabled('app', !!d.checked))
+              }
+            />
+            <p>空格播放或暂停，左右方向键切歌，上下方向键调节音量。</p>
+            <Checkbox
+              label="启用全局快捷键"
+              checked={prefs.globalKeys}
+              onChange={(_, d) =>
+                void update(() => window.music.setShortcutEnabled('global', !!d.checked))
+              }
+            />
             <Checkbox
               label="启用键盘媒体键"
+              disabled={!prefs.globalKeys}
               checked={prefs.mediaKeys}
               onChange={(_, d) =>
                 void update(() => window.music.setMusicMediaKeys(d.checked === true))

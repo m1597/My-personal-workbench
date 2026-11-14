@@ -14,6 +14,7 @@ for (const title of ['A', 'B']) {
   store.library.upsert({ file, title, artist: 'test', album: '', duration: 20 })
 }
 store.set('music-media-keys', 'off')
+store.set('music-global-keys', 'on')
 for (const [action, fn] of [
   ['toggle', 10],
   ['previous', 8],

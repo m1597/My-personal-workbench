@@ -525,6 +525,7 @@ export function musicService(
   })
   bind('setPlayerOption', (key, value) => setPlayerOption(store, key, value))
   bind('setMusicOutput', (volume, muted) => setMusicOutput(store, volume, muted))
+  bind('setShortcutEnabled', (scope, enabled) => shortcuts.setEnabled(store, scope, enabled))
   bind('setMusicShortcut', (action, key) => shortcuts.setCustom(store, action, key))
   bind('setMusicMediaKeys', (enabled) => shortcuts.setMedia(store, enabled))
   async function chooseMusicDirectory(kind, signal) {

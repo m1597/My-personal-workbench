@@ -28,6 +28,7 @@ const names = [
   'answerShortage',
   'setMusicOutput',
   'setPlayerOption',
+  'setShortcutEnabled',
   'setMusicShortcut',
   'setMusicMediaKeys',
   'chooseMusicDirectory',
