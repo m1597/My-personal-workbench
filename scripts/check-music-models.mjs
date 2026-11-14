@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { MusicTaste } from '../examples/component-host/music-taste.mjs'
+import { fitScore, readDouyinChart } from '../examples/component-host/recommendation-weight.mjs'
 import { once } from 'node:events'
 import { MusicStore } from '../components/music/store.mjs'
 import { DatabaseSync } from 'node:sqlite'
@@ -17,6 +18,24 @@ import {
   recordingConstraints,
   namesRequestedArtist,
 } from '../examples/component-host/music-discovery.mjs'
+const demand = { requestFit: 100, tasteFit: 0 }
+const tasteChoice = { requestFit: 0, tasteFit: 100 }
+assert.ok(fitScore(demand, 80) > fitScore(tasteChoice, 80))
+assert.ok(fitScore(demand, 20) < fitScore(tasteChoice, 20))
+assert.equal(fitScore({ ...demand, tasteFit: 100 }, 100), fitScore(demand, 100))
+assert.equal(fitScore({ ...tasteChoice, requestFit: 100 }, 0), fitScore(tasteChoice, 0))
+const originalFetch = globalThis.fetch
+try {
+  globalThis.fetch = async () =>
+    Response.json({
+      status_code: 0,
+      release_date: '2000-01-01',
+      music_list: [{ music_info: { title: '旧歌', author: '艺人' }, heat: 900 }],
+    })
+  assert.deepEqual((await readDouyinChart(new AbortController().signal)).songs, [])
+} finally {
+  globalThis.fetch = originalFetch
+}
 assert.ok(artistMatches('mizuki', '瑞葵(mizuki) / SawanoHiroyuki[nZk]'))
 assert.ok(artistMatches('AC/DC', 'AC/DC & Guest'))
 assert.ok(artistMatches('Sakuzyo', '削除', [['削除', 'Sakuzyo']]))
@@ -152,6 +171,23 @@ try {
   const page = await app.firstWindow()
   await openDiscovery(page, true)
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('雨天的爵士乐')
+  const slider = page.getByRole('slider', { name: '本次要求权重' })
+  await expect(slider).toHaveValue('80')
+  await slider.press('End')
+  await expect
+    .poll(() => page.evaluate(async () => (await window.music.state()).prefs.requestWeight))
+    .toBe(100)
+  await page.reload()
+  await openDiscovery(page, true)
+  await expect(slider).toHaveValue('100')
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('')
+  await expect(slider).toBeDisabled()
+  await expect(slider).toHaveValue('0')
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('雨天的爵士乐')
+  await expect(slider).toHaveValue('100')
+  await page.evaluate(() => window.music.setListeningPreference('requestWeight', '80'))
+  await page.reload()
+  await openDiscovery(page, true)
   await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveAttribute(
     'placeholder',
     '歌手名、歌名，或一句想法都行',

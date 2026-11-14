@@ -1921,6 +1921,43 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           throw Error('未知的音源操作')
       }
     },
+    async chartRecordings(chart, signal, health) {
+      // Resolve the public catalog first. The normal source pipeline still verifies and saves.
+      const catalog = { platform: 'wy' }
+      const deadline = AbortSignal.any([signal, AbortSignal.timeout(15000)])
+      const results = []
+      const probe = async (song, lookup) => {
+        const complete = song.title.replace(/\s*[（(]剪[辑輯]版\d*[)）]\s*$/u, '').trim()
+        const rows = await versions(catalog, { title: complete, artist: song.artist }, lookup, 12)
+        const matches = rows.filter((row) =>
+          [song.title, complete].some(
+            (title) =>
+              titleMatch({ title, artist: song.artist }, row, { exactChart: true }) === 'exact',
+          ),
+        )
+        if (!matches.length) return
+        const rights = await freeDownloadQualities(
+          matches.map((row) => row.id),
+          lookup,
+        )
+        const row = matches.find(
+          (row) => rights.get(row.id)?.length && !getStore().ignoresRecording('wy', row.id),
+        )
+        if (!row) return
+        const item = { ...song, title: row.name, artist: row.singer }
+        if (complete !== song.title && titleMatch(song, row, { exactChart: true }) !== 'exact')
+          item.reason += ` · 上榜为《${song.title}》，此处为同艺人完整版本`
+        health.catalogRecordings.set(JSON.stringify([item.title, item.artist]), { row, rights })
+        return item
+      }
+      try {
+        for await (const { candidate } of availableSources(chart, probe, deadline, 5))
+          if (candidate) results.push(candidate)
+      } catch {
+        signal.throwIfAborted()
+      }
+      return results.sort((a, b) => a.rank - b.rank)
+    },
     async discoveries(seen, local, signal, health) {
       const current = await currentSource(signal, true)
       if (!current) return []

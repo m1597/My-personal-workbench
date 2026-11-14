@@ -271,6 +271,7 @@ declare global {
           mode?: 'auto' | 'style' | 'artist',
           similar?: boolean,
           targetCount?: number,
+          requestWeight?: number,
         ): Promise<string | null>
         stopGeneration(): Promise<void>
         match(id: string): Promise<void>
@@ -1638,6 +1639,7 @@ function Music() {
           <>
             {state && (
               <RecommendationComposer
+                savedWeight={state.prefs.requestWeight}
                 toggle={() => {
                   setDiscoveryMode('download')
                   setTab('download')

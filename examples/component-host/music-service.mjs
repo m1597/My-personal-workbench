@@ -17,6 +17,7 @@ import {
   namesRequestedArtist,
   recordingConstraints,
 } from './music-discovery.mjs'
+import { fitScore, readDouyinChart, wantsDouyinChart } from './recommendation-weight.mjs'
 import { MusicTaste } from './music-taste.mjs'
 import { musicShortcuts } from './music-shortcuts.mjs'
 import {
@@ -642,13 +643,17 @@ export function musicService(
     queueTasteUpdate()
     return taste.status()
   })
-  bind('generate', (preference, mode = 'auto', similar = false, targetCount = 5) => {
+  bind('generate', (preference, mode = 'auto', similar = false, targetCount = 5, weight) => {
+    weight ??= getMusicPreferences(store).requestWeight
     text(preference)
+    if (!Number.isInteger(weight) || weight < 0 || weight > 100) throw Error('无效推荐权重')
+    if (!preference.trim()) weight = 0
     if (!['auto', 'artist', 'style'].includes(mode) || typeof similar !== 'boolean')
       throw Error('无效推荐方式')
     if (!Number.isSafeInteger(targetCount) || targetCount < 1) throw Error('目标首数须为正整数')
     return generateTask(async (signal) => {
       const label = preference.trim() || (mode === 'artist' ? '按歌手推荐' : '按风格推荐')
+      if (!weight) preference = ''
       clearTimeout(updateTimer)
       const previous = store.get('latest-daily-run')
       store.expireRecommendations(undefined, true)
@@ -714,8 +719,13 @@ export function musicService(
         signal.throwIfAborted()
         if (!store.get('lx-source'))
           throw Error('目录和已导入的音乐源均不可用，请在设置中检查音乐源')
-        let profilePolicy = taste.policy()
-        let profile = await taste.refresh(signal)
+        const policy = () =>
+          weight < 100 && store.get('taste-consent') === '1' ? taste.policy() : null
+        let profilePolicy = policy()
+        let profile = profilePolicy === null ? '' : await taste.refresh(signal)
+        const chart = wantsDouyinChart(preference) ? await readDouyinChart(signal) : undefined
+        if (chart && !chart.songs.length)
+          cleanupMessage += ' · 未取得近七天抖音音乐榜，候选热度未经核实'
         signal.throwIfAborted()
         const seen = []
         const history = store.db
@@ -762,8 +772,19 @@ export function musicService(
           queries: new Map(),
           cooldown: new Map(),
           catalogRecordings: new Map(),
-          constraints: { ...recordingConstraints(preference, prefs), artist: '' },
+          constraints: {
+            ...recordingConstraints(
+              preference,
+              weight === 100 ? { edition: 'any', cover: 'any', instrumental: 'any' } : prefs,
+            ),
+            artist: '',
+            ...(chart?.songs.length ? { exactChart: true } : {}),
+          },
         }
+        const chartRecordings = chart?.songs.length
+          ? await lx.chartRecordings(chart.songs, signal, sourceHealth)
+          : []
+        const chartCandidates = [...chartRecordings, ...(chart?.songs ?? [])]
         async function refill(represented, savedCount, work) {
           if (exhausted && !broadened) {
             let expand = prefs.shortage === 'similar'
@@ -810,15 +831,23 @@ export function musicService(
           }
           work.throwIfAborted()
           update('running', round > 1 ? '正在补推候选歌曲' : '正在生成候选歌曲')
-          if (profilePolicy !== taste.policy()) {
-            profilePolicy = taste.policy()
-            profile = await taste.refresh(work)
+          if (profilePolicy !== policy()) {
+            profilePolicy = policy()
+            profile = profilePolicy === null ? '' : await taste.refresh(work)
             work.throwIfAborted()
           }
           const remaining = targetCount - represented.length
           const excluded = [...(profile ? history.slice(-20) : []), ...seen.slice(-100)].map(
             ({ title, artist }) => ({ title, artist }),
           )
+          const local = localRows.all()
+          const remainingChart = chartCandidates.filter(
+            (row) => !inLibrary(row, seen) && !inLibrary(row, history) && !inLibrary(row, local),
+          )
+          const readyChart = remainingChart.filter((row) => chartRecordings.includes(row))
+          const chartOptions = (
+            readyChart.length >= Math.min(remaining, 5) ? readyChart : remainingChart
+          ).slice(0, 30)
           const {
             songs: rows,
             requestedArtist,
@@ -829,6 +858,19 @@ export function musicService(
             'recommend',
             {
               preference,
+              requestWeight: weight,
+              tasteWeight: 100 - weight,
+              ...(chart
+                ? {
+                    douyinChart: chartOptions.map((row) => ({
+                      title: row.title,
+                      artist: row.artist,
+                      rank: row.rank,
+                      downloadVerified: chartRecordings.includes(row),
+                    })),
+                    chartDate: chart.date,
+                  }
+                : {}),
               scope: broadened ? 'related' : 'direct',
               recording: sourceHealth.constraints,
               mode,
@@ -848,7 +890,7 @@ export function musicService(
             work,
           )
           work.throwIfAborted()
-          exhausted = !!preference.trim() && directExhausted
+          exhausted = !!preference.trim() && directExhausted && !chartOptions.length
           if (mode === 'auto' && !seen.length && !requiredArtist) {
             if (requestedArtist && namesRequestedArtist(preference, requestedArtist, true))
               requiredArtist = requestedArtist
@@ -857,9 +899,31 @@ export function musicService(
                 rows.find((row) => namesRequestedArtist(preference, row.artist))?.artist ?? ''
           }
           sourceHealth.constraints.artist = requiredArtist
-          const local = localRows.all()
           const fresh = []
-          for (const row of rows) {
+          // A failed match may exhaust the model's five selections before the chart itself.
+          const rankedRows = [...rows]
+          if (chartOptions.length) rankedRows.push(...chartOptions.slice(0, 5))
+          for (let row of rankedRows) {
+            if (chart) {
+              const listed = chartCandidates.find((entry) => inLibrary(row, [entry]))
+              if (chart.songs.length && !listed && weight === 100) continue
+              row = listed
+                ? {
+                    ...row,
+                    title: listed.title,
+                    artist: listed.artist,
+                    reason: listed.reason,
+                    requestFit: 100 - listed.rank / 3,
+                    verifiedSave: chartRecordings.includes(listed),
+                  }
+                : {
+                    ...row,
+                    requestFit: 0,
+                    reason: chart.date
+                      ? '本地口味补充 · 未在本期抖音音乐榜核实'
+                      : '未取得近期抖音音乐榜 · 本曲热度未经核实',
+                  }
+            }
             if (inLibrary(row, seen)) continue
             seen.push(row)
             if (requiredArtist && !artistMatches(requiredArtist, row.artist)) continue
@@ -882,8 +946,11 @@ export function musicService(
               await refilling
               continue
             }
-            if (mode !== 'artist')
-              candidates.sort((a, b) => frequency(a, represented) - frequency(b, represented))
+            candidates.sort(
+              (a, b) =>
+                fitScore(b, weight) - fitScore(a, weight) ||
+                (mode === 'artist' ? 0 : frequency(a, represented) - frequency(b, represented)),
+            )
             let index = candidates.findIndex(
               (row) => !preferDifferentArtist(row) || !frequency(row, represented),
             )
