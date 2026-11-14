@@ -830,3 +830,31 @@ li[data-active="true"] .music-track-icon,
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
+.library-title[data-all-tracks="true"] {
+  justify-content: flex-end;
+  align-items: center;
+}
+.library-title[data-all-tracks="true"] > div:first-child {
+  margin-inline-end: auto;
+}
+.music-shell :is(.track-actions, .search-result-actions) {
+  display: inline-flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: flex-end;
+}
+.music-shell :is(.track-actions, .search-result-actions) :is(.fui-Button, [data-audio-drag]) {
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  justify-content: center;
+  padding: 3px;
+}
+.highlight-recording {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-8);
+}

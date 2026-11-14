@@ -186,7 +186,9 @@ try {
   await result().getByRole('button', { name: '加入歌单' }).click()
   await page.getByRole('menuitem', { name: '路上听' }).click()
   await expect(page.getByRole('status')).toContainText('已加入「路上听」')
-  await result().getByRole('button', { name: '播放', exact: true }).click()
+  await result().dispatchEvent('click')
+  assert.ok(await page.locator('audio').evaluate((a) => a.paused))
+  await result().dispatchEvent('dblclick')
   await playing()
   assert.deepEqual(await fs.readdir(downloads), [])
   assert.deepEqual(await fs.readdir(cache), [])
@@ -223,8 +225,10 @@ try {
       globalThis.locatedSong = file
     }
   })
-  await result().getByRole('button', { name: '下载', exact: true }).click()
+  const beforeDownload = await page.locator('audio').evaluate((a) => a.src)
+  await page.getByRole('menuitem', { name: '下载', exact: true }).press('Enter')
   await expect(page.getByRole('status')).toContainText('已下载并入库')
+  assert.equal(await page.locator('audio').evaluate((a) => a.src), beforeDownload)
   const audio = (await fs.readdir(downloads)).filter((f) => f.endsWith('.mp3'))
   assert.equal(audio.length, 1)
   const locate = async (row) => {

@@ -103,7 +103,7 @@ try {
         .poll(async () => (await row.isVisible()) || (await group.isVisible()), { timeout: 26000 })
         .toBe(true)
       if (!(await row.isVisible())) await key(group.locator('summary'))
-      await key(row.getByRole('button', { name: '播放', exact: true }))
+      await row.dispatchEvent('dblclick')
       await expect
         .poll(
           () =>

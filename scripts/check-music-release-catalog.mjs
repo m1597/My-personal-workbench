@@ -99,7 +99,7 @@ lx.on('request',({action,info})=>{
    if(info.keyword==='海へ ギヴン')return [{id:'missing',name:'海へ',singer:'ギヴン',albumName:'海へ'}]
    if(info.keyword==='i beg you yurisa')return [{id:'highlight',name:'i beg you',singer:'yurisa',interval:'04:29'}]
    if(info.keyword==='Vogel im Käfig 澤野弘之')return [{id:'sawano',name:'Vogel im Käfig',singer:'澤野弘之'}]
-   if(info.keyword==='夜风 云海')return [{id:'highlight',name:'夜风',singer:'云海'}]
+   if(info.keyword==='夜风 云海')return [{id:'highlight',name:'夜风',singer:'云海',allowPermanentSave:true}]
    if(info.keyword==='缺少曲 青禾')return [{id:'missing',name:'缺少曲',singer:'青禾',albumName:'山色'}]
    return [{id:'recording-17',name:'远山',singer:'青禾',albumName:'山色',interval:'03:01'},
     {id:'recording-18',name:'远山 (Live)',singer:'青禾',albumName:'山色现场',interval:'03:24'},
@@ -526,8 +526,10 @@ try {
     assert.equal((await fs.readdir(downloads)).length, 0)
   }
   for (const i of [0, 1]) {
-    if (i === 0) await versions.nth(i).getByRole('button', { name: '播放', exact: true }).click()
-    else await versions.nth(i).locator('.search-track strong').click()
+    if (i === 0) {
+      await versions.nth(i).dispatchEvent('contextmenu')
+      await page.getByRole('menuitem', { name: '播放', exact: true }).press('Enter')
+    } else await versions.nth(i).locator('.search-track strong').dispatchEvent('dblclick')
     await expect
       .poll(() => app.evaluate(() => globalThis.audioRequests.at(-1)))
       .toBe('/recording-' + (17 + i) + '.mp3')
@@ -615,7 +617,19 @@ try {
   await expect(similar.getByText('共同风格 · rock、jazz')).toBeVisible()
   await expect(similar.getByText('关系组合')).toHaveCount(0)
   await similar.getByRole('button', { name: '代表作' }).first().click()
-  await similar.getByRole('button', { name: '试听' }).click()
+  const highlight = similar.locator('.highlight-recording').first()
+  const originalGrant = await page.locator('audio').evaluate((a) => a.src)
+  await highlight.dispatchEvent('click')
+  await highlight.dispatchEvent('contextmenu')
+  await page.getByRole('menuitem', { name: '加入歌单', exact: true }).press('ArrowRight')
+  await page.getByRole('menuitem', { name: '发行试听', exact: true }).press('Enter')
+  await expect(similar.getByRole('status')).toContainText('已加入')
+  assert.equal(await page.locator('audio').evaluate((a) => a.src), originalGrant)
+  await highlight.getByRole('button', { name: '下载' }).press('Enter')
+  await expect(similar.getByRole('status')).toContainText('已下载并入库')
+  assert.ok((await fs.readdir(downloads)).some((f) => f.includes('夜风')))
+  assert.equal(await page.locator('audio').evaluate((a) => a.src), originalGrant)
+  await highlight.dispatchEvent('dblclick')
   await expect
     .poll(() => app.evaluate(() => globalThis.audioRequests.at(-1)))
     .toBe('/highlight.mp3')
@@ -660,7 +674,7 @@ try {
   await portrait.locator('img').click()
   await expect(home.getByRole('heading', { name: '澤野弘之', exact: true })).toBeVisible()
   await expect(home.getByText('Vogel im Käfig', { exact: true })).toBeVisible()
-  await home.getByRole('button', { name: '播放', exact: true }).click()
+  await home.locator('.highlight-recording').first().dispatchEvent('dblclick')
   await expect.poll(() => app.evaluate(() => globalThis.audioRequests.at(-1))).toBe('/sawano.mp3')
   await played()
   await page.screenshot({ path: path.join(root, 'sawano-artist-home.png') })
@@ -729,8 +743,8 @@ try {
     async (id) => (await window.music.state()).playlists.find((p) => p.id === id).tracks.length,
     listId,
   )
-  assert.equal(saved, 1)
-  assert.equal((await fs.readdir(downloads)).filter((f) => f.endsWith('.mp3')).length, 1)
+  assert.equal(saved, 2)
+  assert.equal((await fs.readdir(downloads)).filter((f) => f.endsWith('.mp3')).length, 2)
   await missing.evaluate((el) => el.scrollIntoView({ block: 'center' }))
   await page.screenshot({ path: path.join(root, 'inline-missing.png') })
   await openDiscovery(page, false)

@@ -1,21 +1,10 @@
 import { PublicPlaylists } from './PublicPlaylists'
-import { SongCredits, songRowClick } from './SongCredits'
+import { OnlineSongRow } from './OnlineSongRow'
+import { SongCredits } from './SongCredits'
 import { useEffect, useRef, useState } from 'react'
-import {
-  Button,
-  Dropdown,
-  Option,
-  Menu,
-  MenuTrigger,
-  MenuPopover,
-  MenuList,
-  MenuItem,
-  Tab,
-  TabList,
-} from '@fluentui/react-components'
-import { TrackMenu } from './TrackMenu'
-import { guardSearchEnter } from './searchSubmit'
+import { Button, Dropdown, Option, Tab, TabList } from '@fluentui/react-components'
 import { DiscoveryInput } from './DiscoveryInput'
+import { guardSearchEnter } from './searchSubmit'
 import { X } from 'lucide-react'
 import './search.css'
 import { formatTime, type Playlist } from './LibraryPane'
@@ -214,94 +203,53 @@ export function DownloadPane({
   }, [])
   function versionRow(item: Versions['items'][number]) {
     return (
-      <TrackMenu key={item.key} localId={item.localId}>
-        <li
-          className="search-recording"
-          onClick={(e) =>
-            songRowClick(e, () => {
-              if (!busy && item.quality?.length !== 0) void act(() => onPlay(item.key), false)
-            })
-          }
-        >
-          <ResultCover item={item} />
-          <div className="search-track">
-            {recordingName(item.title)}
-            <small>
-              <SongCredits song={item} />
-            </small>
-          </div>
-          <small className="search-duration">
-            {item.duration ? formatTime(item.duration) : '时长未知'}
+      <OnlineSongRow
+        key={item.key}
+        className="search-recording"
+        localId={item.localId}
+        busy={busy}
+        canPlay={item.quality?.length !== 0}
+        canDownload={item.quality === undefined || item.quality.includes(quality)}
+        play={() => void act(() => onPlay(item.key), false)}
+        download={() =>
+          void act(async () => {
+            const result = await host.lxDownload(item.key, quality, true)
+            if (result) {
+              const via =
+                result.sources.length > 1 ? ' · 自动换源：' + result.sources.join(' → ') : ''
+              setStatus('已下载并入库 · ' + result.file + via)
+              if (result.localId)
+                setResult(
+                  (previous) =>
+                    previous && {
+                      ...previous,
+                      items: previous.items.map((row) =>
+                        row.key === item.key ? { ...row, localId: result.localId } : row,
+                      ),
+                    },
+                )
+              await refresh()
+            }
+          })
+        }
+        add={(id, name) =>
+          void act(async () => {
+            await onAdd(id, item.key)
+            if (live.current) setStatus('已加入「' + name + '」')
+          }, false)
+        }
+      >
+        <ResultCover item={item} />
+        <div className="search-track">
+          {recordingName(item.title)}
+          <small>
+            <SongCredits song={item} />
           </small>
-          <div className="search-result-actions">
-            <Button
-              size="small"
-              disabled={busy || item.quality?.length === 0}
-              onClick={() => void act(() => onPlay(item.key), false)}
-            >
-              播放
-            </Button>
-            <Button
-              disabled={busy || (item.quality !== undefined && !item.quality.includes(quality))}
-              title={
-                item.quality && !item.quality.includes(quality) ? '此版本没有所选音质' : undefined
-              }
-              size="small"
-              onClick={() =>
-                void act(async () => {
-                  const result = await host.lxDownload(item.key, quality, true)
-                  if (result) {
-                    const via =
-                      result.sources.length > 1 ? ' · 自动换源：' + result.sources.join(' → ') : ''
-                    setStatus('已下载并入库 · ' + result.file + via)
-                    if (result.localId)
-                      setResult(
-                        (previous) =>
-                          previous && {
-                            ...previous,
-                            items: previous.items.map((row) =>
-                              row.key === item.key ? { ...row, localId: result.localId } : row,
-                            ),
-                          },
-                      )
-                    await refresh()
-                  }
-                })
-              }
-            >
-              下载
-            </Button>
-            <Menu>
-              <MenuTrigger disableButtonEnhancement>
-                <Button size="small" disabled={busy}>
-                  加入歌单
-                </Button>
-              </MenuTrigger>
-              <MenuPopover className="component-popup">
-                <MenuList>
-                  {playlists.length ? (
-                    playlists.map((list) => (
-                      <MenuItem
-                        key={list.id}
-                        onClick={() =>
-                          void act(async () => {
-                            await onAdd(list.id, item.key)
-                            if (live.current) setStatus('已加入「' + list.name + '」')
-                          }, false)
-                        }
-                      >
-                        {list.name}
-                      </MenuItem>
-                    ))
-                  ) : (
-                    <MenuItem disabled>请先在本地曲库新建歌单</MenuItem>
-                  )}
-                </MenuList>
-              </MenuPopover>
-            </Menu>
-          </div>
-        </li>
-      </TrackMenu>
+        </div>
+        <small className="search-duration">
+          {item.duration ? formatTime(item.duration) : '时长未知'}
+        </small>
+      </OnlineSongRow>
     )
   }
   return (

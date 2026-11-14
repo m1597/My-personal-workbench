@@ -282,7 +282,7 @@ try {
       await input.fill('深林')
       await input.press('Enter')
       const row = page.getByRole('listitem').filter({ hasText: '深林' })
-      await row.getByRole('button', { name: '播放', exact: true }).click()
+      await row.dispatchEvent('dblclick')
       await expect
         .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0))
         .toBe(true)

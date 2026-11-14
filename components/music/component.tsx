@@ -1,3 +1,4 @@
+import { RecordingLists } from './OnlineSongRow'
 import { useLibrarySearch } from './useLibrarySearch'
 import { useOutputDevice } from './PlayerOptionsPane'
 import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
@@ -2393,9 +2394,11 @@ function Music() {
   )
   return (
     <RevealTrackContext.Provider value={(id) => void act(() => host.revealTrack(id))}>
-      <MusicLanguage.Provider value={language}>
-        <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
-      </MusicLanguage.Provider>
+      <RecordingLists.Provider value={state?.playlists ?? []}>
+        <MusicLanguage.Provider value={language}>
+          <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
+        </MusicLanguage.Provider>
+      </RecordingLists.Provider>
     </RevealTrackContext.Provider>
   )
 }

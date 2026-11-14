@@ -108,3 +108,10 @@ node scripts/check-music-source-live.mjs fish
 | 洛雪桌面 2.12.6 找歌 | 3.257 | 3.488 | 3.518 |
 
 FitBay 从宿主记录取址、字节和 Chromium 的 playing。洛雪独立进程使用已配置的同一源脚本，以 DevTools 收到媒体请求的时间计作 URL 可用，首段来自 Network.dataReceived，playing 来自真实音频元素。两版 FitBay 均实际拖至 82 秒后继续播放。冷播仍受源和公网影响。可通过 `scripts/check-playback-latency-fitbay.mjs` 和 `scripts/check-playback-latency-lx.mjs` 复验。
+## 曲目行操作
+
+曲库和歌单仍可单击曲名播放，歌曲保留本地、在线或缺失标识。已有本地文件的拖出手柄位于行尾，可以将单个文件或多选的文件拖到其他应用。「全部歌曲」右侧的「最近入库」与「多选」相邻。
+
+在线找歌的结果和歌手代表作均可双击行播放，键盘可聚焦行并按 Enter。行尾提供下载与加入歌单；右键菜单提供播放、下载、加入歌单。下载和添加歌单各自独立于播放。
+
+2026-11-14 私有桌面专项 `check-music-online-search.mjs`、`check-music-release-catalog.mjs` 验证同一界面播放、下载与歌单成员变更；`check-library-row-layout.mjs` 在宽 920 和 410 的窗口验证布局、曲库单击和可拖出手柄。用两个选中录音重新投放至 Blender VSE 并打开保存的工程，均为 SOUND 素材，片段长度分别为 288 和 168 帧。

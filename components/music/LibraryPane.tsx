@@ -543,7 +543,7 @@ export function LibraryPane({
             />
           ) : (
             <>
-              <div className="library-title">
+              <div className="library-title" data-all-tracks={collection === 'all'}>
                 {playlistPage && (
                   <PlaylistCover
                     key={`artwork-${collection}`}
@@ -901,40 +901,6 @@ export function LibraryPane({
                           <div className="library-name">
                             <div className="library-track-title">
                               <strong title={t.title}>{t.title}</strong>
-                              {t.available && (t.origin !== 'online' || t.localCopy) ? (
-                                <span
-                                  data-audio-drag=""
-                                  draggable
-                                  role="img"
-                                  aria-label={'拖出音频文件' + t.title}
-                                  title="拖出音频文件到其他应用"
-                                  onDragStart={(event) => {
-                                    event.preventDefault()
-                                    event.stopPropagation()
-                                    const source = selection?.has(t.id)
-                                      ? rows.filter((row) => selection.has(row.id))
-                                      : [t]
-                                    const ids = source.flatMap((row) => {
-                                      if (!row.available) return []
-                                      return row.origin === 'online'
-                                        ? row.localCopy
-                                          ? [row.localCopy]
-                                          : []
-                                        : [row.id]
-                                    })
-                                    setDragError('')
-                                    void window.music
-                                      .dragLocalFiles(ids)
-                                      .catch((e) =>
-                                        setDragError(
-                                          String(e).split('Error: ').at(-1) || '无法拖出文件',
-                                        ),
-                                      )
-                                  }}
-                                >
-                                  <FileOutput size={14} />
-                                </span>
-                              ) : null}
                               <small className="library-track-location">
                                 {t.origin === 'online' && !t.localCopy
                                   ? '在线'
@@ -991,78 +957,114 @@ export function LibraryPane({
                           <small className="library-time">
                             {t.origin === 'online' && !t.duration ? '—' : formatTime(t.duration)}
                           </small>
-                          {!selection && (
-                            <div className="track-actions">
-                              <Popover>
-                                <PopoverTrigger disableButtonEnhancement>
+                          <div className="track-actions">
+                            {t.available && (t.origin !== 'online' || t.localCopy) ? (
+                              <span
+                                data-audio-drag=""
+                                draggable
+                                role="img"
+                                aria-label={'拖出音频文件' + t.title}
+                                title="拖出音频文件到其他应用"
+                                onDragStart={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  const source = selection?.has(t.id)
+                                    ? rows.filter((row) => selection.has(row.id))
+                                    : [t]
+                                  const ids = source.flatMap((row) => {
+                                    if (!row.available) return []
+                                    return row.origin === 'online'
+                                      ? row.localCopy
+                                        ? [row.localCopy]
+                                        : []
+                                      : [row.id]
+                                  })
+                                  setDragError('')
+                                  void window.music
+                                    .dragLocalFiles(ids)
+                                    .catch((e) =>
+                                      setDragError(
+                                        String(e).split('Error: ').at(-1) || '无法拖出文件',
+                                      ),
+                                    )
+                                }}
+                              >
+                                <FileOutput size={14} />
+                              </span>
+                            ) : null}
+                            {!selection && (
+                              <>
+                                <Popover>
+                                  <PopoverTrigger disableButtonEnhancement>
+                                    <Button
+                                      size="small"
+                                      appearance="subtle"
+                                      aria-label={'管理歌单' + t.title}
+                                      title="加入或移出歌单"
+                                      icon={<ListPlus size={16} />}
+                                    />
+                                  </PopoverTrigger>
+                                  <PopoverSurface className="component-popup playlist-options">
+                                    {t.origin !== 'online' && (
+                                      <Checkbox
+                                        label="我的收藏"
+                                        checked={!!t.favorite}
+                                        onChange={(_, d) => void favorite(t.id, d.checked === true)}
+                                      />
+                                    )}
+                                    <strong>我的歌单</strong>
+                                    {playlists.some((p) => !p.system) ? (
+                                      playlists
+                                        .filter((p) => !p.system)
+                                        .map((list) => (
+                                          <Checkbox
+                                            key={list.id}
+                                            label={list.name}
+                                            checked={list.tracks.includes(t.id)}
+                                            onChange={(_, v) =>
+                                              void membership(list.id, t.id, v.checked === true)
+                                            }
+                                          />
+                                        ))
+                                    ) : (
+                                      <small>在「歌单」中点「＋」新建歌单。</small>
+                                    )}
+                                  </PopoverSurface>
+                                </Popover>
+                                {!t.available && (
                                   <Button
                                     size="small"
                                     appearance="subtle"
-                                    aria-label={'管理歌单' + t.title}
-                                    title="加入或移出歌单"
-                                    icon={<ListPlus size={16} />}
+                                    title="重新定位"
+                                    aria-label={'重新定位' + t.title}
+                                    icon={<FolderSearch size={16} />}
+                                    onClick={() => relocate(t.id)}
                                   />
-                                </PopoverTrigger>
-                                <PopoverSurface className="component-popup playlist-options">
-                                  {t.origin !== 'online' && (
-                                    <Checkbox
-                                      label="我的收藏"
-                                      checked={!!t.favorite}
-                                      onChange={(_, d) => void favorite(t.id, d.checked === true)}
-                                    />
-                                  )}
-                                  <strong>我的歌单</strong>
-                                  {playlists.some((p) => !p.system) ? (
-                                    playlists
-                                      .filter((p) => !p.system)
-                                      .map((list) => (
-                                        <Checkbox
-                                          key={list.id}
-                                          label={list.name}
-                                          checked={list.tracks.includes(t.id)}
-                                          onChange={(_, v) =>
-                                            void membership(list.id, t.id, v.checked === true)
-                                          }
-                                        />
-                                      ))
-                                  ) : (
-                                    <small>在「歌单」中点「＋」新建歌单。</small>
-                                  )}
-                                </PopoverSurface>
-                              </Popover>
-                              {!t.available && (
-                                <Button
-                                  size="small"
-                                  appearance="subtle"
-                                  title="重新定位"
-                                  aria-label={'重新定位' + t.title}
-                                  icon={<FolderSearch size={16} />}
-                                  onClick={() => relocate(t.id)}
-                                />
-                              )}
-                              {t.origin === 'online' ? (
-                                <Button
-                                  size="small"
-                                  appearance="subtle"
-                                  title="从歌单移除"
-                                  aria-label={'从歌单移除' + t.title}
-                                  icon={<Trash2 size={15} />}
-                                  onClick={() => void membership(collection, t.id, false)}
-                                />
-                              ) : (
-                                <Button
-                                  size="small"
-                                  appearance="subtle"
-                                  title="从曲库移除"
-                                  aria-label={'从曲库移除' + t.title}
-                                  icon={<Trash2 size={15} />}
-                                  onClick={() =>
-                                    setAction({ kind: 'song', id: t.id, name: t.title })
-                                  }
-                                />
-                              )}
-                            </div>
-                          )}
+                                )}
+                                {t.origin === 'online' ? (
+                                  <Button
+                                    size="small"
+                                    appearance="subtle"
+                                    title="从歌单移除"
+                                    aria-label={'从歌单移除' + t.title}
+                                    icon={<Trash2 size={15} />}
+                                    onClick={() => void membership(collection, t.id, false)}
+                                  />
+                                ) : (
+                                  <Button
+                                    size="small"
+                                    appearance="subtle"
+                                    title="从曲库移除"
+                                    aria-label={'从曲库移除' + t.title}
+                                    icon={<Trash2 size={15} />}
+                                    onClick={() =>
+                                      setAction({ kind: 'song', id: t.id, name: t.title })
+                                    }
+                                  />
+                                )}
+                              </>
+                            )}
+                          </div>
                         </li>
                       </TrackMenu>
                     ))}

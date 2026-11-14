@@ -120,7 +120,7 @@ for (const restart of [false, true]) {
         ([list, local]) => window.music.setMembership(list, local, true),
         [list, local],
       )
-      await pane.getByRole('button', { name: '播放', exact: true }).click()
+      await pane.locator('li.search-recording').first().dispatchEvent('dblclick')
       await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
       onlineId = await page.evaluate(async () => (await window.music.state()).current)
       assert.match(onlineId, /^online-recording-[a-f0-9]{64}$/)
@@ -135,7 +135,7 @@ for (const restart of [false, true]) {
       await openDiscovery(page, false)
       await pane.getByRole('textbox').fill('测试在线歌曲')
       await pane.getByRole('textbox').press('Enter')
-      await pane.getByRole('button', { name: '播放', exact: true }).click()
+      await pane.locator('li.search-recording').first().dispatchEvent('dblclick')
       await expect.poll(() => app.evaluate(() => globalThis.testOnlineQuality)).toBe(nextQuality)
       await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0)).toBe(true)
       assert.notEqual(await audio.evaluate((a) => a.src), previousGrant)

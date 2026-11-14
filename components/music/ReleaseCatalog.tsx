@@ -1,3 +1,4 @@
+import { OnlineSongRow } from './OnlineSongRow'
 import { ArtistPortrait } from './ArtistPortrait'
 import { guardSearchEnter } from './searchSubmit'
 import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
@@ -346,12 +347,33 @@ export function Highlights({
       live.current = false
     }
   }, [id])
-  async function listen(song: Pick<ReleaseTrack, 'artist' | 'title'>) {
+  const [status, setStatus] = useState('')
+  async function perform(
+    song: Pick<ReleaseTrack, 'artist' | 'title'>,
+    action: 'play' | 'download' | 'add',
+    list?: string,
+    name?: string,
+  ) {
     setPending(true)
     setError('')
+    setStatus('')
     try {
       const recording = await matchTrack(song)
-      if (live.current) await play(recording.key)
+      if (!live.current) return
+      if (action === 'play') await play(recording.key)
+      else if (action === 'add' && list) {
+        const reference = await window.music.rememberOnline(recording.key)
+        await window.music.setMembership(list, reference, true)
+        setStatus('已加入「' + name + '」')
+      } else {
+        const prefs = (await window.music.state()).prefs
+        const quality = recording.quality?.includes(prefs.quality)
+          ? prefs.quality
+          : recording.quality?.[0]
+        if (!quality) throw Error('该录音没有可下载音质')
+        const saved = await window.music.lxDownload(recording.key, quality, true)
+        if (saved) setStatus('已下载并入库')
+      }
     } catch (e) {
       if (live.current) setError(message(e))
     } finally {
@@ -369,17 +391,22 @@ export function Highlights({
   )
   return (
     <div>
+      {status && <small role="status">{status}</small>}
       {error && <small role="alert">{error}</small>}
       {visible ? (
         visible.length ? (
           <ul>
             {visible.map((song) => (
-              <li key={song.title}>
+              <OnlineSongRow
+                key={song.title}
+                className="highlight-recording"
+                busy={pending}
+                play={() => void perform(song, 'play')}
+                download={() => void perform(song, 'download')}
+                add={(list, name) => void perform(song, 'add', list, name)}
+              >
                 <span>{song.title}</span>
-                <Button size="small" disabled={pending} onClick={() => void listen(song)}>
-                  {collected ? '播放' : '试听'}
-                </Button>
-              </li>
+              </OnlineSongRow>
             ))}
           </ul>
         ) : (
