@@ -139,6 +139,26 @@ export function musicService(
   }
   bind('showLyrics', (on) => overlay.show(on === true))
   bind('unlockLyrics', () => overlay.unlock())
+  bind('lyricTiming', (id, step) => {
+    if (!text(id) || ![undefined, 'earlier', 'later', 'reset'].includes(step))
+      throw Error('歌词校准参数无效')
+    const local = store.db.prepare('SELECT id FROM local_tracks WHERE id=?').get(id)
+    const recording =
+      local?.id ??
+      store.db.prepare('SELECT local FROM recommended_items WHERE item=?').get(id)?.local ??
+      store.item(id)?.track
+    if (!recording) throw Error('找不到这首录音')
+    const key = 'lyric-offset-ms:' + recording
+    const previous = Number(store.get(key)) || 0
+    if (step === undefined) return previous
+    const shift =
+      step === 'reset'
+        ? 0
+        : Math.max(-30000, Math.min(30000, previous + (step === 'earlier' ? -500 : 500)))
+    if (shift) store.set(key, shift)
+    else store.db.prepare('DELETE FROM state WHERE key=?').run(key)
+    return shift
+  })
   bind('lyricLine', (line, second = '') =>
     overlay.update(
       typeof line === 'string' ? line.slice(0, 500) : '',

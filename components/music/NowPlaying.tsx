@@ -1,4 +1,4 @@
-import { Button } from '@fluentui/react-components'
+import { Button, Popover, PopoverTrigger, PopoverSurface } from '@fluentui/react-components'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { defaultCover, requestCover } from './AlbumBrowser'
@@ -19,6 +19,8 @@ type Props = {
   revision?: number
   lines?: LyricLine[]
   activeLine: number
+  offset: number
+  adjustTiming: (step: 'earlier' | 'later' | 'reset') => void
   seek: (at: number) => void
   back: () => void
 }
@@ -80,6 +82,8 @@ export function NowPlaying({
   revision,
   lines,
   activeLine,
+  offset,
+  adjustTiming,
   seek,
   back,
 }: Props) {
@@ -143,6 +147,47 @@ export function NowPlaying({
           返回
         </Button>
         {trackId && <SongDetails trackId={trackId} actions={actions} />}
+        {timed && (
+          <Popover positioning="below-end">
+            <PopoverTrigger disableButtonEnhancement>
+              <Button size="small" appearance="subtle">
+                歌词校准
+              </Button>
+            </PopoverTrigger>
+            <PopoverSurface className="component-popup lyric-timing">
+              <strong>当前录音的歌词时间</strong>
+              <span role="status">
+                {offset === 0
+                  ? '原时间'
+                  : (offset < 0 ? '提前 ' : '延后 ') + (Math.abs(offset) / 1000).toFixed(1) + ' 秒'}
+              </span>
+              <div>
+                <Button
+                  size="small"
+                  disabled={offset <= -30000}
+                  onClick={() => adjustTiming('earlier')}
+                >
+                  提前 0.5 秒
+                </Button>
+                <Button
+                  size="small"
+                  disabled={offset >= 30000}
+                  onClick={() => adjustTiming('later')}
+                >
+                  延后 0.5 秒
+                </Button>
+              </div>
+              <Button
+                size="small"
+                appearance="subtle"
+                disabled={!offset}
+                onClick={() => adjustTiming('reset')}
+              >
+                恢复原时间
+              </Button>
+            </PopoverSurface>
+          </Popover>
+        )}
         {timed && !following && (
           <Button appearance="subtle" size="small" onClick={() => setFollowing(true)}>
             回到当前歌词
@@ -155,7 +200,7 @@ export function NowPlaying({
           <h2>{title}</h2>
           {artist && <p>{artist}</p>}
         </div>
-        <div className="now-playing-lyric-glass">
+        <div className="now-playing-lyric-pane">
           {lines?.length ? (
             <section
               className="now-playing-lyrics"
@@ -189,7 +234,7 @@ export function NowPlaying({
                     aria-current={index === activeLine ? 'true' : undefined}
                     onClick={() => {
                       setFollowing(true)
-                      seek(at)
+                      seek(Math.max(0, at + offset / 1000))
                     }}
                   >
                     {text}

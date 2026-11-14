@@ -4,6 +4,7 @@ const names = [
   'copyMcpCommand',
   'markMusicGuide',
   'lyrics',
+  'lyricTiming',
   'showLyrics',
   'unlockLyrics',
   'lyricLine',

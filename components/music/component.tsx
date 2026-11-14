@@ -222,6 +222,7 @@ declare global {
         cancelImport(): Promise<void>
         refreshLocal(): Promise<void>
         lyrics(id: string, translations?: boolean): Promise<LyricLine[]>
+        lyricTiming(id: string, step?: 'earlier' | 'later' | 'reset'): Promise<number>
         showLyrics(on: boolean): Promise<void>
         unlockLyrics(): Promise<void>
         onLyricLocked(listener: (locked: boolean) => void): () => void
@@ -921,10 +922,35 @@ function Music() {
     }
   }, [needLyrics, now])
   const lines = lyrics?.id === now ? lyrics.lines : undefined
+  const [timing, setTiming] = useState({ id: '', ms: 0 })
+  const timingRequest = useRef(0)
+  useEffect(() => {
+    if (!now || lines?.[0]?.[0] == null) return
+    const request = ++timingRequest.current
+    void host
+      .lyricTiming(now)
+      .then((ms) => {
+        if (request === timingRequest.current) setTiming({ id: now, ms })
+      })
+      .catch((e) => setError(String(e)))
+    return () => {
+      timingRequest.current++
+    }
+  }, [now, lines])
+  const offset = timing.id === now ? timing.ms : 0
+  async function adjustTiming(step: 'earlier' | 'later' | 'reset') {
+    const request = ++timingRequest.current
+    try {
+      const ms = await host.lyricTiming(now, step)
+      if (request === timingRequest.current) setTiming({ id: now, ms })
+    } catch (e) {
+      setError(String(e))
+    }
+  }
   let activeLine = -1
   if (lines) {
     for (const [index, [at]] of lines.entries()) {
-      if (at === null || at > elapsed) break
+      if (at === null || at + offset / 1000 > elapsed) break
       activeLine = index
     }
   }
@@ -1360,6 +1386,8 @@ function Music() {
             revision={state?.albumRevision}
             lines={now ? lines : []}
             activeLine={activeLine}
+            offset={offset}
+            adjustTiming={adjustTiming}
             seek={(at) =>
               void act(() =>
                 play(

@@ -132,7 +132,11 @@ try {
       await Promise.all(layer.getAnimations().map((animation) => animation.finished))
     })
     await shot(title)
-    const contrast = await page.locator('.now-playing-lyric-glass').evaluate((glass) => {
+    const pane = page.locator('.now-playing-lyric-pane')
+    await expect(pane).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect(pane).toHaveCSS('border-top-width', '0px')
+    await expect(pane).toHaveCSS('border-radius', '0px')
+    const contrast = await pane.evaluate((glass) => {
       // Canvas resolves the theme's color-mix and alpha composition in Chromium's sRGB space.
       const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
       const luminance = () => {

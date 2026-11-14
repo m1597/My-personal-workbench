@@ -72,6 +72,11 @@ assert.equal(await ownedLyrics(store.db, b), null)
 await saveLyrics(store.db, path.join(root, 'C.wav'), async () => '[00:01]下载歌词')
 await writeFile(path.join(root, 'D.flac'), await readFile('tests/fixtures/local-music/tone.flac'))
 await saveLyrics(store.db, path.join(root, 'D.wav'), async () => '[00:01]共有歌词')
+for (const edition of ['Studio', 'Live']) {
+  const file = path.join(root, edition + '.wav')
+  await writeFile(file, recording('fitbay-tone-1'))
+  store.library.upsert({ title: '同名录音', album: edition, artist: '测试', duration: 20, file })
+}
 store.db.close()
 const launch = () =>
   electron.launch({
@@ -178,8 +183,52 @@ try {
     .toBeLessThan(2)
   await expect(currentLine).toHaveCSS(
     'color',
-    await playerPage.locator('h2').evaluate((el) => getComputedStyle(el).color),
+    await playerPage.evaluate((el) => {
+      const span = document.createElement('span')
+      span.style.color = 'var(--accent)'
+      el.append(span)
+      const color = getComputedStyle(span).color
+      span.remove()
+      return color
+    }),
   )
+  await page.locator('audio').evaluate((el) => {
+    el.currentTime = 4.2
+  })
+  await button('歌词校准').click()
+  await button('延后 0.5 秒').click()
+  await expect(currentLine).toHaveText('第一句')
+  await expect(overlay.locator('strong')).toHaveText('第一句')
+  await expect(page.getByRole('status').filter({ hasText: '延后 0.5 秒' })).toBeVisible()
+  await page.screenshot({ path: path.join(root, 'lyric-timing.png') })
+  await button('提前 0.5 秒').click()
+  await expect(currentLine).toHaveText('第二句')
+  await expect(overlay.locator('strong')).toHaveText('第二句')
+  await button('提前 0.5 秒').click()
+  await page.locator('audio').evaluate((el) => {
+    el.currentTime = 3.6
+  })
+  await expect(currentLine).toHaveText('第二句')
+  await expect(overlay.locator('strong')).toHaveText('第二句')
+  await button('提前 0.5 秒').press('Escape')
+  await playerPage.getByRole('button', { name: '第二句', exact: true }).first().click()
+  await expect
+    .poll(() => page.locator('audio').evaluate((el) => el.currentTime))
+    .toBeGreaterThanOrEqual(3.5)
+  assert.ok((await page.locator('audio').evaluate((el) => el.currentTime)) < 4)
+  await button('暂停').click()
+  const ids = await page.evaluate(async () => {
+    const state = await window.music.state()
+    return ['A', 'B'].map((title) => state.localTracks.find((t) => t.title === title).id)
+  })
+  assert.equal(await page.evaluate((id) => window.music.lyricTiming(id), ids[1]), 0)
+  const persisted = new MusicStore(path.join(profile, 'fitbay-music'))
+  assert.equal(persisted.get('lyric-offset-ms:' + ids[0]), '-500')
+  persisted.db.close()
+  await button('歌词校准').click()
+  await button('恢复原时间').click()
+  await expect(button('恢复原时间')).toBeDisabled()
+  await button('提前 0.5 秒').press('Escape')
   await page.screenshot({ scale: 'css', path: path.join(root, 'now-playing-lyrics.png') })
   await overlay.screenshot({ path: path.join(root, 'desktop-lyrics.png') })
   await button('下一首').click()
@@ -438,9 +487,19 @@ try {
   }
   const clamped = await place(area.x - 2500, area.y - 1600, 'display-removed')
   assert.deepEqual(clamped, { ...restored, x: area.x, y: area.y })
+  const versions = await page.evaluate(async () => {
+    const tracks = (await window.music.state()).localTracks.filter((t) => t.title === '同名录音')
+    const studio = tracks.find((t) => t.album === 'Studio').id
+    const live = tracks.find((t) => t.album === 'Live').id
+    await window.music.lyricTiming(live, 'later')
+    return [studio, live]
+  })
   await app.close()
   app = await launch()
   page = await app.firstWindow()
+  assert.equal(await page.evaluate((id) => window.music.lyricTiming(id), versions[1]), 500)
+  assert.equal(await page.evaluate((id) => window.music.lyricTiming(id), versions[0]), 0)
+  await page.evaluate((id) => window.music.lyricTiming(id, 'reset'), versions[1])
   const afterRestart = app.waitForEvent('window')
   await button('桌面歌词').click()
   await (await afterRestart).waitForLoadState()
