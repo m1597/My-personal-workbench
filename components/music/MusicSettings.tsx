@@ -60,12 +60,10 @@ function ShortcutField({
   action,
   saved,
   change,
-  manual,
 }: {
   action: TransportAction
   saved: string
   change(key: string): Promise<boolean>
-  manual: boolean
 }) {
   const [value, setValue] = useState(saved)
   const [recording, setRecording] = useState(false)
@@ -74,53 +72,24 @@ function ShortcutField({
     setHint('')
     setRecording(true)
   }
-  const normalKey = (part: string) => {
-    const aliases: Record<string, string> = {
-      ctrl: 'Ctrl',
-      control: 'Ctrl',
-      alt: 'Alt',
-      shift: 'Shift',
-      super: 'Super',
-      win: 'Super',
-      space: 'Space',
-      up: 'Up',
-      down: 'Down',
-      left: 'Left',
-      right: 'Right',
-      home: 'Home',
-      end: 'End',
-      pageup: 'PageUp',
-      pagedown: 'PageDown',
-      insert: 'Insert',
-      delete: 'Delete',
-    }
-    return aliases[part.toLowerCase()] ?? part.toUpperCase()
-  }
   return (
     <form
       className="settings-shortcut"
       onSubmit={async (e) => {
         e.preventDefault()
-        const key = value.trim()
-          ? value
-              .split('+')
-              .map((p) => normalKey(p.trim()))
-              .join('+')
-          : ''
-        if (await change(key)) setValue(key)
+        await change(value)
       }}
     >
       <Field label={actions[action]} hint={hint || undefined}>
         <Input
           value={recording ? '' : value}
-          readOnly={!manual}
-          maxLength={60}
-          placeholder={manual ? '例如 Ctrl+Alt+P' : recording ? '请按组合键' : '点击录制'}
-          onFocus={() => !manual && begin()}
-          onClick={() => !manual && begin()}
+          readOnly
+          placeholder={recording ? '请按组合键' : '点击录制'}
+          onFocus={begin}
+          onClick={begin}
           onBlur={() => setRecording(false)}
           onKeyDown={(e) => {
-            if (manual || e.key === 'Tab') return
+            if (e.key === 'Tab') return
             if (!recording && e.key === 'Enter') {
               e.preventDefault()
               begin()
@@ -147,7 +116,6 @@ function ShortcutField({
             setHint('')
             setRecording(false)
           }}
-          onChange={(_, d) => setValue(d.value)}
         />
       </Field>
       <Button
@@ -183,7 +151,6 @@ export function MusicSettings({
 }) {
   const [navOpen, setNavOpen] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [manualKeys, setManualKeys] = useState(false)
   const [feedback, setFeedback] = useState<{ category: SettingsCategory; text: string }>()
   const [busy, setBusy] = useState(false)
   const [taste, setTaste] = useState<Awaited<ReturnType<typeof window.music.getTasteStatus>>>()
@@ -448,11 +415,6 @@ export function MusicSettings({
               }
             />
             <p>点击输入框后按组合键或功能键，再点击保存。Esc 取消录制，退格键清空绑定。</p>
-            <Checkbox
-              label="手动输入组合键"
-              checked={manualKeys}
-              onChange={(_, d) => setManualKeys(d.checked === true)}
-            />
             {Object.entries(actions).map(([id]) => {
               const action = id as TransportAction
               return (
@@ -460,7 +422,6 @@ export function MusicSettings({
                   key={action}
                   action={action}
                   saved={prefs.shortcuts[action]}
-                  manual={manualKeys}
                   change={(key) => update(() => window.music.setMusicShortcut(action, key))}
                 />
               )

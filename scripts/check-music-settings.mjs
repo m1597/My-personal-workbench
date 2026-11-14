@@ -81,6 +81,9 @@ try {
       await player.screenshot({ path: path.join(evidence, 'mcp-settings.png') })
     }
   }
+  await expect(player.getByLabel('手动输入组合键')).toHaveCount(0)
+  for (const input of await player.locator('.settings-shortcut input').all())
+    await expect(input).toHaveAttribute('readonly', '')
   const prefs = () => player.evaluate(async () => (await window.music.state()).prefs)
   const combo = 'Ctrl+Alt+Shift+F10'
   const record = async (label, accelerator) => {
