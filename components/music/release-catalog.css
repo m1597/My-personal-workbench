@@ -182,6 +182,16 @@
   width: fit-content;
   vertical-align: middle;
 }
+.library-row [data-audio-drag] {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  color: var(--text-secondary);
+  cursor: grab;
+}
+.library-row [data-audio-drag]:hover {
+  color: var(--accent);
+}
 .library-catalog-home {
   display: grid;
   gap: var(--space-12);

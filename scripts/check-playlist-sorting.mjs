@@ -76,6 +76,28 @@ for (const restart of [false, true]) {
       const rows = page.locator('.library-row')
       await rows.nth(2).dragTo(rows.nth(0), { targetPosition: { x: 45, y: 3 } })
       await expect(names).toHaveText(['A', 'B', 'C'])
+      if (name === '排序验收') {
+        await app.evaluate(({ webContents }) => {
+          const sender = webContents
+            .getAllWebContents()
+            .find((w) => w.getURL().includes('/music/index.html'))
+          sender.startDrag = ({ files }) => {
+            globalThis.draggedAudioFiles = files
+          }
+        })
+        await button('多选').click()
+        await page.getByRole('checkbox', { name: '选择B', exact: true }).check()
+        await page.getByRole('checkbox', { name: '选择A', exact: true }).check()
+        await rows.nth(1).locator('[data-audio-drag]').dispatchEvent('dragstart')
+        await expect
+          .poll(() => app.evaluate(() => globalThis.draggedAudioFiles))
+          .toEqual(['A', 'B'].map((t) => path.join(evidence, t + '.wav')))
+        await expect(names).toHaveText(['A', 'B', 'C'])
+        await assert.rejects(
+          page.evaluate(() => window.music.dragLocalFiles(['C:/Windows/explorer.exe'])),
+        )
+        await button('退出多选').click()
+      }
       await choose('加入时间')
       await expect(names).toHaveText(titles)
       await choose('降序')

@@ -76,6 +76,7 @@ const names = [
   'removeFolder',
   'openFolder',
   'revealTrack',
+  'dragLocalFiles',
   'trashLocal',
   'renamePlaylist',
   'deletePlaylist',

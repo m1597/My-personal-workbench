@@ -230,6 +230,7 @@ declare global {
         removeLocal(id: string | string[]): Promise<void>
         trashLocal(id: string | string[]): Promise<boolean>
         revealTrack(id: string): Promise<void>
+        dragLocalFiles(ids: string[]): Promise<void>
         openFolder(id: string): Promise<void>
         removeFolder(id: string): Promise<string[]>
         renamePlaylist(id: string, name: string): Promise<void>

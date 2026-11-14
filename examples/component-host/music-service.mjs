@@ -252,6 +252,20 @@ export function musicService(
     }
   }
   bind('removeFolder', (id) => updateLibrary(() => store.library.removeFolder(text(id))))
+  bind('dragLocalFiles', async (ids) => {
+    if (!Array.isArray(ids) || !ids.length) throw Error('请选择本地录音')
+    const sender = musicView
+    const epoch = viewEpoch
+    const files = []
+    for (const id of new Set(ids)) {
+      const row = store.library.row(text(id))
+      if (!row.available || row.awaitingLocation || !(await regularFile(row.file)))
+        throw Error('文件不可用，请重新定位')
+      files.push(row.file)
+    }
+    if (sender.isDestroyed() || epoch !== viewEpoch || sender !== musicView) return
+    sender.startDrag({ file: files[0], files, icon: path.join(import.meta.dirname, 'fitbay.png') })
+  })
   bind('revealTrack', async (id) => {
     const track = text(id)
     const row = track.startsWith('online-recording-')

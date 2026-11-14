@@ -41,6 +41,7 @@ import {
 } from '@fluentui/react-components'
 import {
   Folder,
+  FileOutput,
   Plus,
   ListMusic,
   ListPlus,
@@ -222,6 +223,7 @@ export function LibraryPane({
     downloads.filter((r) => r.status === 'failed').map((r) => [r.id, r.error]),
   )
   const [favoriteResult, setFavoriteResult] = useState<{ selection: Set<string>; text: string }>()
+  const [dragError, setDragError] = useState('')
   const selectedIds = useMemo(
     () => (selection ? rows.filter((t) => selection.has(t.id)).map((t) => t.id) : []),
     [selection, rows],
@@ -512,6 +514,7 @@ export function LibraryPane({
         />
       ) : (
         <section className="local-library" aria-label="本地歌曲库">
+          {dragError && <small role="alert">{dragError}</small>}
           {collection === 'all' && (
             <fieldset className="library-view-switch" aria-label="曲库视图">
               {(['歌曲', '专辑'] as const).map((name) => (
@@ -838,7 +841,7 @@ export function LibraryPane({
                               e.target instanceof Element &&
                               e.currentTarget.contains(e.target) &&
                               !e.target.closest(
-                                'button, input, label, .track-actions, [role="button"]',
+                                'button, input, label, .track-actions, [data-audio-drag], [role="button"]',
                               )
                             )
                               playRow(t.id)
@@ -878,6 +881,40 @@ export function LibraryPane({
                           <div className="library-name">
                             <div className="library-track-title">
                               <strong title={t.title}>{t.title}</strong>
+                              {t.available && (t.origin !== 'online' || t.localCopy) ? (
+                                <span
+                                  data-audio-drag=""
+                                  draggable
+                                  role="img"
+                                  aria-label={'拖出音频文件' + t.title}
+                                  title="拖出音频文件到其他应用"
+                                  onDragStart={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    const source = selection?.has(t.id)
+                                      ? rows.filter((row) => selection.has(row.id))
+                                      : [t]
+                                    const ids = source.flatMap((row) => {
+                                      if (!row.available) return []
+                                      return row.origin === 'online'
+                                        ? row.localCopy
+                                          ? [row.localCopy]
+                                          : []
+                                        : [row.id]
+                                    })
+                                    setDragError('')
+                                    void window.music
+                                      .dragLocalFiles(ids)
+                                      .catch((e) =>
+                                        setDragError(
+                                          String(e).split('Error: ').at(-1) || '无法拖出文件',
+                                        ),
+                                      )
+                                  }}
+                                >
+                                  <FileOutput size={14} />
+                                </span>
+                              ) : null}
                               <small className="library-track-location">
                                 {t.origin === 'online' && !t.localCopy
                                   ? '在线'
