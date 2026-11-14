@@ -170,6 +170,16 @@ declare global {
         albums(): Promise<Album[]>
         albumCover(id: string): Promise<string | null>
         trackCover(id: string): Promise<string | null>
+        publicGenres(p: string): Promise<{ id: string; name: string }[]>
+        publicLists(
+          p: string,
+          tag: string,
+          page: number,
+          keyword?: string,
+        ): Promise<import('./PublicPlaylists').PublicList[]>
+        publicListCover(key: string): Promise<string | null>
+        publicListSongs(p: string, id: string): Promise<import('./PublicPlaylists').PublicSong[]>
+        keepPublicSongs(keys: string[]): Promise<string[]>
         playlistArtwork(id: string): Promise<string | null>
         changePlaylistArtwork(id: string, reset: boolean): Promise<void>
         musicGuide(): Promise<{ seen: boolean; script: string }>
@@ -1700,6 +1710,7 @@ function Music() {
             }}
             preferredQuality={state?.prefs.quality}
             playlists={state?.playlists.filter((list) => !list.system) ?? []}
+            playPublic={(ids) => playOrdered(ids[0], ids)}
             onPlay={playSearchResult}
             onAdd={addSearchResult}
             refresh={refresh}

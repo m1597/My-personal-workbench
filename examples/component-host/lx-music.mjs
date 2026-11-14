@@ -1,3 +1,4 @@
+import { genres, popular, publicSongs } from './public-playlists.mjs'
 import { playlistPlayback } from './playlist-playback.mjs'
 import { playbackRepositories } from './playback-repositories.mjs'
 import { catalogId, readSourceLink, inspectSource, sourceCatalog } from './lx-source-catalog.mjs'
@@ -1061,9 +1062,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }, 'search'),
   )
   const onlineRows = new Map()
-  bind('rememberOnline', (key, quality) => {
-    const match = matches.get(key)
-    const selected = source()
+  function keepRecording(match, quality, context) {
+    const selected = context?.selected ?? source()
     if (!match || match.auditionId || selected?.code !== match.sourceCode)
       throw Error('请重新搜索并选择录音')
     const src = { ...selected, ...selected.platforms?.[match.platform] }
@@ -1075,7 +1075,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     }
     if (!recording || !/^[\p{L}\p{N}._:-]{1,256}$/u.test(recording) || !qualities.includes(quality))
       throw Error('此版本没有可用的录音标识或音质')
-    const sourceId = catalog().list().active
+    const sourceId = context?.sourceId ?? catalog().list().active
     if (!sourceId) throw Error('请重新选择音乐源')
     const id =
       'online-recording-' +
@@ -1083,7 +1083,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         .update(JSON.stringify([sourceId, src.platform, recording]))
         .digest('hex')
     const { db } = getStore()
-    db.exec('BEGIN')
+    if (!context) db.exec('BEGIN')
     try {
       db.prepare(`INSERT INTO online_recording_sources VALUES(?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET quality=excluded.quality,query=excluded.query,identifiers=excluded.identifiers`).run(
@@ -1102,9 +1102,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         album: text(row.albumName),
         duration: Number.isFinite(row.durationSeconds) ? row.durationSeconds : 0,
       })
-      db.exec('COMMIT')
+      if (!context) db.exec('COMMIT')
     } catch (error) {
-      db.exec('ROLLBACK')
+      if (!context) db.exec('ROLLBACK')
       throw error
     }
     onlineRows.delete(id)
@@ -1112,6 +1112,74 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     onlineRows.set(id, row)
     if (onlineRows.size > 64) onlineRows.delete(onlineRows.keys().next().value)
     return id
+  }
+  bind('rememberOnline', (key, quality) => keepRecording(matches.get(key), quality))
+  const collectionRows = new Map()
+  const collectionPictures = new Map()
+  bind('publicGenres', genres)
+  bind('publicLists', async (platform, tag, page, keyword) => {
+    const lists = await popular(platform, tag, page, keyword)
+    const pictures = new Map()
+    const result = lists.map(({ pic, ...list }) => {
+      const key = randomUUID()
+      if (
+        typeof pic === 'string' &&
+        /^https:\/\/(?:p[0-9]+\.music\.126\.net|[a-z]+\.gtimg\.cn|imge?\.kugou\.com|qpic\.y\.qq\.com|y\.gtimg\.cn|qpic\.cn|[a-z]+\.qpic\.cn)\//i.test(
+          pic,
+        )
+      )
+        pictures.set(key, pic)
+      return { ...list, picture: pictures.has(key) ? key : null }
+    })
+    for (const [key, url] of pictures) collectionPictures.set(key, url)
+    while (collectionPictures.size > 384)
+      collectionPictures.delete(collectionPictures.keys().next().value)
+    return result
+  })
+  bind('publicListCover', (key) => fetchArtwork('', collectionPictures.get(key)))
+  bind('publicListSongs', async (platform, id) => {
+    const rows = await publicSongs(platform, id)
+    const entries = new Map()
+    const result = rows.map((row) => {
+      const key = randomUUID()
+      entries.set(key, { platform, row })
+      return {
+        key,
+        title: row.name,
+        artist: row.singer,
+        album: row.albumName,
+        duration: row.durationSeconds,
+      }
+    })
+    for (const [key, row] of entries) collectionRows.set(key, row)
+    while (collectionRows.size > 30000) collectionRows.delete(collectionRows.keys().next().value)
+    return result
+  })
+  bind('keepPublicSongs', (keys) => {
+    if (!Array.isArray(keys) || !keys.length || keys.length > 10000) throw Error('请选择歌单曲目')
+    const src = source()
+    if (!src) throw Error('请先在设置中导入可用音乐源')
+    const records = keys.map((key) => {
+      const entry = collectionRows.get(key)
+      if (!entry) throw Error('请重新打开公开歌单')
+      if (!src.platforms?.[entry.platform]) throw Error('当前音源不支持该歌单平台')
+      return {
+        ...entry,
+        sourceCode: src.code,
+        query: { title: entry.row.name, artist: entry.row.singer },
+      }
+    })
+    const context = { selected: src, sourceId: catalog().list().active }
+    const { db } = getStore()
+    db.exec('BEGIN')
+    try {
+      const ids = records.map((record) => keepRecording(record, undefined, context))
+      db.exec('COMMIT')
+      return ids
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
   })
   async function transfer(signal, key, quality, auditionId, detailed = false) {
     const selected = source()

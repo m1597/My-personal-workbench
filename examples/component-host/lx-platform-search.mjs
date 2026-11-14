@@ -17,7 +17,7 @@ function types(sizes, hashes) {
 function interval(seconds) {
   return Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0')
 }
-function qqSong(s) {
+export function qqSong(s) {
   if (!s.mid || !s.file?.media_mid) return null
   const f = s.file
   return {
@@ -39,7 +39,7 @@ function qqSong(s) {
     ...types([f.size_128mp3, f.size_320mp3, f.size_flac, f.size_hires]),
   }
 }
-function kgSong(s) {
+export function kgSong(s) {
   if (!s.FileHash) return null
   return {
     source: 'kg',

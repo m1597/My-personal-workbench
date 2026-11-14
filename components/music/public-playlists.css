@@ -1,0 +1,63 @@
+.discovery-kinds {
+  margin-block-end: var(--space-12);
+}
+.public-playlists {
+  display: grid;
+  gap: var(--space-12);
+  min-width: 0;
+}
+.public-playlists > button {
+  justify-self: start;
+}
+.public-actions,
+.public-actions form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+.public-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(155px, 100%), 1fr));
+  gap: var(--space-12);
+}
+.public-cards button {
+  font: inherit;
+  color: var(--text);
+  background: var(--control);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-6);
+  padding: var(--space-8);
+  text-align: left;
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  cursor: pointer;
+}
+.public-cards img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-6);
+}
+.public-playlists small {
+  display: block;
+  color: var(--text-secondary);
+}
+.public-playlists .public-songs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.public-songs li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6);
+  border-bottom: 1px solid var(--stroke);
+}
+.public-songs li > div {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}

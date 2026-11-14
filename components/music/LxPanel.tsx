@@ -1,3 +1,4 @@
+import { PublicPlaylists } from './PublicPlaylists'
 import { SongCredits, songRowClick } from './SongCredits'
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -37,13 +38,14 @@ function ResultCover({ item }: { item: Versions['items'][number] }) {
   const image = useRef<HTMLImageElement>(null)
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
-    if (!item.hasCover || !image.current) return
+    if ((!item.hasCover && !item.localId) || !image.current) return
     let live = true
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
       observer.disconnect()
-      void window.music
-        .searchCover(item.key)
+      const cover = item.localId ? window.music.trackCover(item.localId) : Promise.resolve(null)
+      void cover
+        .then((local) => local || (item.hasCover ? window.music.searchCover(item.key) : null))
         .then((value) => {
           if (live) setUrl(value)
         })
@@ -54,7 +56,7 @@ function ResultCover({ item }: { item: Versions['items'][number] }) {
       live = false
       observer.disconnect()
     }
-  }, [item.key, item.hasCover])
+  }, [item.key, item.hasCover, item.localId])
   return (
     <img
       ref={image}
@@ -120,6 +122,7 @@ export function DownloadPane({
   query,
   setQuery,
   toggle,
+  playPublic,
   onPlay,
   onAdd,
   refresh,
@@ -129,6 +132,7 @@ export function DownloadPane({
   setQuery(value: string): void
   toggle(): void
   playlists: Playlist[]
+  playPublic: (ids: string[]) => Promise<unknown>
   onPlay: (key: string, quality?: string) => Promise<void>
   onAdd: (playlist: string, key: string) => Promise<void>
   refresh: () => Promise<void>
@@ -140,6 +144,7 @@ export function DownloadPane({
     [status, setStatus] = useState(''),
     [operation, setOperation] = useState<'idle' | 'cancellable' | 'pending'>('idle')
   const busy = operation !== 'idle'
+  const [publicMode, setPublicMode] = useState(false)
   const [platform, setPlatform] = useState('wy')
   const sourceId = useRef<string | null>(null)
   const [available, setAvailable] = useState<string[]>()
@@ -301,165 +306,180 @@ export function DownloadPane({
   }
   return (
     <section className="lx-panel" aria-label="搜索音乐">
-      <div className="search-controls" data-query={hasQuery}>
-        <form
-          className="download-search"
-          onKeyDownCapture={guardSearchEnter}
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!busy && name && searchable && !unsupported) void act(() => search())
-          }}
-        >
-          <DiscoveryInput
-            ai={false}
-            value={query}
-            disabled={busy}
-            toggle={toggle}
-            edit={(value) => {
-              setQuery(value)
-              setResult(undefined)
-              setStatus('')
-            }}
-          />
-          <Button
-            type="submit"
-            appearance="primary"
-            disabled={!name || !searchable || busy || unsupported}
-          >
-            搜索
-          </Button>
-        </form>
-        <TabList
-          className="search-platforms"
-          size="small"
-          aria-label="搜索平台"
-          selectedValue={platform}
-          onTabSelect={(_, data) => {
-            const next = String(data.value)
-            if (next === platform || busy) return
-            setPlatform(next)
-            setResult(undefined)
-            setStatus('')
-            if (name && searchable && (!available || available.includes(next)))
-              void act(() => search(next))
-          }}
-        >
-          <Tab value="wy" disabled={busy}>
-            网易云音乐
-          </Tab>
-          <Tab value="tx" disabled={busy}>
-            QQ 音乐
-          </Tab>
-          <Tab value="kg" disabled={busy}>
-            酷狗音乐
-          </Tab>
-        </TabList>
-        {hasQuery && !searchable && <p>在线搜索关键词最多 256 字。</p>}
-        {!name && hasQuery && <p>正在等待可用音乐源，连接网络后会自动检查。</p>}
-        {unsupported && (
-          <p role="status">
-            当前音乐源不支持{platforms[platform as keyof typeof platforms]}
-            的搜索和下载，请更换音乐源。
-          </p>
-        )}
-        {history.length > 0 && (
-          <section className="search-history" aria-label="最近搜索">
-            <header>
-              <h2>最近搜索</h2>
-              <Button
+      <TabList
+        aria-label="查找内容"
+        className="discovery-kinds"
+        selectedValue={publicMode ? 'lists' : 'songs'}
+        onTabSelect={(_, d) => setPublicMode(d.value === 'lists')}
+      >
+        <Tab value="songs">歌曲</Tab>
+        <Tab value="lists">公开歌单</Tab>
+      </TabList>
+      {publicMode ? (
+        <PublicPlaylists playlists={playlists} play={playPublic} refresh={refresh} />
+      ) : (
+        <>
+          <div className="search-controls" data-query={hasQuery}>
+            <form
+              className="download-search"
+              onKeyDownCapture={guardSearchEnter}
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!busy && name && searchable && !unsupported) void act(() => search())
+              }}
+            >
+              <DiscoveryInput
+                ai={false}
+                value={query}
                 disabled={busy}
-                size="small"
-                appearance="subtle"
-                onClick={() => void act(() => changeHistory('clear'), false)}
+                toggle={toggle}
+                edit={(value) => {
+                  setQuery(value)
+                  setResult(undefined)
+                  setStatus('')
+                }}
+              />
+              <Button
+                type="submit"
+                appearance="primary"
+                disabled={!name || !searchable || busy || unsupported}
               >
-                清空
+                搜索
               </Button>
-            </header>
-            <div>
-              {history.map((word) => (
-                <span key={word}>
+            </form>
+            <TabList
+              className="search-platforms"
+              size="small"
+              aria-label="搜索平台"
+              selectedValue={platform}
+              onTabSelect={(_, data) => {
+                const next = String(data.value)
+                if (next === platform || busy) return
+                setPlatform(next)
+                setResult(undefined)
+                setStatus('')
+                if (name && searchable && (!available || available.includes(next)))
+                  void act(() => search(next))
+              }}
+            >
+              <Tab value="wy" disabled={busy}>
+                网易云音乐
+              </Tab>
+              <Tab value="tx" disabled={busy}>
+                QQ 音乐
+              </Tab>
+              <Tab value="kg" disabled={busy}>
+                酷狗音乐
+              </Tab>
+            </TabList>
+            {hasQuery && !searchable && <p>在线搜索关键词最多 256 字。</p>}
+            {!name && hasQuery && <p>正在等待可用音乐源，连接网络后会自动检查。</p>}
+            {unsupported && (
+              <p role="status">
+                当前音乐源不支持{platforms[platform as keyof typeof platforms]}
+                的搜索和下载，请更换音乐源。
+              </p>
+            )}
+            {history.length > 0 && (
+              <section className="search-history" aria-label="最近搜索">
+                <header>
+                  <h2>最近搜索</h2>
                   <Button
+                    disabled={busy}
                     size="small"
                     appearance="subtle"
-                    disabled={busy || !name || unsupported}
-                    onClick={() => {
-                      setQuery(word)
-                      void act(() => search(platform, word))
+                    onClick={() => void act(() => changeHistory('clear'), false)}
+                  >
+                    清空
+                  </Button>
+                </header>
+                <div>
+                  {history.map((word) => (
+                    <span key={word}>
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        disabled={busy || !name || unsupported}
+                        onClick={() => {
+                          setQuery(word)
+                          void act(() => search(platform, word))
+                        }}
+                      >
+                        {word}
+                      </Button>
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        aria-label={'删除搜索词 ' + word}
+                        disabled={busy}
+                        icon={<X size={13} />}
+                        onClick={() => void act(() => changeHistory('remove', word), false)}
+                      />
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+          {busy ? (
+            <div role="status">
+              正在处理…{' '}
+              {operation === 'cancellable' && (
+                <Button size="small" onClick={() => void host.lxCancel()}>
+                  取消
+                </Button>
+              )}
+            </div>
+          ) : null}
+          {result && result.items.length > 0 && (
+            <>
+              <div className="search-result-head">
+                <label htmlFor="lx-quality">
+                  下载音质{' '}
+                  <Dropdown
+                    inlinePopup
+                    listbox={{ className: 'component-popup' }}
+                    id="lx-quality"
+                    size="small"
+                    value={quality}
+                    selectedOptions={[quality]}
+                    onOptionSelect={(_, data) => {
+                      if (data.optionValue) setQuality(data.optionValue)
                     }}
                   >
-                    {word}
-                  </Button>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    aria-label={'删除搜索词 ' + word}
-                    disabled={busy}
-                    icon={<X size={13} />}
-                    onClick={() => void act(() => changeHistory('remove', word), false)}
-                  />
-                </span>
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
-      {busy ? (
-        <div role="status">
-          正在处理…{' '}
-          {operation === 'cancellable' && (
-            <Button size="small" onClick={() => void host.lxCancel()}>
-              取消
-            </Button>
+                    {result.quality.map((q) => (
+                      <Option key={q} value={q}>
+                        {q}
+                      </Option>
+                    ))}
+                  </Dropdown>
+                </label>
+                <small>
+                  {result.items.length} 个版本
+                  {result.partial && ' · 后续结果暂时不可用'}
+                </small>
+              </div>
+              <ul>
+                {groupedVersions(result.items).map((group) =>
+                  group.items.length === 1 ? (
+                    versionRow(group.items[0])
+                  ) : (
+                    <li className="version-group" key={group.items[0].key}>
+                      <details open>
+                        <summary>
+                          {group.title} · {group.items[0].artist} · {group.items.length} 个版本
+                        </summary>
+                        <ul>{group.items.map(versionRow)}</ul>
+                      </details>
+                    </li>
+                  ),
+                )}
+              </ul>
+            </>
           )}
-        </div>
-      ) : null}
-      {result && result.items.length > 0 && (
-        <>
-          <div className="search-result-head">
-            <label htmlFor="lx-quality">
-              下载音质{' '}
-              <Dropdown
-                inlinePopup
-                listbox={{ className: 'component-popup' }}
-                id="lx-quality"
-                size="small"
-                value={quality}
-                selectedOptions={[quality]}
-                onOptionSelect={(_, data) => {
-                  if (data.optionValue) setQuality(data.optionValue)
-                }}
-              >
-                {result.quality.map((q) => (
-                  <Option key={q} value={q}>
-                    {q}
-                  </Option>
-                ))}
-              </Dropdown>
-            </label>
-            <small>
-              {result.items.length} 个版本
-              {result.partial && ' · 后续结果暂时不可用'}
-            </small>
-          </div>
-          <ul>
-            {groupedVersions(result.items).map((group) =>
-              group.items.length === 1 ? (
-                versionRow(group.items[0])
-              ) : (
-                <li className="version-group" key={group.items[0].key}>
-                  <details open>
-                    <summary>
-                      {group.title} · {group.items[0].artist} · {group.items.length} 个版本
-                    </summary>
-                    <ul>{group.items.map(versionRow)}</ul>
-                  </details>
-                </li>
-              ),
-            )}
-          </ul>
+          {!busy && status && <p role="status">{status}</p>}
         </>
       )}
-      {!busy && status && <p role="status">{status}</p>}
     </section>
   )
 }

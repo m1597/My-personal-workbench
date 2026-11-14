@@ -220,8 +220,7 @@ try {
   await page
     .getByRole('listitem')
     .filter({ hasText: preview })
-    .getByRole('button', { name: '播放', exact: true })
-    .click()
+    .dispatchEvent('dblclick')
   await expect
     .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0))
     .toBe(true)
@@ -335,7 +334,23 @@ try {
     await expect(page.locator('.search-cover').first()).toHaveAttribute('src', expectedCover)
     await page.screenshot({ path: path.join(root, '06-search-art.png') })
     assert.equal(await app.evaluate(() => globalThis.artRequests), 1)
-    const report = { sameCoverAcrossThreeViews: true, ...times, counts, events, transfers, root }
+    const localId = finished.songs.find(([, title]) => title === '晨风')[2]
+    await app.evaluate(() => {
+      process.getBuiltinModule('node:https').request = () => {
+        throw Error('离线封面验证')
+      }
+    })
+    await page.reload()
+    assert.equal(await page.evaluate((id) => window.music.trackCover(id), localId), expectedCover)
+    const report = {
+      offlineCover: true,
+      sameCoverAcrossThreeViews: true,
+      ...times,
+      counts,
+      events,
+      transfers,
+      root,
+    }
     await fs.writeFile(path.join(root, 'timing.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }
