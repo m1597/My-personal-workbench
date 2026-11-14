@@ -7,6 +7,7 @@ import {
 } from './SidebarSorting'
 import { PlaylistSortMenu, type Playlist, type PlaylistSorting } from './PlaylistSortMenu'
 export type { Playlist } from './PlaylistSortMenu'
+import { TimedPlaylist } from './TimedPlaylist'
 import { TrackMenu } from './TrackMenu'
 import { AlbumBrowser } from './AlbumBrowser'
 import { PlaylistCover } from './PlaylistCover'
@@ -530,6 +531,14 @@ export function LibraryPane({
                   >
                     播放全部
                   </Button>
+                )}
+                {playlistPage && (
+                  <TimedPlaylist
+                    key={collection}
+                    members={members}
+                    tracks={tracks}
+                    play={playAlbum}
+                  />
                 )}
                 {collection === 'all' && (
                   <Button

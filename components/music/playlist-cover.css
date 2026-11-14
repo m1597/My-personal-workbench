@@ -19,3 +19,17 @@
 .playlist-cover + div {
   flex: 1;
 }
+
+.timed-playlist {
+  display: grid;
+  gap: var(--space-10);
+  max-width: min(19rem, 88vw);
+}
+.timed-playlist label {
+  display: grid;
+  gap: var(--space-4);
+}
+.timed-playlist p {
+  margin: 0;
+  color: var(--text-secondary);
+}
