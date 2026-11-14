@@ -1,3 +1,4 @@
+import { registerCleanup, recoverRenames } from './library-cleanup.mjs'
 import { libraryTools, callLibraryTool } from './music-mcp-library.mjs'
 import { musicMcpAgents } from './music-mcp-agents.mjs'
 import { reconcileRecycled } from './recycled-tracks.mjs'
@@ -418,7 +419,7 @@ export function musicService(
   bind('removeLocal', (value) => {
     forgetTracks(trackIds(value))
   })
-  bind('trashLocal', async (value) => {
+  async function trashLocal(value, verify) {
     const rows = trackIds(value).map((id) => store.library.row(id))
     if (rows.some((row) => row.awaitingLocation)) throw Error('请先重新定位音频')
     if (localDialog || store.library.job.running) throw Error('请等待当前曲库操作结束')
@@ -445,6 +446,7 @@ export function musicService(
           if (epoch !== viewEpoch) throw Error('窗口已关闭，尚未处理的歌曲已保留')
           if (store.library.row(row.id).file !== row.file || !(await regularFile(row.file)))
             throw Error('文件已变化，曲库记录已保留')
+          verify?.(row.id)
           await trashAudio(store, row, lyric, (file) => shell.trashItem(file), forgetTracks)
         } catch (error) {
           const remaining = targets.filter(({ row }) =>
@@ -464,6 +466,13 @@ export function musicService(
     } finally {
       localDialog = false
     }
+  }
+  bind('trashLocal', (value) => trashLocal(value))
+  const closeCleanup = registerCleanup(bind, () => store, {
+    forget: forgetTracks,
+    trash: trashLocal,
+    epoch: () => viewEpoch,
+    inUse: (id) => grant?.id === id || grant?.libraryId === id,
   })
   let playbackEpoch = 0
   bind('analysisRecording', async (id) => {
@@ -1203,6 +1212,7 @@ export function musicService(
       }
     },
     dispose(reason = '音乐组件已关闭') {
+      closeCleanup()
       collectionSearch?.abort()
       pending?.abort(new DOMException(reason, 'AbortError'))
 

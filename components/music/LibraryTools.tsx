@@ -28,7 +28,7 @@ type Move = {
     options: { id: string; file: string; artist: string; album: string; duration: number }[]
   }[]
 }
-export type LibraryToolsAPI = {
+export type LibraryToolsAPI = import('./LibraryCleanup').CleanupAPI & {
   previewPlaylist(file: File): Promise<import('./PlaylistImport').ImportPreview>
   recentHistory(cursor?: HistoryRow): Promise<HistoryRow[]>
   setFavorite(ids: string | string[], on: boolean): Promise<number>

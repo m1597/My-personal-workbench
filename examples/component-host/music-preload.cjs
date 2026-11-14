@@ -89,6 +89,8 @@ const names = [
   'previewRelocation',
   'applyRelocation',
   'removeLocal',
+  'previewCleanup',
+  'applyCleanup',
   'removeFolder',
   'openFolder',
   'revealTrack',

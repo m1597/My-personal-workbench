@@ -3,6 +3,7 @@ import { MusicMcpSettings } from './MusicMcpSettings'
 import { useEffect, useState } from 'react'
 import { Button, Checkbox, Dropdown, Field, Input, Option } from '@fluentui/react-components'
 import { ModelSettings, type ModelInfo } from './ModelSettings'
+import { LibraryCleanup } from './LibraryCleanup'
 import { LibraryTools } from './LibraryTools'
 import type { ImportJob } from './LibraryPane'
 import { AudioLines, Download, Keyboard, Library, PanelLeft, Plug, Sparkles } from 'lucide-react'
@@ -411,6 +412,7 @@ export function MusicSettings({
             )}
           </section>
         )}
+        {category === 'library' && <LibraryCleanup refresh={refresh} />}
         {category === 'library' && <LibraryTools refresh={refresh} />}
         {category === 'sources' && <MusicSourcesSettings />}
         {category === 'mcp' && <MusicMcpSettings script={script} />}

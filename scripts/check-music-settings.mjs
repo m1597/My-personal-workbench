@@ -61,7 +61,11 @@ try {
   expect(loaded.localTracks.map((row) => row.title)).toEqual(['A', 'B', 'C'])
   await player.getByRole('button', { name: '播放A', exact: true }).click({ timeout: 5000 })
   await openMusicSettings(player)
-  await expect(player.locator('.music-settings h2')).toHaveText(['本地曲库', '曲库管理'])
+  await expect(player.locator('.music-settings h2')).toHaveText([
+    '本地曲库',
+    '曲库整理',
+    '曲库管理',
+  ])
   for (const name of ['音乐源', 'MCP', '下载', '模型与推荐', '快捷键']) {
     await selectMusicSettings(player, name)
     await expect(player.locator('.music-settings h2')).toHaveText([name === 'MCP' ? '外部 Agent 连接（可选）' : name])
