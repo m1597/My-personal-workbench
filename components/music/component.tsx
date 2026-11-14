@@ -265,7 +265,7 @@ declare global {
         renamePlaylist(id: string, name: string): Promise<void>
         deletePlaylist(id: string): Promise<void>
         relocateLocal(id: string): Promise<void>
-        mediaFailed(id: string, url: string): Promise<void | PlaybackFailure>
+        mediaFailed(id: string, url: string): Promise<undefined | PlaybackFailure>
         localSource(id: string, scope?: string): Promise<string>
         rememberOnline(key: string, quality?: string): Promise<string>
         downloadSelection(ids: string[]): Promise<SelectionDownload[]>
