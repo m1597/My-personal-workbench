@@ -1,3 +1,4 @@
+import { selectMusicSettings } from './music-settings-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -18,17 +19,19 @@ for (const [i, title] of ['A', 'B', 'C'].entries()) {
   store.library.upsert({ file, title, artist: '测试乐队', album: '轻声', duration: 60 })
 }
 store.db.close()
-const app = await electron.launch({
-  args: [
-    path.resolve('dist/component-prototype/host'),
-    '--mode=music',
-    '--mute-audio',
-    '--user-data-dir=' + profile,
-  ],
-  env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
-})
+const launch = () =>
+  electron.launch({
+    args: [
+      path.resolve('dist/component-prototype/host'),
+      '--mode=music',
+      '--mute-audio',
+      '--user-data-dir=' + profile,
+    ],
+    env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+  })
+let app = await launch()
 try {
-  const page = await app.firstWindow()
+  let page = await app.firstWindow()
   await app.evaluate(({ app, BaseWindow, globalShortcut }) => {
     const register = globalShortcut.register.bind(globalShortcut)
     globalThis.keyCallbacks = new Map()
@@ -71,7 +74,7 @@ try {
   assert.equal(stored.appKeys, true)
   assert.equal(stored.globalKeys, false)
   assert.deepEqual(stored.shortcuts, {
-    toggle: 'Ctrl+Alt+Q',
+    toggle: 'MediaPlayPause',
     previous: 'Ctrl+Shift+F8',
     next: 'Ctrl+Alt+Right',
     volumeUp: '',
@@ -125,7 +128,7 @@ try {
   await shot('queue-selection')
   await key(button('更多音乐操作'))
   await key(page.getByRole('menuitem', { name: '音乐设置', exact: true }))
-  await key(button('快捷键'))
+  await selectMusicSettings(page,'快捷键')
   await expect(page.getByLabel('启用应用内快捷键')).toBeChecked()
   const global = page.getByLabel('启用全局快捷键')
   await expect(global).not.toBeChecked()
@@ -151,6 +154,43 @@ try {
   assert.equal(await current(), 'A')
   await key(local, 'Space')
   await expect.poll(async () => (await state()).prefs.appKeys).toBe(true)
+  const recordNext = async (chord) => {
+    const input = page.getByRole('textbox', { name: '应用内下一首', exact: true })
+    await input.click()
+    await page.keyboard.press(chord)
+    await button('保存应用内下一首快捷键').click()
+  }
+  await recordNext('Control+Alt+Shift+F11')
+  await expect(page.getByText(/另一作用范围/).first()).toBeVisible()
+  assert.equal((await state()).prefs.appShortcuts.next, 'Right')
+  await recordNext('KeyJ')
+  await expect.poll(async () => (await state()).prefs.appShortcuts.next).toBe('J')
+  await page.evaluate(() => {
+    document.activeElement.blur()
+    for (const init of [{ isComposing: true }, { keyCode: 229 }, { repeat: true }])
+      window.document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'j', code: 'KeyJ', bubbles: true, ...init }),
+      )
+  })
+  assert.equal(await current(), 'A')
+  await bodyKey('j')
+  await expect.poll(current).toBe('C')
+  await app.close()
+  app = await launch()
+  page = await app.firstWindow()
+  await page.waitForSelector('.music-shell')
+  await key(button('更多音乐操作'))
+  await key(page.getByRole('menuitem', { name: '音乐设置', exact: true }))
+  await selectMusicSettings(page,'快捷键')
+  assert.equal((await state()).prefs.appShortcuts.next, 'J')
+  assert.equal((await state()).prefs.shortcuts.volumeUp, 'Ctrl+Alt+Shift+F11')
+  await key(button('恢复应用内默认快捷键'))
+  await expect.poll(async () => (await state()).prefs.appShortcuts.next).toBe('Right')
+  assert.equal((await state()).prefs.shortcuts.volumeUp, 'Ctrl+Alt+Shift+F11')
+  await key(button('恢复全局默认快捷键'))
+  await expect.poll(async () => (await state()).prefs.shortcuts.previous).toBe('Ctrl+Alt+Left')
+  assert.equal((await state()).prefs.shortcuts.toggle, 'MediaPlayPause')
+  assert.equal((await state()).prefs.shortcuts.volumeUp, 'Ctrl+Alt+Up')
   await shot('settings')
   await fs.writeFile(
     path.join(root, 'observations.json'),

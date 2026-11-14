@@ -1,11 +1,12 @@
 import { globalShortcut } from 'electron'
 import {
+  appBindings,
   defaultShortcuts,
   getMusicPreferences,
   mediaBindings as media,
 } from './music-preferences.mjs'
 
-function accelerator(value) {
+function accelerator(value, local = false) {
   if (value === '') return ''
   if (typeof value !== 'string' || value.length > 60) throw Error('快捷键无效')
   const parts = value.split('+')
@@ -14,10 +15,12 @@ function accelerator(value) {
   if (
     !key ||
     parts.length !== modifiers.length ||
-    !/^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Up|Down|Left|Right|Home|End|PageUp|PageDown|Insert|Delete)$/.test(
+    !/^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Up|Down|Left|Right|Home|End|PageUp|PageDown|Insert|Delete|MediaPlayPause|MediaNextTrack|MediaPreviousTrack)$/.test(
       key,
     ) ||
-    (!modifiers.length && !/^F\d+$/.test(key))
+    (!local &&
+      !modifiers.length &&
+      !/^(?:F\d+|MediaPlayPause|MediaPreviousTrack|MediaNextTrack)$/.test(key))
   )
     throw Error('请使用修饰键组合或功能键')
   return [...modifiers, key].join('+')
@@ -54,6 +57,19 @@ export function musicShortcuts() {
       failures.add(key)
     }
   }
+  function applyGlobal(prefs) {
+    for (const key of registered.keys()) remove(key)
+    failures.clear()
+    if (!prefs.globalKeys) return
+    for (const [action, key] of Object.entries(prefs.shortcuts)) {
+      if (!key.startsWith('Media') || prefs.mediaKeys) attempt(key, action)
+    }
+    if (prefs.mediaKeys) for (const [action, key] of Object.entries(media)) attempt(key, action)
+  }
+  function checkOverlap(bindings, other) {
+    if (bindings.some((key) => key && other.includes(key)))
+      throw Error('该快捷键已在另一作用范围内使用')
+  }
   return {
     activate(sender, store) {
       if (owner === sender) return
@@ -69,54 +85,68 @@ export function musicShortcuts() {
       sender.once('destroyed', release)
       sender.once('render-process-gone', release)
       const prefs = getMusicPreferences(store)
-      if (prefs.globalKeys) {
-        if (prefs.mediaKeys) for (const [action, key] of Object.entries(media)) attempt(key, action)
-        for (const [action, key] of Object.entries(prefs.shortcuts)) attempt(key, action)
-      }
+      applyGlobal(prefs)
     },
     failures: () => Array.from(failures),
     setEnabled(store, scope, enabled) {
       if (!['app', 'global'].includes(scope) || typeof enabled !== 'boolean')
         throw Error('快捷键设置无效')
       store.set('music-' + scope + '-keys', enabled ? 'on' : 'off')
-      if (scope === 'global') {
-        const prefs = getMusicPreferences(store)
-        const bindings = [
-          ...Object.entries(prefs.shortcuts),
-          ...Object.entries(media).filter(() => prefs.mediaKeys),
-        ]
-        for (const [action, key] of bindings) {
-          if (enabled) attempt(key, action)
-          else remove(key)
-        }
-      }
+      if (scope === 'global') applyGlobal(getMusicPreferences(store))
     },
-    setCustom(store, action, raw) {
+    reset(store, scope) {
+      if (!['app', 'global'].includes(scope)) throw Error('快捷键范围无效')
+      const prefs = getMusicPreferences(store)
+      const globalKeys = Object.values(scope === 'app' ? prefs.shortcuts : defaultShortcuts).concat(
+        Object.values(media),
+      )
+      checkOverlap(Object.values(scope === 'app' ? appBindings : prefs.appShortcuts), globalKeys)
+      const prefix = scope === 'app' ? 'app-shortcut-' : 'shortcut-'
+      store.db
+        .prepare('DELETE FROM state WHERE key IN (SELECT ? || value FROM json_each(?))')
+        .run(prefix, JSON.stringify(Object.keys(appBindings)))
+      if (scope === 'global') applyGlobal(getMusicPreferences(store))
+    },
+    setCustom(store, action, raw, scope = 'global') {
+      if (!['app', 'global'].includes(scope)) throw Error('快捷键范围无效')
       if (!Object.hasOwn(defaultShortcuts, action)) throw Error('未知的播放操作')
-      const key = accelerator(raw)
+      const key = accelerator(raw, scope === 'app')
       const prefs = getMusicPreferences(store)
       if (
         key &&
-        Object.entries(prefs.shortcuts).some(([id, shortcut]) => id !== action && shortcut === key)
+        Object.entries(scope === 'app' ? prefs.appShortcuts : prefs.shortcuts).some(
+          ([id, shortcut]) => id !== action && shortcut === key,
+        )
       )
         throw Error('该组合已分配给另一个播放操作')
+      if (key) {
+        checkOverlap([key], Object.values(scope === 'app' ? prefs.shortcuts : prefs.appShortcuts))
+        if (
+          Object.entries(media).some(
+            ([other, binding]) => binding === key && (scope === 'app' || other !== action),
+          )
+        )
+          throw Error('该组合已分配给媒体键操作')
+      }
+      if (scope === 'app') {
+        store.set('app-shortcut-' + action, key)
+        return
+      }
       const previous = prefs.shortcuts[action]
-      if (prefs.globalKeys) add(key, action)
+      if (prefs.globalKeys && (!key.startsWith('Media') || prefs.mediaKeys)) add(key, action)
       try {
         store.set('shortcut-' + action, key)
       } catch (error) {
         if (key !== previous) remove(key)
         throw error
       }
-      if (previous !== key) remove(previous)
+      if (previous !== key && !(prefs.mediaKeys && Object.values(media).includes(previous)))
+        remove(previous)
     },
     setMedia(store, enabled) {
       if (typeof enabled !== 'boolean') throw Error('媒体键设置无效')
       store.set('music-media-keys', enabled ? 'on' : 'off')
-      for (const [action, key] of Object.entries(media)) {
-        if (enabled && getMusicPreferences(store).globalKeys) attempt(key, action)
-        else remove(key)
-      }
+      applyGlobal(getMusicPreferences(store))
     },
   }
 }

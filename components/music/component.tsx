@@ -1,3 +1,4 @@
+import { recordShortcut, shortcutInput } from './recordShortcut'
 import { RecordingLists } from './OnlineSongRow'
 import { useLibrarySearch } from './useLibrarySearch'
 import { useOutputDevice } from './PlayerOptionsPane'
@@ -196,7 +197,8 @@ declare global {
         ): Promise<void>
         setMusicOutput(volume: number, muted: boolean): Promise<void>
         setShortcutEnabled(scope: 'app' | 'global', enabled: boolean): Promise<void>
-        setMusicShortcut(action: TransportAction, key: string): Promise<void>
+        resetMusicShortcuts(scope:'app'|'global'):Promise<void>
+        setMusicShortcut(action: TransportAction, key: string,scope?:'app'|'global'): Promise<void>
         setMusicMediaKeys(enabled: boolean): Promise<void>
         chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
         searchCollection(scope: string, query: string): Promise<string[]>
@@ -1102,35 +1104,30 @@ function Music() {
     else if (action === 'previous' && preceding >= 0) void act(() => navigateAt(preceding))
     else if (action === 'next' && canNext) void act(next)
   })
-  useEffect(() => window.musicWindow.onTransport((action) => transport(action)), [])
-  const localShortcut = useEffectEvent((e: globalThis.KeyboardEvent) => {
-    if (
-      !state?.prefs.appKeys ||
-      e.defaultPrevented ||
-      e.isComposing ||
-      e.repeat ||
-      e.altKey ||
-      e.ctrlKey ||
-      e.metaKey ||
-      e.shiftKey
-    )
-      return
-    if (
-      !(e.target instanceof Element) ||
-      e.target.closest(
-        'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"],[role="slider"],[role="menu"],[role="listbox"],[role="tablist"],[role="dialog"]',
-      )
-    )
-      return
-    if (e.key === ' ' && e.target.closest('button,a,[role="button"]')) return
-    const bindings: Record<string, TransportAction> = {
-      ' ': 'toggle',
-      ArrowLeft: 'previous',
-      ArrowRight: 'next',
-      ArrowUp: 'volumeUp',
-      ArrowDown: 'volumeDown',
+  const composingShortcut = useRef(false)
+  useEffect(() => {
+    const start = () => { composingShortcut.current = true }
+    const end = () => { composingShortcut.current = false }
+    window.addEventListener('compositionstart',start)
+    window.addEventListener('compositionend',end)
+    window.addEventListener('blur',end)
+    const unsubscribe = window.musicWindow.onTransport(action => {
+      const editing = document.activeElement?.matches('textarea,select,input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"]')
+      if (document.hasFocus() && (composingShortcut.current || editing)) return
+      transport(action)
+    })
+    return () => {
+      unsubscribe()
+      window.removeEventListener('compositionstart',start)
+      window.removeEventListener('compositionend',end)
+      window.removeEventListener('blur',end)
     }
-    const action = bindings[e.key]
+  }, [])
+  const localShortcut = useEffectEvent((e: globalThis.KeyboardEvent) => {
+    if (!state?.prefs.appKeys || e.defaultPrevented || e.isComposing || composingShortcut.current || e.repeat || e.keyCode === 229 || !(e.target instanceof Element) || shortcutInput(e.target)) return
+    if (e.key === ' ' && e.target.closest('button,a,[role="button"]')) return
+    const chord=recordShortcut(e)
+    const action=Object.entries(state.prefs.appShortcuts).find(([,value])=>value && value===chord)?.[0] as TransportAction|undefined
     if (action) {
       e.preventDefault()
       transport(action)

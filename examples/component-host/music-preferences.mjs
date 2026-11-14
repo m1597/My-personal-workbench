@@ -20,11 +20,18 @@ export function chooseQuality(available, preference) {
   return order.find((q) => available.includes(q)) ?? available[0]
 }
 export const defaultShortcuts = {
-  toggle: 'Ctrl+Alt+Q',
+  toggle: 'MediaPlayPause',
   previous: 'Ctrl+Alt+Left',
   next: 'Ctrl+Alt+Right',
   volumeUp: 'Ctrl+Alt+Up',
   volumeDown: 'Ctrl+Alt+Down',
+}
+export const appBindings = {
+  toggle: 'Space',
+  previous: 'Left',
+  next: 'Right',
+  volumeUp: 'Up',
+  volumeDown: 'Down',
 }
 export const mediaBindings = {
   toggle: 'MediaPlayPause',
@@ -91,6 +98,13 @@ export function getMusicPreferences(store) {
     appKeys: store.get('music-app-keys') !== 'off',
     globalKeys: store.get('music-global-keys') === 'on',
     mediaKeys: store.get('music-media-keys') !== 'off',
+    appShortcuts: Object.fromEntries(
+      Object.entries(appBindings).map(([action, key]) => [
+        action,
+        store.db.prepare('SELECT value FROM state WHERE key=?').get('app-shortcut-' + action)
+          ?.value ?? key,
+      ]),
+    ),
     shortcuts: Object.fromEntries(
       Object.entries(defaultShortcuts).map(([action, fallback]) => [
         action,

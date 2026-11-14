@@ -22,9 +22,9 @@ def owner(hwnd):
 
 def check_foreground(pid):
     hwnd = user32.GetForegroundWindow()
-    if not hwnd or owner(hwnd) == pid:
+    if hwnd and owner(hwnd) == pid:
         raise RuntimeError("An external foreground window is required")
-    return hwnd
+    return hwnd or 0
 
 
 def notify(pid, registration, function_key):

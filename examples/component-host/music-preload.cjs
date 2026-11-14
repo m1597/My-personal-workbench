@@ -35,6 +35,7 @@ const names = [
   'setPlayerOption',
   'setShortcutEnabled',
   'setMusicShortcut',
+  'resetMusicShortcuts',
   'setMusicMediaKeys',
   'chooseMusicDirectory',
   'favoriteSortInfo',

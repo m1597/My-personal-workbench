@@ -1,5 +1,6 @@
+import { recordShortcut } from './recordShortcut'
 import { MusicMcpSettings } from './MusicMcpSettings'
-import { type KeyboardEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Checkbox, Dropdown, Field, Input, Option } from '@fluentui/react-components'
 import { ModelSettings, type ModelInfo } from './ModelSettings'
 import { LibraryTools } from './LibraryTools'
@@ -145,6 +146,7 @@ export type MusicPreferences = PlayerOptions & {
   appKeys: boolean
   globalKeys: boolean
   mediaKeys: boolean
+  appShortcuts: Record<TransportAction, string>
   shortcuts: Record<TransportAction, string>
   shortcutFailures: string[]
 }
@@ -157,31 +159,15 @@ const actions = {
 } as const
 const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
 
-function recordedKey(e: KeyboardEvent<HTMLInputElement>) {
-  const modifiers = [
-    e.ctrlKey && 'Ctrl',
-    e.altKey && 'Alt',
-    e.shiftKey && 'Shift',
-    e.metaKey && 'Super',
-  ].filter(Boolean)
-  const physical = /^(?:Key([A-Z])|Digit([0-9]))$/.exec(e.code)
-  const key = physical?.[1] ?? physical?.[2] ?? e.key.replace(/^Arrow/, '').replace(/^ $/, 'Space')
-  if (/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(key)) return [...modifiers, key].join('+')
-  if (
-    modifiers.length &&
-    /^(?:[A-Z0-9]|Space|Up|Down|Left|Right|Home|End|PageUp|PageDown|Insert|Delete)$/.test(key)
-  )
-    return [...modifiers, key].join('+')
-  return undefined
-}
-
 function ShortcutField({
   action,
   saved,
+  local=false,
   change,
 }: {
   action: TransportAction
   saved: string
+  local?:boolean
   change(key: string): Promise<boolean>
 }) {
   const [value, setValue] = useState(saved)
@@ -199,7 +185,7 @@ function ShortcutField({
         await change(value)
       }}
     >
-      <Field label={actions[action]} hint={hint || undefined}>
+      <Field label={(local?'应用内':'')+actions[action]} hint={hint || undefined}>
         <Input
           value={recording ? '' : value}
           readOnly
@@ -217,7 +203,7 @@ function ShortcutField({
             if (!recording) return
             e.preventDefault()
             e.stopPropagation()
-            if (e.repeat) return
+            if (e.repeat || e.nativeEvent.isComposing || e.nativeEvent.keyCode===229) return
             if (e.key === 'Escape') {
               setRecording(false)
               setHint('')
@@ -226,7 +212,7 @@ function ShortcutField({
             if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
             const clear =
               e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey
-            const key = clear ? '' : recordedKey(e)
+            const key = clear ? '' : recordShortcut(e.nativeEvent,local)
             if (key === undefined) {
               setHint('请按修饰键与字母、数字或导航键的组合，或直接按功能键')
               return
@@ -241,7 +227,7 @@ function ShortcutField({
         type="submit"
         size="small"
         disabled={value === saved}
-        aria-label={'保存' + actions[action] + '快捷键'}
+        aria-label={'保存' + (local?'应用内':'') + actions[action] + '快捷键'}
       >
         保存
       </Button>
@@ -597,7 +583,11 @@ export function MusicSettings({
                 void update(() => window.music.setShortcutEnabled('app', !!d.checked))
               }
             />
-            <p>空格播放或暂停，左右方向键切歌，上下方向键调节音量。</p>
+            {Object.entries(actions).map(([id])=>{
+              const action=id as TransportAction
+              return <ShortcutField local key={action+prefs.appShortcuts[action]} action={action} saved={prefs.appShortcuts[action]} change={key=>update(()=>window.music.setMusicShortcut(action,key,'app'))}/>
+            })}
+            <Button onClick={()=>void update(()=>window.music.resetMusicShortcuts('app'))}>恢复应用内默认快捷键</Button>
             <Checkbox
               label="启用全局快捷键"
               checked={prefs.globalKeys}
@@ -618,13 +608,14 @@ export function MusicSettings({
               const action = id as TransportAction
               return (
                 <ShortcutField
-                  key={action}
+                  key={action+prefs.shortcuts[action]}
                   action={action}
                   saved={prefs.shortcuts[action]}
                   change={(key) => update(() => window.music.setMusicShortcut(action, key))}
                 />
               )
             })}
+            <Button onClick={()=>void update(()=>window.music.resetMusicShortcuts('global'))}>恢复全局默认快捷键</Button>
             {prefs.shortcutFailures.length > 0 && (
               <span role="alert">
                 系统未允许注册或快捷键已被占用：{prefs.shortcutFailures.join('、')}
