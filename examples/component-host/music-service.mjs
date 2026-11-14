@@ -1,6 +1,7 @@
 import { reconcileRecycled } from './recycled-tracks.mjs'
 import { registerReleaseCatalog } from './release-catalog.mjs'
 import { desktopLyrics } from './desktop-lyrics.mjs'
+import { musicPlugins } from './music-plugins.mjs'
 import { registerLibraryTools } from './library-tools.mjs'
 import { localLines } from './music-lyrics.mjs'
 import {
@@ -83,6 +84,12 @@ export function musicService(
       }
     })
   registerReleaseCatalog(bind, () => store, nativeImage)
+  const plugins = musicPlugins(profile, () => store, dialog, nativeImage)
+  bind('pluginList', () => plugins.list())
+  bind('pluginInstall', (id) => plugins.install(id))
+  bind('pluginDownload', (id) => plugins.download(id))
+  bind('pluginRemove', (id) => plugins.remove(id))
+  bind('pluginCall', (id, action, args) => plugins.call(id, action, args))
   bind('musicGuide', () => ({
     seen: Boolean(store.get('music-guide-v1')),
     script: mcpScript,
@@ -896,6 +903,7 @@ export function musicService(
         session.protocol.handle('fitbay-audio', (req) =>
           grant?.controller ? onlineStream(req, grant) : localStream(req, grant, store?.library),
         )
+        session.protocol.handle('fitbay-plugin', (req) => plugins.resource(req))
         sessions.add(session)
       }
     },

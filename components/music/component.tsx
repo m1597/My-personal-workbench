@@ -14,7 +14,7 @@ import {
   type TransportAction,
   type TasteStatus,
 } from './MusicSettings'
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Button,
@@ -300,7 +300,16 @@ function shuffleQueue(ids: string[], first?: string) {
   return result
 }
 type MembershipRemoval = { token: string; count: number; expires: number }
+import { PluginPage, PluginSettings, type PluginRow } from './MusicPlugins'
 function Music() {
+  const [pluginRows, setPluginRows] = useState<PluginRow[]>([])
+  const [selectedPlugin, setSelectedPlugin] = useState('')
+  const refreshPlugins = useCallback(async () => {
+    setPluginRows(await window.musicPlugins.list())
+  }, [])
+  useEffect(() => {
+    void refreshPlugins().catch((e) => setError(String(e)))
+  }, [refreshPlugins])
   const [removal, setRemoval] = useState<MembershipRemoval | null>(null)
   useEffect(() => {
     if (!removal) return
@@ -633,6 +642,12 @@ function Music() {
     }
     const op = switching.current.then(update)
     switching.current = op.catch((e) => setError(String(e)))
+  }
+  async function playOrdered(id: string, ids: string[]) {
+    setShuffled(null)
+    setRepeatOne(false)
+    if (repeatOne) await host.setRepeatOne(false)
+    return play(id, ids, 0, true, [], 0)
   }
   function startTrack(id: string, ids = visibleQueue) {
     if (current.current === id && audio.current) {
@@ -1154,6 +1169,7 @@ function Music() {
           <Tab value="download">在线找歌</Tab>
           <Tab value="audition">智能推荐</Tab>
           <Tab value="feed">歌手</Tab>
+          {pluginRows.some((r) => r.installed) && <Tab value="extensions">扩展</Tab>}
         </TabList>
         <div className="music-view-actions">
           <DownloadTasks batch={batch} saved={downloaded.length} />
@@ -1343,12 +1359,7 @@ function Music() {
             playRow={(id) => void act(() => play(id, visibleQueue))}
             playAlbum={(id, ids, wholeAlbum) =>
               void act(async () => {
-                if (wholeAlbum) {
-                  setShuffled(null)
-                  setRepeatOne(false)
-                  if (repeatOne) await host.setRepeatOne(false)
-                  return play(id, ids, 0, true, [], 0)
-                }
+                if (wholeAlbum) return playOrdered(id, ids)
                 if (shuffled) setShuffled(shuffleQueue(ids, id))
                 return play(id, ids)
               })
@@ -1390,9 +1401,34 @@ function Music() {
               return ok && (removed || collection !== 'infrequent')
             }}
           />
+        ) : tab === 'extensions' ? (
+          <PluginPage
+            rows={pluginRows}
+            selected={selectedPlugin}
+            select={setSelectedPlugin}
+            tracks={state?.localTracks ?? []}
+            activeId={now}
+            audio={audio.current}
+            play={(id, ids) => void act(() => (ids ? playOrdered(id, ids) : startTrack(id)))}
+            refresh={refresh}
+          />
         ) : tab === 'settings' ? (
           state && (
             <MusicSettings
+              plugins={
+                <PluginSettings
+                  rows={pluginRows}
+                  reload={refreshPlugins}
+                  open={(id) => {
+                    setSelectedPlugin(id)
+                    setTab('extensions')
+                  }}
+                  guide={() => {
+                    guideOrigin.current = { tab, category: settingsCategory }
+                    visitGuide(0)
+                  }}
+                />
+              }
               category={settingsCategory}
               selectCategory={(category) => {
                 setGuide(null)

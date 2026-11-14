@@ -14,6 +14,7 @@ const categories = [
   { id: 'downloads', name: '下载', icon: Download },
   { id: 'model', name: '模型与推荐', icon: Sparkles },
   { id: 'keys', name: '全局快捷键', icon: Keyboard },
+  { id: 'plugins', name: '插件', icon: Plug },
 ] as const
 export type SettingsCategory = (typeof categories)[number]['id']
 
@@ -132,6 +133,7 @@ function ShortcutField({
 }
 
 export function MusicSettings({
+  plugins,
   category,
   selectCategory,
   script,
@@ -141,6 +143,7 @@ export function MusicSettings({
   job,
   refresh,
 }: {
+  plugins: React.ReactNode
   script: string
   guideTarget?: string
   category: SettingsCategory
@@ -241,6 +244,7 @@ export function MusicSettings({
         ))}
       </nav>
       <div className="music-settings">
+        {category === 'plugins' && plugins}
         {category === 'library' && (
           <section>
             <h2>本地曲库</h2>

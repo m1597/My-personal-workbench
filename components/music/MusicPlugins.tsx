@@ -13,6 +13,7 @@ export type PluginRow = {
   version: string
   bytes: number
   installed: boolean
+  remote: boolean
   outdated: boolean
 }
 export type PluginProps = {
@@ -27,10 +28,9 @@ declare global {
     musicPlugins: {
       list(): Promise<PluginRow[]>
       install(id: string): Promise<boolean>
+      download(id: string): Promise<boolean>
       remove(id: string): Promise<void>
       call<T = unknown>(id: string, action: string, ...args: unknown[]): Promise<T>
-      guide(): Promise<{ seen: boolean; script: string }>
-      markGuide(): Promise<void>
     }
   }
 }
@@ -54,11 +54,12 @@ export function PluginSettings({
 }) {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
-  async function run(row: PluginRow, method: 'file' | 'remove') {
+  async function run(row: PluginRow, method: 'file' | 'download' | 'remove') {
     setBusy(row.id)
     setMessage('')
     try {
       if (method === 'remove') await window.musicPlugins.remove(row.id)
+      else if (method === 'download') await window.musicPlugins.download(row.id)
       else if (!(await window.musicPlugins.install(row.id))) return
       await reload()
       setMessage(
@@ -84,7 +85,7 @@ export function PluginSettings({
               {row.bytes >= 1048576
                 ? (row.bytes / 1048576).toFixed(2) + ' MiB'
                 : Math.ceil(row.bytes / 1024) + ' KiB'}{' '}
-              · {row.installed ? '已安装' : row.outdated ? '有新版本' : '未安装'}
+              · {row.version} · {row.installed ? '已安装' : row.outdated ? '有新版本' : '未安装'}
             </small>
           </div>
           <div className="settings-buttons">
@@ -99,9 +100,18 @@ export function PluginSettings({
               </>
             ) : (
               <>
+                {row.remote && (
+                  <Button
+                    appearance="primary"
+                    disabled={!!busy}
+                    onClick={() => void run(row, 'download')}
+                  >
+                    下载安装
+                  </Button>
+                )}
                 <Button
                   data-guide-anchor="plugin"
-                  appearance="primary"
+                  appearance={row.remote ? 'secondary' : 'primary'}
                   disabled={!!busy}
                   onClick={() => void run(row, 'file')}
                 >

@@ -1,11 +1,12 @@
 import { build } from 'vite'
-import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { buildSongPath } from './build-song-path.mjs'
 const root = 'dist/component-prototype'
 for (const name of ['host', 'component', 'workbench'])
   await mkdir(`${root}/${name}`, { recursive: true })
 await cp('examples/component-host', `${root}/host`, {
   recursive: true,
-  filter: (file) => !/(?:^|[\\/])(?:plugins|music-plugins\.mjs)$/.test(file),
+  filter: (file) => !/(?:^|[\\/])plugins$/.test(file),
 })
 await cp('src/renderer/public/fitbay.png', `${root}/host/fitbay.png`)
 await mkdir(`${root}/host/music`, { recursive: true })
@@ -53,15 +54,10 @@ for (const [source, output] of [
   }
 }
 await cp('out/renderer', `${root}/workbench`, { recursive: true })
-// Discard only the previous release's generated plugin artifacts.
-for (const file of [
-  'host/music-plugins.mjs',
-  'host/plugin-catalog.json',
-  'plugin-packs/wave.fitbayplugin',
-  'plugin-packs/tags.fitbayplugin',
-  'plugin-packs/rules.fitbayplugin',
-])
-  await rm(`${root}/${file}`, { force: true })
+const catalogPath = `${root}/host/plugin-catalog.json`
+const catalog = JSON.parse(await readFile(catalogPath, 'utf8'))
+catalog.push(await buildSongPath(root))
+await writeFile(catalogPath, JSON.stringify(catalog))
 await writeFile(
   `${root}/host/package.json`,
   JSON.stringify(

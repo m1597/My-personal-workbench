@@ -205,6 +205,7 @@ try {
     '下载',
     '模型与推荐',
     '全局快捷键',
+    '插件',
   ])
   await player.screenshot({
     path: path.join(evidence, 'settings-narrow-menu.png'),

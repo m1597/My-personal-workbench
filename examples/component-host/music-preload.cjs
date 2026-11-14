@@ -103,12 +103,22 @@ const names = [
 const bridge = Object.fromEntries(
   names.map((name) => [name, (...args) => ipcRenderer.invoke('music:' + name, ...args)]),
 )
+bridge.previewPlaylist = (file) =>
+  ipcRenderer.invoke('music:previewPlaylist', webUtils.getPathForFile(file))
+contextBridge.exposeInMainWorld(
+  'musicPlugins',
+  Object.freeze({
+    list: () => ipcRenderer.invoke('music:pluginList'),
+    install: (id) => ipcRenderer.invoke('music:pluginInstall', id),
+    download: (id) => ipcRenderer.invoke('music:pluginDownload', id),
+    remove: (id) => ipcRenderer.invoke('music:pluginRemove', id),
+    call: (id, action, ...args) => ipcRenderer.invoke('music:pluginCall', id, action, args),
+  }),
+)
 bridge.onLyricsSaved = (listener) => {
   const notify = () => listener()
   ipcRenderer.on('music:lyrics-saved', notify)
   return () => ipcRenderer.removeListener('music:lyrics-saved', notify)
-bridge.previewPlaylist = (file) =>
-  ipcRenderer.invoke('music:previewPlaylist', webUtils.getPathForFile(file))
 }
 bridge.onLibraryChanged = (listener) => {
   const notify = (_, removed) => listener(removed)

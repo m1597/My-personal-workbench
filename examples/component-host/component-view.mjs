@@ -231,7 +231,9 @@ export function componentView({
           !allowed.has(details.url.split('?')[0]) &&
           !(
             music &&
-            (details.url.startsWith('blob:') || details.url.startsWith('fitbay-audio://track/'))
+            (details.url.startsWith('blob:') ||
+              details.url.startsWith('fitbay-audio://track/') ||
+              /^fitbay-plugin:\/\/(wave|tags|rules|path)\/panel\.(js|css)(\?|$)/.test(details.url))
           ),
       }),
     )

@@ -52,16 +52,34 @@ export function musicPlugins(profile, getStore, dialog, nativeImage) {
     if (hash(bytes) !== item.files[name]) throw Error('插件文件已变化，请重新安装')
     return bytes
   }
-  async function install(item) {
+  async function readPackage(item, remote) {
+    if (remote) {
+      if (!item.url) throw Error('此插件仅支持本地安装')
+      const response = await fetch(item.url, { signal: AbortSignal.timeout(120000) })
+      if (!response.ok || !response.body) throw Error('插件下载失败：HTTP ' + response.status)
+      const chunks = []
+      let size = 0
+      for await (const part of response.body) {
+        size += part.length
+        if (size > item.bytes) throw Error('下载大小超出此版本的记录')
+        chunks.push(part)
+      }
+      return Buffer.concat(chunks)
+    }
     const choice = await dialog.showOpenDialog({
       title: '选择' + item.title + '插件文件',
       properties: ['openFile'],
       filters: [{ name: 'FitBay Music 插件', extensions: ['fitbayplugin'] }],
     })
-    if (choice.canceled) return false
+    if (choice.canceled) return null
     const file = choice.filePaths[0]
     if ((await stat(file)).size !== item.bytes) throw Error('安装包大小与当前版本不符')
-    const data = await readFile(file)
+    return readFile(file)
+  }
+  async function install(item, remote) {
+    const data = await readPackage(item, remote)
+    if (!data) return false
+    if (data.length !== item.bytes) throw Error('安装包大小与当前版本不符')
     if (hash(data) !== item.digest) throw Error('安装包内容与当前版本不符')
     const pack = JSON.parse(data.toString())
     const target = folder(item)
@@ -96,19 +114,24 @@ export function musicPlugins(profile, getStore, dialog, nativeImage) {
   }
   return {
     list() {
-      return list().map(({ id, title, description, bytes, digest }) => ({
+      return list().map(({ id, title, description, bytes, digest, version, url }) => ({
         id,
         title,
         description,
         bytes,
         installed: active(byId(id)),
         outdated: !!getStore().get(key(id)) && !active(byId(id)),
-        version: digest.slice(0, 12),
+        version: version || digest.slice(0, 12),
+        remote: Boolean(url),
       }))
     },
     install(id) {
       const item = byId(id)
       return serial(id, () => install(item))
+    },
+    download(id) {
+      const item = byId(id)
+      return serial(id, () => install(item, true))
     },
     remove(id) {
       const item = byId(id)
