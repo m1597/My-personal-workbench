@@ -23,7 +23,7 @@ function createWindow() {
     ...(process.platform === 'win32'
       ? {
           titleBarStyle: 'hidden' as const,
-          titleBarOverlay: { color: '#00000000', height: 32 },
+          titleBarOverlay: { color: '#00000000', height: 40 },
         }
       : {}),
     icon: fileURLToPath(new URL('../renderer/fitbay.png', import.meta.url)),

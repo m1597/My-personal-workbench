@@ -202,12 +202,7 @@ export function WindowMenu() {
           </MenuList>
         </MenuPopover>
       </Menu>
-      <span className="toolbar-layout-name">
-        {activeName ||
-          (panels.length
-            ? t('当前工作区', 'Current workspace')
-            : t('空白工作台', 'Blank workspace'))}
-      </span>
+      {activeName && <span className="toolbar-layout-name">{activeName}</span>}
       {layoutsOpen && workspace.api && (
         <LayoutDialog
           api={workspace.api}

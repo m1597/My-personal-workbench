@@ -95,11 +95,11 @@ export default function App() {
           value={{ ...workspace, firstEntry, visible: [...workspace.visible, ...detached] }}
         >
           <div className="workbench">
-            <div className="workbench-caption">
-              <img src="./fitbay.png" alt="" draggable={false} />
-              <span className="fitbay-brand">FitBay</span>
-            </div>
             <header className="app-header">
+              <div className="workbench-caption">
+                <img src="./fitbay.png" alt="" draggable={false} />
+                <span className="fitbay-brand">FitBay</span>
+              </div>
               {!settingsOpen && <WindowMenu />}
               <WorkbenchSettings
                 value={preferences}

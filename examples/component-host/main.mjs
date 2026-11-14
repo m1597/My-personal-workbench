@@ -190,7 +190,7 @@ async function createWorkbench() {
     ...(process.platform === 'win32'
       ? {
           titleBarStyle: 'hidden',
-          titleBarOverlay: { color: '#00000000', height: 32 },
+          titleBarOverlay: { color: '#00000000', height: 40 },
         }
       : {}),
     webPreferences: {

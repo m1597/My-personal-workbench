@@ -19,18 +19,20 @@ for (const scale of [1.25, 1.5]) {
     page.on('pageerror', (error) => errors.push(error.message))
     await expect(page.locator('.dv-tab[data-tab-panel-id]')).toHaveCount(0)
     await expect(page).toHaveTitle('FitBay')
-    await expect(page.locator('.app-header button').first()).toHaveAccessibleName('窗口')
-    await expect(page.locator('.app-header')).not.toContainText(/个人工作台|我的工作空间|FitBay/)
+    await expect(page.locator('.app-header button').first()).toHaveAccessibleName('组件')
+    await expect(page.locator('.app-header')).not.toContainText(
+      /个人工作台|我的工作空间|当前工作区/,
+    )
     const cdp = await app.context().newCDPSession(page)
     await cdp.send('DOM.enable')
     await cdp.send('CSS.enable')
     const { root } = await cdp.send('DOM.getDocument')
     const { nodeId } = await cdp.send('DOM.querySelector', {
       nodeId: root.nodeId,
-      selector: '.empty-workspace p',
+      selector: '.empty-workspace h2',
     })
     const fonts = await cdp.send('CSS.getPlatformFontsForNode', { nodeId })
-    const title = page.locator('.empty-workspace p')
+    const title = page.locator('.empty-workspace h2')
     const typography = await title.evaluate((element) => {
       const style = getComputedStyle(element)
       return {
@@ -83,12 +85,12 @@ for (const scale of [1.25, 1.5]) {
       }
       await capture('workspace')
       for (const [trigger, role] of [
-        ['窗口', 'menu'],
-        ['窗口', 'dialog'],
+        ['组件', 'menu'],
+        ['布局', 'dialog'],
       ]) {
         await page.getByRole('button', { name: trigger, exact: true }).click()
         if (role === 'dialog')
-          await page.getByRole('menuitem', { name: '布局', exact: true }).click()
+          await page.getByRole('menuitem', { name: '管理布局', exact: true }).click()
         const popup = page.getByRole(role)
         await expect(popup).toBeVisible()
         await capture(role)
