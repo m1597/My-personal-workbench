@@ -11,7 +11,7 @@ import {
   writeStartup,
 } from './layoutStorage'
 import { useMusicHostState } from './componentPrototype'
-import { Button, Input, Slider } from '@fluentui/react-components'
+import { Button, Input, Slider, Switch } from '@fluentui/react-components'
 import { Settings, ArrowLeft, Menu, Search, Palette, PanelsTopLeft, Boxes } from 'lucide-react'
 import {
   fonts,
@@ -55,6 +55,7 @@ export function WorkbenchSettings({
     t('布局与启动', 'Layout and startup'),
     t('组件管理', 'Components'),
   ]
+  const keepLabel = t('关闭后继续在后台运行', 'Keep running in background after closing')
   const icons = [Palette, PanelsTopLeft, Boxes]
   const entries = [
     [
@@ -71,7 +72,14 @@ export function WorkbenchSettings({
       t('管理命名布局', 'Manage saved layouts'),
       t('切换到空白工作台', 'Switch to blank workspace'),
     ],
-    [t('在工作台显示 Music', 'Show Music in workspace'), t('打开音乐设置', 'Open Music settings')],
+    [
+      t('在工作台显示 Music', 'Show Music in workspace'),
+      t('打开音乐设置', 'Open Music settings'),
+      'Music · ' + keepLabel,
+      ...(window.componentHost?.sampleEnabled
+        ? [t('示例组件', 'Sample component') + ' · ' + keepLabel]
+        : []),
+    ],
   ]
   const presets = readPresets().items
   const options = ['last', ...presets.map((item) => 'named:' + item.name), 'blank']
@@ -420,7 +428,7 @@ export function WorkbenchSettings({
                             ? t('未安装', 'Not installed')
                             : t('正在检测…', 'Checking…')}
                       </p>
-                      {entries[2].map((label, i) => (
+                      {entries[2].slice(0, 2).map((label, i) => (
                         <div key={label} id={'setting-2-' + i}>
                           <Button
                             disabled={!inventory?.installed}
@@ -430,9 +438,35 @@ export function WorkbenchSettings({
                           </Button>
                         </div>
                       ))}
+                      {inventory?.installed && (
+                        <div id="setting-2-2">
+                          <Switch
+                            label={keepLabel}
+                            aria-label={entries[2][2]}
+                            checked={music?.keepRunning ?? false}
+                            onChange={(_, data) =>
+                              void window.musicDock
+                                ?.keepRunning(data.checked)
+                                .catch((error) => setComponentError(String(error)))
+                            }
+                          />
+                        </div>
+                      )}
                       {sampleInfo?.installed && (
                         <>
                           <h3>{t('示例组件', 'Sample component')}</h3>
+                          <div id="setting-2-3">
+                            <Switch
+                              label={keepLabel}
+                              aria-label={entries[2][3]}
+                              checked={sampleState?.keepRunning ?? false}
+                              onChange={(_, data) =>
+                                void window.componentHost
+                                  ?.keepRunning(data.checked)
+                                  .catch((error) => setComponentError(String(error)))
+                              }
+                            />
+                          </div>
                           <p>
                             {sampleInfo.version} ·{' '}
                             {sampleState?.phase === 'ready'

@@ -12,6 +12,7 @@ import { applyLayout, switchingLayout, trackLayout } from './layoutStorage'
 type Region = { id: string; x: number; y: number; width: number; height: number }
 type Target = Region & { direction: 'within' | 'left' | 'right' | 'above' | 'below' }
 type HostState = {
+  keepRunning?: boolean
   mode: string
   presentation?: 'full' | 'bar' | 'background'
   phase: string
@@ -30,6 +31,7 @@ declare global {
       toggleVisibility(): Promise<void>
     }
     componentHost?: {
+      keepRunning(value: boolean): Promise<boolean>
       layout(included: boolean): Promise<void>
       toggleVisibility(): Promise<void>
       inventory(): Promise<{ installed: boolean; version?: string }>

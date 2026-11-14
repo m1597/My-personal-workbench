@@ -22,6 +22,9 @@ export function componentView({
   isQuitting,
   onDispose,
   configureSession,
+  keepRunning,
+  setKeepRunning,
+  onStateChange,
 }) {
   let standalone, view, parent
   let mode = 'standalone'
@@ -55,6 +58,7 @@ export function componentView({
     material: mode === 'docked' ? material : undefined,
     presentation,
     settingsRequest,
+    keepRunning: keepRunning(),
     phase,
     error,
     sessionId,
@@ -63,6 +67,7 @@ export function componentView({
     transfer,
   })
   function broadcast() {
+    onStateChange()
     if (phase === 'stopped' || phase === 'crashed') thumbnails?.reset()
     else thumbnails?.owner(parent)
     if (shell() && !shell().isDestroyed())
@@ -86,8 +91,7 @@ export function componentView({
       broadcast()
     }
   }
-  function stopMusic() {
-    if (!music) return
+  function stopComponent() {
     clearTimeout(transferTimer)
     settingsRequest = 0
     phase = 'stopped'
@@ -152,6 +156,18 @@ export function componentView({
         }
       })
       const owner = standalone
+      standalone.on('close', (event) => {
+        if (
+          standalone === owner &&
+          mode === 'standalone' &&
+          !isQuitting() &&
+          keepRunning() &&
+          phase === 'ready'
+        ) {
+          event.preventDefault()
+          setPresentation('background')
+        }
+      })
       standalone.on('closed', () => {
         if (standalone !== owner) return
         presentation = 'full'
@@ -439,12 +455,20 @@ export function componentView({
           setPresentation(presentation === 'background' ? 'full' : 'background')
         },
       )
-      if (music) {
-        ipcMain.handle('music-prototype:close', (event) => {
-          if (!isShell(event)) throw Error('DENIED')
-          stopMusic()
-        })
-      }
+      ipcMain.handle(music ? 'music-prototype:close' : 'prototype:close', (event) => {
+        if (!isShell(event)) throw Error('DENIED')
+        if (keepRunning() && phase === 'ready') setPresentation('background')
+        else stopComponent()
+      })
+      ipcMain.handle(
+        music ? 'music-prototype:keep-running' : 'prototype:keep-running',
+        (event, value) => {
+          if (!isShell(event) || typeof value !== 'boolean') throw Error('DENIED')
+          setKeepRunning(value)
+          broadcast()
+          return value
+        },
+      )
       ipcMain.handle(music ? 'music-prototype:open' : 'prototype:open', (event) => {
         if (!isShell(event)) throw new Error('DENIED')
         setPresentation('full')
@@ -505,12 +529,18 @@ export function componentView({
         }
       })
     },
-    closing() {
+    retained: () => phase === 'ready' && keepRunning(),
+    inBackground: () =>
+      phase === 'ready' &&
+      (presentation === 'background' || (mode === 'docked' && !shell()?.isVisible())),
+    closeWithWorkbench() {
       if (phase === 'attaching') cancelAttach('目标工作台已关闭')
-      else if (parent === shell()) {
-        if (!music) detach()
-        else stopMusic()
+      if (phase !== 'ready') return
+      if (keepRunning()) {
+        if (mode === 'standalone') setPresentation('background')
+        return
       }
+      if (mode === 'docked' || presentation === 'background') stopComponent()
     },
     reloading() {
       if (phase === 'attaching') cancelAttach('目标工作台已重新加载')

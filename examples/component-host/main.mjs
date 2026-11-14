@@ -12,6 +12,8 @@ import {
   nativeTheme,
   systemPreferences,
   Menu,
+  Tray,
+  nativeImage,
 } from 'electron'
 import { readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { access, realpath } from 'node:fs/promises'
@@ -101,6 +103,73 @@ function dockTarget(point, source) {
   const hit = snapTarget({ x: point.x - content.x, y: point.y - content.y }, dropZone)
   return hit && shellExposed(point, source, shell) ? hit : null
 }
+let tray
+let hasWorkbench = false
+const backgroundFile = path.join(profile, 'background-components.json')
+let backgroundChoices = {}
+try {
+  const saved = JSON.parse(readFileSync(backgroundFile, 'utf8'))
+  for (const id of ['music', 'sample']) backgroundChoices[id] = saved?.[id] === true
+} catch {
+  /* Older profiles close components by default. */
+}
+function setBackgroundChoice(id, enabled) {
+  const next = { ...backgroundChoices, [id]: enabled }
+  writeFileSync(backgroundFile + '.tmp', JSON.stringify(next))
+  renameSync(backgroundFile + '.tmp', backgroundFile)
+  backgroundChoices = next
+}
+async function revealWorkbench() {
+  if (!shell || shell.isDestroyed()) await openWorkbench()
+  if (shell.isMinimized()) shell.restore()
+  show(shell)
+}
+let traySignature
+function updateTray() {
+  if (!tray || quitting) return
+  const en = language === 'en'
+  const menu = hasWorkbench
+    ? [
+        {
+          label: en ? 'Show FitBay' : '显示 FitBay',
+          click: () => void revealWorkbench().catch(console.error),
+        },
+      ]
+    : []
+  for (const [component, name] of [
+    [music, 'Music'],
+    [sample, en ? 'Sample component' : '示例组件'],
+  ]) {
+    if (component.inBackground())
+      menu.push({
+        label: (en ? 'Show ' : '显示 ') + name,
+        click: () => void component.open().catch(console.error),
+      })
+  }
+  menu.push(
+    { type: 'separator' },
+    { label: en ? 'Quit FitBay' : '退出 FitBay', click: () => app.quit() },
+  )
+  const signature = menu.map((item) => item.label ?? '').join('|')
+  if (signature === traySignature) return
+  traySignature = signature
+  tray.setContextMenu(Menu.buildFromTemplate(menu))
+}
+function ensureTray() {
+  if (process.platform !== 'win32' || tray || quitting) return
+  tray = new Tray(
+    nativeImage.createFromPath(path.join(here, 'fitbay.png')).resize({ width: 32, height: 32 }),
+  )
+  tray.setToolTip('FitBay')
+  tray.on(
+    'click',
+    () =>
+      void (
+        hasWorkbench ? revealWorkbench() : (intent === 'component' ? sample : music).open()
+      ).catch(console.error),
+  )
+  updateTray()
+}
 let openingWorkbench
 function openWorkbench() {
   openingWorkbench ??= createWorkbench().finally(() => {
@@ -148,10 +217,18 @@ async function createWorkbench() {
     nativeTheme.on('updated', updateSymbols)
     workbench.once('closed', () => nativeTheme.off('updated', updateSymbols))
   }
+  ensureTray()
+  shell.on('show', updateTray)
+  shell.on('hide', updateTray)
   secure(shell.webContents)
   shell.webContents.on('did-start-loading', builtins.shellClosed)
-  shell.on('close', () => {
-    if (!quitting) for (const item of components) item.closing()
+  shell.on('close', (event) => {
+    if (quitting) return
+    if (components.some((item) => item.retained())) {
+      event.preventDefault()
+      for (const item of components) item.closeWithWorkbench()
+      shell.hide()
+    } else for (const item of components) item.closeWithWorkbench()
   })
   shell.on('closed', () => {
     builtins.shellClosed()
@@ -178,6 +255,7 @@ const shared = {
   secure,
   dockTarget,
   openWorkbench,
+  onStateChange: updateTray,
   background,
   supportsAcrylic,
   isQuitting: () => quitting,
@@ -189,7 +267,13 @@ try {
 } catch {
   /* A new profile uses Chinese. */
 }
-const sample = componentView({ ...shared, componentRoot, music: false })
+const sample = componentView({
+  ...shared,
+  keepRunning: () => backgroundChoices.sample === true,
+  setKeepRunning: (value) => setBackgroundChoice('sample', value),
+  componentRoot,
+  music: false,
+})
 let closeSourcePipe
 let musicRuntime
 let startingMusic
@@ -216,6 +300,8 @@ async function loadMusic(root) {
   })
 }
 const music = componentView({
+  keepRunning: () => backgroundChoices.music === true,
+  setKeepRunning: (value) => setBackgroundChoice('music', value),
   language,
   configureSession: async (s, root) => {
     await startMusic(root)
@@ -250,6 +336,11 @@ const intent =
 let requests = Promise.resolve()
 async function openIntent(request) {
   if (fixturePanels && isBuiltin(request)) return builtins.open(request)
+  if (['workbench', 'music', 'component'].includes(request)) {
+    hasWorkbench = Boolean(await findWorkbenchFile())
+    ensureTray()
+    updateTray()
+  }
   if (request === 'workbench') {
     if (!shell || shell.isDestroyed()) {
       await sample.discover()
@@ -279,6 +370,8 @@ else {
   })
   app.on('before-quit', () => {
     quitting = true
+    tray?.destroy()
+    tray = undefined
     closeSourcePipe?.()
     for (const item of components) item.quit()
   })
@@ -309,6 +402,7 @@ else {
         if (!isShell(event) || !['zh-CN', 'en'].includes(value) || language === value) return
         language = value
         music.setLanguage(value)
+        updateTray()
         try {
           writeFileSync(languageFile + '.tmp', value)
           renameSync(languageFile + '.tmp', languageFile)

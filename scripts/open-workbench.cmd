@@ -13,6 +13,11 @@ if /i "%~1"=="--manual" set "profile=%workbench_root%\tmp\manual-builtin-windows
 set "ELECTRON_RUN_AS_NODE="
 set "ELECTRON_RENDERER_URL="
 set "WORKBENCH_TEST_BACKGROUND=0"
+if /i "%~1"=="--verify-desktop" (
+  set "profile=%workbench_root%\tmp\desktop-check-%RANDOM%-%RANDOM%"
+  set "WORKBENCH_TEST_BACKGROUND=1"
+  goto workbench
+)
 if /i "%~1"=="--check" goto check_component
 if /i "%~1"=="--workbench" goto workbench
 if /i "%~1"=="--music" goto music

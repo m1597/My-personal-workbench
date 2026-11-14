@@ -27,9 +27,10 @@ function componentBridge(prefix) {
     ...(prefix === 'music-prototype'
       ? {
           show: (settings) => ipcRenderer.invoke('music-prototype:show', settings),
-          close: () => ipcRenderer.invoke('music-prototype:close'),
         }
       : {}),
+    close: () => ipcRenderer.invoke(`${prefix}:close`),
+    keepRunning: (value) => ipcRenderer.invoke(`${prefix}:keep-running`, value),
     layout: (included) => ipcRenderer.invoke(`${prefix}:layout`, included),
     toggleVisibility: () => ipcRenderer.invoke(`${prefix}:toggle-visibility`),
     inventory: () => ipcRenderer.invoke(`${prefix}:inventory`),
