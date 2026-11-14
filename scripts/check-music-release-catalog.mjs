@@ -315,11 +315,36 @@ async function launch() {
       const related = '00000000-0000-0000-0000-000000000006'
       if (entity === artist || entity === related)
         return Response.json({
-          relations: [
-            { type: 'collaboration', artist: { id: related, name: '云海' } },
-            { type: 'collaboration', artist: { id: artist, name: '青禾' } },
+          genres: [
+            { name: 'rock', count: 3 },
+            { name: 'jazz', count: 2 },
+          ],
+          relations: [{ type: 'founder', artist: { id: first, name: '关系组合' } }],
+        })
+      if (url.pathname.endsWith('/artist/') && url.searchParams.get('query')?.includes('tag:')) {
+        return Response.json({
+          artists: [
+            { id: first, name: '单标签', tags: [{ name: 'rock', count: 50 }] },
+            { id: second, name: '关系组合', tags: [] },
+            {
+              id: related,
+              name: '云海',
+              tags: [
+                { name: 'rock', count: 1 },
+                { name: 'jazz', count: 1 },
+              ],
+            },
+            {
+              id: artist,
+              name: '青禾',
+              tags: [
+                { name: 'rock', count: 2 },
+                { name: 'jazz', count: 2 },
+              ],
+            },
           ],
         })
+      }
       const sawano = '60d2ea34-1912-425f-bf9c-fc544e4448cd'
       const sawanoCredit = [{ name: '澤野弘之', artist: { id: sawano, name: '澤野弘之' } }]
       const query = url.searchParams.get('query') ?? ''
@@ -559,7 +584,10 @@ try {
   const similar = news().getByRole('region', { name: '相似歌手' })
   await expect(similar.getByText('云海', { exact: true })).toBeVisible()
   await expect(similar.getByText('青禾', { exact: true })).toHaveCount(0)
-  await similar.getByRole('button', { name: '代表作' }).click()
+  await expect(similar.locator('.catalog-text-link')).toHaveText(['云海', '单标签'])
+  await expect(similar.getByText('共同风格 · rock、jazz')).toBeVisible()
+  await expect(similar.getByText('关系组合')).toHaveCount(0)
+  await similar.getByRole('button', { name: '代表作' }).first().click()
   await similar.getByRole('button', { name: '试听' }).click()
   await expect
     .poll(() => app.evaluate(() => globalThis.audioRequests.at(-1)))
@@ -615,6 +643,7 @@ try {
   await sawanoAlbum.getByRole('button', { name: '返回' }).click()
   await home.getByRole('button', { name: '返回' }).click()
   assert.equal(await scroll(), savedArtistScroll)
+  await expect(similar.getByText('风格标签资料不足，暂无可核实的相似歌手。')).toBeVisible()
   await expect(portrait).toBeInViewport()
   await page.screenshot({ path: path.join(root, 'sawano-return.png') })
   await button('取消关注澤野弘之').click()

@@ -467,7 +467,7 @@ function SimilarArtists({
       ) : !rows ? (
         <small role="status">正在查找相似歌手…</small>
       ) : !rows.length ? (
-        <small>暂无相关歌手。</small>
+        <small>风格标签资料不足，暂无可核实的相似歌手。</small>
       ) : (
         <ul>
           {rows.map((a) => (

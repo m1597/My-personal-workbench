@@ -1,6 +1,8 @@
 import { registerSongDetails } from './song-details.mjs'
 import { setTimeout as delay } from 'node:timers/promises'
 
+// MusicBrainz reserves this artist for compilations credited to 'Various Artists'.
+const variousArtists = '89ad4ac3-39f7-470e-963a-56509c546377'
 const mbid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
 const name = (value) => (typeof value === 'string' ? value.slice(0, 256).trim() : '')
 const quote = (value) => '"' + value.replace(/["\\]/g, '\\$&') + '"'
@@ -102,36 +104,52 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
   const related = new Map()
   bind('similarArtists', async (id) => {
     if (!mbid.test(id) || !followed().some((a) => a.id === id)) throw Error('请先选择已关注歌手')
-    const data = await metadata('artist/' + id, { inc: 'artist-rels+genres' })
+    const data = await metadata('artist/' + id, { inc: 'genres+artist-rels' })
+    const excluded = new Set([
+      id,
+      variousArtists,
+      ...(data.relations ?? []).filter((r) => r.type === 'is person').map((r) => r.artist?.id),
+    ])
+    const genres = (data.genres ?? [])
+      .filter((g) => name(g.name) && g.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+    if (!genres.length) return []
+    const tags = genres.map((g) => name(g.name).toLowerCase())
+    const field = (tag) => 'tag:' + quote(tag)
     const candidates = new Map()
-    const excluded = new Set([id])
-    for (const rel of data.relations ?? []) {
-      if (rel.type === 'is person') excluded.add(rel.artist?.id)
-    }
-    function include(a, detail) {
-      if (mbid.test(a?.id) && name(a.name) && !excluded.has(a.id) && !candidates.has(a.id)) {
-        candidates.set(a.id, { id: a.id, name: name(a.name), detail })
+    // Search the intersection first, then broaden the pool if too few verified matches remain.
+    async function collect(query) {
+      const data = await metadata('artist/', { query, limit: '50' })
+      for (const a of data.artists ?? []) {
+        if (!mbid.test(a.id) || excluded.has(a.id) || !name(a.name) || candidates.has(a.id))
+          continue
+        const votes = new Map(
+          (a.tags ?? [])
+            .filter((t) => name(t.name) && t.count > 0)
+            .map((t) => [name(t.name).toLowerCase(), t.count]),
+        )
+        const shared = tags.filter((t) => votes.has(t))
+        if (!shared.length) continue
+        const support = shared.reduce(
+          (sum, t) => sum + Math.min(votes.get(t), genres[tags.indexOf(t)].count),
+          0,
+        )
+        candidates.set(a.id, {
+          id: a.id,
+          name: name(a.name),
+          detail: '共同风格 · ' + shared.join('、'),
+          count: shared.length,
+          support,
+        })
       }
     }
-    for (const rel of data.relations ?? []) {
-      const reason = {
-        'member of band': '乐队成员',
-        collaboration: '合作歌手',
-        'supporting musician': '演出合作',
-        'artist subgroup': '关联组合',
-        founder: '创办组合',
-      }[rel.type]
-      if (reason) include(rel.artist, reason)
-    }
-    const genre = [...(data.genres ?? [])].sort((a, b) => b.count - a.count)[0]
-    if (!candidates.size && name(genre?.name)) {
-      const matches = await metadata('artist', {
-        query: 'tag:' + quote(name(genre.name)),
-        limit: '24',
-      })
-      for (const a of matches.artists ?? []) include(a, '共同风格 · ' + name(genre.name))
-    }
-    const result = [...candidates.values()].slice(0, 8)
+    await collect(tags.map(field).join(' AND '))
+    if (candidates.size < 8 && tags.length > 1) await collect(tags.map(field).join(' OR '))
+    const result = [...candidates.values()]
+      .sort((a, b) => b.count - a.count || b.support - a.support || a.name.localeCompare(b.name))
+      .slice(0, 8)
+      .map(({ id, name, detail }) => ({ id, name, detail }))
     for (const a of result) related.set(a.id, a)
     return result
   })
