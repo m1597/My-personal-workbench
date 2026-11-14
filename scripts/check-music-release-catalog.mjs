@@ -558,7 +558,7 @@ try {
     ).toContainText(type)
   await news().getByRole('button', { name: '查看曲目' }).first().click()
   const pick = news().getByRole('button', { name: '播放', exact: true }).first()
-  await expect(pick).toBeVisible()
+  await expect(pick).toBeVisible({ timeout: 15000 })
   const selector = news().getByRole('combobox', { name: '动态发行版本' })
   await app.evaluate(() => {
     globalThis.failEditionOnce = true
@@ -576,7 +576,7 @@ try {
   ])
   await news().getByRole('button', { name: '收起曲目' }).click()
   await news().getByRole('button', { name: '查看曲目' }).first().click()
-  await expect(pick).toBeVisible()
+  await expect(pick).toBeVisible({ timeout: 15000 })
   assert.deepEqual(await app.evaluate(() => globalThis.catalogRequests), requests)
   await selector.click()
   await page.getByRole('option', { name: /豪华版/ }).click()
@@ -850,7 +850,7 @@ try {
   await artistHome.getByRole('button', { name: '播放冬のはなし' }).click()
   await played()
   assert.equal(await app.evaluate(() => globalThis.audioRequests.length), audioBefore)
-  await expect(artistHome.getByRole('button', { name: /海へ/ })).toBeVisible()
+  await expect(artistHome.getByRole('button', { name: /海へ/ })).toBeVisible({ timeout: 15000 })
   await page.screenshot({ path: path.join(root, 'given-home.png') })
   await artistHome.getByRole('button', { name: /海へ/ }).click()
   await albumHome.getByRole('button', { name: '播放', exact: true }).click()

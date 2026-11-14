@@ -187,6 +187,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
   })
   bind('followedArtists', followed)
   const portraits = new Map()
+  let portraitQueue = Promise.resolve()
   bind('artistPortrait', async (id) => {
     if (!knownArtist(id)) throw Error('请先选择艺人')
     const store = getStore()
@@ -201,7 +202,16 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     const artist = artists.get(id) ?? related.get(id) ?? followed().find((a) => a.id === id)
     const request = (async () => {
       const local = await store.library.albums.artistPortrait(artist.name, nativeImage)
-      const image = local || (await loadArtistPortrait(id, metadata, nativeImage))
+      let image = local
+      if (!image) {
+        // Let interactive release lookups enter the rate-limited metadata queue between portraits.
+        const result = portraitQueue.then(() => loadArtistPortrait(id, metadata, nativeImage))
+        portraitQueue = result.then(
+          () => {},
+          () => {},
+        )
+        image = await result
+      }
       store.db
         .prepare('INSERT OR REPLACE INTO artist_portraits VALUES(?,?,?)')
         .run(id, image, Date.now() + (image ? 30 : 1) * 86400000)
