@@ -113,6 +113,11 @@ try {
     await page.locator('audio').evaluate((audio) => audio.play())
     for (const [i, word] of ['The sea', longLine].entries()) {
       await expect(groups.first().locator('.lyric-original')).toHaveText(word)
+      if (i === 1)
+        await page.locator('audio').evaluate((audio) => {
+          audio.pause()
+          audio.currentTime = 11.25
+        })
       await overlay.screenshot({
         path: path.join(root, `${mode}-${i}.png`),
         style: ':root{background:#202227}',
