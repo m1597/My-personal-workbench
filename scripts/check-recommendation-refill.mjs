@@ -12,8 +12,11 @@ const profile = path.join(root, 'profile')
 const output = path.join(root, 'songs')
 await fs.mkdir(output)
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
+const cancellation = process.env.FITBAY_TEST_RECOMMEND_STOP
+if (cancellation === 'consent') store.set('taste-consent', '1')
 store.set('music-recommend-dir', output)
 store.set('music-media-keys', 'off')
+store.set('music-guide-v1', 1)
 store.db.close()
 
 const songs = ['晨风', '河岸', '远山', '晚钟', '归途']
@@ -23,6 +26,9 @@ for (const [i, song] of songs.entries()) {
   await writeFixtureRecording(files[song], 630 + i * 175)
 }
 const code = path.join(root, 'source.js')
+const preview = '海风'
+files[preview] = path.join(root, preview + '.wav')
+await writeFixtureRecording(files[preview], 43, 24)
 await fs.writeFile(
   code,
   `// @name 五首补推测试源
@@ -59,20 +65,38 @@ try {
       const https = process.getBuiltinModule('node:https')
       const { EventEmitter } = process.getBuiltinModule('node:events')
       globalThis.transfers = []
-      https.request = (url, _options, receive) => {
+      https.request = (url, options, receive) => {
         if (url.origin !== 'https://1.1.1.1') throw Error('夹具意外请求')
         const title = decodeURIComponent(url.pathname.slice('/audio/'.length))
         if (!files[title]) throw Error('无授权曲目触发了音频请求')
-        globalThis.transfers.push(title)
+        globalThis.transfers.push({ title, at: Date.now() })
         const req = new EventEmitter()
-        req.end = () =>
-          receive(
-            Object.assign(fs.createReadStream(files[title]), {
-              headers: {},
-              statusCode: 200,
-              setTimeout() {},
-            }),
-          )
+        req.end = () => {
+          const bytes = fs.statSync(files[title]).size
+          const match = /^bytes=(\d+)-(\d*)$/.exec(options.headers.Range ?? '')
+          const start = match ? Number(match[1]) : 0
+          const end = match?.[2] ? Math.min(Number(match[2]), bytes - 1) : bytes - 1
+          const deliver = () =>
+            receive(
+              Object.assign(fs.createReadStream(files[title], { start, end }), {
+                headers: {
+                  'content-length': String(end - start + 1),
+                  'content-type': 'audio/wav',
+                  ...(match && { 'content-range': `bytes ${start}-${end}/${bytes}` }),
+                },
+                statusCode: match ? 206 : 200,
+                setTimeout() {},
+              }),
+            )
+          if (title === songs[4]) {
+            globalThis.finishFifth = deliver
+            options.signal.addEventListener(
+              'abort',
+              () => req.emit('error', options.signal.reason),
+              { once: true },
+            )
+          } else deliver()
+        }
         return req
       }
       const catalog = [
@@ -114,38 +138,169 @@ try {
     await window.music.lxImport()
     await window.music.configureModel('deepseek', 'fixture', 'fixture', false)
   })
-  await page.getByRole('tab', { name: 'AI 推荐' }).click()
+  const recommendation = page.getByRole('tab', { name: /AI 推荐|智能推荐/ })
+  await recommendation.click()
   await page.getByLabel('推荐首数').fill('5')
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('只听青禾本人的作品')
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
-    const list = document.querySelector('.music-list')
     const started = performance.now()
     const times = {}
     new MutationObserver(() => {
-      const n = list.querySelectorAll('li strong').length
+      const n =
+        document
+          .querySelector('.music-list:has(.music-batch-status)')
+          ?.querySelectorAll('li strong').length ?? 0
       if (n > 0 && !times.firstMs) times.firstMs = Math.round(performance.now() - started)
       if (n === 5 && !times.fiveMs) times.fiveMs = Math.round(performance.now() - started)
-    }).observe(list, { subtree: true, childList: true, characterData: true })
+    }).observe(document.body, { subtree: true, childList: true, characterData: true })
     window.fixtureTimes = times
   })
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(page.locator('.music-batch-status [role="status"]')).toContainText(
-    '已入库 5/5，已达到目标首数',
-    { timeout: 30000 },
-  )
-  const times = await page.evaluate(() => window.fixtureTimes)
-  const counts = await app.evaluate(() => globalThis.counts)
-  assert.deepEqual((await app.evaluate(() => globalThis.transfers)).sort(), [...songs].sort())
-  assert.deepEqual(
-    (await page.locator('.music-list li strong').allTextContents()).sort(),
-    [...songs].sort(),
-  )
-  assert.equal((await fs.readdir(output)).filter((f) => f.endsWith('.wav')).length, 5)
-  assert.deepEqual(counts, [5, 5])
-  const report = { ...times, counts, root }
-  await fs.writeFile(path.join(root, 'timing.json'), JSON.stringify(report, null, 2))
-  console.log(JSON.stringify(report))
+  const events = []
+  async function capture(step) {
+    const state = await page.evaluate(async () => {
+      const state = await window.music.state()
+      const { id, state: status, message } = state.batches[0]
+      const audio = document.querySelector('audio')
+      return {
+        id,
+        status,
+        message,
+        at: Date.now(),
+        songs: state.items
+          .filter((row) => row.batch === id)
+          .map((row) => [row.id, row.title, row.localId]),
+        tab: document.querySelector('[role=tab][aria-selected=true]')?.textContent,
+        playing: !audio.paused,
+        currentTime: audio.currentTime,
+        protocol: audio.currentSrc.split(':')[0],
+      }
+    })
+    events.push({ step, ...state })
+    await page.screenshot({
+      path: path.join(root, step + '.png'),
+      style: ':root {background:var(--base)!important}',
+    })
+    return state
+  }
+  const progress = page.locator('.music-batch-status [role="status"]')
+  await expect
+    .poll(() => app.evaluate(() => typeof globalThis.finishFifth), { timeout: 30000 })
+    .toBe('function')
+  await expect(progress).toContainText('已入库 4/5')
+  const partial = await capture('01-four-saved')
+  await page.getByRole('tab', { name: '在线找歌' }).click()
+  const input = page.getByRole('textbox', { name: '搜索关键词' })
+  await input.fill(preview)
+  await input.press('Enter')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: preview })
+    .getByRole('button', { name: '播放', exact: true })
+    .click()
+  await expect
+    .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0))
+    .toBe(true)
+  await page.getByRole('button', { name: '下载任务' }).click()
+  await expect(page.locator('.download-tasks')).toContainText('已下载 4/5 首')
+  const online = await capture('02-online-playing')
+  assert.equal(online.protocol, 'fitbay-audio')
+  await page.keyboard.press('Escape')
+  await recommendation.click()
+  await expect(progress).toContainText('已入库 4/5')
+  const returned = await capture('03-return-running')
+  for (const state of [partial, online, returned]) {
+    assert.equal(state.status, 'running')
+    assert.equal(state.id, partial.id)
+    assert.deepEqual(state.songs, partial.songs)
+  }
+  if (cancellation) {
+    const message = {
+      manual: '本次推荐已终止（手动终止）',
+      consent: '本次推荐已终止（已撤回审美资料授权）',
+      lifecycle: '本次推荐已终止（音乐组件已关闭）',
+      crash: '本次推荐已终止（音乐组件渲染进程退出）',
+    }[cancellation]
+    assert.ok(message)
+    if (cancellation === 'manual') await page.getByRole('button', { name: '终止本次推荐' }).click()
+    else if (cancellation === 'consent')
+      await page.evaluate(() => window.music.setTasteConsent(false))
+    else if (cancellation === 'crash') {
+      const address = page.url()
+      await app.evaluate(({ webContents }, address) => {
+        const music = webContents.getAllWebContents().find((wc) => wc.getURL() === address)
+        setTimeout(() => music.forcefullyCrashRenderer(), 100)
+      }, address)
+    } else
+      await app.evaluate(({ BaseWindow }) => {
+        const window = BaseWindow.getAllWindows().find((w) => w.getTitle() === 'Music')
+        setTimeout(() => window.close(), 100)
+      })
+    const { DatabaseSync } = await import('node:sqlite')
+    const db = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'), {
+      readOnly: true,
+      timeout: 3000,
+    })
+    try {
+      await expect
+        .poll(
+          () =>
+            db.prepare('SELECT message FROM recommendation_runs WHERE batch=?').get(partial.id)
+              ?.message,
+        )
+        .toBe(message)
+      assert.equal(
+        db
+          .prepare("SELECT count(*) AS n FROM items WHERE batch=? AND status='已入库'")
+          .get(partial.id).n,
+        4,
+      )
+      if (cancellation === 'manual' || cancellation === 'consent') {
+        await expect(progress).toContainText(message)
+        const cancelled = await capture('04-cancelled')
+        assert.deepEqual(cancelled.songs, partial.songs)
+      }
+      await fs.writeFile(
+        path.join(root, 'events.json'),
+        JSON.stringify({ cancellation, message, events }, null, 2),
+      )
+      console.log(cancellation, message, root)
+    } finally {
+      db.close()
+    }
+  } else {
+    await app.evaluate(() => globalThis.finishFifth())
+    await expect(page.locator('.music-batch-status [role="status"]')).toContainText(
+      '已入库 5/5，已达到目标首数',
+      { timeout: 30000 },
+    )
+    const times = await page.evaluate(() => window.fixtureTimes)
+    const counts = await app.evaluate(() => globalThis.counts)
+    const finished = await capture('04-five-saved')
+    assert.equal(finished.status, 'completed')
+    assert.deepEqual(
+      finished.songs.filter(([id]) => partial.songs.some(([old]) => old === id)),
+      partial.songs,
+    )
+    const transfers = await app.evaluate(() => globalThis.transfers)
+    assert.deepEqual(
+      transfers
+        .map((entry) => entry.title)
+        .filter((title) => title !== preview)
+        .sort(),
+      [...songs].sort(),
+    )
+    assert.deepEqual(
+      (await page.locator('.music-list li strong').allTextContents()).sort(),
+      [...songs].sort(),
+    )
+    assert.equal((await fs.readdir(output)).filter((f) => f.endsWith('.wav')).length, 5)
+    assert.deepEqual(counts, [5, 5])
+    const report = { ...times, counts, events, transfers, root }
+    await fs.writeFile(path.join(root, 'timing.json'), JSON.stringify(report, null, 2))
+    console.log(JSON.stringify(report))
+  }
 } finally {
   await app.close()
 }

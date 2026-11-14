@@ -211,7 +211,7 @@ const music = componentView({
     await startMusic(root)
     musicRuntime.register(s)
   },
-  onDispose: () => musicRuntime?.dispose(),
+  onDispose: (reason) => musicRuntime?.dispose(reason),
   ...shared,
   componentRoot: findMusicRoot,
   music: true,

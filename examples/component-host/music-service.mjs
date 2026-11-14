@@ -530,7 +530,7 @@ export function musicService(
   bind('getTasteStatus', () => taste.status())
   bind('setTasteConsent', (value) => {
     taste.consent(value)
-    if (!value) pending?.abort()
+    if (!value) pending?.abort(new DOMException('已撤回审美资料授权', 'AbortError'))
     queueTasteUpdate()
     return taste.status()
   })
@@ -551,6 +551,10 @@ export function musicService(
         store.db
           .prepare('UPDATE recommendation_runs SET state=?,message=? WHERE batch=?')
           .run(state, message + cleanupMessage, batch)
+      // Closing the last window can exit before the asynchronous workers unwind.
+      const recordCancellation = () =>
+        update('cancelled', '本次推荐已终止（' + signal.reason.message + '）')
+      signal.addEventListener('abort', recordCancellation, { once: true })
       try {
         const { archive, failures } = await retireDownloads(
           store,
@@ -591,6 +595,7 @@ export function musicService(
           !store.get('music-recommend-dir') &&
           !(await chooseMusicDirectory('recommend', signal))
         ) {
+          signal.throwIfAborted()
           update('cancelled', '未选择推荐下载目录')
           return null
         }
@@ -761,14 +766,14 @@ export function musicService(
         if (refillError && savedRows.all(batch).length < targetCount) throw refillError
         update('completed', '已达到目标首数')
       } catch (error) {
-        update(
-          signal.aborted ? 'cancelled' : 'blocked',
-          signal.aborted
-            ? '本次推荐已终止'
-            : error.code
-              ? '存储操作失败，请检查空间和目录权限后重试'
-              : String(error.message),
-        )
+        if (!signal.aborted)
+          update(
+            'blocked',
+            error.code ? '存储操作失败，请检查空间和目录权限后重试' : String(error.message),
+          )
+        else recordCancellation()
+      } finally {
+        signal.removeEventListener('abort', recordCancellation)
       }
       try {
         await catalogSync?.()
@@ -780,7 +785,7 @@ export function musicService(
     })
   })
   bind('stopGeneration', async () => {
-    pending?.abort()
+    pending?.abort(new DOMException('手动终止', 'AbortError'))
     await generationFinished?.catch(() => {})
   })
   bind('match', (batch) => store.match(text(batch)))
@@ -874,7 +879,8 @@ export function musicService(
         sessions.add(session)
       }
     },
-    dispose() {
+    dispose(reason = '音乐组件已关闭') {
+      pending?.abort(new DOMException(reason, 'AbortError'))
       for (const generation of archiveJobs) generation.abort()
       overlay.show(false)
       lx.close()
@@ -883,7 +889,6 @@ export function musicService(
       viewEpoch++
       releaseGrant()
       store?.library.cancel()
-      pending?.abort()
       if (store) {
         try {
           store.release()

@@ -251,8 +251,13 @@ export function componentView({
     loadingView.setBackgroundColor(music ? '#202227' : '#00000000')
     secure(view.webContents)
     if (onDispose) {
-      view.webContents.once('destroyed', onDispose)
-      view.webContents.once('render-process-gone', onDispose)
+      const contents = view.webContents
+      const closed = () => onDispose('音乐组件已关闭')
+      contents.once('destroyed', closed)
+      contents.once('render-process-gone', () => {
+        contents.off('destroyed', closed)
+        onDispose('音乐组件渲染进程退出')
+      })
     }
     view.webContents.on('render-process-gone', () => {
       clearTimeout(transferTimer)
