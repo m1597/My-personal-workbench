@@ -158,3 +158,20 @@
     padding-inline: 3px;
   }
 }
+
+@media (max-width: 270px) {
+  .music-navigation {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .music-shell .music-navigation > .music-tabs[role="tablist"] {
+    flex: 1 0 100%;
+    gap: 0;
+    padding-inline: 2px;
+    flex-wrap: wrap;
+  }
+  .music-navigation .music-tabs .fui-Tab {
+    font-size: var(--font-size-caption);
+    padding-inline: 2px;
+  }
+}
