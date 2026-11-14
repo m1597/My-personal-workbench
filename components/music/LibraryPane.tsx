@@ -352,7 +352,6 @@ export function LibraryPane({
     setLimit(100)
     sentinel.current?.closest('.music-scroll')?.scrollTo(0, 0)
   }
-  const library = (
   const collectionHeading = (
     <div>
       <h2>
@@ -365,6 +364,7 @@ export function LibraryPane({
       )}
     </div>
   )
+  const library = (
     <div
       ref={(el) => {
         layout.current = el
@@ -579,7 +579,6 @@ export function LibraryPane({
                         : undefined)
                     }
                     revision={albumRevision}
-                  />
                     heading={collectionHeading}
                     playAll={
                       <Button
@@ -592,6 +591,7 @@ export function LibraryPane({
                         播放全部
                       </Button>
                     }
+                  />
                 )}
                 {!playlistPage && collectionHeading}
                 {playlistPage && (
