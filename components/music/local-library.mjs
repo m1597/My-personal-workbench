@@ -5,9 +5,9 @@ import { audioFileStat, fileIdentity, confirmedMissing, pathKey } from './local-
 import { AlbumLibrary } from './albums.mjs'
 
 const folderKey = (dir) => createHash('sha256').update(pathKey(dir)).digest('hex')
-function playlistName(name) {
-  if (typeof name !== 'string' || !name.trim() || name.trim().length > 80)
-    throw Error('歌单名称须为 1 至 80 个字符')
+function playlistName(name, limit = 80) {
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > limit)
+    throw Error('歌单名称须为 1 至 ' + limit + ' 个字符')
   return name.trim()
 }
 export class LocalLibrary {
@@ -37,6 +37,26 @@ export class LocalLibrary {
         CREATE INDEX IF NOT EXISTS recording_copy_local ON recording_copies(local);
         CREATE INDEX IF NOT EXISTS playlist_track_lookup ON playlist_tracks(track);
       `)
+      if (
+        !this.db
+          .prepare('PRAGMA table_info(recording_artwork)')
+          .all()
+          .some((c) => c.name === 'scope')
+      ) {
+        // Pre-scope artwork cannot identify a custom source: retain only unambiguous catalog art.
+        this.db.exec(`ALTER TABLE recording_artwork RENAME TO unscoped_artwork;
+          CREATE TABLE recording_artwork(scope TEXT NOT NULL, platform TEXT NOT NULL, recording TEXT NOT NULL,
+            address TEXT,catalogId TEXT,image TEXT,PRIMARY KEY(scope,platform,recording));
+          INSERT INTO recording_artwork SELECT '',platform,recording,address,catalogId,image FROM unscoped_artwork WHERE catalogId IS NOT NULL;
+          DROP TABLE unscoped_artwork;`)
+      }
+      if (
+        !this.db
+          .prepare('PRAGMA table_info(recording_copies)')
+          .all()
+          .some((c) => c.name === 'artScope')
+      )
+        this.db.exec('ALTER TABLE recording_copies ADD COLUMN artScope TEXT')
       if (
         !this.db
           .prepare('PRAGMA table_info(playlist_tracks)')
@@ -409,7 +429,7 @@ export class LocalLibrary {
       ...byId.values(),
     ]
   }
-  createPlaylist(name, tracks = []) {
+  createPlaylist(name, tracks = [], allowOnline = false) {
     if (
       !Array.isArray(tracks) ||
       tracks.length > 200000 ||
@@ -423,14 +443,14 @@ export class LocalLibrary {
       if (
         !this.db
           .prepare('INSERT OR IGNORE INTO playlists(id,name) VALUES(?,?)')
-          .run(id, playlistName(name)).changes
+          .run(id, playlistName(name, allowOnline ? 240 : 80)).changes
       )
         throw Error('已有同名歌单')
       const inserted = this.db
         .prepare(`INSERT INTO playlist_tracks(playlist,track,position,addedAt)
-        SELECT ?,t.id,j.key,? FROM json_each(?) j JOIN local_tracks t ON t.id=j.value
-        WHERE t.listed=1 ORDER BY j.key`)
-        .run(id, Date.now(), JSON.stringify(members))
+        SELECT ?,j.value,j.key,? FROM json_each(?) j WHERE j.value IN (SELECT id FROM local_tracks WHERE listed=1)
+        OR (? AND j.value IN (SELECT id FROM online_tracks)) ORDER BY j.key`)
+        .run(id, Date.now(), JSON.stringify(members), Number(allowOnline))
       if (inserted.changes !== members.length) throw Error('所选本地曲目已移除，请刷新后重试')
       this.db.exec('RELEASE new_playlist')
     } catch (error) {

@@ -1,6 +1,6 @@
 import { BackButton } from './BackButton'
 import { Button, Checkbox, Dropdown, Input, Option, Tab, TabList } from '@fluentui/react-components'
-import { Play, Search } from 'lucide-react'
+import { Play, Search, Sparkles } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Playlist } from './PlaylistSortMenu'
 import { guardSearchEnter } from './searchSubmit'
@@ -47,7 +47,9 @@ export function PublicPlaylists({
   play,
   playlists,
   refresh,
+  recommend,
 }: {
+  recommend: (query: string) => void
   play: (ids: string[]) => Promise<unknown>
   playlists: Playlist[]
   refresh: () => Promise<void>
@@ -113,7 +115,9 @@ export function PublicPlaylists({
     setBusy(true)
     setError('')
     try {
-      const ids = await host.keepPublicSongs(keys)
+      const { ids, skipped } = await host.keepPublicSongs(keys, !playlist && keys.length > 1)
+      if (skipped.length) setError('当前音质不可用：' + skipped.join('、'))
+      if (!ids.length) return
       if (playlist) {
         await host.setMembership(playlist, ids, true)
         await refresh()
@@ -124,6 +128,27 @@ export function PublicPlaylists({
       }
     } catch (e) {
       setError(String(e).split('Error: ').pop() || '操作失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const [notice, setNotice] = useState('')
+  async function importList(target: PublicList) {
+    if (busy) return
+    setBusy(true)
+    setNotice('')
+    setError('')
+    try {
+      await host.importPublicList(
+        platform,
+        target.id,
+        target.name,
+        list === target ? songs.map((song) => song.key) : undefined,
+      )
+      await refresh()
+      setNotice('已导入到我的歌单：' + target.name)
+    } catch (e) {
+      setError(String(e).split('Error: ').pop() || '歌单导入失败')
     } finally {
       setBusy(false)
     }
@@ -143,6 +168,9 @@ export function PublicPlaylists({
             >
               播放全部
             </Button>
+            <Button disabled={busy || loading} onClick={() => void importList(list)}>
+              导入到我的歌单
+            </Button>
             <Dropdown
               inlinePopup
               listbox={{ className: 'component-popup' }}
@@ -151,7 +179,11 @@ export function PublicPlaylists({
               selectedOptions={[]}
               disabled={!selected.length || busy || !playlists.length}
               onOptionSelect={(_, d) => {
-                if (d.optionValue) void action(selected, d.optionValue)
+                if (d.optionValue)
+                  void action(
+                    songs.filter((s) => selected.includes(s.key)).map((s) => s.key),
+                    d.optionValue,
+                  )
               }}
             >
               {playlists.map((p) => (
@@ -245,6 +277,18 @@ export function PublicPlaylists({
                 value={draft}
                 onChange={(_, d) => setDraft(d.value)}
                 contentBefore={<Search size={16} />}
+                contentAfter={
+                  <Button
+                    type="button"
+                    size="small"
+                    appearance="subtle"
+                    aria-label="AI 推荐"
+                    title="切换到 AI 推荐"
+                    aria-pressed={false}
+                    icon={<Sparkles size={16} />}
+                    onClick={() => recommend(draft)}
+                  />
+                }
               />
               <Button type="submit">搜索</Button>
             </form>
@@ -253,13 +297,23 @@ export function PublicPlaylists({
           {!loading && (
             <div className="public-cards">
               {visible.map((l) => (
-                <button key={l.id} type="button" onClick={() => setList(l)}>
-                  <ListImage picture={l.picture} />
-                  <strong>{l.name}</strong>
-                  <small>
-                    {[l.author, l.count && l.count + ' 次播放'].filter(Boolean).join(' · ')}
-                  </small>
-                </button>
+                <article key={l.id}>
+                  <button className="public-list-card" type="button" onClick={() => setList(l)}>
+                    <ListImage picture={l.picture} />
+                    <strong>{l.name}</strong>
+                    <small>
+                      {[l.author, l.count && l.count + ' 次播放'].filter(Boolean).join(' · ')}
+                    </small>
+                  </button>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    disabled={busy}
+                    onClick={() => void importList(l)}
+                  >
+                    导入到我的歌单
+                  </Button>
+                </article>
               ))}
             </div>
           )}
@@ -275,6 +329,7 @@ export function PublicPlaylists({
           </div>
         </>
       )}
+      {notice && <p role="status">{notice}</p>}
       {loading && <p role="status">正在读取歌单…</p>}
       {error && <p role="alert">{error}</p>}
     </section>

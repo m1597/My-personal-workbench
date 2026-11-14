@@ -154,6 +154,7 @@ export async function publicSongs(platform, id) {
   if (platform === 'wy') {
     const { playlist } = await read('https://music.163.com/api/v6/playlist/detail?n=1000&id=' + id)
     const songs = new Map(playlist.tracks.map((t) => [t.id, t]))
+    if (playlist.trackIds.length > 10000) throw Error('单张歌单最多支持一万首歌曲')
     const missing = playlist.trackIds.filter((t) => !songs.has(t.id))
     for (let i = 0; i < missing.length; i += 150) {
       const ids = missing.slice(i, i + 150).map(({ id }) => ({ id }))
@@ -193,6 +194,7 @@ export async function publicSongs(platform, id) {
         tag: 1,
       })
     const first = await request(0)
+    if (first.total_song_num > 10000) throw Error('单张歌单最多支持一万首歌曲')
     const songs = [...first.songlist]
     for (let i = songs.length; i < first.total_song_num && i > 0; ) {
       const { songlist } = await request(i)

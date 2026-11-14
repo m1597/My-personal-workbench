@@ -14,7 +14,7 @@
 }
 .lx-panel .search-platforms [role="tab"] {
   background: transparent;
-  border: 1px solid transparent;
+  border: 0;
   color: var(--text-secondary);
   border-radius: var(--radius-6);
 }
@@ -23,11 +23,24 @@
 }
 .lx-panel .search-platforms [role="tab"][aria-selected="true"] {
   color: var(--text);
-  border-color: var(--accent);
 }
 .lx-panel .search-platforms [role="tab"]::before,
 .lx-panel .search-platforms [role="tab"]::after {
   content: none;
+}
+.lx-panel .search-platforms [role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto auto 0 50%;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+.lx-panel .search-platforms [role="tab"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .search-history header,
 .search-result-head,

@@ -68,6 +68,7 @@ const names = [
   'publicListCover',
   'publicListSongs',
   'keepPublicSongs',
+  'importPublicList',
   'playlistArtwork',
   'changePlaylistArtwork',
   'moveSidebarItem',

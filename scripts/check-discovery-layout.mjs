@@ -117,9 +117,8 @@ try {
           assert.equal(states.filter((tab) => tab.selected).length, 1)
           for (const tab of states) {
             assert.equal(tab.background, 'rgba(0, 0, 0, 0)')
-            assert.equal(tab.underline, 'none')
-            assert.ok(parseFloat(tab.width) > 0 && parseFloat(tab.width) <= 1)
-            assert.equal(tab.border === 'rgba(0, 0, 0, 0)', !tab.selected)
+            assert.equal(tab.underline !== 'none', tab.selected)
+            assert.equal(parseFloat(tab.width), 0)
           }
         }
         const recent = await box('.search-history')

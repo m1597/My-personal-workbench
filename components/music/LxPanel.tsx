@@ -264,7 +264,15 @@ export function DownloadPane({
         <Tab value="lists">公开歌单</Tab>
       </TabList>
       {publicMode ? (
-        <PublicPlaylists playlists={playlists} play={playPublic} refresh={refresh} />
+        <PublicPlaylists
+          playlists={playlists}
+          play={playPublic}
+          refresh={refresh}
+          recommend={(draft) => {
+            setQuery(draft)
+            toggle()
+          }}
+        />
       ) : (
         <>
           <div className="search-controls" data-query={hasQuery}>

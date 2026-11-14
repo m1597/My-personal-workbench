@@ -357,7 +357,7 @@ function rememberCopy(store, version, local, automatic) {
       .run(version.source, version.platform)
   store.db
     .prepare(
-      'INSERT OR REPLACE INTO recording_copies(version,local,automatic,source,platform,sourceId,quality,digest) VALUES(?,?,?,?,?,?,?,?)',
+      'INSERT OR REPLACE INTO recording_copies(version,local,automatic,source,platform,sourceId,quality,digest,artScope) VALUES(?,?,?,?,?,?,?,?,?)',
     )
     .run(
       version.key,
@@ -368,6 +368,7 @@ function rememberCopy(store, version, local, automatic) {
       version.sourceId,
       version.quality,
       version.digest,
+      version.artScope ?? null,
     )
 }
 export function publishToLibrary(temp, row, store, version, dailyId) {
@@ -650,6 +651,9 @@ function durableRecording(src, row) {
   }
   return out
 }
+function artworkScope(src) {
+  return src.search ? createHash('sha256').update(src.code).digest('hex') : ''
+}
 function versionInfo(src, row, quality) {
   const id = recordingId(src, row)
   if (id === null) return null
@@ -661,6 +665,7 @@ function versionInfo(src, row, quality) {
     source: src.name,
     platform: src.platform,
     sourceId: String(id),
+    artScope: artworkScope(src),
     quality,
   }
 }
@@ -871,26 +876,26 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         : null
     if (!recording || (!address && !catalogId)) return
     getStore()
-      .db.prepare(`INSERT INTO recording_artwork(platform,recording,address,catalogId) VALUES(?,?,?,?)
-      ON CONFLICT(platform,recording) DO UPDATE SET address=coalesce(excluded.address,address),catalogId=coalesce(excluded.catalogId,catalogId)`)
-      .run(src.platform, recording, address ?? null, catalogId)
+      .db.prepare(`INSERT INTO recording_artwork(scope,platform,recording,address,catalogId) VALUES(?,?,?,?,?)
+      ON CONFLICT(scope,platform,recording) DO UPDATE SET
+      image=CASE WHEN (excluded.address IS NOT NULL AND excluded.address IS NOT address)
+        OR (excluded.catalogId IS NOT NULL AND excluded.catalogId IS NOT catalogId) THEN NULL ELSE image END,address=coalesce(excluded.address,address),catalogId=coalesce(excluded.catalogId,catalogId)`)
+      .run(artworkScope(src), src.platform, recording, address ?? null, catalogId)
   }
-  function readArtwork(platform, recording) {
+  function readArtwork(platform, recording, scope) {
     const db = getStore().db
     const record = db
-      .prepare('SELECT * FROM recording_artwork WHERE platform=? AND recording=?')
-      .get(platform, recording)
+      .prepare('SELECT * FROM recording_artwork WHERE platform=? AND recording=? AND scope=?')
+      .get(platform, recording, scope)
     if (!record || record.image) return record?.image ?? null
-    const key = JSON.stringify([platform, recording])
+    const key = JSON.stringify([platform, recording, scope, record.address, record.catalogId])
     if (loadingCovers.has(key)) return loadingCovers.get(key)
     const pending = fetchArtwork(platform, record.address, record.catalogId)
       .then((image) => {
         if (image)
-          db.prepare('UPDATE recording_artwork SET image=? WHERE platform=? AND recording=?').run(
-            image,
-            platform,
-            recording,
-          )
+          db.prepare(
+            'UPDATE recording_artwork SET image=? WHERE platform=? AND recording=? AND scope=? AND address IS ? AND catalogId IS ?',
+          ).run(image, platform, recording, scope, record.address, record.catalogId)
         return image
       })
       .finally(() => loadingCovers.delete(key))
@@ -900,11 +905,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   bind('searchCover', (key) => {
     const match = matches.get(key)
     if (!match) return null
-    const src = { platform: match.platform, search: match.customSearch }
+    const src = { platform: match.platform, search: match.customSearch, code: match.sourceCode }
     rememberArtwork(src, match.row)
     const id = recordingId(src, match.row)
     return id
-      ? readArtwork(src.platform, id)
+      ? readArtwork(src.platform, id, artworkScope(src))
       : fetchArtwork(src.platform, searchCoverAddress(match.row))
   })
   async function fetchArtwork(platform, address, catalogId) {
@@ -1032,8 +1037,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       if (!Array.isArray(rows)) throw Error('源返回了无效的版本列表')
       const localCopy = getStore().db.prepare(`SELECT t.id FROM recording_copies c
         JOIN local_tracks t ON t.id=c.local
-        WHERE c.platform=? AND c.sourceId=? AND t.available=1 AND t.awaitingLocation=0
+        WHERE c.platform=? AND c.sourceId=? AND (c.artScope=? OR (c.artScope IS NULL AND c.source=?)) AND t.available=1 AND t.awaitingLocation=0
         ORDER BY t.id LIMIT 1`)
+      const scope = artworkScope(src)
       const items = []
       for (const row of audition ? rows.slice(0, 20) : rows) {
         if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
@@ -1048,7 +1054,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         })
         items.push({
           key,
-          localId: localCopy.get(src.platform, String(recordingId(src, row) || ''))?.id,
+          localId: localCopy.get(src.platform, String(recordingId(src, row) || ''), scope, src.name)
+            ?.id,
           title: text(row.name),
           artist: text(row.singer),
           album: text(row.albumName),
@@ -1068,9 +1075,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     if (!match || match.auditionId || selected?.code !== match.sourceCode)
       throw Error('请重新搜索并选择录音')
     const src = { ...selected, ...selected.platforms?.[match.platform] }
+    if (context?.publicCatalog) src.search = false
     const row = match.row
     const recording = recordingId(src, row)
-    const qualities = recordingQualities(src, row)
+    const available = recordingQualities(src, row)
+    // Keep unavailable public entries in an imported playlist, including its original order.
+    const qualities = !available.length && context?.importList ? src.quality : available
     if (quality === undefined) {
       quality = chooseQuality(qualities, getMusicPreferences(getStore()).previewQuality)
     }
@@ -1081,7 +1091,16 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     const id =
       'online-recording-' +
       createHash('sha256')
-        .update(JSON.stringify([sourceId, src.platform, recording]))
+        .update(
+          JSON.stringify([
+            sourceId,
+            src.platform,
+            recording,
+            ...(context?.publicCatalog && selected.platforms?.[match.platform]?.search
+              ? ['public']
+              : []),
+          ]),
+        )
         .digest('hex')
     const { db } = getStore()
     if (!context) db.exec('BEGIN')
@@ -1143,7 +1162,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     const entries = new Map()
     const result = rows.map((row) => {
       const key = randomUUID()
-      entries.set(key, { platform, row })
+      entries.set(key, { platform, listId: id, row })
       return {
         key,
         title: row.name,
@@ -1156,7 +1175,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     while (collectionRows.size > 30000) collectionRows.delete(collectionRows.keys().next().value)
     return result
   })
-  bind('keepPublicSongs', (keys) => {
+  function persistPublic(keys, options = {}) {
     if (!Array.isArray(keys) || !keys.length || keys.length > 10000) throw Error('请选择歌单曲目')
     const src = source()
     if (!src) throw Error('请先在设置中导入可用音乐源')
@@ -1170,16 +1189,63 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         query: { title: entry.row.name, artist: entry.row.singer },
       }
     })
-    const context = { selected: src, sourceId: catalog().list().active }
+    const context = {
+      selected: src,
+      publicCatalog: true,
+      importList: Boolean(options.title),
+      sourceId: catalog().list().active,
+    }
     const { db } = getStore()
     db.exec('BEGIN')
     try {
-      const ids = records.map((record) => keepRecording(record, undefined, context))
+      const ids = [],
+        skipped = []
+      for (const record of records) {
+        const platformSource = { ...src, ...src.platforms[record.platform], search: false }
+        if (options.skip && !recordingQualities(platformSource, record.row).length) {
+          skipped.push(record.row.name)
+          continue
+        }
+        ids.push(keepRecording(record, undefined, context))
+      }
+      const playlist = options.title
+        ? getStore().library.createPlaylist(options.title, ids, true)
+        : undefined
       db.exec('COMMIT')
-      return ids
+      return { ids, skipped, playlist }
     } catch (error) {
       db.exec('ROLLBACK')
       throw error
+    }
+  }
+  bind('keepPublicSongs', (keys, skip) => persistPublic(keys, { skip: skip === true }))
+  bind('importPublicList', async (platform, id, title, snapshot) => {
+    if (typeof title !== 'string' || !title.trim() || title.length > 240)
+      throw Error('歌单标题无效')
+    if (snapshot !== undefined) {
+      if (
+        !Array.isArray(snapshot) ||
+        !snapshot.length ||
+        snapshot.length > 10000 ||
+        snapshot.some((key) => {
+          const entry = collectionRows.get(key)
+          return !entry || entry.platform !== platform || entry.listId !== id
+        })
+      )
+        throw Error('歌单内容已过期，请重新打开')
+      return persistPublic(snapshot, { title }).playlist
+    }
+    const rows = await publicSongs(platform, id)
+    if (!rows.length) throw Error('此歌单没有在线曲目')
+    const keys = rows.map((row) => {
+      const key = randomUUID()
+      collectionRows.set(key, { platform, row })
+      return key
+    })
+    try {
+      return persistPublic(keys, { title }).playlist
+    } finally {
+      for (const key of keys) collectionRows.delete(key)
     }
   })
   async function transfer(signal, key, quality, auditionId, detailed = false) {
@@ -1745,9 +1811,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         batchSignal &&
         store.db
           .prepare(
-            'SELECT 1 FROM recording_copies c JOIN local_tracks t ON t.id=c.local WHERE c.platform=? AND c.sourceId=?',
+            'SELECT 1 FROM recording_copies c JOIN local_tracks t ON t.id=c.local WHERE c.platform=? AND c.sourceId=? AND (c.artScope=? OR (c.artScope IS NULL AND c.source=?))',
           )
-          .get(identity.platform, identity.sourceId)
+          .get(identity.platform, identity.sourceId, identity.artScope, identity.source)
       async function save({ src, row: pick, quality, preparedUrl }, canRetry = true) {
         const identity = versionInfo(src, pick, quality)
         if (store.ignoresRecording(identity.platform, identity.sourceId)) {
@@ -1990,8 +2056,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       if (typeof id !== 'string' || id.length > 128) return null
       const db = getStore().db
       const versions = db
-        .prepare(`SELECT platform,recording FROM online_recording_sources WHERE id=?
-        UNION SELECT platform,sourceId FROM recording_copies WHERE local=? AND sourceId IS NOT NULL`)
+        .prepare(`SELECT o.platform,o.recording,CASE WHEN json_extract(o.identifiers,'$.nativeCatalog')=0 THEN s.digest ELSE '' END AS scope
+          FROM online_recording_sources o LEFT JOIN music_sources s ON s.id=o.source WHERE o.id=?
+        UNION SELECT platform,sourceId,coalesce(artScope,'') FROM recording_copies WHERE local=? AND sourceId IS NOT NULL`)
         .all(id, id)
       for (const version of versions) {
         if (version.platform === 'wy' && /^\d+$/.test(version.recording)) {
@@ -2010,10 +2077,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
               return platform && platform.search === false
             })
           if (nativeCatalog)
-            db.prepare(`INSERT OR IGNORE INTO recording_artwork(platform,recording,catalogId)
-            VALUES('wy',?,?)`).run(version.recording, version.recording)
+            db.prepare(`INSERT OR IGNORE INTO recording_artwork(scope,platform,recording,catalogId)
+            VALUES('','wy',?,?)`).run(version.recording, version.recording)
         }
-        const image = await readArtwork(version.platform, version.recording)
+        const image = await readArtwork(version.platform, version.recording, version.scope)
         if (image) return image
       }
       return null

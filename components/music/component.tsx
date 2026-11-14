@@ -182,7 +182,16 @@ declare global {
         ): Promise<import('./PublicPlaylists').PublicList[]>
         publicListCover(key: string): Promise<string | null>
         publicListSongs(p: string, id: string): Promise<import('./PublicPlaylists').PublicSong[]>
-        keepPublicSongs(keys: string[]): Promise<string[]>
+        keepPublicSongs(
+          keys: string[],
+          skip?: boolean,
+        ): Promise<{ ids: string[]; skipped: string[] }>
+        importPublicList(
+          platform: string,
+          id: string,
+          title: string,
+          snapshot?: string[],
+        ): Promise<string>
         playlistArtwork(id: string): Promise<string | null>
         changePlaylistArtwork(id: string, reset: boolean): Promise<void>
         musicGuide(): Promise<{ seen: boolean; script: string }>

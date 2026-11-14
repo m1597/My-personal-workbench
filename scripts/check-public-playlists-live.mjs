@@ -72,7 +72,7 @@ try {
   const genre = panel.getByRole('combobox', { name: '歌单风格' })
   await genre.click()
   await page.getByRole('option', { name: '流行', exact: true }).click({ timeout: 30000 })
-  const cards = panel.locator('.public-cards button')
+  const cards = panel.locator('.public-list-card')
   await expect(cards.first()).toBeVisible({ timeout: 45000 })
   evidence.cards = await cards.count()
 
@@ -105,6 +105,17 @@ try {
   await expect(cards.first()).toBeVisible({ timeout: 45000 })
   const card = cards.nth(Number(process.env.FITBAY_TEST_LIST_INDEX || 0))
   evidence.list = await card.locator('strong').textContent()
+  const other = panel.locator('.public-cards article').filter({ hasNotText: evidence.list }).first()
+  const cardName = await other.locator('strong').textContent()
+  await other.getByRole('button', { name: '导入到我的歌单' }).click()
+  await expect(panel.getByRole('status')).toContainText(cardName, { timeout: 60000 })
+  const cardCount = await page.evaluate(
+    async (name) =>
+      (await window.music.state()).playlists.find((p) => p.name === name)?.tracks.length,
+    cardName,
+  )
+  assert.ok(cardCount > 0)
+  evidence.importedCard = { name: cardName, count: cardCount }
   await card.click()
   const rows = panel.locator('.public-songs li')
   await expect(rows.nth(1)).toBeVisible({ timeout: 60000 })
@@ -114,7 +125,7 @@ try {
   console.log(label, evidence.list, titles.length, titles.slice(0, 3))
   await page.evaluate(() => delete document.documentElement.dataset.backdrop)
   await page.screenshot({ path: path.join(root, '歌单.png') })
-  for (const index of [0, 1]) await rows.nth(index).getByRole('checkbox').check()
+  for (const index of [1, 0]) await rows.nth(index).getByRole('checkbox').check()
   await panel.getByRole('combobox', { name: '加入自己的歌单' }).click()
   await page.getByRole('option', { name: listName, exact: true }).click()
   const libraryState = () =>
@@ -127,6 +138,7 @@ try {
         saved: state.playlists.find((p) => p.id === id)?.tracks.map((i) => byId.get(i)),
         queue: state.queue.map((i) => byId.get(i)),
         current: byId.get(state.current),
+        uniqueQueue: [...new Set(state.queue)].map((id) => byId.get(id)),
       }
     }, id)
   await expect.poll(async () => (await libraryState()).saved).toEqual(titles.slice(0, 2))
@@ -177,6 +189,26 @@ try {
     .locator('footer [role=status],.public-playlists [role=alert]')
     .allTextContents()
   assert.ok(evidence.single && evidence.all && evidence.queue.sameOrder, JSON.stringify(evidence))
+  const title = evidence.list
+  await panel.getByRole('button', { name: '导入到我的歌单', exact: true }).click()
+  await expect(panel.getByRole('status').filter({ hasText: '已导入到我的歌单' })).toBeVisible({
+    timeout: 60000,
+  })
+  const imported = await page.evaluate(async (title) => {
+    const state = await window.music.state()
+    const list = state.playlists.find((p) => p.name === title)
+    const songs = new Map(state.onlineTracks.map((s) => [s.id, s.title]))
+    return list?.tracks.map((id) => songs.get(id))
+  }, title)
+  assert.deepEqual(imported, actual.uniqueQueue)
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
+  const nav = page.getByRole('button', { name: '歌单导航' })
+  if ((await nav.isVisible()) && (await nav.getAttribute('aria-expanded')) === 'false')
+    await nav.click()
+  await page.getByRole('button', { name: title, exact: true }).click()
+  await page.getByRole('button', { name: '播放全部', exact: true }).click()
+  evidence.imported = { name: title, count: imported.length, playing: await measure(titles[0]) }
+  await page.screenshot({ path: path.join(root, '已导入个人歌单.png') })
   evidence.passed = true
 } finally {
   await fs.writeFile(path.join(root, '验证.json'), JSON.stringify(evidence, null, 2))

@@ -76,16 +76,19 @@ try {
       globalThis.artRequests = 0
       globalThis.transfers = []
       https.request = (url, options, receive) => {
-        if (url.href === 'https://p1.music.126.net/fixture.png') {
+        if (url.hostname === 'p1.music.126.net') {
           globalThis.artRequests++
           const req = new EventEmitter()
           req.end = () =>
             receive(
-              Object.assign(fs.createReadStream(files.cover), {
-                statusCode: 200,
-                headers: { 'content-type': 'image/png' },
-                setTimeout() {},
-              }),
+              Object.assign(
+                fs.createReadStream(url.pathname === '/other.png' ? files.other : files.cover),
+                {
+                  statusCode: 200,
+                  headers: { 'content-type': 'image/png' },
+                  setTimeout() {},
+                },
+              ),
             )
           return req
         }
@@ -155,7 +158,15 @@ try {
         })
       }
     },
-    { files: { ...files, cover: path.resolve('src/renderer/public/fitbay.png') }, code, songs },
+    {
+      files: {
+        ...files,
+        cover: path.resolve('src/renderer/public/fitbay.png'),
+        other: path.resolve('examples/component-host/transport-icons.png'),
+      },
+      code,
+      songs,
+    },
   )
   await page.evaluate(async () => {
     await window.music.lxImport()
@@ -217,10 +228,7 @@ try {
   await expect(input).toHaveValue('只听青禾本人的作品')
   await input.fill(preview)
   await input.press('Enter')
-  await page
-    .getByRole('listitem')
-    .filter({ hasText: preview })
-    .dispatchEvent('dblclick')
+  await page.getByRole('listitem').filter({ hasText: preview }).dispatchEvent('dblclick')
   await expect
     .poll(() => page.locator('audio').evaluate((a) => !a.paused && a.currentTime > 0))
     .toBe(true)
@@ -335,6 +343,47 @@ try {
     await page.screenshot({ path: path.join(root, '06-search-art.png') })
     assert.equal(await app.evaluate(() => globalThis.artRequests), 1)
     const localId = finished.songs.find(([, title]) => title === '晨风')[2]
+    // A second source uses the same recording ID, then changes its image on a new search.
+    const second = path.join(root, 'source-b.js')
+    await fs.writeFile(
+      second,
+      (await fs.readFile(code, 'utf8'))
+        .replace('五首补推测试源', '另一个封面源')
+        .replace(
+          "picUrl:name==='晨风'?'https://p1.music.126.net/fixture.png':undefined",
+          "picUrl: info.keyword.includes('新版')?'https://p1.music.126.net/fixture.png':'https://p1.music.126.net/other.png'",
+        ),
+    )
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+    }, second)
+    const otherCover =
+      'data:image/png;base64,' +
+      (await fs.readFile('examples/component-host/transport-icons.png')).toString('base64')
+    const secondImage = await page.evaluate(async () => {
+      await window.music.lxImport()
+      const {
+        items: [item],
+      } = await window.music.lxSearch({ title: '晨风', artist: '青禾' }, 'wy')
+      const id = await window.music.rememberOnline(item.key, '320k')
+      return { id, image: await window.music.searchCover(item.key), local: item.localId }
+    })
+    assert.equal(secondImage.image, otherCover)
+    assert.equal(secondImage.local, undefined)
+    assert.equal(await page.evaluate((id) => window.music.trackCover(id), localId), expectedCover)
+    assert.equal(
+      await page.evaluate((id) => window.music.trackCover(id), secondImage.id),
+      otherCover,
+    )
+    assert.equal(
+      await page.evaluate(async () => {
+        const {
+          items: [item],
+        } = await window.music.lxSearch({ title: '晨风 新版', artist: '' }, 'wy')
+        return window.music.searchCover(item.key)
+      }),
+      expectedCover,
+    )
     await app.evaluate(() => {
       process.getBuiltinModule('node:https').request = () => {
         throw Error('离线封面验证')

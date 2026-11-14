@@ -139,15 +139,14 @@ try {
           selected: node.getAttribute('aria-selected') === 'true',
           fill: getComputedStyle(node).backgroundColor,
           line: getComputedStyle(node, '::after').content,
-          thickness: getComputedStyle(node, '::after').height,
+          border: getComputedStyle(node).borderTopColor,
+          width: getComputedStyle(node).borderTopWidth,
         })),
       )
       for (const item of styles) {
         assert.match(item.fill, /^rgba\(/)
-        if (item.selected) {
-          assert.notEqual(item.line, 'none')
-          assert.equal(item.thickness, '2px')
-        } else assert.equal(item.line, 'none')
+        assert.equal(item.line !== 'none', item.selected)
+        assert.equal(parseFloat(item.width), 0)
       }
     }
     await page.screenshot({

@@ -32,6 +32,7 @@ try {
       sourceId: null,
       quality: null,
       digest: null,
+      artScope: null,
     },
   )
   restart()
