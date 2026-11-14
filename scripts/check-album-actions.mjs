@@ -126,9 +126,9 @@ try {
   await expect.poll(() => player.evaluate((el) => !el.paused && el.currentTime >= 3)).toBe(true)
   await button('播放队列').click()
   await expect(page.locator('.music-queue li')).toHaveText([
-    'Album 110-1 · Artist',
-    'Album 110-2 · Artist',
-    'Album 110-3 · Artist',
+    'Album 110-1 · Artist · Album 110',
+    'Album 110-2 · Artist · Album 110',
+    'Album 110-3 · Artist · Album 110',
   ])
   await page.keyboard.press('Escape')
   await button('下一首').click()
@@ -146,8 +146,8 @@ try {
   await expect.poll(async () => (await state()).queueOccurrence).toBe(1)
   await button('播放队列').click()
   await expect(page.locator('.music-queue li')).toHaveText([
-    'Album 110-2 · Artist',
-    'Album 110-3 · Artist',
+    'Album 110-2 · Artist · Album 110',
+    'Album 110-3 · Artist · Album 110',
   ])
   await page.keyboard.press('Escape')
   await button('下一首').click()

@@ -18,11 +18,18 @@ export type CatalogLocation = {
   fromSong?: string
   group?: News
 }
-export function useCatalogNavigation() {
+export function useCatalogNavigation(scope?: string) {
+  const [priorScope, setPriorScope] = useState(scope)
   const [locations, setLocations] = useState<CatalogLocation[]>([])
   const layout = useRef<HTMLElement>(null)
   const scrollPositions = useRef<number[]>([])
   const restoreTop = useRef<number | null>(null)
+  if (scope !== priorScope) {
+    setPriorScope(scope)
+    setLocations([])
+    scrollPositions.current = []
+    restoreTop.current = null
+  }
   function openCatalog(location: CatalogLocation) {
     scrollPositions.current.push(layout.current?.closest('.music-scroll')?.scrollTop ?? 0)
     restoreTop.current = 0

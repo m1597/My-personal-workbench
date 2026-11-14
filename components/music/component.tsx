@@ -63,6 +63,8 @@ import {
   type SelectionDownload,
   type ImportJob,
 } from './LibraryPane'
+import { SongCredits, SongCatalog, songRowClick, songAlbum } from './SongCredits'
+import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
 import { PlaybackQueue } from './PlaybackQueue'
 import { DownloadTasks } from './DownloadTasks'
 import { VolumeControls } from './VolumeControls'
@@ -391,6 +393,7 @@ function Music() {
   const [tab, setTab] = useState('library'),
     [libraryCollection, setLibraryCollection] = useState('all'),
     [playlistCollection, setPlaylistCollection] = useState('favorites')
+  const catalog = useCatalogNavigation(tab)
   const [online, setOnline] = useState<{
     row: Item
     result: Versions
@@ -1377,7 +1380,14 @@ function Music() {
           </Button>
         </div>
       )}
-      <main key={tab} className="music-scroll" data-page={tab}>
+      <main
+        key={tab}
+        ref={catalog.locations.length ? undefined : catalog.layout}
+        className="music-scroll"
+        data-page={tab}
+        hidden={catalog.locations.length > 0}
+        style={catalog.locations.length ? { display: 'none' } : undefined}
+      >
         {showPlayer ? (
           <NowPlaying
             actions={{
@@ -1388,6 +1398,7 @@ function Music() {
             trackId={now}
             title={active?.title ?? '尚未播放'}
             artist={active?.artist ?? ''}
+            album={active && songAlbum(active)}
             coverId={coverId}
             revision={state?.albumRevision}
             lines={now ? lines : []}
@@ -1774,7 +1785,15 @@ function Music() {
                           onDismiss={() => void act(() => host.dismissRecommendation(r.id))}
                           dismissed={r.notInterested}
                         >
-                          <li data-active={(r.localId ?? r.id) === active?.id}>
+                          <li
+                            data-active={(r.localId ?? r.id) === active?.id}
+                            onClick={(e) =>
+                              songRowClick(e, () => {
+                                if (playable(r)) void act(() => startTrack(r.localId ?? r.id))
+                                else if (r.online) void act(() => audition(r))
+                              })
+                            }
+                          >
                             <div className="music-track-icon" data-cover={!!r.daily}>
                               {r.daily && <Cover track id={r.localId ?? undefined} />}
                               {playable(r) ? (
@@ -1801,7 +1820,7 @@ function Music() {
                             <div className="music-track">
                               <div>
                                 <strong>{r.title}</strong>
-                                <span>{r.artist}</span>
+                                <SongCredits song={r} />
                               </div>
                               <p>{r.reason}</p>
                               {!r.daily &&
@@ -1809,11 +1828,7 @@ function Music() {
                                 !(r.daily && r.status === '待重试') && (
                                   <small>
                                     {r.status}
-                                    {r.recordingAlbum
-                                      ? ' · ' + r.recordingAlbum
-                                      : version
-                                        ? ' · ' + version.album + ' · ' + version.version
-                                        : ''}
+                                    {version?.version && ' · ' + version.version}
                                   </small>
                                 )}
                               {r.online && !playable(r) && (
@@ -1926,6 +1941,26 @@ function Music() {
           </>
         )}
       </main>
+      {catalog.locations.length > 0 && (
+        <main className="music-scroll" ref={catalog.layout}>
+          {catalog.locations.map((location, index) => (
+            <div
+              key={JSON.stringify([index, location])}
+              hidden={index !== catalog.locations.length - 1}
+            >
+              <LibraryCatalogPage
+                location={location}
+                local={state?.localTracks ?? []}
+                songs={state?.onlineTracks ?? []}
+                play={(id, ids) => void act(() => playOrdered(id, ids))}
+                actions={{ play: playSearchResult }}
+                back={catalog.catalogBack}
+                open={catalog.openCatalog}
+              />
+            </div>
+          ))}
+        </main>
+      )}
       <footer className="music-player">
         <div className="music-transport">
           <button
@@ -1942,7 +1977,7 @@ function Music() {
               <strong>{active?.title ?? '尚未播放'}</strong>
               {favoriteButton}
             </div>
-            <small>{active?.artist ?? '试听播放器'}</small>
+            <small>{active ? <SongCredits song={active} /> : '试听播放器'}</small>
           </div>
           <Button
             appearance="subtle"
@@ -2001,6 +2036,17 @@ function Music() {
               presentation === 'bar'
                 ? () => void act(() => window.musicWindow.present('full'))
                 : undefined
+            }
+            play={(id, occurrence) =>
+              void act(() =>
+                play(
+                  id,
+                  queue,
+                  occurrence ?? state?.queueOccurrence,
+                  occurrence !== undefined,
+                  state?.pendingAlbum,
+                ),
+              )
             }
             active={active}
             tracks={recordings}
@@ -2141,7 +2187,7 @@ function Music() {
   )
   return (
     <RevealTrackContext.Provider value={(id) => void act(() => host.revealTrack(id))}>
-      {content}
+      <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
     </RevealTrackContext.Provider>
   )
 }

@@ -500,8 +500,34 @@ try {
   const versions = group.getByRole('listitem')
   await expect(versions.nth(0)).toContainText('3:01')
   await expect(versions.nth(1)).toContainText('3:24')
+  const online = versions.nth(1)
+  await online.scrollIntoViewIfNeeded()
+  const creditButtons = online.locator('.song-credit-links button')
+  const albumName = await creditButtons.nth(1).innerText()
+  const platform = await page
+    .locator('.music-scroll [role=tab][aria-selected=true]')
+    .first()
+    .innerText()
+  for (const [index, title] of [
+    [0, '青禾'],
+    [1, albumName],
+  ]) {
+    const before = await page.locator('.music-scroll').evaluate((el) => el.scrollTop)
+    await creditButtons.nth(index).click()
+    const home = page.getByRole('region', { name: index ? '专辑主页' : '歌手主页' })
+    await expect(home.getByRole('heading', { name: title, exact: true })).toBeVisible()
+    await home.getByRole('button', { name: '返回', exact: true }).click()
+    await expect(input).toHaveValue('远山')
+    await expect(page.locator('.music-scroll [role=tab][aria-selected=true]').first()).toHaveText(
+      platform,
+    )
+    await expect(group).toHaveAttribute('open', '')
+    assert.equal(await page.locator('.music-scroll').evaluate((el) => el.scrollTop), before)
+    assert.equal((await fs.readdir(downloads)).length, 0)
+  }
   for (const i of [0, 1]) {
-    await versions.nth(i).getByRole('button', { name: '播放', exact: true }).click()
+    if (i === 0) await versions.nth(i).getByRole('button', { name: '播放', exact: true }).click()
+    else await versions.nth(i).locator('.search-track strong').click()
     await expect
       .poll(() => app.evaluate(() => globalThis.audioRequests.at(-1)))
       .toBe('/recording-' + (17 + i) + '.mp3')

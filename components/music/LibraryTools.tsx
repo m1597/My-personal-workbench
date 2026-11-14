@@ -1,3 +1,4 @@
+import { SongCredits, songRowClick } from './SongCredits'
 import { TrackMenu } from './TrackMenu'
 import { useEffect, useState } from 'react'
 import { Button, Dropdown, Option } from '@fluentui/react-components'
@@ -101,15 +102,22 @@ export function RecentHistory({
                   return (
                     t && (
                       <TrackMenu key={r.track} localId={r.track}>
-                        <li>
+                        <li
+                          onClick={(e) =>
+                            songRowClick(e, () => {
+                              if (t.available) play(r.track, queue)
+                            })
+                          }
+                        >
                           <Button
                             appearance="subtle"
                             disabled={!t.available}
                             icon={<Play size={15} />}
                             onClick={() => play(r.track, queue)}
                           >
-                            {t.title} · {t.artist}
+                            {t.title}
                           </Button>
+                          <SongCredits song={t} />
                           <small>{new Date(r.playedAt).toLocaleString('zh-CN')}</small>
                         </li>
                       </TrackMenu>

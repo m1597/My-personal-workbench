@@ -1,3 +1,4 @@
+import { SongCredits, songRowClick } from './SongCredits'
 import { useEffect, useRef, useState } from 'react'
 import {
   Button,
@@ -208,11 +209,20 @@ export function DownloadPane({
   function versionRow(item: Versions['items'][number]) {
     return (
       <TrackMenu key={item.key} localId={item.localId}>
-        <li className="search-recording">
+        <li
+          className="search-recording"
+          onClick={(e) =>
+            songRowClick(e, () => {
+              if (!busy && item.quality?.length !== 0) void act(() => onPlay(item.key), false)
+            })
+          }
+        >
           <ResultCover item={item} />
           <div className="search-track">
             {recordingName(item.title)}
-            <small>{item.artist || '未知艺人'}</small>
+            <small>
+              <SongCredits song={item} />
+            </small>
           </div>
           <small className="search-duration">
             {item.duration ? formatTime(item.duration) : '时长未知'}

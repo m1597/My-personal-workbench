@@ -1,3 +1,4 @@
+import { SongCredits, songRowClick } from './SongCredits'
 import { TrackMenu } from './TrackMenu'
 import { useState } from 'react'
 import { Button, Popover, PopoverSurface, PopoverTrigger } from '@fluentui/react-components'
@@ -16,6 +17,7 @@ function localFile(song: Song) {
 }
 export function PlaybackQueue({
   onOpen,
+  play,
   active,
   tracks,
   items,
@@ -23,6 +25,7 @@ export function PlaybackQueue({
   index,
   navigable,
 }: {
+  play(id: string, occurrence?: number): void
   onOpen?: () => void
   active?: Song
   tracks?: Song[]
@@ -34,10 +37,16 @@ export function PlaybackQueue({
   const [open, setOpen] = useState(false)
   const songs = new Map<string, Song>()
   if (open) for (const row of [...(tracks ?? []), ...(items ?? [])]) songs.set(row.id, row)
-  const upcoming = open
-    ? order.slice(index + 1).filter((id) => navigable.has(id) && songs.has(id))
-    : []
-  const seen = new Set<string>()
+  const upcoming: { row: Song; occurrence: number }[] = []
+  if (open) {
+    const occurrences = new Map<string, number>()
+    for (const [at, id] of order.entries()) {
+      const occurrence = occurrences.get(id) ?? 0
+      occurrences.set(id, occurrence + 1)
+      const row = songs.get(id)
+      if (at > index && row && navigable.has(id)) upcoming.push({ row, occurrence })
+    }
+  }
   return (
     <Popover
       positioning="above"
@@ -60,23 +69,20 @@ export function PlaybackQueue({
         <strong>播放队列</strong>
         {active && (
           <TrackMenu localId={localFile(active)}>
-            <p>
-              当前曲目 · {active.title} · {active.artist}
+            <p onClick={(e) => songRowClick(e, () => play(active.id))}>
+              当前曲目 · {active.title} ·{' '}
+              <SongCredits song={active} beforeOpen={() => setOpen(false)} />
             </p>
           </TrackMenu>
         )}
         <small>接下来</small>
         {upcoming.length ? (
           <ol>
-            {upcoming.map((id) => {
-              const row = songs.get(id)
-              if (!row) return null
-              const key = seen.has(id) ? id + ':repeat' : id
-              seen.add(id)
+            {upcoming.map(({ row, occurrence }) => {
               return (
-                <TrackMenu key={key} localId={localFile(row)}>
-                  <li>
-                    {row.title} · {row.artist}
+                <TrackMenu key={row.id + ':' + occurrence} localId={localFile(row)}>
+                  <li onClick={(e) => songRowClick(e, () => play(row.id, occurrence))}>
+                    {row.title} · <SongCredits song={row} beforeOpen={() => setOpen(false)} />
                   </li>
                 </TrackMenu>
               )

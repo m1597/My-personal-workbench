@@ -1,3 +1,4 @@
+import { SongCredits } from './SongCredits'
 import { Button, Popover, PopoverTrigger, PopoverSurface } from '@fluentui/react-components'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -14,6 +15,7 @@ type Props = {
   actions: ReleaseActions
   trackId: string
   title: string
+  album?: string
   artist: string
   coverId?: string
   revision?: number
@@ -78,6 +80,7 @@ export function NowPlaying({
   trackId,
   title,
   artist,
+  album,
   coverId,
   revision,
   lines,
@@ -198,7 +201,11 @@ export function NowPlaying({
         <div className="now-playing-record">
           <RecordArt revision={revision} id={coverId} />
           <h2>{title}</h2>
-          {artist && <p>{artist}</p>}
+          {(artist || album) && (
+            <p>
+              <SongCredits song={{ title, artist, album }} />
+            </p>
+          )}
         </div>
         <div className="now-playing-lyric-pane">
           {lines?.length ? (
