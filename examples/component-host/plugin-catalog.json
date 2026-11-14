@@ -1,0 +1,48 @@
+[
+  {
+    "id": "wave",
+    "title": "波形与片段试听",
+    "description": "查看波形、循环试听选段，给时间点添加标记。",
+    "version": "1.0.0",
+    "musicVersion": "0.1.0",
+    "url": "https://github.com/m1597/fitbay-plugins/releases/download/music-v1.0.0/wave.fitbayplugin",
+    "bytes": 14879,
+    "digest": "9d6c3dd75657eb3de73142e21e6a1cd3a7fea6ea2b5af3a1598f7f8c71343c5c",
+    "files": {
+      "panel.js": "39afc10b6e2805eddae9ec346d86f53d55157adac0f11f75be96a3abc35bb2b2",
+      "panel.css": "319f10da3353cce7b9bef23ccd0c18244c9ff23101e504731646077dfd655047",
+      "host.mjs": "51703359e901c5a905a12ef29456bc81f085eb8113a4e6771e7a3779e975bd03"
+    }
+  },
+  {
+    "id": "tags",
+    "title": "歌曲标签与封面整理",
+    "description": "对照原资料和建议，选择要写入的曲目与字段。",
+    "version": "1.0.0",
+    "musicVersion": "0.1.0",
+    "url": "https://github.com/m1597/fitbay-plugins/releases/download/music-v1.0.0/tags.fitbayplugin",
+    "bytes": 1119438,
+    "digest": "ca16e6d7104b3ee331650315db7e551a80b19619e2530a5a86efc3fb0d239ed1",
+    "files": {
+      "panel.js": "3db0fd1fb9e349999dcdbded44db123da800b69b04c6b8b33ee4953e0eee0d00",
+      "panel.css": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "host.mjs": "4d2f8c385145bdceca24ca9c7e7d78920c8e680d2e31a7bf6c074bbee39f7b67",
+      "tags-engine.mjs": "8db333f2973bd627c26bc744115025766917abc93e5247a42ca78bfba88b823b"
+    }
+  },
+  {
+    "id": "rules",
+    "title": "智能歌单",
+    "description": "按来源、入库时间和收听次数组合规则，自动更新歌单。",
+    "version": "1.0.0",
+    "musicVersion": "0.1.0",
+    "url": "https://github.com/m1597/fitbay-plugins/releases/download/music-v1.0.0/rules.fitbayplugin",
+    "bytes": 7526,
+    "digest": "c0711c67ad5ad19e963c04c3f5fb002dcae3eed35d19685f72e8eaa143c535e8",
+    "files": {
+      "panel.js": "4cc51a7674cd43728853b7e2fadff70bced36c9f04139fe0986536d9f371bfe7",
+      "panel.css": "c291da940807b0e623cc95b55703033b1531828abb1cd97c21de77021563c940",
+      "host.mjs": "372c54714877071da5bfd9abd471dcde821c9a6405ddd2784876ebb271def197"
+    }
+  }
+]

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 
-const titles = {
+const publicTitles = {
   wave: ['波形与片段试听', '查看波形、循环试听选段，给时间点添加标记。'],
   tags: ['歌曲标签与封面整理', '对照原资料和建议，选择要写入的曲目与字段。'],
   rules: ['智能歌单', '按来源、入库时间和收听次数组合规则，自动更新歌单。'],
@@ -15,9 +15,14 @@ const shared = {
   'react-dom': 'FitBayReactDOM',
   '@fluentui/react-components': 'FitBayFluent',
 }
-export async function buildMusicPlugins(root) {
+const version = '1.0.0'
+const musicVersion = '0.1.0'
+const release = 'https://github.com/m1597/fitbay-plugins/releases/download/music-v' + version
+
+export async function buildMusicPlugins(root, titles = publicTitles) {
   const dest = path.join(root, 'plugin-packs')
   await mkdir(dest, { recursive: true })
+  await mkdir(path.join(root, 'host'), { recursive: true })
   const catalog = []
   for (const [id, [title, description]] of Object.entries(titles)) {
     const files = {}
@@ -74,10 +79,25 @@ export async function buildMusicPlugins(root) {
       id,
       title,
       description,
+      ...(Object.hasOwn(publicTitles, id) && {
+        version,
+        musicVersion,
+        url: release + '/' + id + '.fitbayplugin',
+      }),
       bytes: data.length,
       digest: sha(data),
       files: Object.fromEntries(Object.entries(files).map(([key, data]) => [key, sha(data)])),
     })
   }
-  await writeFile(path.join(root, 'host', 'plugin-catalog.json'), JSON.stringify(catalog))
+  await writeFile(
+    path.join(root, 'host', 'plugin-catalog.json'),
+    JSON.stringify(catalog, null, 2) + '\n',
+  )
+  return catalog
+}
+
+if (import.meta.main) {
+  const root = path.resolve(process.argv[2] || 'dist/music-plugin-release')
+  const catalog = await buildMusicPlugins(root)
+  for (const item of catalog) console.log(item.id, item.version, item.digest)
 }

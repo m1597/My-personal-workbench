@@ -26,6 +26,7 @@ export async function buildTagsRuntime() {
       readFile(path.join(dependency, name)),
     ),
   )
+  notices.push(await readFile(path.join(plugin, 'node_modules/@msgpack/msgpack/LICENSE')))
   const bundle = await rolldown({
     input: 'fitbay-tag-runtime',
     platform: 'node',
