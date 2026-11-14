@@ -131,3 +131,40 @@
     align-self: start;
   }
 }
+
+.music-scroll:is([data-page="download"], [data-page="audition"]) {
+  scrollbar-gutter: stable;
+}
+.music-scroll > .discovery-kinds {
+  flex: none;
+  margin: 0 0 var(--space-8);
+}
+.music-scroll[data-page="audition"] > .music-compose {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.music-scroll:is([data-page="download"], [data-page="audition"]) .download-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5em;
+  gap: var(--space-8);
+  margin: 0;
+  min-width: 0;
+}
+.discovery-options {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  margin-block: var(--space-8);
+}
+.discovery-options .music-recommend-weight {
+  margin: 0;
+  flex-wrap: wrap;
+}
+@media (min-width: 740px) {
+  .music-scroll .music-compose .download-search,
+  .music-scroll .public-playlists > .download-search {
+    width: calc((100% - var(--space-20)) * 0.6);
+  }
+}

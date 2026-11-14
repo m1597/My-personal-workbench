@@ -1,5 +1,4 @@
 import { recordShortcut, shortcutInput } from './recordShortcut'
-import { RecordingLists } from './OnlineSongRow'
 import { useLibrarySearch } from './useLibrarySearch'
 import { useOutputDevice } from './PlayerOptionsPane'
 import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
@@ -67,6 +66,7 @@ import {
 } from './LibraryPane'
 import { SongCredits, SongCatalog, songRowClick, songAlbum } from './SongCredits'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
+import { RecordingLists } from './OnlineSongRow'
 import { MusicLanguage } from './BackButton'
 import { playbackReason, userMessage } from './playbackError'
 import { PlaybackQueue } from './PlaybackQueue'
@@ -167,7 +167,8 @@ type PlaybackFailure = {
 }
 declare global {
   interface Window {
-    music: MusicFavoriteSortAPI & LibraryToolsAPI &
+    music: MusicFavoriteSortAPI &
+      LibraryToolsAPI &
       ReleaseAPI & {
         analysisRecording(id: string): Promise<Uint8Array | null>
         albums(): Promise<Album[]>
@@ -184,7 +185,7 @@ declare global {
         publicListSongs(p: string, id: string): Promise<import('./PublicPlaylists').PublicSong[]>
         keepPublicSongs(
           keys: string[],
-          skip?: boolean,
+          operation?: 'play' | 'queue' | 'save',
         ): Promise<{ ids: string[]; skipped: string[] }>
         importPublicList(
           platform: string,
@@ -206,8 +207,12 @@ declare global {
         ): Promise<void>
         setMusicOutput(volume: number, muted: boolean): Promise<void>
         setShortcutEnabled(scope: 'app' | 'global', enabled: boolean): Promise<void>
-        resetMusicShortcuts(scope:'app'|'global'):Promise<void>
-        setMusicShortcut(action: TransportAction, key: string,scope?:'app'|'global'): Promise<void>
+        resetMusicShortcuts(scope: 'app' | 'global'): Promise<void>
+        setMusicShortcut(
+          action: TransportAction,
+          key: string,
+          scope?: 'app' | 'global',
+        ): Promise<void>
         setMusicMediaKeys(enabled: boolean): Promise<void>
         chooseMusicDirectory(kind: 'manual' | 'recommend'): Promise<void>
         searchCollection(scope: string, query: string): Promise<string[]>
@@ -377,6 +382,7 @@ function Music() {
   const guideOrigin = useRef({ tab: 'library', category: 'library' as SettingsCategory })
   function visitGuide(step: number) {
     const page = guideSteps[step].page
+    if (page === 'audition' || page === 'download') setPublicMode(false)
     if (page === 'songs') setTab('library')
     else if (['audition', 'download', 'playlists', 'feed'].some((tab) => tab === page)) setTab(page)
     else {
@@ -393,6 +399,13 @@ function Music() {
   const startFirstGuide = useEffectEvent(() => visitGuide(0))
   const [script, setScript] = useState('')
   const [recommendationDraft, setRecommendationDraft] = useState<string>()
+  const [publicMode, setPublicMode] = useState(false)
+  const [publicDraft, setPublicDraft] = useState('')
+  const [publicAI, setPublicAI] = useState(false)
+  function selectDiscoveryKind(lists: boolean) {
+    setPublicMode(lists)
+    setTab(lists ? 'download' : discoveryMode)
+  }
   const [discoveryMode, setDiscoveryMode] = useState('download')
   const [recommendationCount, setRecommendationCount] = useState('5')
   function editRecommendation(value: string) {
@@ -504,8 +517,9 @@ function Music() {
       .catch((e) => setError(String(e)))
     let handledSettings = 0
     const mode = (v: Mode) => {
-      if ((v.settingsRequest ?? 0) > handledSettings) {
-        handledSettings = v.settingsRequest!
+      const request = v.settingsRequest ?? 0
+      if (request > handledSettings) {
+        handledSettings = request
         setGuide(null)
         setTab('settings')
       }
@@ -1115,28 +1129,46 @@ function Music() {
   })
   const composingShortcut = useRef(false)
   useEffect(() => {
-    const start = () => { composingShortcut.current = true }
-    const end = () => { composingShortcut.current = false }
-    window.addEventListener('compositionstart',start)
-    window.addEventListener('compositionend',end)
-    window.addEventListener('blur',end)
-    const unsubscribe = window.musicWindow.onTransport(action => {
-      const editing = document.activeElement?.matches('textarea,select,input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"]')
+    const start = () => {
+      composingShortcut.current = true
+    }
+    const end = () => {
+      composingShortcut.current = false
+    }
+    window.addEventListener('compositionstart', start)
+    window.addEventListener('compositionend', end)
+    window.addEventListener('blur', end)
+    const unsubscribe = window.musicWindow.onTransport((action) => {
+      const editing = document.activeElement?.matches(
+        'textarea,select,input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"]',
+      )
       if (document.hasFocus() && (composingShortcut.current || editing)) return
       transport(action)
     })
     return () => {
       unsubscribe()
-      window.removeEventListener('compositionstart',start)
-      window.removeEventListener('compositionend',end)
-      window.removeEventListener('blur',end)
+      window.removeEventListener('compositionstart', start)
+      window.removeEventListener('compositionend', end)
+      window.removeEventListener('blur', end)
     }
   }, [])
   const localShortcut = useEffectEvent((e: globalThis.KeyboardEvent) => {
-    if (!state?.prefs.appKeys || e.defaultPrevented || e.isComposing || composingShortcut.current || e.repeat || e.keyCode === 229 || !(e.target instanceof Element) || shortcutInput(e.target)) return
+    if (
+      !state?.prefs.appKeys ||
+      e.defaultPrevented ||
+      e.isComposing ||
+      composingShortcut.current ||
+      e.repeat ||
+      e.keyCode === 229 ||
+      !(e.target instanceof Element) ||
+      shortcutInput(e.target)
+    )
+      return
     if (e.key === ' ' && e.target.closest('button,a,[role="button"]')) return
-    const chord=recordShortcut(e)
-    const action=Object.entries(state.prefs.appShortcuts).find(([,value])=>value && value===chord)?.[0] as TransportAction|undefined
+    const chord = recordShortcut(e)
+    const action = Object.entries(state.prefs.appShortcuts).find(
+      ([, value]) => value && value === chord,
+    )?.[0] as TransportAction | undefined
     if (action) {
       e.preventDefault()
       transport(action)
@@ -1374,7 +1406,13 @@ function Music() {
           onTabSelect={(_, data) => {
             setGuide(null)
             setSearch('')
-            setTab(data.value === 'download' ? discoveryMode : String(data.value))
+            setTab(
+              data.value === 'download'
+                ? publicMode
+                  ? 'download'
+                  : discoveryMode
+                : String(data.value),
+            )
           }}
         >
           <Tab
@@ -1503,6 +1541,17 @@ function Music() {
         hidden={catalog.locations.length > 0}
         style={catalog.locations.length ? { display: 'none' } : undefined}
       >
+        {!showPlayer && (tab === 'download' || tab === 'audition') && (
+          <TabList
+            aria-label="查找内容"
+            className="discovery-kinds"
+            selectedValue={publicMode ? 'lists' : 'songs'}
+            onTabSelect={(_, d) => selectDiscoveryKind(d.value === 'lists')}
+          >
+            <Tab value="songs">歌曲</Tab>
+            <Tab value="lists">公开歌单</Tab>
+          </TabList>
+        )}
         {showPlayer ? (
           <NowPlaying
             actions={{
@@ -1712,6 +1761,11 @@ function Music() {
           />
         ) : tab === 'download' ? (
           <DownloadPane
+            publicMode={publicMode}
+            publicDraft={publicDraft}
+            setPublicDraft={setPublicDraft}
+            publicAI={publicAI}
+            togglePublic={() => setPublicAI(!publicAI)}
             query={recommendationDraft ?? state?.draft ?? ''}
             setQuery={editRecommendation}
             toggle={() => {
@@ -1900,6 +1954,7 @@ function Music() {
                           onDismiss={() => void act(() => host.dismissRecommendation(r.id))}
                           dismissed={r.notInterested}
                         >
+                          {/* biome-ignore lint/a11y/useKeyWithClickEvents: The recording has its own keyboard-accessible play button. */}
                           <li
                             data-active={(r.localId ?? r.id) === active?.id}
                             onClick={(e) =>
@@ -2358,6 +2413,7 @@ function Music() {
             </span>
             {onlineFailure.choices.map((choice) => (
               <button
+                type="button"
                 key={choice.key}
                 onClick={() =>
                   void act(async () => {
@@ -2380,7 +2436,7 @@ function Music() {
                 {choice.duration > 0 && ` · ${formatTime(choice.duration)}`}
               </button>
             ))}
-            <button onClick={() => setOnlineFailure(undefined)}>
+            <button type="button" onClick={() => setOnlineFailure(undefined)}>
               {language === 'en' ? 'Dismiss' : '关闭播放提示'}
             </button>
           </div>

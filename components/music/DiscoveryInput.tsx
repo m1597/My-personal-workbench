@@ -4,12 +4,14 @@ import type { Ref } from 'react'
 
 export function DiscoveryInput({
   ai,
+  lists = false,
   value,
   edit,
   toggle,
   disabled,
   inputRef,
 }: {
+  lists?: boolean
   ai: boolean
   value: string
   edit(value: string): void
@@ -21,8 +23,24 @@ export function DiscoveryInput({
     <Input
       id={ai ? 'music-description' : 'music-search-keyword'}
       data-guide-anchor={ai ? 'recommend' : 'online'}
-      aria-label={ai ? '想让 AI 推荐什么？（选填）' : '搜索关键词'}
-      placeholder={ai ? '描述你想听什么（选填）' : '输入歌名、艺人或关键词'}
+      aria-label={
+        lists
+          ? ai
+            ? '描述想听的公开歌单'
+            : '搜索公开歌单'
+          : ai
+            ? '想让 AI 推荐什么？（选填）'
+            : '搜索关键词'
+      }
+      placeholder={
+        lists
+          ? ai
+            ? '描述风格或场景'
+            : '搜索公开歌单'
+          : ai
+            ? '描述你想听什么（选填）'
+            : '输入歌名、艺人或关键词'
+      }
       ref={inputRef}
       value={value}
       maxLength={1000}

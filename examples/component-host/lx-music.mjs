@@ -1203,7 +1203,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     const context = {
       selected: src,
       publicCatalog: true,
-      importList: Boolean(options.title),
+      importList: Boolean(options.title || options.save),
       sourceId: catalog().list().active,
     }
     const { db } = getStore()
@@ -1243,7 +1243,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       throw error
     }
   }
-  bind('keepPublicSongs', (keys, skip) => persistPublic(keys, { skip: skip === true }))
+  bind('keepPublicSongs', (keys, operation) =>
+    persistPublic(keys, {
+      skip: operation === 'queue' || operation === true,
+      save: operation === 'save',
+    }),
+  )
   bind('importPublicList', async (platform, id, title, snapshot) => {
     if (typeof title !== 'string' || !title.trim() || title.length > 240)
       throw Error('歌单标题无效')

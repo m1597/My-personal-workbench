@@ -63,23 +63,8 @@ export function RecommendationComposer({
   }
   return (
     <section className="music-compose">
-      <div className="music-compose-heading">
-        <label htmlFor="music-description">想让 AI 推荐什么？（选填）</label>
-        <Button
-          size="small"
-          appearance="subtle"
-          disabled={busy || !currentSong?.title}
-          onClick={() => {
-            if (!currentSong) return
-            edit([currentSong.title, currentSong.artist].filter(Boolean).join(' · ').slice(0, 1000))
-            input.current?.focus()
-          }}
-        >
-          {currentSong?.title ? `以《${currentSong.title}》为参考` : '以当前歌曲为参考'}
-        </Button>
-      </div>
       <form
-        className="music-input"
+        className="download-search"
         onKeyDownCapture={guardSearchEnter}
         onSubmit={(event) => {
           event.preventDefault()
@@ -94,6 +79,12 @@ export function RecommendationComposer({
           inputRef={input}
           disabled={busy}
         />
+        <Button type="submit" disabled={busy || !validCount} appearance="primary">
+          {busy ? '生成中…' : '生成推荐'}
+        </Button>
+      </form>
+      <div className="discovery-options">
+        {' '}
         <label className="music-target-count" htmlFor="music-count">
           推荐首数
           <Input
@@ -107,33 +98,40 @@ export function RecommendationComposer({
             onChange={(_, d) => setCount(d.value)}
           />
         </label>
-        {!busy && (
-          <Button type="submit" disabled={!validCount} appearance="primary">
-            生成推荐
-          </Button>
-        )}
-      </form>
-      <label className="music-recommend-weight">
-        本次要求 {effectiveWeight}%
-        <input
-          type="range"
-          data-guide-anchor="weight"
-          aria-label="本次要求权重"
-          aria-valuetext={`本次要求 ${effectiveWeight}%，本地口味 ${100 - effectiveWeight}%`}
-          min={0}
-          max={100}
-          value={effectiveWeight}
-          disabled={busy || !description.trim()}
-          onChange={(event) => {
-            const next = event.currentTarget.valueAsNumber
-            setWeight(next)
-            void window.music
-              .setListeningPreference('requestWeight', String(next))
-              .catch(() => setError('未能保存推荐权重'))
+        <Button
+          size="small"
+          appearance="subtle"
+          disabled={busy || !currentSong?.title}
+          onClick={() => {
+            if (!currentSong) return
+            edit([currentSong.title, currentSong.artist].filter(Boolean).join(' · ').slice(0, 1000))
+            input.current?.focus()
           }}
-        />
-        本地口味 {100 - effectiveWeight}%
-      </label>
+        >
+          {currentSong?.title ? `以《${currentSong.title}》为参考` : '以当前歌曲为参考'}
+        </Button>
+        <label className="music-recommend-weight">
+          本次要求 {effectiveWeight}%
+          <input
+            type="range"
+            data-guide-anchor="weight"
+            aria-label="本次要求权重"
+            aria-valuetext={`本次要求 ${effectiveWeight}%，本地口味 ${100 - effectiveWeight}%`}
+            min={0}
+            max={100}
+            value={effectiveWeight}
+            disabled={busy || !description.trim()}
+            onChange={(event) => {
+              const next = event.currentTarget.valueAsNumber
+              setWeight(next)
+              void window.music
+                .setListeningPreference('requestWeight', String(next))
+                .catch(() => setError('未能保存推荐权重'))
+            }}
+          />
+          本地口味 {100 - effectiveWeight}%
+        </label>
+      </div>
       {!validCount && <small>请输入大于零的整数。</small>}
       {error && <p role="alert">{error}</p>}
     </section>

@@ -108,6 +108,11 @@ function groupedVersions(items: Versions['items']) {
   })
 }
 export function DownloadPane({
+  publicMode,
+  publicDraft,
+  setPublicDraft,
+  publicAI,
+  togglePublic,
   playlists,
   query,
   setQuery,
@@ -118,6 +123,11 @@ export function DownloadPane({
   refresh,
   preferredQuality = '320k',
 }: {
+  publicMode: boolean
+  publicDraft: string
+  setPublicDraft(value: string): void
+  publicAI: boolean
+  togglePublic(): void
   query: string
   setQuery(value: string): void
   toggle(): void
@@ -134,7 +144,6 @@ export function DownloadPane({
     [status, setStatus] = useState(''),
     [operation, setOperation] = useState<'idle' | 'cancellable' | 'pending'>('idle')
   const busy = operation !== 'idle'
-  const [publicMode, setPublicMode] = useState(false)
   const [platform, setPlatform] = useState('wy')
   const sourceId = useRef<string | null>(null)
   const [available, setAvailable] = useState<string[]>()
@@ -255,24 +264,15 @@ export function DownloadPane({
   }
   return (
     <section className="lx-panel" aria-label="搜索音乐">
-      <TabList
-        aria-label="查找内容"
-        className="discovery-kinds"
-        selectedValue={publicMode ? 'lists' : 'songs'}
-        onTabSelect={(_, d) => setPublicMode(d.value === 'lists')}
-      >
-        <Tab value="songs">歌曲</Tab>
-        <Tab value="lists">公开歌单</Tab>
-      </TabList>
       {publicMode ? (
         <PublicPlaylists
           playlists={playlists}
           play={playPublic}
           refresh={refresh}
-          recommend={(draft) => {
-            setQuery(draft)
-            toggle()
-          }}
+          ai={publicAI}
+          draft={publicDraft}
+          setDraft={setPublicDraft}
+          toggleAI={togglePublic}
         />
       ) : (
         <>

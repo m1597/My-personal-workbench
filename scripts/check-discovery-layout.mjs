@@ -86,6 +86,50 @@ try {
       w.setMinimumSize(360, 320)
       w.setContentSize(width, 740)
     }, width)
+    await openDiscovery(page, false)
+    const kinds = page.getByRole('tablist', { name: '查找内容' })
+    const geometry = async () =>
+      Promise.all(
+        [
+          kinds,
+          page.locator('form.download-search .fui-Input'),
+          page.locator('form.download-search button[aria-pressed]'),
+          page.locator('form.download-search button[type=submit]'),
+        ].map(async (el) => {
+          const r = await el.boundingBox()
+          assert.ok(r)
+          return [r.x, r.y, r.width, r.height]
+        }),
+      )
+    let baseline
+    for (const [kind, draft] of [
+      ['歌曲', '晚间路上'],
+      ['公开歌单', '开车时听的摇滚'],
+    ]) {
+      await kinds.getByRole('tab', { name: kind, exact: true }).click()
+      const keyword = page.locator('form.download-search input')
+      await keyword.fill(draft)
+      const before = await geometry()
+      baseline ??= before
+      const anchor = page.getByRole('button', { name: 'AI 推荐', exact: true })
+      const r = await anchor.boundingBox()
+      for (const expected of [true, false]) {
+        await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2)
+        await expect(anchor).toHaveAttribute('aria-pressed', String(expected))
+        await expect(keyword).toHaveValue(draft)
+        const after = await geometry()
+        assert.ok(
+          after.every((v, i) => v.every((n, j) => Math.abs(n - baseline[i][j]) <= 1)),
+          JSON.stringify({ kind, width, before, baseline, after }),
+        )
+        await page.screenshot({
+          path: path.join(root, width + '-' + kind + '-' + (expected ? 'AI' : '普通') + '.png'),
+        })
+      }
+    }
+    await kinds.getByRole('tab', { name: '歌曲', exact: true }).click()
+    await expect(page.locator('form.download-search input')).toHaveValue('晚间路上')
+    await page.locator('form.download-search input').fill('')
     for (const [name, selector] of [
       ['在线找歌', '.download-search'],
       ['智能推荐', '.music-compose'],

@@ -1,6 +1,7 @@
+import { DiscoveryInput } from './DiscoveryInput'
 import { BackButton } from './BackButton'
-import { Button, Checkbox, Dropdown, Input, Option, Tab, TabList } from '@fluentui/react-components'
-import { Play, Search, Sparkles } from 'lucide-react'
+import { Button, Checkbox, Dropdown, Option, Tab, TabList } from '@fluentui/react-components'
+import { Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Playlist } from './PlaylistSortMenu'
 import { guardSearchEnter } from './searchSubmit'
@@ -47,9 +48,15 @@ export function PublicPlaylists({
   play,
   playlists,
   refresh,
-  recommend,
+  ai,
+  draft,
+  setDraft,
+  toggleAI,
 }: {
-  recommend: (query: string) => void
+  ai: boolean
+  draft: string
+  setDraft(value: string): void
+  toggleAI(): void
   play: (ids: string[]) => Promise<unknown>
   playlists: Playlist[]
   refresh: () => Promise<void>
@@ -62,8 +69,34 @@ export function PublicPlaylists({
     [list, setList] = useState<PublicList>()
   const [songs, setSongs] = useState<PublicSong[]>([]),
     [selected, setSelected] = useState<string[]>([])
-  const [draft, setDraft] = useState(''),
-    [filter, setFilter] = useState('')
+  const [filter, setFilter] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const queryVersion = useRef(0)
+  useEffect(
+    () => () => {
+      queryVersion.current++
+    },
+    [],
+  )
+  async function submit() {
+    const version = ++queryVersion.current
+    setError('')
+    setThinking(ai)
+    try {
+      const keyword = ai
+        ? await window.music.aiCatalogQuery('publicLists', draft.trim())
+        : draft.trim()
+      if (version !== queryVersion.current) return
+      setTag('')
+      setPage(1)
+      setFilter(keyword)
+    } catch (e) {
+      if (version === queryVersion.current)
+        setError(String(e).split('Error: ').pop() || '歌单推荐失败')
+    } finally {
+      if (version === queryVersion.current) setThinking(false)
+    }
+  }
   const [loading, setLoading] = useState(false),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
@@ -115,7 +148,10 @@ export function PublicPlaylists({
     setBusy(true)
     setError('')
     try {
-      const { ids, skipped } = await host.keepPublicSongs(keys, !playlist && keys.length > 1)
+      const { ids, skipped } = await host.keepPublicSongs(
+        keys,
+        playlist ? 'save' : keys.length > 1 ? 'queue' : 'play',
+      )
       if (skipped.length) setError('当前音质不可用：' + skipped.join('、'))
       if (!ids.length) return
       if (playlist) {
@@ -252,6 +288,29 @@ export function PublicPlaylists({
         </>
       ) : (
         <>
+          <form
+            className="download-search"
+            onKeyDownCapture={guardSearchEnter}
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!thinking && (!ai || draft.trim())) void submit()
+            }}
+          >
+            <DiscoveryInput
+              lists
+              ai={ai}
+              value={draft}
+              edit={setDraft}
+              toggle={() => {
+                queryVersion.current++
+                setThinking(false)
+                toggleAI()
+              }}
+            />
+            <Button type="submit" appearance="primary" disabled={thinking || (ai && !draft.trim())}>
+              {ai ? '推荐歌单' : '搜索'}
+            </Button>
+          </form>
           <TabList
             aria-label="公开歌单平台"
             className="search-platforms"
@@ -261,7 +320,8 @@ export function PublicPlaylists({
               setTag('')
               setPage(1)
               setFilter('')
-              setDraft('')
+              queryVersion.current++
+              setThinking(false)
             }}
           >
             <Tab value="wy">网易云音乐</Tab>
@@ -277,7 +337,8 @@ export function PublicPlaylists({
               value={tags.find((t) => t.id === tag)?.name || '全部风格'}
               onOptionSelect={(_, d) => {
                 setTag(d.optionValue || '')
-                setDraft('')
+                queryVersion.current++
+                setThinking(false)
                 setFilter('')
                 setPage(1)
               }}
@@ -289,37 +350,6 @@ export function PublicPlaylists({
                 </Option>
               ))}
             </Dropdown>
-            <form
-              onKeyDownCapture={guardSearchEnter}
-              onSubmit={(e) => {
-                e.preventDefault()
-                setFilter(draft.trim())
-                setTag('')
-                setPage(1)
-              }}
-            >
-              <Input
-                aria-label="搜索公开歌单"
-                maxLength={160}
-                placeholder="搜索公开歌单"
-                value={draft}
-                onChange={(_, d) => setDraft(d.value)}
-                contentBefore={<Search size={16} />}
-                contentAfter={
-                  <Button
-                    type="button"
-                    size="small"
-                    appearance="subtle"
-                    aria-label="AI 推荐"
-                    title="切换到 AI 推荐"
-                    aria-pressed={false}
-                    icon={<Sparkles size={16} />}
-                    onClick={() => recommend(draft)}
-                  />
-                }
-              />
-              <Button type="submit">搜索</Button>
-            </form>
           </div>
           <h2>{filter ? '搜索结果' : '热门歌单'}</h2>
           {!loading && (
