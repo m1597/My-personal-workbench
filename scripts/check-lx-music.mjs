@@ -131,6 +131,7 @@ const app = await electron.launch({
   args: [
     path.resolve('dist/component-prototype/host'),
     '--mode=music',
+    '--mute-audio',
     '--user-data-dir=' + profile,
     '--workbench=' + path.resolve('out/renderer/index.html'),
   ],
@@ -310,7 +311,7 @@ try {
   )
   assert.ok(index >= 0, '在线目录缺少能核对歌名、艺人的测试版本')
   await choose(output)
-  await downloads.nth(index).click()
+  await versions.nth(index).getByRole('button', { name: '下载', exact: true }).click()
   await expect
     .poll(
       () =>
@@ -325,7 +326,11 @@ try {
   if (!live) {
     assert.match(status, /仅支持公网地址/)
     assert.deepEqual(await fs.readdir(output), [])
-    await downloads.nth(1).click()
+    const downloadable = pane
+      .getByRole('listitem')
+      .filter({ has: page.getByText('可下载版本', { exact: true }) })
+    const download = downloadable.getByRole('button', { name: '下载', exact: true })
+    await download.click()
     await pane.getByRole('button', { name: '取消', exact: true }).click()
     await expect(pane.getByRole('status')).toHaveText(/操作已取消/)
     assert.deepEqual(await fs.readdir(output), [])
@@ -350,13 +355,22 @@ try {
           return req
         }
       }, path.resolve('tests/fixtures/local-music/tone.mp3'))
+    const occupied = path.join(output, '测试艺人 - 可下载版本.mp3')
+    const sentinel = Buffer.from('保留原文件')
+    await fs.writeFile(occupied, sentinel, { flag: 'wx' })
     await mockAudio()
-    await downloads.nth(1).click()
+    await download.click()
+    await expect(pane.getByRole('status')).toHaveText('目标文件已存在，请选择其他目录')
+    assert.deepEqual(await fs.readFile(occupied), sentinel)
+    await fs.unlink(occupied)
+    await mockAudio()
+    await download.click()
     await expect(pane.getByText(/已下载并入库.*自动换源：在线测试源 → FitBay 测试源/)).toBeVisible()
     assert.equal(await page.evaluate(() => window.music.lxInfo()), '在线测试源')
-    await mockAudio()
-    await downloads.nth(1).click()
-    await expect(pane.getByRole('status')).toHaveText('目标文件已存在，请选择其他目录')
+    await expect(
+      downloadable.getByRole('button', { name: '查看文件所在位置', exact: true }),
+    ).toBeVisible()
+    await expect(download).toHaveCount(0)
     const audio = (await fs.readdir(output)).find((name) => name.endsWith('.mp3'))
     assert.ok(audio)
     assert.equal(
