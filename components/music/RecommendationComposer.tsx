@@ -64,6 +64,7 @@ export function RecommendationComposer({
   return (
     <section className="music-compose">
       <form
+        id="music-generate-recommendations"
         className="download-search"
         onKeyDownCapture={guardSearchEnter}
         onSubmit={(event) => {
@@ -84,11 +85,12 @@ export function RecommendationComposer({
         </Button>
       </form>
       <div className="discovery-options">
-        {' '}
         <label className="music-target-count" htmlFor="music-count">
           推荐首数
           <Input
             id="music-count"
+            input={{ form: 'music-generate-recommendations' }}
+            onKeyDownCapture={guardSearchEnter}
             type="text"
             inputMode="numeric"
             pattern="[0-9]+"

@@ -189,7 +189,7 @@ try {
     }).observe(document.body, { subtree: true, childList: true, characterData: true })
     window.fixtureTimes = times
   })
-  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await page.getByLabel('推荐首数').press('Enter')
   const events = []
   async function capture(step) {
     const state = await page.evaluate(async () => {
@@ -333,7 +333,32 @@ try {
       (await fs.readFile('src/renderer/public/fitbay.png')).toString('base64')
     const recommendation = page.locator('.music-list li').filter({ hasText: '晨风' }).first()
     await expect(recommendation.locator('.album-art img')).toHaveAttribute('src', expectedCover)
-    await recommendation.getByRole('button', { name: '试听晨风', exact: true }).click()
+    const frame = recommendation.locator('.music-track-icon'),
+      button = frame.getByRole('button')
+    const icon = button.locator('.fui-Button__icon')
+    const bounds = await frame.boundingBox()
+    assert.deepEqual(await button.boundingBox(), bounds)
+    assert.deepEqual(await frame.locator('img').boundingBox(), bounds)
+    async function checkCover(name, opacity) {
+      await expect(icon).toHaveCSS('opacity', opacity)
+      await expect(button).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await frame.screenshot({ path: path.join(root, 'cover-' + name + '.png') })
+    }
+    await page.mouse.move(1, 1)
+    await checkCover('rest', '0')
+    await button.hover()
+    await checkCover('hover', '1')
+    await page.mouse.move(1, 1)
+    await button.focus()
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Shift+Tab')
+    await expect(button).toBeFocused()
+    await checkCover('focus', '1')
+    await button.click()
+    await page.mouse.move(1, 1)
+    await page.keyboard.press('Tab')
+    await expect(button).toHaveAttribute('aria-label', '暂停晨风')
+    await checkCover('playing', '1')
     await expect(page.locator('.music-cover-button img')).toHaveAttribute('src', expectedCover)
     await page.screenshot({ path: path.join(root, '05-recommendation-player-art.png') })
     await openDiscovery(page, false)

@@ -190,7 +190,7 @@ export function PublicPlaylists({
         'done',
         result.added
           ? '已导入 · 新增 ' + result.added + ' 首，跳过 ' + result.skipped + ' 首'
-          : '全部重复 · 跳过 ' + result.skipped + ' 首',
+          : '已导入 · 全部重复，' + result.skipped + ' 首均已在歌单中',
       )
       await refresh()
     } catch (e) {

@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from 'react'
 
-export function guardSearchEnter(event: KeyboardEvent<HTMLFormElement>) {
+export function guardSearchEnter(event: KeyboardEvent<HTMLElement>) {
   if (
     event.key === 'Enter' &&
     (event.repeat || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)

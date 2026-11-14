@@ -1964,7 +1964,11 @@ function Music() {
                               })
                             }
                           >
-                            <div className="music-track-icon" data-cover={!!r.daily}>
+                            <div
+                              className="music-track-icon"
+                              data-cover={!!r.daily}
+                              data-playing={(r.localId ?? r.id) === current.current && !paused}
+                            >
                               {r.daily && <Cover track id={r.localId ?? undefined} />}
                               {playable(r) ? (
                                 <Button

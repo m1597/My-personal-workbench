@@ -138,7 +138,7 @@ try {
   await first.getByRole('button', { name: '重试导入' }).click()
   await expect(status).toHaveText('已导入 · 新增 1 首，跳过 2 首')
   await action()
-  await expect(status).toHaveText('全部重复 · 跳过 3 首')
+  await expect(status).toHaveText('已导入 · 全部重复，3 首均已在歌单中')
   await expect(cards.nth(1).getByRole('status')).toBeEmpty()
   await first.locator('.public-list-card').click()
   await expect(panel.getByRole('status').filter({ hasText: '全部重复' })).toBeVisible()
