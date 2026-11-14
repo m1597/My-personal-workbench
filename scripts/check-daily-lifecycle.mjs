@@ -137,7 +137,7 @@ try {
   await expect(heart).toHaveAttribute('aria-pressed', 'false')
   await heart.click()
   await expect(heart).toHaveAttribute('aria-pressed', 'true')
-  await page.getByRole('tab', { name: '歌单' }).click()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   const navigation = page.getByRole('button', { name: '歌单导航' })
   if (await navigation.isVisible()) await navigation.click()
   await page.getByRole('button', { name: '我的收藏', exact: true }).click()

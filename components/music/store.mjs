@@ -506,11 +506,14 @@ export class MusicStore {
         if (!this.db.prepare('SELECT 1 FROM batches WHERE id=? AND day=?').get(batch, day()))
           throw Error('推荐已过期')
       } else this.db.prepare('INSERT INTO batches VALUES(?,?,?)').run(batch, day(), preference)
-      if (targetCount)
+      if (targetCount) {
         this.db
           .prepare("INSERT INTO recommendation_runs VALUES(?,?,'running','正在准备推荐')")
           .run(batch, targetCount)
-      if (targetCount) this.set('latest-daily-run', batch)
+        if (!this.get('retiring-daily-run'))
+          this.set('retiring-daily-run', this.get('latest-daily-run'))
+        this.set('latest-daily-run', batch)
+      }
       for (const row of accepted) {
         const id = randomUUID()
         this.db

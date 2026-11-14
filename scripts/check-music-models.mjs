@@ -543,7 +543,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   const history = await page.evaluate(() => window.music.state())
   const tasteBefore = await fs.readFile(docfile, 'utf8')
   const filesBefore = await fs.readdir(output)
-  await page.getByRole('tab', { name: '歌单' }).click()
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
   const nav = page.getByRole('button', { name: '歌单导航' })
   if (await nav.isVisible()) await nav.click()
   await page.getByRole('button', { name: '歌曲推荐', exact: true }).click()
@@ -720,6 +720,15 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
   assert.match(blocked.batch.message, /429/)
   assert.equal(blocked.batch.targetCount, 8)
   assert.equal(blocked.rows.length, 1)
+  // A cancelled preparation must not strand the preceding batch's downloaded recordings.
+  assert.deepEqual(
+    await page.evaluate(async () =>
+      (await window.music.state()).localTracks.filter((track) =>
+        track.title.startsWith('队列歌曲'),
+      ),
+    ),
+    [],
+  )
   const nextInput = await app.evaluate(() => globalThis.additionalInput)
   assert.deepEqual(nextInput.recentArtists, ['独唱艺人'])
   assert.equal(nextInput.preference, '只想听独唱艺人本人的歌')

@@ -810,7 +810,6 @@ export function musicService(
       const label = preference.trim() || (mode === 'artist' ? '按歌手推荐' : '按风格推荐')
       if (!weight) preference = ''
       clearTimeout(updateTimer)
-      const previous = store.get('latest-daily-run')
       store.expireRecommendations(undefined, true)
       const batch = store.saveSuggestions(label, [], '待处理', undefined, targetCount)
       let cleanupMessage = ''
@@ -826,13 +825,14 @@ export function musicService(
       try {
         const { failures } = await retireDownloads(
           store,
-          previous,
+          store.get('retiring-daily-run'),
           {
             forget: forgetTracks,
             trash: (file) => shell.trashItem(file),
           },
           signal,
         )
+        store.set('retiring-daily-run', '')
         if (failures) cleanupMessage = ' · 上轮有 ' + failures + ' 首未能完整回收'
         if (
           !store.get('music-recommend-dir') &&
