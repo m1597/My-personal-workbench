@@ -191,7 +191,12 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     for (const a of result) related.set(a.id, a)
     return result
   })
-  const creditedArtist=(id)=>getStore().db.prepare("SELECT mbid AS id,name,'' AS detail FROM song_artist_credits WHERE mbid=? LIMIT 1").get(id)
+  const creditedArtist = (id) =>
+    getStore()
+      .db.prepare(
+        "SELECT mbid AS id,name,'' AS detail FROM song_artist_credits WHERE mbid=? LIMIT 1",
+      )
+      .get(id)
   const knownArtist = (id) =>
     mbid.test(id) &&
     (artists.has(id) ||
@@ -208,7 +213,14 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     const cache = db
       .prepare('SELECT payload,updated FROM artist_song_pages WHERE artist=? AND offset=?')
       .get(id, offset)
-    if (cache && Date.now() - cache.updated < 3600000) return JSON.parse(cache.payload)
+    const cachedPage = () => {
+      const page = JSON.parse(cache.payload)
+      for (const song of page.songs)
+        for (const a of song.artistCredits ?? [])
+          if (mbid.test(a.id) && !artists.has(a.id)) artists.set(a.id, { ...a, detail: '' })
+      return page
+    }
+    if (cache && Date.now() - cache.updated < 3600000) return cachedPage()
     try {
       const data = await metadata('recording', {
         artist: id,
@@ -244,8 +256,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
       )
       return page
     } catch (e) {
-      if (cache)
-        return { ...JSON.parse(cache.payload), notice: String(e.message) + '；显示已缓存的目录。' }
+      if (cache) return { ...cachedPage(), notice: String(e.message) + '；显示已缓存的目录。' }
       throw e
     }
   })

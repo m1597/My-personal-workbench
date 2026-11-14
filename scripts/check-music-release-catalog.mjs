@@ -435,8 +435,8 @@ async function launch() {
             },
           ],
         })
-      if (entity === second && globalThis.failEditionOnce) {
-        globalThis.failEditionOnce = false
+      if (entity === second && globalThis.editionFailures > 0) {
+        globalThis.editionFailures--
         return new Response(null, { status: 503 })
       }
       if (entity === first || entity === second)
@@ -506,11 +506,11 @@ try {
   const online = versions.nth(1)
   await online.scrollIntoViewIfNeeded()
   const creditButtons = online.locator('.song-credit-links button')
-  const albumName = await creditButtons.nth(1).innerText()
+  const albumName = await creditButtons.nth(1).textContent()
   const platform = await page
     .locator('.music-scroll [role=tab][aria-selected=true]')
     .first()
-    .innerText()
+    .textContent()
   for (const [index, title] of [
     [0, '青禾'],
     [1, albumName],
@@ -566,11 +566,11 @@ try {
   await expect(pick).toBeVisible({ timeout: 15000 })
   const selector = news().getByRole('combobox', { name: '动态发行版本' })
   await app.evaluate(() => {
-    globalThis.failEditionOnce = true
+    globalThis.editionFailures = 2
   })
   await selector.click()
   await page.getByRole('option', { name: /豪华版/ }).click()
-  await expect(news().getByRole('alert')).toContainText('暂时无法访问')
+  await expect(news().getByRole('alert')).toContainText('HTTP 503', { timeout: 15000 })
   const failedRequests = await app.evaluate(() => globalThis.catalogRequests)
   await news().getByRole('button', { name: '重试' }).click()
   await expect(news().getByText('2.2 缺少曲', { exact: true })).toBeVisible()
@@ -640,7 +640,10 @@ try {
   await similar.evaluate((el) => el.scrollIntoView({ block: 'center' }))
   await page.screenshot({ path: path.join(root, 'similar-artists.png') })
   const home = page.getByRole('region', { name: '歌手主页' })
-  await similar.getByRole('button', { name: '云海', exact: true }).click()
+  await similar
+    .locator('.release-event-head')
+    .getByRole('button', { name: '云海', exact: true })
+    .click()
   await expect(home.getByText('夜风', { exact: true })).toBeVisible()
   await home.getByRole('button', { name: '返回' }).click()
   await similar.getByRole('button', { name: '关注云海' }).click()
@@ -830,7 +833,7 @@ try {
       await link.scrollIntoViewIfNeeded()
       const point = await link.evaluate((el) => {
         const r = el.getBoundingClientRect(),
-          parent = el.parentElement.getBoundingClientRect()
+          parent = el.closest('.library-name,.library-album').getBoundingClientRect()
         if (r.right + 4 >= parent.right) throw Error('文本链接占满列宽')
         const x = r.right + 4,
           y = r.top + r.height / 2
