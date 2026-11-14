@@ -10,10 +10,10 @@ export const guideSteps = [
     text: '从目录选择音源，也可以导入本地文件或链接。',
   },
   {
-    page: 'sources',
+    page: 'mcp',
     target: 'mcp',
     title: '连接你的 Agent',
-    text: '按「MCP 连接方法」添加 stdio 服务，便可让 Agent 导入或切换音源。展开该说明还可查看如何授权 Agent 整理本地歌曲。',
+    text: '保持 Music 运行，将启动命令复制到支持 stdio 的本机 Agent，即可让它查询、导入或切换音源。',
   },
   {
     page: 'model',
@@ -59,7 +59,7 @@ export function MusicGuide({
       inline
       positioning={{
         target: anchor,
-        position: name === 'model' || name === 'mcp' ? 'above' : 'below',
+        position: name === 'model' ? 'above' : 'below',
         align: 'start',
         strategy: 'fixed',
         offset: 10,

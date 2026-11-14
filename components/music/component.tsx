@@ -154,6 +154,7 @@ declare global {
         albumCover(id: string): Promise<string | null>
         trackCover(id: string): Promise<string | null>
         musicGuide(): Promise<{ seen: boolean; script: string }>
+        copyMcpCommand(): Promise<void>
         markMusicGuide(): Promise<void>
         setMusicQuality(quality: string): Promise<void>
         setMusicOutput(volume: number, muted: boolean): Promise<void>

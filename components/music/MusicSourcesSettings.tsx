@@ -21,13 +21,7 @@ export type SourceInventory = {
   active: string | null
 }
 
-export function MusicSourcesSettings({
-  script,
-  showConnection,
-}: {
-  script: string
-  showConnection: boolean
-}) {
+export function MusicSourcesSettings() {
   const host = window.music
   const [data, setData] = useState<SourceInventory>()
   const [online, setOnline] = useState(false)
@@ -229,15 +223,6 @@ export function MusicSourcesSettings({
           </div>
         </fieldset>
       )}
-      <details className="music-mcp-connection" open={showConnection}>
-        <summary data-guide-anchor="mcp">MCP 连接方法</summary>
-        <code>node "{script}"</code>
-        <p>连接后，可让 Agent 使用音乐源 MCP 导入或切换音源。</p>
-        <p>
-          要整理本地歌曲，请在你自己的 Agent 中授权音乐文件夹，先让它列出移动和重命名前后的路径。
-          核对方案后再让它执行。外部移动或改名后，FitBay 中的旧条目可能需要「重新定位」。
-        </p>
-      </details>
       {status && <span role="status">{status}</span>}
     </section>
   )

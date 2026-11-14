@@ -53,14 +53,33 @@ try {
   let player = await open()
   await player.getByRole('button', { name: '跳过', exact: true }).click()
   await player.waitForSelector('.music-shell', { timeout: 5000 })
+  // Supply the same opaque fallback used beneath the transparent native child view.
+  await player.evaluate(() => {
+    document.documentElement.style.backgroundColor = 'var(--base)'
+  })
   const loaded = await player.evaluate(() => window.music.state())
   expect(loaded.localTracks.map((row) => row.title)).toEqual(['A', 'B', 'C'])
   await player.getByRole('button', { name: '播放A', exact: true }).click({ timeout: 5000 })
   await openMusicSettings(player)
   await expect(player.locator('.music-settings h2')).toHaveText(['本地曲库', '曲库管理'])
-  for (const name of ['音乐源', '下载', '模型与推荐', '全局快捷键']) {
+  for (const name of ['音乐源', 'MCP', '下载', '模型与推荐', '全局快捷键']) {
     await selectMusicSettings(player, name)
     await expect(player.locator('.music-settings h2')).toHaveText([name])
+    if (name === '音乐源') await expect(player.getByText('复制启动命令')).toHaveCount(0)
+    if (name === 'MCP') {
+      // Capture this action without overwriting the user's Windows clipboard.
+      await app.evaluate(({ clipboard }) => {
+        clipboard.writeText = (value) => {
+          globalThis.testMcpCommand = value
+        }
+      })
+      await player.getByRole('button', { name: '复制启动命令' }).click()
+      await expect(player.getByRole('status')).toContainText('已复制启动命令')
+      expect(await app.evaluate(() => globalThis.testMcpCommand)).toBe(
+        await player.locator('.music-mcp-connection code').innerText(),
+      )
+      await player.screenshot({ path: path.join(evidence, 'mcp-settings.png') })
+    }
   }
   const prefs = () => player.evaluate(async () => (await window.music.state()).prefs)
   const combo = 'Ctrl+Alt+Shift+F10'
@@ -138,10 +157,6 @@ try {
   expect(
     await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows().some((w) => w.isFocused())),
   ).toBe(false)
-  // Supply the same opaque fallback used beneath the transparent native child view.
-  await player.evaluate(() => {
-    document.documentElement.style.backgroundColor = 'var(--base)'
-  })
   await selectMusicSettings(player, '下载')
   await player.getByRole('combobox', { name: '首选音质' }).click()
   await expect(player.getByRole('listbox')).toBeVisible()
@@ -186,6 +201,7 @@ try {
     '下载',
     '模型与推荐',
     '全局快捷键',
+    'MCP',
   ])
   await player.screenshot({
     path: path.join(evidence, 'settings-narrow-menu.png'),

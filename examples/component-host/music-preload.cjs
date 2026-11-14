@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 const names = [
   'musicGuide',
+  'copyMcpCommand',
   'markMusicGuide',
   'lyrics',
   'showLyrics',
@@ -32,6 +33,8 @@ const names = [
   'albums',
   'findArtists',
   'followedArtists',
+  'similarArtists',
+  'artistHighlights',
   'followArtist',
   'releaseNews',
   'artistReleases',
@@ -61,6 +64,7 @@ const names = [
   'removeLocal',
   'removeFolder',
   'openFolder',
+  'revealTrack',
   'trashLocal',
   'renamePlaylist',
   'deletePlaylist',

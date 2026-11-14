@@ -70,6 +70,8 @@ try {
       )
     else await expect(page.locator('.music-settings')).toBeVisible()
     if (id === 'mcp') {
+      await expect(page.locator('.music-settings h2')).toHaveText('MCP')
+      await expect(target).toHaveText('复制启动命令')
       const command = page.locator('.music-mcp-connection code')
       await expect(command).toContainText('music-source-mcp.mjs')
       await expect(page.locator('.music-mcp-connection')).toContainText('移动和重命名前后的路径')

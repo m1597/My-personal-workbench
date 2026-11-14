@@ -31,14 +31,17 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.music-mcp-connection summary {
-  width: fit-content;
-  cursor: pointer;
+.music-mcp-connection :is(h3, p, ul) {
+  margin-block: 0;
+}
+.music-mcp-connection ul {
+  padding-inline-start: var(--space-20);
+  line-height: 1.7;
 }
 .music-mcp-connection code {
   display: block;
   width: fit-content;
-  margin-block-start: var(--space-10);
+  max-width: 100%;
   overflow-wrap: anywhere;
   user-select: all;
 }

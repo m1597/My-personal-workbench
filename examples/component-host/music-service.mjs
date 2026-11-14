@@ -24,7 +24,7 @@ import { openAudio, pathKey, regularFile } from './music/local-files.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
-import { ipcMain, dialog, nativeImage, safeStorage, shell } from 'electron'
+import { ipcMain, clipboard, dialog, nativeImage, safeStorage, shell } from 'electron'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
 import { localStream } from './local-stream.mjs'
@@ -87,6 +87,7 @@ export function musicService(
     seen: Boolean(store.get('music-guide-v1')),
     script: mcpScript,
   }))
+  bind('copyMcpCommand', () => clipboard.writeText(`node "${mcpScript}"`))
   bind('markMusicGuide', () => store.set('music-guide-v1', 1))
   const lx = registerLx(
     bind,
