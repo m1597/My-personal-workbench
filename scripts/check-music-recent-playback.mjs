@@ -79,6 +79,9 @@ try {
   }
   evidence.recorded = events()
   const history = await openHistory(page)
+  await history.locator('li').first().click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '查看文件所在位置' })).toBeVisible()
+  await page.keyboard.press('Escape')
   const song = history.getByRole('listitem').filter({ hasText: '短歌' })
   await expect(song.first()).toBeVisible()
   evidence.times = await song.locator('small').allTextContents()

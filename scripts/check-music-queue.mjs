@@ -53,6 +53,9 @@ try {
   await button('播放队列').click()
   const pop = page.locator('.music-queue')
   await expect(pop.getByText('当前曲目 · B · 测试艺人')).toBeVisible()
+  await pop.locator('li').first().click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '查看文件所在位置' })).toBeVisible()
+  await page.keyboard.press('Escape')
   await expect(pop.locator('li')).toHaveText(['A · 测试艺人', 'D · 测试艺人'])
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop

@@ -51,6 +51,26 @@ try {
   await expect(button('录音')).toHaveCount(0)
   await button('春天').click()
   await expect(page.getByRole('heading', { name: '文件夹 / 春天' })).toBeVisible()
+  await app.evaluate(({ shell }) => {
+    globalThis.revealedFiles = []
+    shell.showItemInFolder = (file) => globalThis.revealedFiles.push(file)
+  })
+  const reveal = page.getByRole('menuitem', { name: '查看文件所在位置', exact: true })
+  await page.locator('.library-row').first().click({ button: 'right' })
+  await expect(reveal).toBeVisible()
+  await page.screenshot({
+    path: path.join(evidence, '歌曲所在位置.png'),
+    style: ':root {background:var(--base)!important}',
+    animations: 'disabled',
+  })
+  await reveal.click()
+  assert.deepEqual(await app.evaluate(() => globalThis.revealedFiles), [
+    path.join(root, directories[0], '晨间.wav'),
+  ])
+  await assert.rejects(
+    page.evaluate(() => window.music.revealTrack('C:/Windows/not-a-track')),
+    /歌曲已移除/,
+  )
   await expect(button('我的收藏')).toHaveCount(0)
   await expect(page.locator('.library-name strong')).toHaveText(['晨间'])
   await page.getByRole('tab', { name: '歌单', exact: true }).click()

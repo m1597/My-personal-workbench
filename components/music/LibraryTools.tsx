@@ -1,3 +1,4 @@
+import { TrackMenu } from './TrackMenu'
 import { useEffect, useState } from 'react'
 import { Button, Dropdown, Option } from '@fluentui/react-components'
 import { Play } from 'lucide-react'
@@ -98,17 +99,19 @@ export function RecentHistory({
                   const t = items.get(r.track)
                   return (
                     t && (
-                      <li key={r.track}>
-                        <Button
-                          appearance="subtle"
-                          disabled={!t.available}
-                          icon={<Play size={15} />}
-                          onClick={() => play(r.track, queue)}
-                        >
-                          {t.title} · {t.artist}
-                        </Button>
-                        <small>{new Date(r.playedAt).toLocaleString('zh-CN')}</small>
-                      </li>
+                      <TrackMenu key={r.track} localId={r.track}>
+                        <li>
+                          <Button
+                            appearance="subtle"
+                            disabled={!t.available}
+                            icon={<Play size={15} />}
+                            onClick={() => play(r.track, queue)}
+                          >
+                            {t.title} · {t.artist}
+                          </Button>
+                          <small>{new Date(r.playedAt).toLocaleString('zh-CN')}</small>
+                        </li>
+                      </TrackMenu>
                     )
                   )
                 })}

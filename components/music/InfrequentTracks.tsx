@@ -1,3 +1,4 @@
+import { TrackMenu } from './TrackMenu'
 import { useState } from 'react'
 import {
   Button,
@@ -123,45 +124,47 @@ export function InfrequentTracks({ rows, days, changeDays, active, playing, play
           </div>
           <ul>
             {sorted.map((t) => (
-              <li key={t.id} className="infrequent-row">
-                <Checkbox
-                  aria-label={'选择' + t.title}
-                  checked={selected.has(t.id)}
-                  onChange={(_, d) =>
-                    setSelected((prev) => {
-                      const next = new Set(prev)
-                      if (d.checked) next.add(t.id)
-                      else next.delete(t.id)
-                      return next
-                    })
-                  }
-                />
-                <Button
-                  size="small"
-                  appearance="subtle"
-                  aria-label={(active === t.id && playing ? '暂停' : '试听') + t.title}
-                  disabled={!t.available}
-                  icon={active === t.id && playing ? <Pause size={16} /> : <Play size={16} />}
-                  onClick={() =>
-                    play(
-                      t.id,
-                      sorted.filter((track) => track.available).map((track) => track.id),
-                    )
-                  }
-                />
-                <div className="library-name">
-                  <strong>{t.title}</strong>
-                  <small>{t.artist}</small>
-                  <small>
-                    {t.lastHeardAt
-                      ? '上次收听 ' + new Date(t.lastHeardAt).toLocaleDateString('zh-CN')
-                      : '尚无收听记录 · ' +
-                        new Date(t.observedAt).toLocaleDateString('zh-CN') +
-                        ' 起观察'}
-                  </small>
-                </div>
-                <small>{t.size === null ? '大小未知' : formatBytes(t.size)}</small>
-              </li>
+              <TrackMenu key={t.id} localId={t.id}>
+                <li className="infrequent-row">
+                  <Checkbox
+                    aria-label={'选择' + t.title}
+                    checked={selected.has(t.id)}
+                    onChange={(_, d) =>
+                      setSelected((prev) => {
+                        const next = new Set(prev)
+                        if (d.checked) next.add(t.id)
+                        else next.delete(t.id)
+                        return next
+                      })
+                    }
+                  />
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    aria-label={(active === t.id && playing ? '暂停' : '试听') + t.title}
+                    disabled={!t.available}
+                    icon={active === t.id && playing ? <Pause size={16} /> : <Play size={16} />}
+                    onClick={() =>
+                      play(
+                        t.id,
+                        sorted.filter((track) => track.available).map((track) => track.id),
+                      )
+                    }
+                  />
+                  <div className="library-name">
+                    <strong>{t.title}</strong>
+                    <small>{t.artist}</small>
+                    <small>
+                      {t.lastHeardAt
+                        ? '上次收听 ' + new Date(t.lastHeardAt).toLocaleDateString('zh-CN')
+                        : '尚无收听记录 · ' +
+                          new Date(t.observedAt).toLocaleDateString('zh-CN') +
+                          ' 起观察'}
+                    </small>
+                  </div>
+                  <small>{t.size === null ? '大小未知' : formatBytes(t.size)}</small>
+                </li>
+              </TrackMenu>
             ))}
           </ul>
         </>

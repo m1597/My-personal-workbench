@@ -1,7 +1,19 @@
+import { TrackMenu } from './TrackMenu'
 import { useState } from 'react'
 import { Button, Popover, PopoverSurface, PopoverTrigger } from '@fluentui/react-components'
 import { ListMusic } from 'lucide-react'
-type Song = { id: string; title: string; artist: string }
+type Song = {
+  id: string
+  title: string
+  artist: string
+  origin?: string
+  localCopy?: string | null
+  localId?: string | null
+}
+function localFile(song: Song) {
+  if (song.origin === 'online') return song.localCopy
+  return song.origin ? song.id : song.localId
+}
 export function PlaybackQueue({
   onOpen,
   active,
@@ -47,9 +59,11 @@ export function PlaybackQueue({
       <PopoverSurface className="component-popup music-queue" aria-label="播放队列">
         <strong>播放队列</strong>
         {active && (
-          <p>
-            当前曲目 · {active.title} · {active.artist}
-          </p>
+          <TrackMenu localId={localFile(active)}>
+            <p>
+              当前曲目 · {active.title} · {active.artist}
+            </p>
+          </TrackMenu>
         )}
         <small>接下来</small>
         {upcoming.length ? (
@@ -60,9 +74,11 @@ export function PlaybackQueue({
               const key = seen.has(id) ? id + ':repeat' : id
               seen.add(id)
               return (
-                <li key={key}>
-                  {row.title} · {row.artist}
-                </li>
+                <TrackMenu key={key} localId={localFile(row)}>
+                  <li>
+                    {row.title} · {row.artist}
+                  </li>
+                </TrackMenu>
               )
             })}
           </ol>

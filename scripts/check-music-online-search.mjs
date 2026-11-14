@@ -127,6 +127,34 @@ try {
     .poll(() => page.evaluate(async () => (await window.music.state()).prefs.manualDir))
     .toBe(downloads)
   await tab('在线找歌').click()
+  const platforms = page.getByRole('tablist', { name: '搜索平台' })
+  for (const label of ['QQ 音乐', '酷狗音乐', '网易云音乐']) {
+    const selected = platforms.getByRole('tab', { name: label })
+    await selected.click()
+    for (const hovered of [true, false]) {
+      await (hovered ? selected : page.getByRole('textbox', { name: '搜索关键词' })).hover()
+      const styles = await platforms.getByRole('tab').evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          selected: node.getAttribute('aria-selected') === 'true',
+          fill: getComputedStyle(node).backgroundColor,
+          line: getComputedStyle(node, '::after').content,
+          thickness: getComputedStyle(node, '::after').height,
+        })),
+      )
+      for (const item of styles) {
+        assert.match(item.fill, /^rgba\(/)
+        if (item.selected) {
+          assert.notEqual(item.line, 'none')
+          assert.equal(item.thickness, '2px')
+        } else assert.equal(item.line, 'none')
+      }
+    }
+    await page.screenshot({
+      path: path.join(root, label + '-平台.png'),
+      style: ':root {background:var(--base)!important}',
+      animations: 'disabled',
+    })
+  }
   const history = page.getByRole('region', { name: '最近搜索' })
   const input = page.getByRole('textbox', { name: '搜索关键词' })
   await expect(history).toHaveCount(0)

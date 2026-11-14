@@ -71,6 +71,9 @@ try {
   const rows = page.locator('.infrequent-row')
   await button('不常听').click()
   await expect(rows.locator('strong')).toHaveText(['半年', '旧录音', '长录音'])
+  await rows.first().click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '查看文件所在位置' })).toBeVisible()
+  await page.keyboard.press('Escape')
   const select = async (name, value) => {
     await page.getByRole('combobox', { name, exact: true }).click()
     await page.getByRole('option', { name: value, exact: true }).click()

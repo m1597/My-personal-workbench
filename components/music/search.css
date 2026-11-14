@@ -12,13 +12,34 @@
 .lx-panel .search-platforms {
   gap: var(--space-4);
 }
-.search-platforms [role="tab"][aria-selected="true"] {
-  background: var(--solid-surface);
+.lx-panel .search-platforms [role="tab"] {
+  position: relative;
+  background: var(--canvas);
+  color: var(--text-secondary);
   border-radius: var(--radius-6);
 }
-.search-platforms [role="tab"]::before,
-.search-platforms [role="tab"]::after {
+.lx-panel .search-platforms [role="tab"]:hover {
+  background: var(--backdrop);
+  color: var(--text);
+}
+.lx-panel .search-platforms [role="tab"][aria-selected="true"] {
+  color: var(--text);
+  background: var(--backdrop);
+}
+.lx-panel .search-platforms [role="tab"]::before {
   display: none;
+}
+.lx-panel .search-platforms [role="tab"]::after {
+  content: none;
+}
+.lx-panel .search-platforms [role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 8px 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: none;
 }
 .search-history header,
 .search-result-head,
