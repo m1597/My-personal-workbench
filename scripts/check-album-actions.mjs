@@ -45,9 +45,14 @@ async function launch() {
     env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
   })
 }
+async function musicWindow(app) {
+  const locate = () => app.windows().find((page) => page.url().includes('/music/index.html'))
+  await expect.poll(() => Boolean(locate())).toBe(true)
+  return locate()
+}
 let app = await launch()
 try {
-  let page = await app.firstWindow()
+  let page = await musicWindow(app)
   const button = (name) => page.getByRole('button', { name, exact: true })
   const state = () => page.evaluate(() => window.music.state())
   page.setDefaultTimeout(7000)
@@ -135,7 +140,7 @@ try {
   await expect.poll(async () => (await state()).queueOccurrence).toBe(1)
   await app.close()
   app = await launch()
-  page = await app.firstWindow()
+  page = await musicWindow(app)
   page.setDefaultTimeout(7000)
   await page.waitForSelector('.music-shell')
   await expect.poll(async () => (await state()).queueOccurrence).toBe(1)
@@ -178,7 +183,7 @@ try {
   await expect.poll(async () => (await state()).pendingAlbum).toEqual([other[1]])
   await app.close()
   app = await launch()
-  page = await app.firstWindow()
+  page = await musicWindow(app)
   await expect(page.locator('.music-order')).toHaveText('单曲循环')
   await page
     .locator('.music-transport')

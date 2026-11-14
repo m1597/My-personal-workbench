@@ -1409,7 +1409,11 @@ function Music() {
             tracks={state?.localTracks ?? []}
             activeId={now}
             audio={audio.current}
-            play={(id, ids) => void act(() => (ids ? playOrdered(id, ids) : startTrack(id)))}
+            play={(id, ids) =>
+              void act(() =>
+                ids ? playOrdered(id, ids) : startTrack(id, queue.includes(id) ? queue : [id]),
+              )
+            }
             refresh={refresh}
           />
         ) : tab === 'settings' ? (
