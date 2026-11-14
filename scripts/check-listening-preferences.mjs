@@ -16,6 +16,29 @@ const base = { title: '晨曲', artist: '青禾' }
 const row = (name, singer = '青禾') => ({ name, singer })
 const prefs = { edition: 'live', cover: 'avoid', instrumental: 'requested' }
 const ordinary = recordingConstraints('适合春天的音乐', prefs)
+for (const [input, allowStudio, allowLive, rank] of [
+  ['现场版也可以', true, true, 'any'],
+  ['现场也行', true, true, 'any'],
+  ['允许录音室版', true, true, 'any'],
+  ['现场和录音室都可以', true, true, 'any'],
+  ['优先录音室版', true, true, 'studio'],
+  ['现场版优先', true, true, 'live'],
+  ['只要现场', false, true, 'live'],
+  ['不要现场', true, false, 'live'],
+  ['不要录音室版', false, true, 'live'],
+  ['只听录音室版', true, false, 'live'],
+  ['优先录音室版，现场也行', true, true, 'studio'],
+  ['适合活动现场播放的音乐', true, true, 'live'],
+  ['适合春天的音乐', true, true, 'live'],
+]) {
+  const constraints = recordingConstraints(input, prefs)
+  const studio = row('晨曲')
+  const live = row('晨曲 (Live)')
+  assert.equal(!!titleMatch(base, studio, constraints), allowStudio, input)
+  assert.equal(!!titleMatch(base, live, constraints), allowLive, input)
+  const rankDifference = recordingRank(studio, constraints) - recordingRank(live, constraints)
+  assert.equal(Math.sign(rankDifference), { any: 0, studio: -1, live: 1 }[rank], input)
+}
 assert.ok(recordingRank(row('晨曲 (Live)'), ordinary) < recordingRank(row('晨曲'), ordinary))
 assert.equal(titleMatch(base, row('晨曲 (伴奏)'), ordinary), '')
 assert.ok(titleMatch(base, row('晨曲 (伴奏)'), recordingConstraints('需要伴奏', prefs)))
@@ -199,7 +222,13 @@ try {
   await page.getByRole('tab', { name: '智能推荐' }).click()
   await page
     .getByLabel('想让 AI 推荐什么？（选填）')
-    .fill(mode === 'blank' ? '' : '适合雨后散步的音乐')
+    .fill(
+      mode === 'blank'
+        ? ''
+        : mode === 'expand'
+          ? '适合雨后散步的音乐，现场也行'
+          : '适合雨后散步的音乐',
+    )
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   const progress = page.locator('.music-batch-progress [role=status]')
   if (['keep', 'expand', 'close', 'stop'].includes(mode)) {
@@ -242,7 +271,9 @@ try {
     )
     assert.equal(prompts[0].profile, '偏爱轻声室内乐')
     assert.ok(
-      (await app.evaluate(() => globalThis.transfers)).some(([title]) => title === '晨光 (Live)'),
+      (await app.evaluate(() => globalThis.transfers)).some(
+        ([title]) => title === (mode === 'expand' ? '晨光' : '晨光 (Live)'),
+      ),
     )
     if (mode === 'keep') {
       await page.getByRole('tab', { name: '在线找歌' }).click()

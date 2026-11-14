@@ -13,7 +13,7 @@ import {
   titleMatch,
   inLibrary,
   searchRecommendation,
-  recordingPreference,
+  recordingConstraints,
   namesRequestedArtist,
 } from '../examples/component-host/music-discovery.mjs'
 assert.ok(artistMatches('mizuki', '瑞葵(mizuki) / SawanoHiroyuki[nZk]'))
@@ -50,11 +50,8 @@ assert.equal(namesRequestedArtist('ambient', 'A', true), false)
 assert.equal(namesRequestedArtist('想听 AC/DC 本人的歌', 'AC/DC'), true)
 const song = { title: '群青', artist: 'YOASOBI' }
 const cover = { name: '群青（Cover. YOASOBI）', singer: '梨绪Rio' }
-assert.equal(
-  titleMatch(song, cover, { version: recordingPreference('接受有原唱署名的翻唱') }),
-  'cover',
-)
-assert.equal(recordingPreference('只听原唱，展示原唱署名'), 'original')
+assert.equal(titleMatch(song, cover, recordingConstraints('接受有原唱署名的翻唱', {})), 'cover')
+assert.equal(recordingConstraints('只听原唱，展示原唱署名', {}).version, 'original')
 assert.equal(titleMatch(song, cover), 'cover')
 assert.equal(titleMatch(song, cover, { version: 'original' }), '')
 assert.equal(titleMatch(song, cover, { artist: 'YOASOBI' }), '')

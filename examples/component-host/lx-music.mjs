@@ -4,7 +4,7 @@ import {
   artistMatches,
   inLibrary,
   searchRecommendation,
-  recordingPreference,
+  recordingConstraints,
   recordingRank,
   recordingDisplayTitle,
   namesRequestedArtist,
@@ -1327,7 +1327,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       )
       .get(item.batch)
     constraints ??= {
-      version: recordingPreference(batch?.preference),
+      ...recordingConstraints(batch?.preference, getMusicPreferences(store)),
       artist: namesRequestedArtist(batch?.preference, item.artist) ? item.artist : '',
     }
     function hasLocalCopy(recording) {

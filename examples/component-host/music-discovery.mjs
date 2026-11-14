@@ -73,26 +73,6 @@ function edition(title) {
   }
   return { base: name, kind: '', detail: '' }
 }
-export function recordingPreference(text) {
-  const description = fold(text)
-    .replace(/《[^》]*》/gu, '')
-    .replace(/原唱(?:的)?(?:署名|标注|信息)/gu, '')
-  const live =
-    /(?:现场(?:版|录音)?|現場版|ライブ版|\blive(?:\s+(?:version|recording|at|in|from)|版|$))/iu
-  const original =
-    /(?:原版|原唱(?!\s*[:：])|录音室(?:版)?|錄音室版|\b(?:original|studio)(?:\s+(?:version|recording)|版|$))/iu
-  const excluded = description.match(
-    /(?:不要|不听|不想听|排除|避免|别来|非)\s*(?:听)?\s*(现场(?:版)?|現場版|live|原版|原唱版)/iu,
-  )
-  if (excluded) {
-    const positive = description.replace(excluded[0], '')
-    if (live.test(excluded[1])) return original.test(positive) ? 'original' : 'no-live'
-    return live.test(positive) ? 'live' : 'no-original'
-  }
-  if (live.test(description) !== original.test(description))
-    return live.test(description) ? 'live' : 'original'
-  return ''
-}
 const originalArtists = (row) =>
   [row.originalArtist, ...(Array.isArray(row.originalArtists) ? row.originalArtists : [])]
     .map((v) => (typeof v === 'string' ? v : v?.name))
@@ -104,34 +84,54 @@ const liveAlbum = (name) =>
   )
 export function recordingConstraints(text, prefs) {
   const description = fold(text)
-  const choice = (pattern, fallback) => {
-    const kind = '(?:' + pattern + ')'
-    const match = description.match(
-      new RegExp('(?:不要|不听|排除|避免|别来)\\s*(?:听)?\\s*' + kind, 'iu'),
-    )
-    if (match) return 'exclude'
-    if (
-      new RegExp(
-        '(?:允许|接受|可以有)\\s*' + kind + '|' + kind + '(?:版)?(?:也|都)?(?:可以|行)',
-        'iu',
-      ).test(description)
-    )
+    .replace(/《[^》]*》/gu, '')
+    .replace(/原唱(?:的)?(?:署名|标注|信息)/gu, '')
+  const live = '现场(?:版|录音)?|現場(?:版|錄音)?|ライブ版|\\blive\\b(?:\\s+(?:version|recording))?'
+  const studio = '录音室(?:版)?|錄音室(?:版)?|\\bstudio\\b(?:\\s+(?:version|recording))?'
+  function intent(pattern, fallback, recordingLocation = false) {
+    const kind = `(?:${pattern})`
+    const matches = (rule) => new RegExp(rule, 'iu').test(description)
+    if (!matches(kind)) return fallback
+    if (matches(`(?:不要|不听|不想听|排除|避免|别来|非)\\s*(?:听)?\\s*${kind}`)) return 'exclude'
+    if (matches(`(?:只要|只听|仅要|仅听|必须是)\\s*${kind}`)) return 'require'
+    if (matches(`(?:优先|首选|最好是|偏爱|偏好)\\s*(?:听)?\\s*${kind}|${kind}\\s*(?:优先|为佳)`))
+      return 'prefer'
+    if (matches(`(?:允许|接受|可以有|也可以听)\\s*${kind}|${kind}\\s*(?:也|都)?(?:可以|行|可接受)`))
       return 'any'
-    return new RegExp(pattern, 'iu').test(description) ? 'require' : fallback
+    // A bare location in a listening scenario does not specify a recording edition.
+    if (
+      recordingLocation &&
+      !matches(
+        `^\\s*${kind}\\s*$|(?:要|听|推荐|找|来点)\\s*(?:一些|几首|点)?${kind}|${kind}(?:版|录音)`,
+      )
+    )
+      return fallback
+    return 'require'
   }
-  const studio = /录音室|錄音室|\bstudio\b/iu
-  const version = recordingPreference(description.replace(studio, ''))
-  const studioRequirement = studio.test(description)
-    ? /(?:不要|不听|排除|避免|别来)\s*(?:听)?\s*(?:录音室|錄音室|studio)/iu.test(description)
-      ? 'live'
-      : 'no-live'
-    : ''
+  const pair = (first, second) => `(?:${first})\\s*(?:和|或|、|与)\\s*(?:${second})`
+  const either = new RegExp(
+    `(?:${pair(live, studio)}|${pair(studio, live)})\\s*(?:都|均)?(?:可以|行|可接受)`,
+    'iu',
+  ).test(description)
+  const liveIntent = either ? 'any' : intent(live, undefined, true)
+  const studioIntent = either ? 'any' : intent(studio, undefined, true)
+  const original = intent('原版|原唱(?!\\s*[:：])(?:版)?|\\boriginal\\b')
+  let version = ''
+  if (original === 'require') version = 'original'
+  else if (liveIntent === 'exclude') version = 'no-live'
+  else if (studioIntent === 'exclude') version = 'live'
+  else if (liveIntent === 'require' && studioIntent !== 'require') version = 'live'
+  else if (studioIntent === 'require' && liveIntent !== 'require') version = 'no-live'
+  else if (original === 'exclude') version = 'no-original'
+  let editionPreference = prefs.edition
+  if (liveIntent === 'prefer') editionPreference = 'live'
+  else if (studioIntent === 'prefer') editionPreference = 'studio'
+  else if (liveIntent === 'any' || studioIntent === 'any') editionPreference = 'any'
   return {
-    version:
-      version === 'live' && studioRequirement === 'no-live' ? '' : version || studioRequirement,
-    editionPreference: prefs.edition,
-    cover: choice('翻唱|cover\\b', prefs.cover),
-    instrumental: choice('伴奏|纯音乐|instrumental', prefs.instrumental),
+    version,
+    editionPreference,
+    cover: intent('翻唱(?:版)?|cover\\b', prefs.cover),
+    instrumental: intent('伴奏(?:版)?|纯音乐(?:版)?|instrumental', prefs.instrumental),
   }
 }
 export function recordingRank(row, constraints) {
