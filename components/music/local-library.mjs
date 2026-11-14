@@ -2,7 +2,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
 import { audioFileStat, fileIdentity, confirmedMissing, pathKey } from './local-files.mjs'
-import { AlbumLibrary } from './albums.mjs'
+import { AlbumLibrary, readCommon, albumTags } from './albums.mjs'
 
 const folderKey = (dir) => createHash('sha256').update(pathKey(dir)).digest('hex')
 function playlistName(name, limit = 80) {
@@ -128,6 +128,14 @@ export class LocalLibrary {
       this.db.exec(
         'CREATE TABLE IF NOT EXISTS song_artist_credits(track TEXT NOT NULL REFERENCES playlist_recordings(id) ON DELETE CASCADE, position INTEGER NOT NULL, name TEXT NOT NULL, mbid TEXT, PRIMARY KEY(track,position))',
       )
+      if (
+        !this.db
+          .prepare("SELECT 1 FROM sqlite_master WHERE name='legacy_artist_credit_reads'")
+          .get()
+      ) {
+        this.db.exec(`CREATE TABLE legacy_artist_credit_reads(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE);
+          INSERT INTO legacy_artist_credit_reads SELECT id FROM local_tracks WHERE id NOT IN (SELECT track FROM song_artist_credits)`)
+      }
       const trackColumns = this.db.prepare('PRAGMA table_info(local_tracks)').all()
       if (!trackColumns.some((column) => column.name === 'albumArtist'))
         this.db.exec(`ALTER TABLE local_tracks ADD COLUMN albumArtist TEXT;
@@ -323,8 +331,38 @@ export class LocalLibrary {
         )
         .run(...values, id, Date.now(), row.size ?? null, row.identity ?? null)
     this.saveArtistCredits(id, row.artistCredits)
+    this.db.prepare('DELETE FROM legacy_artist_credit_reads WHERE track=?').run(id)
     this.changed?.()
     return !!(existing || replacing)
+  }
+  async readLegacyArtistCredits(onChange) {
+    const pending = this.db
+      .prepare(
+        'SELECT t.id,t.file,t.artist FROM local_tracks t JOIN legacy_artist_credit_reads p ON p.track=t.id WHERE t.listed=1 AND t.available=1',
+      )
+      .all()
+    let changed = false
+    for (const row of pending) {
+      try {
+        const tags = await readCommon(row.file, true)
+        if (!tags) continue
+        const fresh = this.db
+          .prepare(
+            'SELECT 1 FROM local_tracks t JOIN legacy_artist_credit_reads p ON p.track=t.id WHERE t.id=? AND t.file=? AND t.artist=?',
+          )
+          .get(row.id, row.file, row.artist)
+        if (!fresh) continue
+        const credits = albumTags(tags).artistCredits
+        if (credits.length) {
+          this.saveArtistCredits(row.id, credits)
+          changed = true
+        }
+        this.db.prepare('DELETE FROM legacy_artist_credit_reads WHERE track=?').run(row.id)
+      } catch {
+        /* Retry unavailable files on a later launch. */
+      }
+    }
+    if (changed) onChange()
   }
   saveArtistCredits(id, credits) {
     if (!Array.isArray(credits)) return

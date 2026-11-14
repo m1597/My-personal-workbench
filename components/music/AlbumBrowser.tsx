@@ -198,6 +198,7 @@ export function AlbumBrowser({ releaseActions, revision, tracks, active, play, q
           album={selected}
           local={selected.tracks.flatMap((id) => trackMap.get(id) ?? [])}
           actions={releaseActions}
+          playLocal={(id) => play(id, queue)}
         />
         <ol className="album-tracks">
           {selected.tracks.map((id) => {

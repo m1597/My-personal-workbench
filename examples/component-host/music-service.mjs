@@ -69,6 +69,7 @@ export function musicService(
         requestMusicModel(store, safeStorage, 'profile', data, signal),
       )
       store.library.changed = queueTasteUpdate
+      void store.library.readLegacyArtistCredits(()=>{if(musicView && !musicView.isDestroyed()) musicView.send('music:library-changed',[])})
       if (store.get('auto-sort-favorites') === 'on') {
         const ids = store.db
           .prepare("SELECT local FROM favorite_sort_pending WHERE reason='正在归类'")

@@ -20,6 +20,24 @@ for (const [title, artist, artistCredits] of [
   store.library.upsert({ file, title, artist, artistCredits, album: '小碟', duration: 30 })
   rows.push(store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file).id)
 }
+// Simulate an earlier library index. The actual ID3 tag contains two artists.
+const legacy = path.join(root, '旧库录音.mp3')
+const original = await fs.readFile(path.resolve('tests/fixtures/local-music/tone.mp3'))
+const oldSize = original.subarray(6, 10).reduce((n, b) => n * 128 + b, 0)
+const value = Buffer.concat([Buffer.of(3), Buffer.from(artists.join('\0'))])
+const frame = Buffer.alloc(10)
+frame.write('TPE1')
+frame[7] = value.length
+const header = Buffer.from([73, 68, 51, 4, 0, 0, 0, 0, 0, value.length + 10])
+await fs.writeFile(legacy, Buffer.concat([header, frame, value, original.subarray(oldSize + 10)]))
+store.library.upsert({
+  file: legacy,
+  title: '旧库录音',
+  artist: artists.join(' & '),
+  album: '',
+  duration: 2,
+})
+store.db.exec('DROP TABLE legacy_artist_credit_reads')
 store.library.createPlaylist('署名验收', rows)
 store.db.close()
 const app = await electron.launch({
@@ -45,6 +63,7 @@ try {
   const song = (title) => page.locator('.library-row').filter({ hasText: title })
   await page.getByRole('tab', { name: '曲库', exact: true }).press('Enter')
   for (const name of artists) {
+    await expect(song('旧库录音').getByRole('button', { name, exact: true })).toBeVisible()
     const link = song('合作录音').getByRole('button', { name, exact: true })
     await link.press('Enter')
     const home = page.getByRole('region', { name: '歌手主页' })

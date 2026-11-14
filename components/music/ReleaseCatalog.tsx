@@ -8,7 +8,6 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
 import type { LocalTrack, PlaylistTrack } from './LibraryPane'
 import { Cover, type Album } from './AlbumBrowser'
-import { TrackMenu } from './TrackMenu'
 import type { SongAPI } from './SongDetails'
 import './release-catalog.css'
 
@@ -383,9 +382,17 @@ export function NewsTracks({
 export function CatalogSongRow({
   song,
   play,
+  localId,
+  playLocal,
+  album,
+  children,
 }: {
   song: Pick<ReleaseTrack, 'artist' | 'title' | 'artistCredits'> & { version?: string }
   play: PlayRecording
+  localId?: string
+  playLocal?(): void
+  album?: string
+  children?: React.ReactNode
 }) {
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
@@ -402,7 +409,15 @@ export function CatalogSongRow({
     setError('')
     setStatus('')
     try {
-      const recording = await matchTrack(song)
+      if (localId) {
+        if (action === 'play') playLocal?.()
+        else if (action === 'add' && list) {
+          await window.music.setMembership(list, localId, true)
+          setStatus('已加入「' + name + '」')
+        }
+        return
+      }
+      const recording = await matchTrack(song, album)
       if (!live.current) return
       if (action === 'play') await play(recording.key)
       else if (action === 'add' && list) {
@@ -421,6 +436,8 @@ export function CatalogSongRow({
   }
   return (
     <OnlineSongRow
+      singleClick={!!localId}
+      localId={localId}
       className="highlight-recording"
       busy={pending}
       play={() => void perform('play')}
@@ -428,16 +445,18 @@ export function CatalogSongRow({
       add={(list, name) => void perform('add', list, name)}
     >
       <div>
-        <Button
-          size="small"
-          aria-label={'试听' + song.title}
-          appearance="subtle"
-          onClick={() => void perform('play')}
-          disabled={pending}
-        >
-          播放
-        </Button>
-        <span>{song.title}</span> {song.version && <small>{song.version}</small>}
+        {!children && (
+          <Button
+            size="small"
+            aria-label={'试听' + song.title}
+            appearance="subtle"
+            onClick={() => void perform('play')}
+            disabled={pending}
+          >
+            播放
+          </Button>
+        )}
+        {children || <span>{song.title}</span>} {song.version && <small>{song.version}</small>}
         <small>
           <SongCredits song={song} />
           {status && <small role="status">{status}</small>}
@@ -955,7 +974,9 @@ export function AlbumEditions({
   album,
   local,
   actions,
+  playLocal,
 }: {
+  playLocal(id: string): void
   album: Album
   local: LocalTrack[]
   actions: ReleaseActions
@@ -1022,28 +1043,35 @@ export function AlbumEditions({
         <ol>
           {tracks.map((t) => {
             return (
-              <TrackMenu key={t.disc + ':' + t.number + ':' + t.title} localId={collected.get(t)}>
-                <li>
-                  <div>
-                    <strong>
-                      {t.disc}.{t.number} {t.title}
-                    </strong>
-                    <small>{t.artist}</small>
-                  </div>
-                  {collected.has(t) ? (
-                    <small>已收录</small>
-                  ) : (
-                    <MissingTrack
-                      key={selected}
-                      active={openTrack === t}
-                      track={t}
-                      album={album.title}
-                      actions={actions}
-                      onSearch={() => setOpenTrack(t)}
-                    />
-                  )}
-                </li>
-              </TrackMenu>
+              <CatalogSongRow
+                key={[t.disc, t.number, t.title].join(':')}
+                song={t}
+                play={actions.play}
+                album={album.title}
+                localId={collected.get(t) || undefined}
+                playLocal={() => {
+                  const id = collected.get(t)
+                  if (id) playLocal(id)
+                }}
+              >
+                <div>
+                  <strong>
+                    {t.disc}.{t.number} {t.title}
+                  </strong>
+                </div>
+                {collected.has(t) ? (
+                  <small>已收录</small>
+                ) : (
+                  <MissingTrack
+                    key={selected}
+                    active={openTrack === t}
+                    track={t}
+                    album={album.title}
+                    actions={actions}
+                    onSearch={() => setOpenTrack(t)}
+                  />
+                )}
+              </CatalogSongRow>
             )
           })}
         </ol>
