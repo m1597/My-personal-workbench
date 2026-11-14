@@ -361,6 +361,16 @@ try {
     await checkCover('playing', '1')
     await expect(page.locator('.music-cover-button img')).toHaveAttribute('src', expectedCover)
     await page.screenshot({ path: path.join(root, '05-recommendation-player-art.png') })
+    await page.getByRole('button', { name: '打开歌词页', exact: true }).click()
+    await expect(page.locator('.record-art-current .album-art img')).toHaveAttribute(
+      'src',
+      expectedCover,
+    )
+    await page.screenshot({
+      path: path.join(root, 'lyrics-art.png'),
+      style: ':root {background:var(--base)!important}',
+    })
+    await page.getByRole('button', { name: '返回', exact: true }).click()
     await openDiscovery(page, false)
     await input.fill('晨风')
     await input.press('Enter')
@@ -419,6 +429,7 @@ try {
     const report = {
       offlineCover: true,
       sameCoverAcrossThreeViews: true,
+      sameLyricsCover: true,
       ...times,
       counts,
       events,

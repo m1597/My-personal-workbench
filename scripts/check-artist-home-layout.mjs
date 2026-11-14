@@ -57,7 +57,7 @@ try {
   const search = page.getByRole('searchbox', { name: '搜索本地歌曲' })
   await search.fill('音乐作品')
   const row = page.locator('li.library-row').nth(36)
-  await row.locator('strong').click()
+  await row.locator('strong').dblclick()
   const audio = page.locator('audio')
   await expect.poll(() => audio.evaluate((a) => !a.paused && a.currentTime > 0.15)).toBe(true)
   const link = row.getByRole('button', { name: artist, exact: true })
