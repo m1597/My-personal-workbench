@@ -135,6 +135,11 @@
 .music-bar-only .music-expand {
   margin-inline-start: auto;
 }
+@media (min-width: 541px) {
+  .music-bar-only .music-expand {
+    margin-inline-end: 30px;
+  }
+}
 .music-narrow-action[role="menuitem"] {
   display: none;
 }

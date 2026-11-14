@@ -113,7 +113,17 @@ try {
           path: path.join(evidence, '顶栏停靠-' + width + '.png'),
           style: ':root { background: var(--base) !important }',
         })
-        await music.getByRole('button', { name: '更多音乐操作' }).click()
+        const more = music.getByRole('button', { name: '更多音乐操作' })
+        await expect(more).toHaveAttribute('title', '更多音乐操作')
+        const hideButton = music.locator('.music-view-actions .music-hide-extra')
+        if (await hideButton.isVisible()) {
+          await expect(hideButton).toHaveAttribute('title', '隐藏到后台')
+          expect(await hideButton.evaluate((el) => el === el.parentElement.lastElementChild)).toBe(
+            true,
+          )
+          expect((await hideButton.boundingBox()).x).toBeGreaterThan((await more.boundingBox()).x)
+        }
+        await more.click()
         if (width === 440) {
           await expect(music.getByRole('menuitem', { name: '使用引导' })).toBeVisible()
           await expect(music.getByRole('menuitem', { name: '隐藏到后台' })).toBeVisible()

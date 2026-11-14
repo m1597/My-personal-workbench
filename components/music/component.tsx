@@ -1454,15 +1454,6 @@ function Music() {
               打开 Music 使用引导
             </span>
           </span>
-          <Button
-            appearance="subtle"
-            size="small"
-            className="music-hide-extra"
-            aria-label="隐藏到后台"
-            title="隐藏到后台"
-            icon={<PanelTopClose size={17} />}
-            onClick={() => void act(() => window.musicWindow.present('background'))}
-          />
           <Menu>
             <MenuTrigger disableButtonEnhancement>
               <Button
@@ -1513,6 +1504,15 @@ function Music() {
             title="只显示播放栏"
             icon={<PanelBottomClose size={17} />}
             onClick={() => void act(() => window.musicWindow.present('bar'))}
+          />
+          <Button
+            appearance="subtle"
+            size="small"
+            className="music-hide-extra"
+            aria-label="隐藏到后台"
+            title="隐藏到后台"
+            icon={<PanelTopClose size={17} />}
+            onClick={() => void act(() => window.musicWindow.present('background'))}
           />
         </div>
       </div>

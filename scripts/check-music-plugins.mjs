@@ -111,7 +111,7 @@ try {
     const controls = page.locator('.music-view-actions button')
     assert.deepEqual(
       await controls.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label'))),
-      ['下载任务', '使用引导', '只显示播放栏', '隐藏到后台', '更多音乐操作'],
+      ['下载任务', '使用引导', '更多音乐操作', '只显示播放栏', '隐藏到后台'],
     )
     await help.hover()
     await expect(page.getByRole('tooltip')).toContainText('使用引导')
