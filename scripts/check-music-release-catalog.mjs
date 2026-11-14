@@ -37,6 +37,38 @@ for (const title of ['无编号', '唯一曲目']) {
     duration: 1,
   })
 }
+const coverTitle = 'I BEG YOU（翻自 Aimer）'
+const coverFile = path.join(root, 'cover.mp3')
+const bytes = await fs.readFile(tone)
+const textFrame = (id, value) => {
+  const b = Buffer.concat([Buffer.from([3]), Buffer.from(value)])
+  const h = Buffer.alloc(10)
+  h.write(id)
+  h.writeUInt32BE(b.length, 4)
+  return Buffer.concat([h, b])
+}
+const frames = Buffer.concat([
+  textFrame('TCOM', '本地作曲者'),
+  textFrame('TIPL', 'arranger\0本地编曲者'),
+  textFrame('TMCL', 'bass\0贝斯手甲,贝斯手乙'),
+])
+const header = Buffer.from([73, 68, 51, 4, 0, 0, 0, 0, 0, 0])
+for (let i = 0; i < 4; i++) header[9 - i] = (frames.length >>> (7 * i)) & 127
+await fs.writeFile(
+  coverFile,
+  Buffer.concat([
+    header,
+    frames,
+    bytes.subarray(10 + bytes.subarray(6, 10).reduce((a, b) => a * 128 + b, 0)),
+  ]),
+)
+store.library.upsert({
+  file: coverFile,
+  title: coverTitle,
+  artist: '翻唱歌手',
+  album: '现场录音',
+  duration: 1,
+})
 const listId = store.library.createPlaylist('发行试听')
 store.db.close()
 await fs.writeFile(
@@ -44,6 +76,11 @@ await fs.writeFile(
   `// @name 版本归组源
 lx.on('request',({action,info})=>{
  if(action==='search') {
+   if(['Morning Aimer','Night Aimer','Evening Aimer','Daylight Aimer'].includes(info.keyword)){
+     const title=info.keyword.split(' ')[0]
+     return [{id:'missing',name:title,singer:'Aimer',albumName:({Evening:'Instrumental Edition',Daylight:'Tokyo Live'})[title] || 'Studio Recording'}]
+   }
+   if(info.keyword==='i beg you yurisa')return [{id:'highlight',name:'i beg you',singer:'yurisa',interval:'04:29'}]
    if(info.keyword==='夜风 云海')return [{id:'highlight',name:'夜风',singer:'云海'}]
    if(info.keyword==='缺少曲 青禾')return [{id:'missing',name:'缺少曲',singer:'青禾',albumName:'山色'}]
    return [{id:'recording-17',name:'远山',singer:'青禾',albumName:'山色',interval:'03:01'},
@@ -131,6 +168,70 @@ async function launch() {
       globalThis.catalogRequests.push(url.pathname)
       const today = new Date().toISOString().slice(0, 10)
       const entity = url.pathname.split('/').at(-1)
+      const wid = '04574440-b752-49eb-8ce7-75aa82113cd6',
+        rid = '8efb27e4-aa62-4999-821d-6482df5e7238',
+        composer = '67e344da-ec54-4e26-b2a4-8351d744a14c'
+      const song = (id, singer, title = 'I beg you') => ({
+        id,
+        title,
+        length: 269000,
+        'artist-credit': [{ name: singer }],
+      })
+      if (entity === 'recording' && url.searchParams.get('query')?.startsWith('recording:')) {
+        return Response.json({
+          count: 2,
+          recordings: [song(rid, 'Aimer'), song(second, '同名异作艺人')],
+        })
+      }
+      if (entity === rid)
+        return Response.json({
+          relations: [{ type: 'performance', work: { id: wid, title: 'I beg you' } }],
+        })
+      if (entity === wid)
+        return Response.json({
+          title: 'I beg you',
+          relations: [
+            { type: 'composer', artist: { id: composer, name: '梶浦由記' } },
+            ...[
+              ['Morning', 'live'],
+              ['Night', 'instrumental'],
+              ['Evening', 'instrumental'],
+              ['Daylight', 'live'],
+            ].map(([title, attr], i) => ({
+              type: 'performance',
+              attributes: [attr],
+              recording: {
+                id: '10000000-1000-1000-1000-10000000000' + i,
+                title,
+                'artist-credit': [{ name: 'Aimer' }],
+              },
+            })),
+            ...[
+              [rid, 'Aimer', []],
+              [first, 'yurisa', ['cover']],
+              [second, 'Aimer', ['live']],
+            ].map(([id, singer, attributes]) => ({
+              type: 'performance',
+              attributes,
+              recording: song(
+                id,
+                singer,
+                attributes.includes('cover')
+                  ? 'i beg you'
+                  : attributes.includes('live')
+                    ? 'I beg you (Live)'
+                    : 'I beg you',
+              ),
+            })),
+          ],
+        })
+      if (entity === composer)
+        return Response.json({
+          relations: [
+            { type: 'composer', work: { id: wid, title: 'I beg you' } },
+            { type: 'composer', work: { id: first, title: '花の唄' } },
+          ],
+        })
       const related = '00000000-0000-0000-0000-000000000006'
       if (entity === artist || entity === related)
         return Response.json({
@@ -423,6 +524,55 @@ try {
   assert.equal((await fs.readdir(downloads)).filter((f) => f.endsWith('.mp3')).length, 1)
   await missing.evaluate((el) => el.scrollIntoView({ block: 'center' }))
   await page.screenshot({ path: path.join(root, 'inline-missing.png') })
+  await tab('在线找歌').click()
+  await tab('曲库').click()
+  await button('全部歌曲').click()
+  await button('播放' + coverTitle).click()
+  await button('打开歌词页').click()
+  await button('其他演绎').click()
+  const details = page.getByRole('dialog', { name: '歌曲资料' })
+  await expect(details.getByText('Aimer · 原唱')).toBeVisible()
+  await expect(details.getByText('Aimer · 现场').first()).toBeVisible()
+  await expect(details.getByText('同名异作艺人')).toHaveCount(0)
+  for (const [title, playable] of [
+    ['Morning', false],
+    ['Night', false],
+    ['Daylight', true],
+    ['Evening', true],
+  ]) {
+    const candidate = details
+      .getByRole('listitem')
+      .filter({ has: page.getByText(title, { exact: true }) })
+    await candidate.getByRole('button', { name: '查找音源' }).click()
+    if (playable) await expect(candidate.getByRole('button', { name: '试听' })).toBeVisible()
+    else {
+      await expect(details.getByRole('status')).toContainText('未找到能确认版本')
+      await expect(candidate.getByRole('button', { name: '试听' })).toHaveCount(0)
+    }
+  }
+  const version = details.getByRole('listitem').filter({ hasText: 'yurisa' })
+  await version.getByRole('button', { name: '查找音源' }).click()
+  await version.getByRole('combobox', { name: '加入歌单' }).click()
+  await page.getByRole('option', { name: '发行试听' }).click()
+  await expect(details.getByRole('status')).toHaveText('已加入发行试听')
+  await version.getByRole('button', { name: '试听' }).click()
+  await played()
+  await page.screenshot({ path: path.join(root, 'song-versions.png') })
+  await details.getByRole('tab', { name: '参与人员' }).click()
+  await expect(details.getByText('翻唱歌手', { exact: true })).toBeVisible()
+  await expect(details.getByText('本地作曲者')).toBeVisible()
+  await expect(details.getByText('本地编曲者')).toBeVisible()
+  await expect(details.getByText('贝斯手甲')).toBeVisible()
+  await expect(details.getByText('贝斯手乙')).toBeVisible()
+  await details.getByRole('button', { name: '梶浦由記' }).click()
+  await expect(details.getByText('花の唄')).toBeVisible()
+  await page.screenshot({ path: path.join(root, 'song-credits.png') })
+  await details.getByRole('button', { name: '关闭' }).click()
+  await button('返回').click()
+  await button('播放唯一曲目').click()
+  await button('打开歌词页').click()
+  await button('其他演绎').click()
+  await expect(details.getByText('资料不足，暂无可确认的其他演绎。')).toBeVisible()
   console.log(
     'PASS 同曲版组、逐项播放/时长/下载、关注与跨重启新发行、发行版本切换与缺曲搜索 ' + root,
   )

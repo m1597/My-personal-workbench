@@ -2,6 +2,8 @@ import { Button } from '@fluentui/react-components'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { defaultCover, requestCover } from './AlbumBrowser'
+import { SongDetails } from './SongDetails'
+import type { ReleaseActions } from './ReleaseCatalog'
 import './now-playing.css'
 
 const readingKeys = new Set(['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'])
@@ -9,6 +11,7 @@ const readingKeys = new Set(['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home
 export type LyricLine = [number | null, string]
 
 type Props = {
+  actions: ReleaseActions
   trackId: string
   title: string
   artist: string
@@ -69,6 +72,7 @@ function RecordArt({ id, revision = 0 }: { id?: string; revision?: number }) {
 }
 
 export function NowPlaying({
+  actions,
   trackId,
   title,
   artist,
@@ -138,6 +142,7 @@ export function NowPlaying({
         <Button appearance="subtle" size="small" icon={<ArrowLeft size={16} />} onClick={back}>
           返回
         </Button>
+        {trackId && <SongDetails trackId={trackId} actions={actions} />}
         {timed && !following && (
           <Button appearance="subtle" size="small" onClick={() => setFollowing(true)}>
             回到当前歌词

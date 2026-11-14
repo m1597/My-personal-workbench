@@ -1,3 +1,4 @@
+import { registerSongDetails } from './song-details.mjs'
 import { setTimeout as delay } from 'node:timers/promises'
 
 const mbid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
@@ -55,6 +56,7 @@ export function registerReleaseCatalog(bind, getStore, nativeImage) {
     responses.set(key, entry)
     return entry.result
   }
+  registerSongDetails(bind, getStore, metadata)
   const artists = new Map()
   const releases = new Set()
   const newsGroups = new Set()

@@ -16,7 +16,7 @@ function localFile(file) {
   // Network shares (including extended UNC paths) are outside local artwork lookup.
   return !file.startsWith('\\\\') && !file.startsWith('//')
 }
-async function readCommon(file, skipCovers) {
+async function readTags(file, skipCovers) {
   if (!localFile(file)) return null
   const handle = await openAudio(file)
   let stream
@@ -24,11 +24,15 @@ async function readCommon(file, skipCovers) {
     const { size } = await handle.stat()
     stream = handle.createReadStream({ autoClose: false })
     const info = { path: file, size, mimeType: audioTypes[path.extname(file).toLowerCase()] }
-    return (await parseStream(stream, info, { skipCovers })).common
+    return await parseStream(stream, info, { skipCovers })
   } finally {
     stream?.destroy()
     await handle.close()
   }
+}
+
+async function readCommon(file, skipCovers) {
+  return (await readTags(file, skipCovers))?.common
 }
 
 const normalized = (value) => value.trim().normalize().toLowerCase()
@@ -124,6 +128,46 @@ export class AlbumLibrary {
     this.syncGroups()
     for (const album of albums) this.groups.set(album.id, album.tracks)
     return albums
+  }
+  async songTags(row) {
+    if (!row?.available || row.awaitingLocation) return {}
+    const tags = await readTags(row.file, true).catch(() => null)
+    if (!tags) return {}
+    const { common, native } = tags,
+      people = []
+    function add(role, name) {
+      if (
+        typeof name === 'string' &&
+        name.trim() &&
+        !people.some((p) => p.name === name.trim() && p.role === role)
+      )
+        people.push({ id: null, role, name: name.trim() })
+    }
+    for (const [field, role] of Object.entries({
+      composer: '作曲',
+      arranger: '编曲',
+      lyricist: '作词',
+      conductor: '指挥',
+      producer: '制作',
+    }))
+      for (const person of common[field] ?? []) add(role, person)
+    for (const tag of Object.values(native).flat()) {
+      if (tag.id === 'TMCL' || tag.id === 'IPLS' || tag.id === 'TIPL') {
+        for (const [role, names] of Object.entries(tag.value ?? {})) {
+          if (!Array.isArray(names)) continue
+          const title =
+            { arranger: '编曲', composer: '作曲', producer: '制作', vocals: '演唱' }[
+              role.toLowerCase()
+            ] ?? (tag.id === 'TMCL' ? '演奏 · ' + role : role)
+          for (const person of names) add(title, person)
+        }
+      }
+      if (tag.id.toUpperCase() === 'PERFORMER' && typeof tag.value === 'string') {
+        const m = tag.value.match(/^(.+?)\s*\(([^()]+)\)\s*$/u)
+        add(m ? '演奏 · ' + m[2] : '演奏', m?.[1] ?? tag.value)
+      }
+    }
+    return { people, recording: common.musicbrainz_recordingid, work: common.musicbrainz_workid }
   }
   async artistPortrait(artist, nativeImage) {
     const rows = this.db

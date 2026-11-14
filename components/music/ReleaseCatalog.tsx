@@ -3,6 +3,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { LocalTrack } from './LibraryPane'
 import { Cover, type Album } from './AlbumBrowser'
 import { TrackMenu } from './TrackMenu'
+import type { SongAPI } from './SongDetails'
 import './release-catalog.css'
 
 type Artist = { id: string; name: string; detail: string }
@@ -16,7 +17,7 @@ type ReleaseTrack = {
   artist: string
 }
 type News = { type: string; id: string; title: string; artist: string; date: string }
-export interface ReleaseAPI {
+export interface ReleaseAPI extends SongAPI {
   findArtists(term: string): Promise<Artist[]>
   similarArtists(id: string): Promise<Artist[]>
   artistHighlights(id: string): Promise<Pick<ReleaseTrack, 'artist' | 'title'>[]>

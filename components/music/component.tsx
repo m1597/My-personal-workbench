@@ -1235,6 +1235,11 @@ function Music() {
       <main key={tab} className="music-scroll">
         {showPlayer ? (
           <NowPlaying
+            actions={{
+              play: playSearchResult,
+              add: addSearchResult,
+              playlists: state?.playlists.filter((p) => !p.system) ?? [],
+            }}
             trackId={now}
             title={active?.title ?? '尚未播放'}
             artist={active?.artist ?? ''}
