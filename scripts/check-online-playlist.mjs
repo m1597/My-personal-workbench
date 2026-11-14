@@ -205,7 +205,7 @@ for (const restart of [false, true]) {
       }, list)
       assert.equal(extra.length, 3)
       await openDiscovery(page, false)
-      await page.getByRole('tab', { name: '歌单' }).click()
+      await page.getByRole('tab', { name: '歌单', exact: true }).click()
       const rows = page.locator('.library-row')
       await expect(rows).toHaveCount(5)
       await button('多选').click()
