@@ -83,6 +83,7 @@ try {
     const fetch = globalThis.fetch
     globalThis.fetch = (...args) => {
       const body = args[1]?.body
+      let round
       if (typeof body === 'string' && args[1]?.method === 'POST') {
         try {
           const request = JSON.parse(body)
@@ -91,17 +92,58 @@ try {
             request.messages?.at(-1)?.content ??
             request.contents?.[0]?.parts?.[0]?.text
           const payload = JSON.parse(input)
-          if (['auto', 'style', 'artist'].includes(payload.mode))
-            globalThis.recommendationRounds.push({
+          if (['auto', 'style', 'artist'].includes(payload.mode)) {
+            round = {
               excluded: payload.excluded?.length ?? 0,
               catalogChoices: payload.catalogChoices?.length ?? 0,
               target: payload.count ?? null,
-            })
+            }
+            globalThis.recommendationRounds.push(round)
+          }
         } catch {
           /* Other POST operations are outside the model round count. */
         }
       }
-      return fetch(...args)
+      return fetch(...args).then(async (response) => {
+        if (round) {
+          // Keep structural diagnostics only, never credentials or the private taste input.
+          try {
+            const data = await response.clone().json()
+            const content = data.choices?.[0]?.message?.content
+            if (typeof content === 'string') {
+              const parsed = JSON.parse(
+                content.trim().replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/gi, ''),
+              )
+              round.response = {
+                keys: Object.keys(parsed),
+                directExhausted: parsed.directExhausted,
+                songs: Array.isArray(parsed.songs)
+                  ? parsed.songs.map((song) =>
+                      Object.fromEntries(
+                        Object.entries(song ?? {}).map(([key, value]) => [
+                          key,
+                          {
+                            type: typeof value,
+                            length: typeof value === 'string' ? value.length : undefined,
+                            control:
+                              typeof value === 'string' &&
+                              Array.from(value).some((character) => character.charCodeAt(0) < 32),
+                            path:
+                              typeof value === 'string' &&
+                              /(?:[a-z]+:\/\/|^\/|\\|^[a-z]:\/)/iu.test(value),
+                          },
+                        ]),
+                      ),
+                    )
+                  : typeof parsed.songs,
+              }
+            }
+          } catch {
+            round.response = { invalidJson: true }
+          }
+        }
+        return response
+      })
     }
   }, output)
   const before = await page.evaluate(() => window.music.state())

@@ -150,7 +150,13 @@ try {
               message: {
                 content: JSON.stringify({
                   requestedArtist: '青禾',
-                  songs: titles.map((title) => ({ title, artist: '青禾', reason: '同艺人作品' })),
+                  songs: titles.map((title) => ({
+                    title,
+                    artist: '青禾',
+                    // A malformed candidate must not discard the four playable ones.
+                    reason: title === '限听一' ? undefined : '同艺人作品',
+                    ...(title === songs[0] ? { unusedMetadata: 'ignored' } : {}),
+                  })),
                 }),
               },
             },

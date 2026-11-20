@@ -1,3 +1,4 @@
+import './check-music-model-responses.mjs'
 import { openDiscovery } from './discovery-fixture.mjs'
 import { offlineSourceRepository } from './music-source-fixture.mjs'
 import { writeFixtureRecording } from './music-recording-fixture.mjs'

@@ -217,21 +217,26 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
         throw Error()
       return parsed.profile.trim()
     }
+    if (!Array.isArray(parsed.songs) || parsed.songs.length > 5) throw Error()
+    const songs = parsed.songs.flatMap((source) => {
+      try {
+        // One malformed candidate must not discard the other usable recordings.
+        // Project the supported fields; keep the existing value checks unchanged.
+        const { title, artist, reason } = source
+        const [song] = validateSuggestions([{ title, artist, reason }], {
+          songPunctuation: true,
+          partial: true,
+        })
+        const fit = (key) =>
+          Number.isInteger(source[key]) && source[key] >= 0 && source[key] <= 100 ? source[key] : 50
+        return [{ ...song, requestFit: fit('requestFit'), tasteFit: fit('tasteFit') }]
+      } catch {
+        return []
+      }
+    })
+    if (!songs.length && !(parsed.directExhausted === true && !parsed.songs.length)) throw Error()
     return {
-      songs:
-        parsed.directExhausted === true && Array.isArray(parsed.songs) && !parsed.songs.length
-          ? []
-          : validateSuggestions(
-              parsed.songs.map(({ requestFit, tasteFit, ...song }) => song),
-              { songPunctuation: true, partial: true },
-            ).map((song, i) => {
-              const source = parsed.songs[i]
-              const fit = (key) =>
-                Number.isInteger(source[key]) && source[key] >= 0 && source[key] <= 100
-                  ? source[key]
-                  : 50
-              return { ...song, requestFit: fit('requestFit'), tasteFit: fit('tasteFit') }
-            }),
+      songs,
       directExhausted: parsed.directExhausted === true,
       requestedArtist:
         typeof parsed.requestedArtist === 'string' && parsed.requestedArtist.length <= 300
