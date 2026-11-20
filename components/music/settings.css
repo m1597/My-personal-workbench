@@ -1,3 +1,4 @@
+.music-settings .fui-Checkbox:has(#music-keys-app:focus, #music-keys-global:focus),
 .music-settings:focus {
   outline: 2px solid var(--colorBrandStroke1);
   outline-offset: -2px;

@@ -17,6 +17,16 @@
     { "target": "lyrics", "name": "歌词", "path": "Music → 音乐设置 → 歌词" },
     { "target": "playback", "name": "播放", "path": "Music → 音乐设置 → 播放" },
     { "target": "keys", "name": "快捷键", "path": "Music → 音乐设置 → 快捷键" },
+    {
+      "target": "keys.app",
+      "name": "应用内快捷键",
+      "path": "Music → 音乐设置 → 快捷键 → 应用内快捷键"
+    },
+    {
+      "target": "keys.global",
+      "name": "全局快捷键",
+      "path": "Music → 音乐设置 → 快捷键 → 全局快捷键"
+    },
     { "target": "plugins", "name": "插件", "path": "Music → 音乐设置 → 插件" }
   ]
 }

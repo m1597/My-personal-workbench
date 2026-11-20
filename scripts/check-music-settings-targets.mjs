@@ -39,14 +39,21 @@ try {
   let request = 0
   const nav = page.getByRole('navigation', { name: '设置分类' })
   for (const { target, name, path: breadcrumb } of manifest.settingsEntries) {
-    assert.equal(breadcrumb, 'Music → 音乐设置 → ' + name)
+    assert.ok(breadcrumb.startsWith('Music → 音乐设置 → ') && breadcrumb.endsWith(name))
     await locate(++request, target)
+    if (target.startsWith('keys.')) {
+      await expect(page.getByRole('checkbox', { name: '启用' + name })).toBeFocused()
+      continue
+    }
     await expect(nav.getByRole('button', { name, exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
   }
-  assert.equal(await nav.getByRole('button').count(), manifest.settingsEntries.length)
+  assert.equal(
+    await nav.getByRole('button').count(),
+    manifest.settingsEntries.filter(({ target }) => !target.includes('.')).length,
+  )
   await locate(++request, 'keys')
   await expect(page.getByText('启用应用内快捷键', { exact: true })).toBeVisible()
   for (const unknown of [undefined, 'obsolete']) {
