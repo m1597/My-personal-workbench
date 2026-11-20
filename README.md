@@ -1,5 +1,9 @@
 # FitBay
 
+Windows 安装版在启动约 10 秒后检查 GitHub 正式发行版，运行期间每 5 分钟检查一次。右键 FitBay 托盘图标可立即「检查更新」。工作台和 Music 分别比较版本，用户确认后下载对应安装包，校验 GitHub 提供的 SHA-256，再启动安装向导。请沿用原安装位置。
+
+发布者更新 package.json 和锁文件中的版本后，在包含发布工作流的提交上推送对应标签（例如 `v0.2.0`）。GitHub Actions 在 Windows 构建三个安装包并发布 Release，已安装更新功能的客户端随后会收到提示。此前安装的版本需要手动升级一次。[下载正式发行版](https://github.com/m1597/My-personal-workbench/releases)
+
 本地优先的个人创作工作台。目前实现真实组件的拖拽、停靠、分组、缩放、关闭重开、最大化与布局恢复。
 
 技术栈：Electron + React + TypeScript + Vite，Dockview 布局。视觉为微软 Fluent 磨砂玻璃，固定深色；中文优先本机 HarmonyOS Sans SC，回退微软雅黑 UI。记住上次布局；首次启动使用空工作区，全部关闭的空工作区也会保留。
