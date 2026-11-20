@@ -4,6 +4,9 @@
 !if "${APP_ID}" == "io.github.m1597.fitbay.music"
   !define FITBAY_SLOT "Music"
   !define FITBAY_PEER "Workbench"
+!else if "${APP_ID}" == "io.github.m1597.fitbay.prompts"
+  !define FITBAY_SLOT "Prompts"
+  !define FITBAY_PEER "Music"
 !else
   !define FITBAY_SLOT "Workbench"
   !define FITBAY_PEER "Music"
@@ -86,6 +89,14 @@
     ${If} $1 != ""
       !insertmacro rejectOverlap "$1"
     ${EndIf}
+    !if "${FITBAY_SLOT}" == "Prompts"
+      ReadRegStr $1 HKCU "${FITBAY_REG}" "Workbench"
+    !else
+      ReadRegStr $1 HKCU "${FITBAY_REG}" "Prompts"
+    !endif
+    ${If} $1 != ""
+      !insertmacro rejectOverlap "$1"
+    ${EndIf}
     ReadRegStr $1 HKCU "${FITBAY_REG}" "${FITBAY_PEER}"
     StrCpy $4 ""
     ${If} $1 != ""
@@ -96,7 +107,7 @@
       ${EndIf}
       !if "${FITBAY_SLOT}" == "Music"
         StrCmp "$1\Music" "$2" peerChecked
-      !else
+      !else if "${FITBAY_SLOT}" == "Workbench"
         ${If} "$2\Music" == "$1"
           StrCpy $4 "Music"
           Goto peerChecked
@@ -104,7 +115,11 @@
       !endif
       !insertmacro rejectOverlap "$1"
     ${EndIf}
+    !if "${FITBAY_SLOT}" == "Music"
     peerChecked:
+    !else if "${FITBAY_SLOT}" == "Workbench"
+    peerChecked:
+    !endif
     ReadRegStr $1 HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
     ${If} $1 != ""
       System::Call 'kernel32::GetFullPathNameW(w "$1\.", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'

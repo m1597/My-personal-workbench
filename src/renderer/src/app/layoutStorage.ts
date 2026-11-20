@@ -37,7 +37,9 @@ function validLayout(value: unknown): value is SerializedDockview {
   const ids = Object.keys(panels)
   if (
     !ids.every(
-      (id) => ['component-example', 'component-music'].includes(id) || retiredPanelIds.includes(id),
+      (id) =>
+        ['component-example', 'component-music', 'component-prompts'].includes(id) ||
+        retiredPanelIds.includes(id),
     )
   )
     return false
@@ -48,7 +50,9 @@ function validLayout(value: unknown): value is SerializedDockview {
         record(panel) &&
         panel.id === id &&
         panel.contentComponent ===
-          (['component-example', 'component-music'].includes(id) ? 'component-slot' : 'module') &&
+          (['component-example', 'component-music', 'component-prompts'].includes(id)
+            ? 'component-slot'
+            : 'module') &&
         !panel.tabComponent &&
         ['minimumWidth', 'minimumHeight', 'maximumWidth', 'maximumHeight'].every((field) => {
           const size = panel[field]
@@ -316,6 +320,7 @@ export function switchLayout(api: DockviewApi, snapshot?: SerializedDockview, bl
   } finally {
     switching.delete(api)
   }
+  void window.promptDock?.layout(Boolean(api.getPanel('component-prompts')))
   void window.musicDock?.layout(Boolean(api.getPanel('component-music')))
   if (window.componentHost?.sampleEnabled)
     void window.componentHost.layout(Boolean(api.getPanel('component-example')))

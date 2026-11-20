@@ -86,4 +86,5 @@ contextBridge.exposeInMainWorld('componentHost', {
   setMaterial: (value) => ipcRenderer.send('workbench:material', value),
   sampleEnabled: process.argv.includes('--enable-sample-component'),
 })
+contextBridge.exposeInMainWorld('promptDock', componentBridge('prompt-prototype'))
 contextBridge.exposeInMainWorld('musicDock', componentBridge('music-prototype'))

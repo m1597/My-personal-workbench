@@ -22,6 +22,7 @@ for (const f of [
 for (const [source, output] of [
   ['examples/sample-component', 'component'],
   ['components/music', 'music'],
+  ['components/prompts', 'prompts'],
 ]) {
   await build({
     configFile: false,

@@ -21,6 +21,8 @@ import { useMusicHostState } from './componentPrototype'
 export function WindowMenu() {
   const t = useTranslation()
   const music = useMusicHostState()
+  const [hasPrompts, setPrompts] = useState(false)
+  const promptState = useMusicHostState(window.promptDock)
   const sampleState = useMusicHostState(window.componentHost)
   const sampleRunning = sampleState?.phase === 'ready' || sampleState?.phase === 'attaching'
   const sampleHidden = sampleState?.presentation === 'background'
@@ -40,6 +42,10 @@ export function WindowMenu() {
   const layoutTrigger = useRef<HTMLButtonElement>(null)
   const panels = workspace.api?.panels ?? []
   const inspect = useCallback(() => {
+    void window.promptDock
+      ?.inventory()
+      .then((r) => setPrompts(r.installed))
+      .catch(() => setPrompts(false))
     void window.musicDock
       ?.inventory()
       .then((info) => setInstalled(info.installed))
@@ -107,6 +113,15 @@ export function WindowMenu() {
                 {module.title}
               </MenuItem>
             ))}
+            {hasPrompts && (
+              <MenuItem
+                role="menuitemcheckbox"
+                aria-checked={promptState?.phase === 'ready'}
+                onClick={() => void toggleRunning(window.promptDock)}
+              >
+                {t('提示词仓库', 'Prompt library')}
+              </MenuItem>
+            )}
             {sample && (
               <MenuSplitGroup>
                 <MenuItem
@@ -162,7 +177,7 @@ export function WindowMenu() {
                 />
               </MenuSplitGroup>
             )}
-            {!modules.length && !installed && !sample && (
+            {!modules.length && !installed && !sample && !hasPrompts && (
               <MenuItem disabled>{t('未检测到已安装组件', 'No installed components')}</MenuItem>
             )}
           </MenuList>

@@ -7,6 +7,7 @@ import { watchNativeDock, positionAtRelease, outsideRelease } from './native-doc
 import { musicThumbnails } from './music-thumbnails.mjs'
 export function componentView({
   music,
+  prompts = false,
   language = 'zh-CN',
   componentRoot,
   here,
@@ -26,6 +27,8 @@ export function componentView({
   setKeepRunning,
   onStateChange,
 }) {
+  const hostChannel = prompts ? 'prompt-prototype' : music ? 'music-prototype' : 'prototype'
+  const viewChannel = prompts ? 'prompt-sample' : music ? 'music-sample' : 'sample'
   let standalone, view, parent
   let mode = 'standalone'
   let presentation = 'full'
@@ -74,9 +77,9 @@ export function componentView({
     if (phase === 'stopped' || phase === 'crashed') thumbnails?.reset()
     else thumbnails?.owner(parent)
     if (shell() && !shell().isDestroyed())
-      shell().webContents.send(music ? 'music-prototype:state' : 'prototype:state', snapshot())
+      shell().webContents.send(`${hostChannel}:state`, snapshot())
     if (view && !view.webContents.isDestroyed() && !view.webContents.isCrashed())
-      view.webContents.send(music ? 'music-sample:state' : 'sample:state', snapshot())
+      view.webContents.send(`${viewChannel}:state`, snapshot())
   }
   function isSample(event) {
     return (
@@ -132,8 +135,7 @@ export function componentView({
       }
     }
     broadcast()
-    if (next === 'full' && mode === 'docked')
-      shell()?.webContents.send(music ? 'music-prototype:activate' : 'prototype:activate')
+    if (next === 'full' && mode === 'docked') shell()?.webContents.send(`${hostChannel}:activate`)
   }
   function detach(point) {
     clearTimeout(transferTimer)
@@ -141,7 +143,7 @@ export function componentView({
     if (!standalone || standalone.isDestroyed()) {
       standalone = new BaseWindow({
         ...options(660, 620),
-        title: music ? 'Music' : '示例组件 · 独立窗口',
+        title: prompts ? '提示词仓库' : music ? 'Music' : '示例组件 · 独立窗口',
       })
       watchNativeDock(standalone, {
         target: (point) => {
@@ -212,7 +214,8 @@ export function componentView({
       )
         throw new Error('INCOMPATIBLE：需要 manifest 1、协议/宿主 API 0.1')
       if (
-        manifest.id !== (music ? 'io.fitbay.music' : 'io.example.counter') ||
+        manifest.id !==
+          (prompts ? 'io.fitbay.prompts' : music ? 'io.fitbay.music' : 'io.example.counter') ||
         manifest.uiEntry !== 'index.html' ||
         JSON.stringify(manifest.capabilities) !== '["view.transfer"]'
       )
@@ -252,7 +255,11 @@ export function componentView({
     if (!root || restoreWindow?.isDestroyed()) return false
     view?.webContents.close()
     const isolated = session.fromPartition(
-      music ? 'persist:fitbay-music-player' : `component-${sessionId}`,
+      prompts
+        ? 'persist:fitbay-prompts'
+        : music
+          ? 'persist:fitbay-music-player'
+          : `component-${sessionId}`,
     )
     await configureSession?.(isolated, root)
     const allowOutput = (contents, permission) =>
@@ -289,9 +296,11 @@ export function componentView({
     view = new WebContentsView({
       webPreferences: {
         session: isolated,
-        preload: music
-          ? path.resolve(root, '../host/music-preload.cjs')
-          : path.join(here, 'sample-preload.cjs'),
+        preload: prompts
+          ? path.join(here, 'prompt-preload.cjs')
+          : music
+            ? path.resolve(root, '../host/music-preload.cjs')
+            : path.join(here, 'sample-preload.cjs'),
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
@@ -388,7 +397,7 @@ export function componentView({
     setMaterial(next) {
       material = next
       if (mode === 'docked' && view && !view.webContents.isDestroyed())
-        view.webContents.send(music ? 'music-sample:state' : 'sample:state', snapshot())
+        view.webContents.send(`${viewChannel}:state`, snapshot())
     },
     discover,
     preview,
@@ -397,11 +406,11 @@ export function componentView({
         ipcMain.on('music-sample:thumbnail-state', (event, state) => {
           if (isSample(event)) thumbnails?.update(state)
         })
-      ipcMain.handle(music ? 'music-sample:hello' : 'sample:hello', (event, payload) => {
+      ipcMain.handle(`${viewChannel}:hello`, (event, payload) => {
         if (!isSample(event) || payload?.protocol !== '0.1') throw new Error('DENIED')
         return snapshot()
       })
-      ipcMain.handle(music ? 'music-sample:transfer' : 'sample:transfer', (event, action) => {
+      ipcMain.handle(`${viewChannel}:transfer`, (event, action) => {
         if (!isSample(event) || !['attach', 'detach'].includes(action))
           return { ok: false, error: 'DENIED' }
         setPresentation('full')
@@ -409,11 +418,11 @@ export function componentView({
         detach()
         return { ok: true }
       })
-      ipcMain.handle(music ? 'music-prototype:status' : 'prototype:status', (event) => {
+      ipcMain.handle(`${hostChannel}:status`, (event) => {
         if (!isShell(event)) throw new Error('DENIED')
         return snapshot()
       })
-      ipcMain.handle(music ? 'music-prototype:inventory' : 'prototype:inventory', async (event) => {
+      ipcMain.handle(`${hostChannel}:inventory`, async (event) => {
         if (!isShell(event)) throw Error('DENIED')
         const installed = Boolean(await discover(false))
         return {
@@ -422,49 +431,43 @@ export function componentView({
           settingsEntries: installed ? settingsEntries : [],
         }
       })
-      ipcMain.handle(
-        music ? 'music-prototype:show' : 'prototype:show',
-        async (event, settings, target) => {
-          if (!isShell(event) || typeof settings !== 'boolean') throw Error('DENIED')
-          if (
-            target !== undefined &&
-            (!settings ||
-              !(await discover(false)) ||
-              !settingsEntries.some((e) => e.target === target))
-          )
-            return { ok: false, error: '设置项已不可用' }
-          if (settings && mode === 'standalone' && phase === 'ready') {
-            setPresentation('full')
-            if (parent?.isMinimized()) parent.restore()
-            if (parent) show(parent)
-          } else {
-            if (mode === 'standalone') setPresentation('full')
-            const result = await attach()
-            if (!result.ok) return result
-            setPresentation('full')
-            shell()?.webContents.send(music ? 'music-prototype:activate' : 'prototype:activate')
-          }
-          settingsTarget = target
-          if (settings) settingsRequest++
-          broadcast()
-          return { ok: true }
-        },
-      )
-      ipcMain.handle(
-        music ? 'music-prototype:layout' : 'prototype:layout',
-        async (event, included) => {
-          if (!isShell(event) || typeof included !== 'boolean') throw Error('DENIED')
-          if (!included) {
-            if (mode === 'docked' && presentation === 'full') setPresentation('background')
-            return
-          }
-          if (phase === 'ready') {
-            presentation = 'full'
-            restoreDockedView(shell())
-          } else await openComponent(shell())
-        },
-      )
-      ipcMain.handle(music ? 'music-prototype:restore' : 'prototype:restore', async (event) => {
+      ipcMain.handle(`${hostChannel}:show`, async (event, settings, target) => {
+        if (!isShell(event) || typeof settings !== 'boolean') throw Error('DENIED')
+        if (
+          target !== undefined &&
+          (!settings ||
+            !(await discover(false)) ||
+            !settingsEntries.some((e) => e.target === target))
+        )
+          return { ok: false, error: '设置项已不可用' }
+        if (settings && mode === 'standalone' && phase === 'ready') {
+          setPresentation('full')
+          if (parent?.isMinimized()) parent.restore()
+          if (parent) show(parent)
+        } else {
+          if (mode === 'standalone') setPresentation('full')
+          const result = await attach()
+          if (!result.ok) return result
+          setPresentation('full')
+          shell()?.webContents.send(`${hostChannel}:activate`)
+        }
+        settingsTarget = target
+        if (settings) settingsRequest++
+        broadcast()
+        return { ok: true }
+      })
+      ipcMain.handle(`${hostChannel}:layout`, async (event, included) => {
+        if (!isShell(event) || typeof included !== 'boolean') throw Error('DENIED')
+        if (!included) {
+          if (mode === 'docked' && presentation === 'full') setPresentation('background')
+          return
+        }
+        if (phase === 'ready') {
+          presentation = 'full'
+          restoreDockedView(shell())
+        } else await openComponent(shell())
+      })
+      ipcMain.handle(`${hostChannel}:restore`, async (event) => {
         if (!isShell(event)) throw Error('DENIED')
         if (presentation !== 'full') return broadcast()
         if (phase === 'stopped') await openComponent(shell())
@@ -476,50 +479,41 @@ export function componentView({
             throw Error('DENIED')
           setPresentation(next)
         })
-      ipcMain.handle(
-        music ? 'music-prototype:toggle-visibility' : 'prototype:toggle-visibility',
-        (event) => {
-          if (!isShell(event)) throw Error('DENIED')
-          setPresentation(presentation === 'background' ? 'full' : 'background')
-        },
-      )
-      ipcMain.handle(music ? 'music-prototype:stop' : 'prototype:stop', (event) => {
+      ipcMain.handle(`${hostChannel}:toggle-visibility`, (event) => {
+        if (!isShell(event)) throw Error('DENIED')
+        setPresentation(presentation === 'background' ? 'full' : 'background')
+      })
+      ipcMain.handle(`${hostChannel}:stop`, (event) => {
         if (!isShell(event)) throw Error('DENIED')
         stopComponent()
       })
-      ipcMain.handle(music ? 'music-prototype:close' : 'prototype:close', (event) => {
+      ipcMain.handle(`${hostChannel}:close`, (event) => {
         if (!isShell(event)) throw Error('DENIED')
         if (keepRunning() && phase === 'ready') setPresentation('background')
         else stopComponent()
       })
-      ipcMain.handle(
-        music ? 'music-prototype:keep-running' : 'prototype:keep-running',
-        (event, value) => {
-          if (!isShell(event) || typeof value !== 'boolean') throw Error('DENIED')
-          setKeepRunning(value)
-          broadcast()
-          return value
-        },
-      )
-      ipcMain.handle(music ? 'music-prototype:open' : 'prototype:open', (event) => {
+      ipcMain.handle(`${hostChannel}:keep-running`, (event, value) => {
+        if (!isShell(event) || typeof value !== 'boolean') throw Error('DENIED')
+        setKeepRunning(value)
+        broadcast()
+        return value
+      })
+      ipcMain.handle(`${hostChannel}:open`, (event) => {
         if (!isShell(event)) throw new Error('DENIED')
         setPresentation('full')
         return attach()
       })
-      ipcMain.handle(music ? 'music-prototype:detach' : 'prototype:detach', (event, release) => {
+      ipcMain.handle(`${hostChannel}:detach`, (event, release) => {
         if (!isShell(event)) throw new Error('DENIED')
         if (mode !== 'docked' || phase !== 'ready') return
         if (release === undefined) return detach()
         const point = outsideRelease(shell(), release)
         if (point) detach(point)
       })
-      ipcMain.on(
-        music ? 'music-prototype:confirmed-transfer' : 'prototype:confirmed-transfer',
-        (event, id) => {
-          event.returnValue = Boolean(isShell(event) && id > 0 && id === confirmedTransfer)
-        },
-      )
-      ipcMain.on(music ? 'music-prototype:bounds' : 'prototype:bounds', (event, bounds, id) => {
+      ipcMain.on(`${hostChannel}:confirmed-transfer`, (event, id) => {
+        event.returnValue = Boolean(isShell(event) && id > 0 && id === confirmedTransfer)
+      })
+      ipcMain.on(`${hostChannel}:bounds`, (event, bounds, id) => {
         if (!isShell(event) || !view || !['ready', 'attaching'].includes(phase)) return
         if (presentation === 'background' || (presentation === 'bar') !== (id === 'bar')) return
         if (phase === 'attaching' && id !== transfer) return
@@ -585,8 +579,7 @@ export function componentView({
       if (!(await openComponent())) return false
       setPresentation('full')
       const window = parent ?? shell()
-      if (mode === 'docked')
-        shell().webContents.send(music ? 'music-prototype:activate' : 'prototype:activate')
+      if (mode === 'docked') shell().webContents.send(`${hostChannel}:activate`)
       if (window.isMinimized()) window.restore()
       show(window)
       return true

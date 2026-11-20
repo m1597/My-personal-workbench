@@ -13,6 +13,10 @@ const commonHostFiles = [
   'installed-products.mjs',
   'music-installer.mjs',
   'component-view.mjs',
+  'prompt-actions.mjs',
+  'prompt-library.mjs',
+  'prompt-palette.mjs',
+  'prompt-preload.cjs',
   'music-thumbnails.mjs',
   'transport-icons.png',
   'builtin-windows.mjs',
@@ -76,7 +80,7 @@ async function stageModules(dest, roots) {
 }
 
 export async function prepareProduct(product) {
-  if (!['music', 'workbench'].includes(product)) throw Error('未知产品')
+  if (!['music', 'workbench', 'prompts'].includes(product)) throw Error('未知产品')
   const music = product === 'music'
   const stage = path.resolve('.cache', 'fitbay-package', product)
   await rm(stage, { recursive: true, force: true })
@@ -105,7 +109,9 @@ export async function prepareProduct(product) {
   } else {
     for (const f of commonHostFiles)
       await cp(path.join(prototype, 'host', f), path.join(app, 'host', f))
-    await cp('out/renderer', path.join(app, 'workbench'), { recursive: true })
+    if (product === 'prompts')
+      await cp(path.join(prototype, 'prompts'), path.join(app, 'prompts'), { recursive: true })
+    else await cp('out/renderer', path.join(app, 'workbench'), { recursive: true })
   }
   await cp('LICENSE', path.join(app, 'LICENSE'))
   await writeFile(path.join(app, 'THIRD_PARTY_NOTICES.txt'), await notices())

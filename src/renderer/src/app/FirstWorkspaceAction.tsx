@@ -15,6 +15,7 @@ declare global {
 export function FirstWorkspaceAction() {
   const t = useTranslation()
   const [installed, setInstalled] = useState<boolean>()
+  const [prompts, setPrompts] = useState(false)
   const [sample, setSample] = useState(false)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState('')
@@ -26,10 +27,12 @@ export function FirstWorkspaceAction() {
     const refresh = async () => {
       const id = ++request
       try {
-        const [music, example] = await Promise.all([
+        const [music, example, library] = await Promise.all([
           window.musicDock?.inventory(),
           window.componentHost?.sampleEnabled ? window.componentHost.inventory() : undefined,
+          window.promptDock?.inventory(),
         ])
+        if (active && id === request) setPrompts(Boolean(library?.installed))
         const value = Boolean(music?.installed)
         if (active && id === request) setSample(Boolean(example?.installed))
         if (active && id === request) setInstalled(value)
@@ -46,7 +49,7 @@ export function FirstWorkspaceAction() {
       window.removeEventListener('focus', refresh)
     }
   }, [])
-  async function activate(which: 'music' | 'sample' | 'install') {
+  async function activate(which: 'music' | 'sample' | 'install' | 'prompts') {
     const bridge = window.firstWorkspace
     if (!bridge || busy) return
     setBusy(true)
@@ -54,9 +57,11 @@ export function FirstWorkspaceAction() {
     try {
       if (which !== 'install') {
         const result =
-          which === 'music'
-            ? await window.musicDock?.show(false)
-            : await window.componentHost?.open()
+          which === 'prompts'
+            ? await window.promptDock?.show(false)
+            : which === 'music'
+              ? await window.musicDock?.show(false)
+              : await window.componentHost?.open()
         if (!result?.ok) setProblem('open')
       } else {
         setInstalled(false)
@@ -83,6 +88,16 @@ export function FirstWorkspaceAction() {
             aria-label={t('打开 Music', 'Open Music')}
           >
             Music
+          </Button>
+        )}
+        {prompts && (
+          <Button
+            className="quick-component"
+            icon={<Boxes />}
+            disabled={busy}
+            onClick={() => void activate('prompts')}
+          >
+            {t('提示词仓库', 'Prompt library')}
           </Button>
         )}
         {sample && (
@@ -114,7 +129,7 @@ export function FirstWorkspaceAction() {
                   'Music was not detected. You can select the installer again.',
                 )
               : problem === 'open'
-                ? t('Music 打开失败，请重试。', 'Music could not open. Try again.')
+                ? t('组件打开失败，请重试。', 'Could not open the component. Try again.')
                 : t(
                     '无法连接组件或启动安装程序，请重试。',
                     'Could not connect to the component or start its installer. Try again.',

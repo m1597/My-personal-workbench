@@ -1,0 +1,174 @@
+import { createRequire } from 'node:module'
+import { setTimeout as delay } from 'node:timers/promises'
+import path from 'node:path'
+import { BrowserWindow, clipboard, dialog, globalShortcut, ipcMain } from 'electron'
+import { promptLibrary } from './prompt-library.mjs'
+
+function windowsTarget() {
+  const user = createRequire(import.meta.url)('koffi').load('user32.dll')
+  const foreground = user.func('intptr_t __stdcall GetForegroundWindow()')
+  const restore = user.func('int __stdcall SetForegroundWindow(intptr_t)')
+  const owner = user.func('uint32_t __stdcall GetWindowThreadProcessId(intptr_t,_Out_ uint32_t *)')
+  const send = user.func('uint32_t __stdcall SendInput(uint32_t,void *,int)')
+  return {
+    capture() {
+      const hwnd = foreground(),
+        pid = [0]
+      owner(hwnd, pid)
+      return { hwnd, pid: pid[0] }
+    },
+    async paste(target) {
+      const pid = [0]
+      if (!target?.hwnd || !owner(target.hwnd, pid) || pid[0] !== target.pid) return false
+      restore(target.hwnd)
+      await delay(90)
+      if (foreground() !== target.hwnd) return false
+      // x64 Windows INPUT includes an aligned 32-byte union at offset 8.
+      const keys = [
+        [17, 0],
+        [86, 0],
+        [86, 2],
+        [17, 2],
+      ]
+      const events = Buffer.alloc(40 * keys.length)
+      keys.forEach(([key, flags], i) => {
+        events.writeUInt32LE(1, i * 40)
+        events.writeUInt16LE(key, i * 40 + 8)
+        events.writeUInt32LE(flags, i * 40 + 12)
+      })
+      return send(keys.length, events, 40) === keys.length
+    },
+  }
+}
+export async function promptRuntime({ profile, here, root, isEditor, options, secure, show }) {
+  let editor,
+    panel,
+    target,
+    native,
+    active = '',
+    registrationError = '',
+    generation = 0
+  const library = await promptLibrary(profile, () => {
+    if (editor && !editor.isDestroyed()) editor.send('prompt:changed')
+  })
+  async function summon() {
+    if (panel?.isVisible()) {
+      panel.focus()
+      return
+    }
+    target = native?.capture()
+    const call = ++generation
+    if (!panel) {
+      panel = new BrowserWindow({
+        ...options(560, 450),
+        title: '搜索提示词',
+        autoHideMenuBar: true,
+        backgroundColor: '#202227',
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          preload: path.join(here, 'prompt-preload.cjs'),
+        },
+      })
+      secure(panel.webContents)
+      panel.on('closed', () => {
+        panel = undefined
+      })
+      await panel.loadFile(path.join(root, 'index.html'), { query: { palette: '1' } })
+    }
+    if (call !== generation || !panel) return
+    show(panel)
+    panel.webContents.send('prompt:focus')
+  }
+  function register(value) {
+    if (
+      typeof value !== 'string' ||
+      !/^(?:(?:Control|Alt|Shift|Super|CommandOrControl)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space)$/i.test(
+        value,
+      )
+    )
+      throw Error('请输入带修饰键的快捷键，例如 Control+Alt+P')
+    if (active === value) return
+    if (!globalShortcut.register(value, () => void summon().catch(console.error)))
+      throw Error('快捷键已被占用，请换一个组合')
+    if (active) globalShortcut.unregister(active)
+    active = value
+    registrationError = ''
+  }
+  function start() {
+    if (process.platform === 'win32' && !native) {
+      try {
+        native = windowsTarget()
+      } catch {
+        /* Clipboard fallback remains available. */
+      }
+    }
+    try {
+      register(library.state().shortcut)
+    } catch (e) {
+      registrationError = e.message
+    }
+  }
+  const handlers = []
+  function handle(name, scope, fn) {
+    const channel = 'prompt:' + name
+    handlers.push(channel)
+    ipcMain.handle(channel, (e, ...args) => {
+      const palette =
+        panel && e.sender === panel.webContents && e.senderFrame === panel.webContents.mainFrame
+      if (!(scope === 'panel' ? palette : isEditor(e))) throw Error('DENIED')
+      if (!palette) editor = e.sender
+      return fn(...args)
+    })
+  }
+  handle('state', 'editor', () => ({
+    ...library.state(),
+    registrationError: registrationError || library.state().preferenceError,
+  }))
+  handle('choose', 'editor', async (remember) => {
+    if (typeof remember !== 'boolean') throw Error('DENIED')
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+    if (!result.canceled) await library.select(result.filePaths[0], remember)
+  })
+  handle('default', 'editor', () => library.select(library.state().defaultRoot, false))
+  handle('shortcut', 'editor', async (value) => {
+    const old = active
+    register(value)
+    try {
+      await library.shortcut(value)
+    } catch (e) {
+      globalShortcut.unregister(value)
+      active = ''
+      if (old) register(old)
+      throw e
+    }
+  })
+  for (const method of ['files', 'read', 'save', 'pin']) handle(method, 'editor', library[method])
+  handle('search', 'panel', library.search)
+  handle('dismiss', 'panel', () => panel.hide())
+  handle('use', 'panel', async (folder, name, insert) => {
+    const text = await library.selection(folder, name)
+    clipboard.writeText(text)
+    if (!insert) return '已复制'
+    const previous = target
+    panel.hide()
+    if (await native?.paste(previous)) return '已发送粘贴，提示词也已复制'
+    if (panel) show(panel)
+    return '无法恢复输入窗口，提示词已复制'
+  })
+  return {
+    start,
+    stop() {
+      generation++
+      panel?.destroy()
+      if (active) globalShortcut.unregister(active)
+      active = ''
+    },
+    dispose() {
+      this.stop()
+      library.close()
+      for (const name of handlers) ipcMain.removeHandler(name)
+    },
+  }
+}

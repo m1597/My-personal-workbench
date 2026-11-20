@@ -20,12 +20,16 @@ if /i "%~1"=="--verify-desktop" (
 )
 if /i "%~1"=="--check" goto check_component
 if /i "%~1"=="--workbench" goto workbench
+if /i "%~1"=="--prompts" goto prompts
 if /i "%~1"=="--music" goto music
 choice /c 17 /n /t 5 /d 1 /m "1 工作台，7 Music（默认 1）："
 if errorlevel 255 goto failed
 if errorlevel 2 goto music
 if not errorlevel 1 goto failed
 goto workbench
+:prompts
+set "mode=prompts"
+goto check_component
 :music
 set "mode=music"
 goto check_component

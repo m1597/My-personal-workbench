@@ -175,7 +175,9 @@ function ensureTray() {
     'click',
     () =>
       void (
-        hasWorkbench ? revealWorkbench() : (intent === 'component' ? sample : music).open()
+        hasWorkbench
+          ? revealWorkbench()
+          : (intent === 'prompts' ? prompts : intent === 'component' ? sample : music).open()
       ).catch(console.error),
   )
   updateTray()
@@ -190,7 +192,7 @@ function openWorkbench() {
 async function createWorkbench() {
   if (shell && !shell.isDestroyed()) return
   const entry = await findWorkbenchFile()
-  if (!entry) throw new Error('NOT_INSTALLED：未安装 FitBay 工作台；Music 仍可独立使用')
+  if (!entry) throw new Error('NOT_INSTALLED：未安装 FitBay 工作台；当前组件仍可独立使用')
   const file = await realpath(entry)
   shell = new BrowserWindow({
     ...options(1480, 960),
@@ -322,7 +324,37 @@ const music = componentView({
   componentRoot: findMusicRoot,
   music: true,
 })
-const components = [sample, music]
+let promptService
+async function findPromptRoot() {
+  if (!installation) return path.join(here, '../prompts')
+  const appRoot = await installation.find('prompts')
+  return appRoot && path.join(appRoot, 'prompts')
+}
+const prompts = componentView({
+  ...shared,
+  prompts: true,
+  componentRoot: findPromptRoot,
+  keepRunning: () => false,
+  setKeepRunning: () => {},
+  configureSession: async (_session, root) => {
+    const { promptRuntime } = await import('./prompt-palette.mjs')
+    promptService ??= await promptRuntime({
+      profile,
+      here,
+      root,
+      isEditor: prompts.isSender,
+      options,
+      secure,
+      show,
+    })
+    promptService.start()
+  },
+  onDispose: () => {
+    promptService?.dispose()
+    promptService = undefined
+  },
+})
+const components = [sample, music, prompts]
 const builtins = builtinWindows({
   shell: () => shell,
   isShell,
@@ -338,6 +370,7 @@ const builtins = builtinWindows({
 })
 const requestedMode = installation?.product || argument('mode')
 const intent =
+  requestedMode === 'prompts' ||
   requestedMode === 'music' ||
   requestedMode === 'workbench' ||
   (fixturePanels && isBuiltin(requestedMode))
@@ -346,7 +379,7 @@ const intent =
 let requests = Promise.resolve()
 async function openIntent(request) {
   if (fixturePanels && isBuiltin(request)) return builtins.open(request)
-  if (['workbench', 'music', 'component'].includes(request)) {
+  if (['workbench', 'music', 'component', 'prompts'].includes(request)) {
     hasWorkbench = Boolean(await findWorkbenchFile())
     ensureTray()
     updateTray()
@@ -360,7 +393,7 @@ async function openIntent(request) {
       show(shell)
     }
   } else {
-    const component = request === 'music' ? music : sample
+    const component = request === 'prompts' ? prompts : request === 'music' ? music : sample
     if (!(await component.open())) {
       if (await findWorkbenchFile()) await openWorkbench()
       else throw new Error(component.failure())
@@ -371,6 +404,7 @@ if (!app.requestSingleInstanceLock({ intent })) app.quit()
 else {
   app.on('second-instance', (_event, _argv, _cwd, data) => {
     if (
+      data.intent === 'prompts' ||
       data.intent === 'music' ||
       data.intent === 'workbench' ||
       data.intent === 'component' ||
@@ -382,6 +416,7 @@ else {
     quitting = true
     tray?.destroy()
     tray = undefined
+    promptService?.dispose()
     closeSourcePipe?.()
     for (const item of components) item.quit()
   })

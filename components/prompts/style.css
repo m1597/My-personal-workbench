@@ -1,0 +1,172 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root,
+.component-theme {
+  margin: 0;
+  height: 100%;
+  color-scheme: dark;
+}
+.library,
+.palette {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--workbench-popup-tint), var(--solid-surface));
+  color: var(--text);
+  font-family: inherit;
+  overflow: auto;
+}
+.library header,
+.tools,
+footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.library header {
+  justify-content: space-between;
+}
+h1,
+h2 {
+  margin: 0;
+}
+h1 {
+  font-size: 19px;
+}
+h2 {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--control);
+  border: 1px solid var(--stroke-strong);
+  border-radius: 5px;
+  padding: 5px 9px;
+}
+button,
+summary {
+  cursor: pointer;
+}
+button:hover,
+.selected {
+  background: var(--accent-soft);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.split {
+  display: grid;
+  grid-template-columns: minmax(110px, 30%) 1fr;
+  gap: 12px;
+  min-height: 150px;
+  flex: 1;
+}
+.split nav,
+article,
+.hits {
+  overflow: auto;
+  min-width: 0;
+}
+.split nav button,
+.hits button {
+  display: block;
+  text-align: left;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.split nav button {
+  border: 0;
+  margin: 2px 0;
+}
+.split nav details > *:not(summary) {
+  margin-left: 8px;
+  width: calc(100% - 8px);
+}
+article {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+article pre,
+textarea {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 100px;
+  flex: 1;
+  margin: 0;
+  font: inherit;
+}
+textarea {
+  width: 100%;
+  resize: vertical;
+}
+label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 5px 0;
+}
+input {
+  min-width: 0;
+  flex: 1;
+}
+.hits {
+  flex: 1;
+}
+.hits span,
+.hits strong {
+  display: block;
+  white-space: pre-wrap;
+}
+.hits span,
+small {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+aside {
+  color: var(--text);
+}
+summary {
+  padding: 4px;
+}
+@media (max-width: 480px) {
+  .split {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(60px, 28%) 1fr;
+  }
+  .library {
+    padding: 10px;
+    gap: 6px;
+  }
+}
+
+.markdown {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+.markdown h3 {
+  margin: 8px 0;
+}
+.markdown pre {
+  min-height: 0;
+  padding: 8px;
+  background: var(--base);
+}

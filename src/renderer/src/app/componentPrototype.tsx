@@ -31,6 +31,7 @@ type HostState = {
 const attachingGroups = new WeakMap<IDockviewPanelProps['api'], string>()
 declare global {
   interface Window {
+    promptDock?: Window['componentHost']
     musicDock?: NonNullable<Window['componentHost']> & {
       toggleVisibility(): Promise<void>
     }
@@ -196,6 +197,8 @@ export function useComponentPrototype(
       }
     }
     const offSample = host.sampleEnabled && bind(host, 'component-example', '示例组件')
+    const offPrompts =
+      window.promptDock && bind(window.promptDock, 'component-prompts', '提示词仓库')
     const offMusic = window.musicDock && bind(window.musicDock, 'component-music', 'Music')
     let dragging = ''
     let pointer: number | undefined
@@ -208,6 +211,7 @@ export function useComponentPrototype(
       if (
         !(nativeEvent instanceof PointerEvent) ||
         !(
+          panel.id === 'component-prompts' ||
           panel.id === 'component-example' ||
           panel.id === 'component-music' ||
           (builtins && modules.some((item) => item.id === panel.id))
@@ -230,6 +234,7 @@ export function useComponentPrototype(
       ) {
         const point = { x: event.clientX, y: event.clientY }
         if (dragging === 'component-example') void host.detach(point)
+        else if (dragging === 'component-prompts') void window.promptDock?.detach(point)
         else if (dragging === 'component-music') void window.musicDock?.detach(point)
         else {
           // Keep the captured navigation state stable until the new renderer has mounted.
@@ -287,6 +292,7 @@ export function useComponentPrototype(
     frame = requestAnimationFrame(measure)
     return () => {
       if (offSample) offSample()
+      offPrompts?.()
       offMusic?.()
       builtins?.dispose()
 
@@ -373,7 +379,12 @@ export function MusicPlayerBar() {
 export function ComponentDropPreview() {
   const [sampleOver, setOver] = useState<Target | null>(null)
   const [musicOver, setMusicOver] = useState<Target | null>(null)
-  const over = musicOver ?? sampleOver
+  const [promptOver, setPromptOver] = useState<Target | null>(null)
+  useEffect(
+    () => window.promptDock?.subscribe((value) => setPromptOver(value.dragOver ?? null)),
+    [],
+  )
+  const over = promptOver ?? musicOver ?? sampleOver
   useEffect(() => window.componentHost?.subscribe((value) => setOver(value.dragOver ?? null)), [])
   useEffect(() => window.musicDock?.subscribe((value) => setMusicOver(value.dragOver ?? null)), [])
   return (
@@ -392,14 +403,26 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
   const element = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<HostState>()
   useEffect(() => {
-    const host = api.id === 'component-music' ? window.musicDock : window.componentHost
+    const host =
+      api.id === 'component-prompts'
+        ? window.promptDock
+        : api.id === 'component-music'
+          ? window.musicDock
+          : window.componentHost
     if (!host) return
     let current: HostState | undefined
     let otherPreview: Target | null = null
-    const other = api.id === 'component-music' ? window.componentHost : window.musicDock
-    const offOther = other?.subscribe((value) => {
-      otherPreview = value.dragOver ?? null
-    })
+    const peers = [window.componentHost, window.musicDock, window.promptDock].filter(
+      (peer) => peer && peer !== host,
+    )
+    const previews = new Map<number, Target>()
+    const offOthers = peers.map((peer, index) =>
+      peer?.subscribe((value) => {
+        if (value.dragOver) previews.set(index, value.dragOver)
+        else previews.delete(index)
+        otherPreview = previews.values().next().value ?? null
+      }),
+    )
     const update = (value: HostState) => {
       current = value
       setState(value)
@@ -452,7 +475,7 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
     return () => {
       cancelAnimationFrame(frame)
       off()
-      offOther?.()
+      for (const unsubscribe of offOthers) unsubscribe?.()
       host.bounds(null)
     }
   }, [api])
@@ -477,12 +500,18 @@ export function ComponentSlot({ api }: IDockviewPanelProps) {
           </p>
           <Button
             onClick={() =>
-              void (api.id === 'component-music' ? window.musicDock : window.componentHost)?.open()
+              void (
+                api.id === 'component-prompts'
+                  ? window.promptDock
+                  : api.id === 'component-music'
+                    ? window.musicDock
+                    : window.componentHost
+              )?.open()
             }
           >
             {api.id === 'component-music'
               ? t('重新连接音乐', 'Reconnect Music')
-              : t('重新连接示例', 'Reconnect example')}
+              : t('重新连接组件', 'Reconnect component')}
           </Button>
         </>
       )}

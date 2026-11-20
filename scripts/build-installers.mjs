@@ -74,17 +74,18 @@ async function writeInstallerInclude(output, appOutDir) {
 
 const files = {}
 const { version } = JSON.parse(await readFile('package.json', 'utf8'))
-for (const product of ['music', 'workbench']) {
+const promptsOnly = process.argv.includes('--prompts')
+for (const product of promptsOnly ? ['prompts'] : ['music', 'workbench']) {
   const music = product === 'music'
   const { app, modules } = await prepareProduct(product)
-  if (!music) {
+  if (product === 'workbench') {
     const hash = createHash('sha256')
     for await (const chunk of createReadStream(files.music)) hash.update(chunk)
     await writeFile(path.join(app, 'music-setup.sha256'), hash.digest('hex'))
   }
-  const title = music ? 'FitBay Music' : 'FitBay'
-  const shortcut = music ? title : 'FitBay 工作台'
-  const filename = `FitBay-${music ? 'Music' : 'Workbench'}-Setup-${version}-x64.exe`
+  const title = promptsOnly ? 'FitBay Prompts' : music ? 'FitBay Music' : 'FitBay'
+  const shortcut = promptsOnly ? 'FitBay 提示词仓库' : music ? title : 'FitBay 工作台'
+  const filename = `FitBay-${promptsOnly ? 'Prompts' : music ? 'Music' : 'Workbench'}-Setup-${version}-x64.exe`
   const output = path.resolve('.cache', 'fitbay-build', product)
   const include = path.join(output, 'fitbay-owned-files.nsh')
   await build({
@@ -120,4 +121,5 @@ for (const product of ['music', 'workbench']) {
   })
   files[product] = path.join(output, filename)
 }
-await deliverInstallers(files.workbench, files.music, version)
+if (promptsOnly) console.log(files.prompts)
+else await deliverInstallers(files.workbench, files.music, version)
