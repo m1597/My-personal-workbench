@@ -9,6 +9,11 @@ import { type ModuleId, navigationQuery } from './builtinSession'
 import { modules } from './moduleRegistry'
 import { applyLayout, switchingLayout, trackLayout } from './layoutStorage'
 
+export type ComponentInventory = {
+  installed: boolean
+  version?: string
+  settingsEntries?: { target: string; name: string; path: string }[]
+}
 type Region = { id: string; x: number; y: number; width: number; height: number }
 type Target = Region & { direction: 'within' | 'left' | 'right' | 'above' | 'below' }
 type HostState = {
@@ -27,14 +32,14 @@ const attachingGroups = new WeakMap<IDockviewPanelProps['api'], string>()
 declare global {
   interface Window {
     musicDock?: NonNullable<Window['componentHost']> & {
-      show(settings: boolean): Promise<{ ok: boolean; error?: string }>
       toggleVisibility(): Promise<void>
     }
     componentHost?: {
       keepRunning(value: boolean): Promise<boolean>
       layout(included: boolean): Promise<void>
       toggleVisibility(): Promise<void>
-      inventory(): Promise<{ installed: boolean; version?: string }>
+      show(settings: boolean, target?: string): Promise<{ ok: boolean; error?: string }>
+      inventory(): Promise<ComponentInventory>
       sampleEnabled?: boolean
       dropZone(value: Region[] | null): void
       setLanguage?(value: 'zh-CN' | 'en'): void

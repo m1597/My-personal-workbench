@@ -113,8 +113,9 @@ try {
           path: path.join(evidence, '顶栏停靠-' + width + '.png'),
           style: ':root { background: var(--base) !important }',
         })
-        const more = music.getByRole('button', { name: '更多音乐操作' })
-        await expect(more).toHaveAttribute('title', '更多音乐操作')
+        const more = music.getByRole('button', { name: '音乐设置' })
+        await more.hover()
+        await expect(music.getByRole('tooltip', { name: '音乐设置' })).toBeVisible()
         const hideButton = music.locator('.music-view-actions .music-hide-extra')
         if (await hideButton.isVisible()) {
           await expect(hideButton).toHaveAttribute('title', '隐藏到后台')
@@ -124,11 +125,6 @@ try {
           expect((await hideButton.boundingBox()).x).toBeGreaterThan((await more.boundingBox()).x)
         }
         await more.click()
-        if (width === 440) {
-          await expect(music.getByRole('menuitem', { name: '使用引导' })).toBeVisible()
-          await expect(music.getByRole('menuitem', { name: '隐藏到后台' })).toBeVisible()
-        }
-        await music.getByRole('menuitem', { name: '音乐设置' }).click()
         await expect(music.locator('.music-settings')).toBeVisible()
         await music.getByRole('tab', { name: '曲库', exact: true }).click()
       }

@@ -50,6 +50,83 @@ export async function saveInstaller(update, temp, request = fetch) {
   }
 }
 
+// Renderer callers supply a product id. Download URLs and hashes stay in the main process.
+export function updateCatalog({ inventory, launch, request = fetch, changed = () => {} }) {
+  const results = new Map()
+  let lastChecked = null
+  let pending = Promise.resolve()
+  function serialize(action) {
+    const next = pending.then(action)
+    pending = next.catch(() => {})
+    return next
+  }
+  async function snapshot() {
+    const rows = (await inventory()).map((row) => {
+      const saved = results.get(row.id)
+      const result = saved?.installed === row.version ? saved : undefined
+      return {
+        ...row,
+        status: result?.status ?? (products[row.id] ? 'unchecked' : 'unsupported'),
+        available: result?.update?.version ?? null,
+      }
+    })
+    return { rows, lastChecked }
+  }
+  function check(id) {
+    return serialize(async () => {
+      const selected = (await inventory()).filter(
+        (row) => (!id || id === row.id) && Object.hasOwn(products, row.id),
+      )
+      if (selected.length) {
+        let release
+        try {
+          const response = await request(`https://api.github.com/repos/${repo}/releases/latest`, {
+            signal: AbortSignal.timeout(15000),
+          })
+          if (!response.ok) throw Error('Release unavailable')
+          release = await response.json()
+        } catch {
+          release = null
+        }
+        for (const row of selected) {
+          const version = release?.tag_name?.replace(/^v/, '')
+          const update = release && selectUpdate(release, row.id, row.version)
+          const valid =
+            versionPattern.test(version) &&
+            versionPattern.test(row.version) &&
+            !release?.draft &&
+            !release?.prerelease
+          const newer =
+            valid &&
+            version
+              .split('.')
+              .map((part, i) => Number(part) - Number(row.version.split('.')[i]))
+              .find((n) => n !== 0) > 0
+          results.set(row.id, {
+            installed: row.version,
+            update,
+            status: update ? 'available' : valid && !newer ? 'current' : 'failed',
+          })
+        }
+        lastChecked = new Date().toISOString()
+      }
+      const state = await snapshot()
+      changed(state)
+      return state
+    })
+  }
+  function install(id) {
+    return serialize(async () => {
+      const row = (await inventory()).find((item) => item.id === id)
+      const result = results.get(id)
+      if (!row?.installable || !result?.update || result.installed !== row.version)
+        throw Error('Update unavailable')
+      await launch(result.update)
+    })
+  }
+  return { snapshot, check, install }
+}
+
 export function productUpdater({ installation, app, dialog, shell, english }) {
   const declined = new Set()
   let busy = false

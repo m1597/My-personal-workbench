@@ -41,6 +41,11 @@ try {
     )
   await resize(1040)
   await app.evaluate(({ dialog }, root) => {
+    const messageBox = dialog.showMessageBox.bind(dialog)
+    dialog.showMessageBox = (...args) =>
+      args[0]?.checkboxLabel === '自动收录以后新增的歌曲'
+        ? Promise.resolve({ response: 0, checkboxChecked: false })
+        : messageBox(...args)
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] })
   }, root)
   await openMusicSettings(page)

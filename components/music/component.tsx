@@ -22,25 +22,13 @@ import {
 } from './MusicSettings'
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import {
-  Button,
-  Checkbox,
-  Menu,
-  MenuItem,
-  MenuList,
-  MenuPopover,
-  MenuTrigger,
-  Slider,
-  Tab,
-  TabList,
-} from '@fluentui/react-components'
+import { Button, Checkbox, Slider, Tab, TabList } from '@fluentui/react-components'
 import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import {
   AudioLines,
   Heart,
   Disc3,
   CircleHelp,
-  Ellipsis,
   Settings,
   PanelBottomClose,
   PanelTopOpen,
@@ -232,7 +220,16 @@ declare global {
         lxInfo(): Promise<string>
         lxImport(link?: string): Promise<void>
         lxCancel(scope?: 'import' | 'search' | 'download'): Promise<void>
-        downloadTasks(): Promise<{ id: string; title: string; status: string; detail: string; collection?: string; failedIds?: string[] }[]>
+        downloadTasks(): Promise<
+          {
+            id: string
+            title: string
+            status: string
+            detail: string
+            collection?: string
+            failedIds?: string[]
+          }[]
+        >
         cancelDownloadTask(id: string): Promise<void>
         searchHistory(
           action?: 'list' | 'add' | 'remove' | 'clear',
@@ -287,6 +284,10 @@ declare global {
         mediaFailed(id: string, url: string): Promise<undefined | PlaybackFailure>
         localSource(id: string, scope?: string): Promise<string>
         rememberOnline(key: string, quality?: string): Promise<string>
+        queuePlaylistDownload(
+          ids: string[],
+          collection: string,
+        ): Promise<{ queued: number; skipped: number; taskId?: string }>
         downloadSelection(ids: string[]): Promise<SelectionDownload[]>
         dismissRecommendation(id: string): Promise<void>
         setRepeatOne(enabled: boolean): Promise<void>
@@ -525,10 +526,17 @@ function Music() {
       if (request > handledSettings) {
         handledSettings = request
         setGuide(null)
-        if (isSettingsCategory(v.settingsTarget)) {
-          setSettingsCategory(v.settingsTarget)
+        const field =
+          v.settingsTarget === 'keys.app' || v.settingsTarget === 'keys.global'
+            ? v.settingsTarget
+            : undefined
+        const category = field ? 'keys' : v.settingsTarget
+        if (isSettingsCategory(category)) {
+          setSettingsCategory(category)
           requestAnimationFrame(() => {
-            const pane = document.querySelector<HTMLElement>('.music-settings')
+            const pane = field
+              ? document.getElementById('music-' + field.replace('.', '-'))
+              : document.querySelector<HTMLElement>('.music-settings')
             pane?.focus()
             pane?.scrollIntoView({ block: 'start' })
           })
@@ -1471,48 +1479,22 @@ function Music() {
               打开 Music 使用引导
             </span>
           </span>
-          <Menu>
-            <MenuTrigger disableButtonEnhancement>
-              <Button
-                size="small"
-                appearance="subtle"
-                icon={<Ellipsis size={17} />}
-                aria-label="更多音乐操作"
-                title="更多音乐操作"
-              />
-            </MenuTrigger>
-            <MenuPopover className="component-popup">
-              <MenuList>
-                <MenuItem
-                  className="music-narrow-action"
-                  icon={<CircleHelp size={16} />}
-                  onClick={() => {
-                    if (guide === null) guideOrigin.current = { tab, category: settingsCategory }
-                    visitGuide(0)
-                  }}
-                >
-                  使用引导
-                </MenuItem>
-                <MenuItem
-                  className="music-narrow-action"
-                  icon={<PanelTopClose size={16} />}
-                  onClick={() => void act(() => window.musicWindow.present('background'))}
-                >
-                  隐藏到后台
-                </MenuItem>
-
-                <MenuItem
-                  icon={<Settings size={16} />}
-                  onClick={() => {
-                    setGuide(null)
-                    openSettings(settingsCategory)
-                  }}
-                >
-                  音乐设置
-                </MenuItem>
-              </MenuList>
-            </MenuPopover>
-          </Menu>
+          <span className="music-guide-trigger">
+            <Button
+              size="small"
+              appearance="subtle"
+              icon={<Settings size={17} />}
+              aria-label="音乐设置"
+              aria-describedby="music-settings-hint"
+              onClick={() => {
+                setGuide(null)
+                openSettings(settingsCategory)
+              }}
+            />
+            <span role="tooltip" id="music-settings-hint">
+              音乐设置
+            </span>
+          </span>
           <Button
             appearance="subtle"
             size="small"
@@ -1632,6 +1614,7 @@ function Music() {
             members={categoryRows}
             recentImports={recentImports}
             setRecentImports={setRecentImports}
+            refreshDownloads={() => host.state().then(setState)}
             downloadSelected={async (ids) => {
               let result: SelectionDownload[] = []
               await act(async () => {
@@ -1662,7 +1645,9 @@ function Music() {
             }}
             create={(name, tracks) =>
               act(async () => {
-                setPlaylistCollection(await host.createPlaylist(name, tracks))
+                const id = await host.createPlaylist(name, tracks)
+                if (tab === 'library') return
+                setPlaylistCollection(id)
                 setTab('playlists')
                 setSearch('')
               })
@@ -1680,6 +1665,7 @@ function Music() {
             job={state?.importJob}
             active={now}
             playing={!paused}
+            importLocal={(mode) => void act(() => host.importLocal(mode))}
             cancel={() => void act(() => host.cancelImport())}
             play={(id, ids) => void act(() => startTrack(id, ids))}
             relocate={(id) => void act(() => host.relocateLocal(id))}

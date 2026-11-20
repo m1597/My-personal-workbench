@@ -79,6 +79,11 @@ const launch = () =>
   })
 const choose = (app, paths) =>
   app.evaluate(({ dialog }, paths) => {
+    const messageBox = dialog.showMessageBox.bind(dialog)
+    dialog.showMessageBox = (...args) =>
+      args[0]?.checkboxLabel === '自动收录以后新增的歌曲'
+        ? Promise.resolve({ response: 0, checkboxChecked: false })
+        : messageBox(...args)
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: paths })
   }, paths)
 async function waitJobs(page) {
@@ -97,19 +102,19 @@ try {
   await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件夹' }).click()
   await page.getByRole('tab', { name: '曲库' }).click()
-  await expect(page.getByText(/导入完成 · 新增 4 · 重复 0 · 失败 1/)).toBeVisible()
+  await expect(page.getByText(/导入完成 · 新增 4 · 跳过 0 · 失败 1/)).toBeVisible()
   await choose(app, [songs])
   await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件夹' }).click()
   await page.getByRole('tab', { name: '曲库' }).click()
-  await expect(page.getByText(/导入完成 · 新增 0 · 重复 4 · 失败 1/)).toBeVisible()
+  await expect(page.getByText(/导入完成 · 新增 0 · 跳过 4 · 失败 1/)).toBeVisible()
 
   await copyFile(path.join(nested, 'tone.mp3'), duplicate)
   await choose(app, [duplicate, longFile])
   await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件', exact: true }).click()
   await page.getByRole('tab', { name: '曲库' }).click()
-  await expect(page.getByText(/导入完成 · 新增 1 · 重复 1/)).toBeVisible()
+  await expect(page.getByText(/导入完成 · 新增 1 · 跳过 1/)).toBeVisible()
   await expect(page.getByRole('button', { name: '播放试音 mp3', exact: true })).toHaveCount(2)
   await page.getByRole('searchbox').fill('声学校验')
   await expect(page.locator('.library-row')).toHaveCount(4)

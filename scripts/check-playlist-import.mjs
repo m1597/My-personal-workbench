@@ -51,6 +51,15 @@ assert.deepEqual(
   (await previewPlaylist(db.library, legacy)).entries.map((e) => e.id),
   [ids[3], ids[1]],
 )
+for (let index = 0; index < 50; index++) {
+  db.library.upsert({
+    file: path.join(root, index + '.wav'),
+    title: '滚动验收' + index,
+    artist: '验收',
+    album: '验收',
+    duration: 20,
+  })
+}
 db.set('music-guide-v1', 1)
 db.db.close()
 const app = await electron.launch({
@@ -64,6 +73,49 @@ const app = await electron.launch({
 })
 try {
   const page = await app.firstWindow()
+  await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(1100, 780))
+  for (const width of [1100, 420]) {
+    await app.evaluate(({ BaseWindow }, width) => {
+      const win = BaseWindow.getAllWindows()[0]
+      win.setMinimumSize(360, 320)
+      win.setContentSize(width, 580)
+    }, width)
+    const gear = page.getByRole('button', { name: '音乐设置', exact: true })
+    await gear.hover()
+    await expect(page.getByRole('tooltip', { name: '音乐设置' })).toBeVisible()
+    await page.screenshot({
+      path: path.join(root, 'gear-' + width + '.png'),
+      style: ':root{background:var(--base)!important}',
+    })
+    await gear.click()
+    await expect(page.locator('.music-settings')).toBeVisible()
+    await page.getByRole('tab', { name: '曲库', exact: true }).click()
+    const group = page.getByRole('group', { name: '导入音乐' })
+    for (const name of ['添加文件', '添加文件夹', '导入歌单'])
+      await expect(group.getByRole('button', { name, exact: true })).toBeVisible()
+    await group.screenshot({
+      path: path.join(root, 'import-' + width + '.png'),
+      style: ':root{background:var(--base)!important}',
+    })
+    const query = page.getByRole('searchbox', { name: '搜索本地歌曲' })
+    await query.fill('滚动验收')
+    const scroll = page.locator('.music-scroll')
+    await scroll.evaluate((el) => el.scrollTo(0, 180))
+    await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(180)
+    const chooser = page.waitForEvent('filechooser')
+    await group.getByRole('button', { name: '导入歌单' }).evaluate((el) => el.click())
+    await (await chooser).setFiles(file)
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByRole('textbox', { name: '歌单名称' })).toHaveValue('旧时光')
+    if (width === 420) await dialog.getByRole('textbox', { name: '歌单名称' }).fill('窄窗导入')
+    await dialog
+      .getByRole('button', { name: width === 420 ? '创建歌单' : '取消', exact: true })
+      .click()
+    await expect(dialog).toHaveCount(0)
+    await expect(query).toHaveValue('滚动验收')
+    await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(180)
+    await query.fill('')
+  }
   await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(1100, 780))
   await page.getByRole('tab', { name: '歌单', exact: true }).click()
   const heading = page.locator('.playlist-heading')

@@ -21,7 +21,12 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-8);
-  flex: none;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.playlist-download-status {
+  display: grid;
+  overflow-wrap: anywhere;
 }
 @media (max-width: 739px) {
   .library-title:has(> .playlist-cover) {

@@ -1,5 +1,5 @@
 import { installMusic } from './music-installer.mjs'
-import { productUpdater } from './product-updates.mjs'
+import { updateCatalog, saveInstaller, productUpdater } from './product-updates.mjs'
 import { installedProducts, registeredProduct } from './installed-products.mjs'
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
@@ -13,6 +13,7 @@ import {
   protocol,
   screen,
   nativeTheme,
+  net,
   systemPreferences,
   Menu,
   Tray,
@@ -393,7 +394,60 @@ else {
       if (fixturePanels) builtins.listen()
       Menu.setApplicationMenu(null)
       nativeTheme.themeSource = 'dark'
-      if (installation && !background) {
+      const catalog = updateCatalog({
+        request: (...args) => net.fetch(...args),
+        inventory: async () => {
+          const rows = []
+          for (const [id, name] of [
+            ['workbench', 'FitBay'],
+            ['music', 'Music'],
+            ['sample', '示例组件'],
+          ]) {
+            const root =
+              id === 'workbench'
+                ? installation
+                  ? await installation.find(id)
+                  : here
+                : await (id === 'music' ? music : sample).discover(false)
+            if (!root) continue
+            const packaged = installation && id !== 'sample' && (await installation.find(id))
+            const file = packaged || id === 'workbench' ? 'package.json' : 'component.json'
+            const { version } = JSON.parse(readFileSync(path.join(packaged || root, file), 'utf8'))
+            rows.push({ id, name, version, installable: Boolean(packaged) })
+          }
+          return rows
+        },
+        changed: (state) => shell?.webContents.send('updates:state', state),
+        launch: async (update) => {
+          const file = await saveInstaller(update, app.getPath('temp'), (...args) =>
+            net.fetch(...args),
+          )
+          if (await systemShell.openPath(file)) throw Error('Installer launch failed')
+          app.quit()
+        },
+      })
+      for (const method of ['snapshot', 'check', 'install']) {
+        ipcMain.handle('updates:' + method, (event, id) => {
+          if (
+            !isShell(event) ||
+            (id !== undefined && !['workbench', 'music', 'sample'].includes(id))
+          )
+            throw Error('DENIED')
+          return catalog[method](id)
+        })
+      }
+      if (await findWorkbenchFile()) {
+        checkUpdates = async () => {
+          await revealWorkbench()
+          shell.webContents.send('updates:open')
+        }
+        if (!background) {
+          const poll = () => catalog.check().catch(console.error)
+          setTimeout(poll, 10000).unref()
+          setInterval(poll, 300000).unref()
+        }
+        updateTray()
+      } else if (installation && !background) {
         checkUpdates = productUpdater({
           installation,
           app,

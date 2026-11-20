@@ -20,6 +20,7 @@ import {
 import { TimedPlaylist } from './TimedPlaylist'
 import { TrackMenu } from './TrackMenu'
 import { AlbumBrowser } from './AlbumBrowser'
+import { PlaylistDownload } from './PlaylistDownload'
 import { PlaylistCover } from './PlaylistCover'
 import { InfrequentTracks } from './InfrequentTracks'
 import { RecentHistory } from './LibraryTools'
@@ -115,6 +116,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   albumRevision: number
   favorite: (id: string, value: boolean) => Promise<unknown>
   addFavorites: (ids: string[]) => Promise<number | null>
+  refreshDownloads: () => Promise<void>
   downloadSelected: (ids: string[]) => Promise<SelectionDownload[]>
   rows: PlaylistTrack[]
   onlineSongs: OnlineTrack[]
@@ -137,6 +139,7 @@ interface Props extends SidebarSorting, PlaylistSorting {
   active: string
   playing: boolean
   play: (id: string, queue?: string[]) => void
+  importLocal: (mode: 'files' | 'folder') => void
   cancel: () => void
   relocate: (id: string) => void
   onQueue: (id: string, next: boolean) => void
@@ -161,6 +164,7 @@ export function LibraryPane({
   favorite,
   addFavorites,
   downloadSelected,
+  refreshDownloads,
   tracks,
   playlists,
   sidebarOrder,
@@ -186,6 +190,7 @@ export function LibraryPane({
   active,
   playing,
   play,
+  importLocal,
   cancel,
   relocate,
   remove,
@@ -345,7 +350,7 @@ export function LibraryPane({
   const currentFolder = folders.find((f) => f.id === collection)
   const heading = currentPlaylist?.name ?? currentFolder?.name ?? '全部歌曲'
   const playlistPage = scope === 'playlists'
-  const importer = usePlaylistImport(playlistPage)
+  const importer = usePlaylistImport(playlistPage, !playlistPage)
   const playableMembers = playlistPage
     ? (librarySearch.ids ? rows : members).filter((t) => t.available).map((t) => t.id)
     : []
@@ -587,19 +592,49 @@ export function LibraryPane({
                     revision={albumRevision}
                     heading={collectionHeading}
                     playAll={
-                      <Button
-                        size="small"
-                        appearance="primary"
-                        icon={<Play size={15} />}
-                        disabled={!playableMembers.length}
-                        onClick={() => playAlbum(playableMembers[0], playableMembers, true)}
-                      >
-                        播放全部
-                      </Button>
+                      <>
+                        <Button
+                          size="small"
+                          appearance="primary"
+                          icon={<Play size={15} />}
+                          disabled={!playableMembers.length}
+                          onClick={() => playAlbum(playableMembers[0], playableMembers, true)}
+                        >
+                          播放全部
+                        </Button>
+                        {(collection === 'favorites' || !currentPlaylist?.system) && (
+                          <PlaylistDownload
+                            key={collection}
+                            collection={collection}
+                            members={members}
+                            refresh={refreshDownloads}
+                          />
+                        )}
+                      </>
                     }
                   />
                 )}
                 {!playlistPage && collectionHeading}
+                {!playlistPage && collection === 'all' && (
+                  <fieldset className="library-import-actions" aria-label="导入音乐">
+                    <Button
+                      size="small"
+                      disabled={job?.running}
+                      onClick={() => importLocal('files')}
+                    >
+                      添加文件
+                    </Button>
+                    <Button
+                      size="small"
+                      disabled={job?.running}
+                      onClick={() => importLocal('folder')}
+                    >
+                      添加文件夹
+                    </Button>
+                    {importer.trigger}
+                    {importer.error && <small role="alert">{importer.error}</small>}
+                  </fieldset>
+                )}
                 {playlistPage && (
                   <TimedPlaylist
                     key={collection}
@@ -824,7 +859,7 @@ export function LibraryPane({
                         : feedback.text('导入完成', 'Import complete')}
                     {feedback.text(' · 新增 ', ' · Added ')}
                     {job.added}
-                    {feedback.text(' · 重复 ', ' · Duplicates ')}
+                    {feedback.text(' · 跳过 ', ' · Skipped ')}
                     {job.duplicates}
                     {feedback.text(' · 失败 ', ' · Failed ')}
                     {job.failed}
@@ -1132,7 +1167,7 @@ export function LibraryPane({
           )}
         </section>
       )}
-      {playlistPage && importer.preview && (
+      {importer.preview && (
         <PlaylistImportDialog
           preview={importer.preview}
           tracks={tracks}

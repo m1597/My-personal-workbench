@@ -26,13 +26,14 @@ export type ImportPreview = {
   choices: Record<string, Candidate>
 }
 
-export function usePlaylistImport(active: boolean) {
+export function usePlaylistImport(active: boolean, showLabel = false) {
   const feedback = useMusicFeedback()
   const [preview, setPreview] = useState<ImportPreview>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const reading = useRef(false)
   const input = useRef<HTMLInputElement>(null)
+  const origin = useRef<{ element: Element; top: number } | undefined>(undefined)
   async function load(files: FileList | null) {
     if (!files?.length || reading.current) return
     setError('')
@@ -57,7 +58,12 @@ export function usePlaylistImport(active: boolean) {
   return {
     preview,
     error,
-    close: () => setPreview(undefined),
+    close: () => {
+      setPreview(undefined)
+      const saved = origin.current
+      origin.current = undefined
+      if (saved) requestAnimationFrame(() => saved.element.scrollTo(0, saved.top))
+    },
     drop: {
       onDragOverCapture(event: DragEvent) {
         if (!isFile(event)) return
@@ -81,8 +87,14 @@ export function usePlaylistImport(active: boolean) {
           aria-label="导入歌单"
           aria-busy={loading}
           title={loading ? '正在读取歌单…' : '导入 M3U / M3U8 歌单'}
-          onClick={() => input.current?.click()}
-        />
+          onClick={(event) => {
+            const element = event.currentTarget.closest('.music-scroll')
+            if (showLabel && element) origin.current = { element, top: element.scrollTop }
+            input.current?.click()
+          }}
+        >
+          {showLabel && '导入歌单'}
+        </Button>
         <input
           ref={input}
           type="file"

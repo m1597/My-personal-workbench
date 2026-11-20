@@ -377,9 +377,8 @@ export function MusicSettings({
           </Button>
         ))}
       </nav>
-      <div
+      <section
         className="music-settings"
-        role="region"
         aria-label={categories.find((item) => item.id === category)?.name}
         tabIndex={-1}
       >
@@ -406,7 +405,7 @@ export function MusicSettings({
               <div className="settings-buttons">
                 <span>
                   {job.running ? '正在导入' : job.cancelled ? '导入已取消' : '导入完成'} · 新增{' '}
-                  {job.added} · 重复 {job.duplicates} · 失败 {job.failed}
+                  {job.added} · 跳过 {job.duplicates} · 失败 {job.failed}
                 </span>
                 {job.running && (
                   <Button
@@ -588,6 +587,7 @@ export function MusicSettings({
             <h2>快捷键</h2>
             <Checkbox
               label="启用应用内快捷键"
+              id="music-keys-app"
               checked={prefs.appKeys}
               onChange={(_, d) =>
                 void update(() => window.music.setShortcutEnabled('app', !!d.checked))
@@ -610,6 +610,7 @@ export function MusicSettings({
             </Button>
             <Checkbox
               label="启用全局快捷键"
+              id="music-keys-global"
               checked={prefs.globalKeys}
               onChange={(_, d) =>
                 void update(() => window.music.setShortcutEnabled('global', !!d.checked))
@@ -650,7 +651,7 @@ export function MusicSettings({
             {feedback.text}
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }

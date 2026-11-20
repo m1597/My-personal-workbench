@@ -1,8 +1,15 @@
 import { parentPort, workerData } from 'node:worker_threads'
-import { opendir, lstat, realpath } from 'node:fs/promises'
+import { opendir, lstat } from 'node:fs/promises'
 import path from 'node:path'
 import { parseStream } from 'music-metadata'
-import { fileIdentity, audioTypes, pathKey, openAudio } from './local-files.mjs'
+import {
+  fileIdentity,
+  audioTypes,
+  pathKey,
+  openAudio,
+  isDirectPath,
+  volumeIdentity,
+} from './local-files.mjs'
 import { albumTags } from './albums.mjs'
 const text = (s) => (typeof s === 'string' ? s.trim().slice(0, 2048) : '')
 let rows = [],
@@ -28,6 +35,7 @@ async function file(entry) {
     rows.push({
       file: entry,
       identity: fileIdentity(stat),
+      volume: await volumeIdentity(entry),
       title: text(common.title) || path.basename(entry, path.extname(entry)),
       artist: text(common.artist) || '未知艺人',
       album: text(common.album),
@@ -43,13 +51,15 @@ async function file(entry) {
     await handle?.close()
   }
 }
+const visited = new Set()
 async function directory(root) {
   const pending = [root]
   while (pending.length) {
     const dir = pending.pop()
+    if (visited.has(pathKey(dir))) continue
+    visited.add(pathKey(dir))
     try {
-      if (!(await lstat(dir)).isDirectory() || pathKey(await realpath(dir)) !== pathKey(dir))
-        continue
+      if (!(await lstat(dir)).isDirectory() || !(await isDirectPath(dir))) continue
       for await (const item of await opendir(dir)) {
         const entry = path.join(dir, item.name)
         if (item.isDirectory()) pending.push(entry)
@@ -65,6 +75,11 @@ async function directory(root) {
 }
 const timer = setInterval(flush, 120)
 try {
+  if (workerData.watchFolders) {
+    const volumes = []
+    for (const dir of workerData.paths) volumes.push([path.resolve(dir), await volumeIdentity(dir)])
+    parentPort.postMessage({ rows: [], failed: 0, volumes })
+  }
   for (const entry of workerData.paths) {
     if (workerData.folder) await directory(entry)
     else await file(entry)

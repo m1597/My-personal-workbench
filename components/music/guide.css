@@ -140,19 +140,13 @@
     margin-inline-end: 30px;
   }
 }
-.music-narrow-action[role="menuitem"] {
-  display: none;
-}
 @media (max-width: 540px) {
+  .music-navigation {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
   .music-navigation .music-tabs .fui-Tab {
     padding-inline: 5px;
-  }
-  .music-view-actions > .music-guide-trigger,
-  .music-view-actions > .music-hide-extra {
-    display: none;
-  }
-  .music-narrow-action[role="menuitem"] {
-    display: flex;
   }
 }
 @media (max-width: 315px) {

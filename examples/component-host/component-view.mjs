@@ -49,6 +49,8 @@ export function componentView({
 
   let dragOver = null
   let settingsRequest = 0
+  let settingsTarget
+  let settingsEntries = []
   let version
   let material
   let placement = null
@@ -58,6 +60,7 @@ export function componentView({
     material: mode === 'docked' ? material : undefined,
     presentation,
     settingsRequest,
+    settingsTarget,
     keepRunning: keepRunning(),
     phase,
     error,
@@ -217,6 +220,17 @@ export function componentView({
       entry = await realpath(path.join(root, manifest.uiEntry))
       if (path.dirname(entry) !== root) throw new Error('DENIED：入口越界')
       version = typeof manifest.version === 'string' ? manifest.version : undefined
+      settingsEntries = (Array.isArray(manifest.settingsEntries) ? manifest.settingsEntries : [])
+        .filter(
+          (e) =>
+            typeof e?.target === 'string' &&
+            /^[a-z][a-z0-9.-]{0,63}$/.test(e.target) &&
+            typeof e.name === 'string' &&
+            typeof e.path === 'string' &&
+            e.path.length <= 300,
+        )
+        .slice(0, 200)
+        .map(({ name, target, path }) => ({ name, target, path }))
       return root
     } catch (failure) {
       if (!reportFailure) return
@@ -402,11 +416,23 @@ export function componentView({
       ipcMain.handle(music ? 'music-prototype:inventory' : 'prototype:inventory', async (event) => {
         if (!isShell(event)) throw Error('DENIED')
         const installed = Boolean(await discover(false))
-        return { installed, version: installed ? version : undefined }
+        return {
+          installed,
+          version: installed ? version : undefined,
+          settingsEntries: installed ? settingsEntries : [],
+        }
       })
-      if (music)
-        ipcMain.handle('music-prototype:show', async (event, settings) => {
+      ipcMain.handle(
+        music ? 'music-prototype:show' : 'prototype:show',
+        async (event, settings, target) => {
           if (!isShell(event) || typeof settings !== 'boolean') throw Error('DENIED')
+          if (
+            target !== undefined &&
+            (!settings ||
+              !(await discover(false)) ||
+              !settingsEntries.some((e) => e.target === target))
+          )
+            return { ok: false, error: '设置项已不可用' }
           if (settings && mode === 'standalone' && phase === 'ready') {
             setPresentation('full')
             if (parent?.isMinimized()) parent.restore()
@@ -418,10 +444,12 @@ export function componentView({
             setPresentation('full')
             shell()?.webContents.send(music ? 'music-prototype:activate' : 'prototype:activate')
           }
+          settingsTarget = target
           if (settings) settingsRequest++
           broadcast()
           return { ok: true }
-        })
+        },
+      )
       ipcMain.handle(
         music ? 'music-prototype:layout' : 'prototype:layout',
         async (event, included) => {

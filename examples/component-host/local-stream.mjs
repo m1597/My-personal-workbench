@@ -11,7 +11,8 @@ export async function localStream(request, grant, library) {
     const row = grant.audition ? grant : library.row(grant.libraryId ?? grant.id)
     if (row.file !== grant.file || (!grant.audition && !(await library.verify(row))))
       return new Response(null, { status: 404 })
-    file = await openAudio(row.file)
+    file = await openAudio(row.file, grant.audition ? undefined : library.row(row.id).fileIdentity)
+    if (library && !(await library.acceptsVolume(row.file))) throw Error('录音已变化')
     const original = (await file.stat()).size
     const prefix =
       path.extname(row.file).toLowerCase() === '.flac' ? await flacPrefix(file, original) : null

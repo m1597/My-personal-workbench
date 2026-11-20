@@ -870,3 +870,14 @@ li[data-active="true"] .music-track-icon,
   align-items: center;
   gap: var(--space-8);
 }
+
+.library-title > .library-import-actions {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

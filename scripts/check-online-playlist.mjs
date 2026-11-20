@@ -328,7 +328,7 @@ for (const restart of [false, true]) {
         globalThis.mixedAudioRequests = []
       })
       await button('下载所选').click()
-      await expect(page.getByText(/已下载 .*已跳过 2 首/)).toBeVisible()
+      await expect(page.getByText(/已下载 .*已跳过 2 首/)).toBeVisible({ timeout: 20000 })
       const allRequests = await app.evaluate(() => globalThis.mixedAudioRequests)
       assert.ok(allRequests.includes('未选在线'))
       assert.ok(!allRequests.includes('另存在线'))

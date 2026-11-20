@@ -111,7 +111,7 @@ try {
     const controls = page.locator('.music-view-actions button')
     assert.deepEqual(
       await controls.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label'))),
-      ['下载任务', '使用引导', '更多音乐操作', '只显示播放栏', '隐藏到后台'],
+      ['下载任务', '使用引导', '音乐设置', '只显示播放栏', '隐藏到后台'],
     )
     await help.hover()
     await expect(page.getByRole('tooltip')).toContainText('使用引导')
@@ -129,8 +129,7 @@ try {
     w.setMinimumSize(360, 320)
     w.setContentSize(420, 480)
   })
-  await page.getByRole('button', { name: '更多音乐操作' }).click()
-  await page.getByRole('menuitem', { name: '使用引导' }).click()
+  await page.getByRole('button', { name: '使用引导' }).click()
   for (const [i, id] of steps.entries()) {
     if (i) await next()
     await checkStep(id, 'small')

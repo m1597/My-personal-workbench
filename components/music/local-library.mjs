@@ -1,7 +1,14 @@
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { Worker } from 'node:worker_threads'
-import { audioFileStat, fileIdentity, confirmedMissing, pathKey } from './local-files.mjs'
+import {
+  audioFileStat,
+  fileIdentity,
+  confirmedMissing,
+  pathKey,
+  volumeIdentity,
+  currentVolumeIdentity,
+} from './local-files.mjs'
 import { AlbumLibrary, readCommon, albumTags } from './albums.mjs'
 
 const folderKey = (dir) => createHash('sha256').update(pathKey(dir)).digest('hex')
@@ -22,6 +29,10 @@ export class LocalLibrary {
       )
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS music_roots(dir TEXT PRIMARY KEY COLLATE NOCASE);
+        CREATE TABLE IF NOT EXISTS watched_music_roots(dir TEXT PRIMARY KEY COLLATE NOCASE REFERENCES music_roots(dir) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS watched_music_volumes(dir TEXT PRIMARY KEY COLLATE NOCASE REFERENCES watched_music_roots(dir) ON DELETE CASCADE, identity TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS watched_music_files(dir TEXT NOT NULL,file TEXT PRIMARY KEY,stamp TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS watched_music_directory ON watched_music_files(dir);
         CREATE TABLE IF NOT EXISTS playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE);
         CREATE TABLE IF NOT EXISTS playlist_artwork(id TEXT PRIMARY KEY,image BLOB NOT NULL);
         CREATE TRIGGER IF NOT EXISTS discard_playlist_artwork AFTER DELETE ON playlists BEGIN
@@ -238,10 +249,19 @@ export class LocalLibrary {
           .all()
           .map((col) => col.name),
       )
-      this.db.exec(`CREATE VIEW IF NOT EXISTS online_local_copies AS
-        SELECT s.id AS online,t.id AS local FROM online_recording_sources s
+      if (
+        !this.db
+          .prepare("SELECT 1 FROM sqlite_master WHERE type='view' AND name='recording_copy_links'")
+          .get()
+      )
+        this.db.exec(`DROP VIEW IF EXISTS online_local_copies;
+        CREATE VIEW IF NOT EXISTS recording_copy_links AS
+        SELECT s.id AS online,c.local FROM online_recording_sources s
         JOIN recording_copies c ON c.platform=s.platform AND c.sourceId=s.recording
-        JOIN local_tracks t ON t.id=c.local WHERE t.available=1 AND t.unplayable=0 AND t.awaitingLocation=0;`)
+          AND c.artScope=json_extract(s.identifiers,'$.catalogScope');
+        CREATE VIEW online_local_copies AS
+        SELECT c.online,c.local FROM recording_copy_links c JOIN local_tracks t ON t.id=c.local
+        WHERE t.available=1 AND t.unplayable=0 AND t.awaitingLocation=0;`)
       if (legacyColumns.size) {
         // Legacy mappings retain provenance but cannot prove the identity of current file bytes.
         const columns = [
@@ -255,6 +275,66 @@ export class LocalLibrary {
         this.db.exec(`INSERT OR IGNORE INTO recording_copies(${columns})
           SELECT ${columns} FROM recording_versions;
           DROP TABLE recording_versions;`)
+      }
+      // Old profiles stored the provider on the recording, but only the label on early copies.
+      // Resolve labels only when exactly one installed source could own the platform ID.
+      if (
+        this.db
+          .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='music_sources'")
+          .get() &&
+        this.db
+          .prepare(`SELECT 1 WHERE EXISTS (
+            SELECT 1 FROM online_recording_sources WHERE json_extract(identifiers,'$.catalogScope') IS NULL)
+            OR EXISTS (SELECT 1 FROM recording_copies WHERE artScope IS NULL AND source IS NOT NULL)`)
+          .get()
+      ) {
+        const sources = this.db
+          .prepare('SELECT id,digest,payload FROM music_sources')
+          .all()
+          .map((row) => ({
+            ...row,
+            definition: JSON.parse(row.payload),
+          }))
+        const platform = (source, key) =>
+          source.definition.platforms?.[key] ??
+          (source.definition.platform === key ? source.definition : undefined)
+        const updateRecording = this.db.prepare(
+          "UPDATE online_recording_sources SET identifiers=json_set(identifiers,'$.catalogScope',?) WHERE id=?",
+        )
+        for (const row of this.db
+          .prepare(
+            "SELECT id,source,platform,json_extract(identifiers,'$.nativeCatalog') AS native FROM online_recording_sources WHERE json_extract(identifiers,'$.catalogScope') IS NULL",
+          )
+          .all()) {
+          const source = sources.find((item) => item.id === row.source)
+          const mode = source && platform(source, row.platform)
+          const native = row.native ?? (mode && !mode.search)
+          const scope = native
+            ? ''
+            : (source?.digest ??
+              (row.source.startsWith('sha256:') ? row.source.slice(7) : undefined))
+          if (native != null && scope !== undefined) updateRecording.run(scope, row.id)
+        }
+        const updateCopy = this.db.prepare(
+          'UPDATE recording_copies SET artScope=? WHERE local=? AND version=?',
+        )
+        for (const row of this.db
+          .prepare(
+            'SELECT version,local,platform,source FROM recording_copies WHERE artScope IS NULL AND source IS NOT NULL',
+          )
+          .all()) {
+          const candidates = sources.filter(
+            (source) => source.definition.name === row.source && platform(source, row.platform),
+          )
+          if (candidates.length === 1) {
+            const source = candidates[0]
+            updateCopy.run(
+              platform(source, row.platform).search ? source.digest : '',
+              row.local,
+              row.version,
+            )
+          }
+        }
       }
       if (!store.get('local-index-v1')) {
         for (const row of this.db.prepare('SELECT track,file FROM library').all())
@@ -301,7 +381,30 @@ export class LocalLibrary {
       throw err
     }
   }
+  watchedRoot(file) {
+    const key = pathKey(file)
+    return this.db
+      .prepare(`
+      SELECT r.dir, v.identity FROM watched_music_roots r
+      LEFT JOIN watched_music_volumes v ON v.dir=r.dir ORDER BY length(r.dir) DESC`)
+      .all()
+      .find(({ dir }) => {
+        const base = pathKey(dir)
+        return key === base || key.startsWith(base.endsWith(path.sep) ? base : base + path.sep)
+      })
+  }
+  async acceptsVolume(file) {
+    const root = this.watchedRoot(file)
+    return !root || Boolean(root.identity && root.identity === (await volumeIdentity(file)))
+  }
   upsert(row, replacing) {
+    const authorized = this.watchedRoot(row.file)
+    if (
+      authorized &&
+      (!authorized.identity ||
+        authorized.identity !== (row.volume ?? currentVolumeIdentity(row.file)))
+    )
+      throw Error('请连接原音乐盘')
     const key = pathKey(row.file)
     const existing = this.db.prepare('SELECT id FROM local_tracks WHERE path_key=?').get(key)
     if (replacing && existing && existing.id !== replacing) throw Error('所选文件已经在曲库中')
@@ -795,6 +898,12 @@ export class LocalLibrary {
   }
   async verify(row) {
     if (row.awaitingLocation) return false
+    if (!(await this.acceptsVolume(row.file))) {
+      this.db
+        .prepare('UPDATE local_tracks SET available=0 WHERE id=? AND file=? AND available=1')
+        .run(row.id, row.file)
+      return false
+    }
     const stat = await audioFileStat(row.file)
     const size = stat ? Number(stat.size) : null
     const identity = fileIdentity(stat)
@@ -846,16 +955,18 @@ export class LocalLibrary {
   remove(id) {
     this.db.prepare('DELETE FROM local_tracks WHERE id=?').run(id)
   }
-  start(paths, folder, replacing) {
+  start(paths, folder, replacing, watchFolders = false) {
     if (this.worker) throw Error('导入正在进行')
     if (replacing) this.row(replacing)
     const worker = new Worker(new URL('./library-worker.mjs', import.meta.url), {
-      workerData: { paths, folder },
+      workerData: { paths, folder, watchFolders },
     })
-    if (folder)
-      this.db
-        .prepare('INSERT OR IGNORE INTO music_roots(dir) VALUES(?)')
-        .run(path.resolve(paths[0]))
+    if (folder) {
+      for (const selected of paths) {
+        const dir = path.resolve(selected)
+        this.db.prepare('INSERT OR IGNORE INTO music_roots(dir) VALUES(?)').run(dir)
+      }
+    }
     this.worker = worker
     const job = {
       started: true,
@@ -866,7 +977,9 @@ export class LocalLibrary {
       cancelled: false,
     }
     this.job = job
-    worker.on('message', ({ rows, failed }) => {
+    let selectedVolumes = []
+    worker.on('message', ({ rows, failed, volumes }) => {
+      if (volumes) selectedVolumes = volumes
       if (job.cancelled) return
       job.failed += failed
       for (const row of rows) {
@@ -881,7 +994,19 @@ export class LocalLibrary {
     worker.on('error', () => {
       job.failed++
     })
-    worker.on('exit', () => {
+    worker.on('exit', (code) => {
+      if (!code && !job.cancelled && folder && watchFolders) {
+        const enable = this.db.prepare('INSERT OR IGNORE INTO watched_music_roots(dir) VALUES(?)')
+        const pin = this.db.prepare(
+          'INSERT OR IGNORE INTO watched_music_volumes(dir,identity) VALUES(?,?)',
+        )
+        for (const [dir, identity] of selectedVolumes) {
+          if (identity) {
+            enable.run(dir)
+            pin.run(dir, identity)
+          }
+        }
+      }
       job.running = false
       this.worker = null
     })
@@ -893,9 +1018,12 @@ export class LocalLibrary {
     }
   }
   scanFolder(dir) {
+    return this.scanFiles([dir], true)
+  }
+  scanFiles(paths, folder = false) {
     return new Promise((resolve, reject) => {
       const worker = new Worker(new URL('./library-worker.mjs', import.meta.url), {
-        workerData: { paths: [dir], folder: true },
+        workerData: { paths, folder },
       })
       const found = []
       worker.on('message', ({ rows }) => found.push(...rows))

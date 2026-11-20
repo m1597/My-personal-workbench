@@ -1,3 +1,4 @@
+import { WatchedLibrary } from './watched-library.mjs'
 import { execFile } from 'node:child_process'
 import { registerCleanup, recoverRenames } from './library-cleanup.mjs'
 import { reconcileRecycled } from './recycled-tracks.mjs'
@@ -49,6 +50,7 @@ export function musicService(
   isSender,
   mcpScript = path.resolve(import.meta.dirname, '../../../scripts/music-source-mcp.mjs'),
 ) {
+  let watchedLibrary
   let store,
     pending,
     generationFinished,
@@ -81,6 +83,12 @@ export function musicService(
         if (ids.length) recoveringTrash = recoveringTrash.then(() => archiveFavorites(ids))
       }
     }
+    watchedLibrary ??= new WatchedLibrary(store.library, ({ music, lyrics }) => {
+      if (musicView && !musicView.isDestroyed()) {
+        if (music) musicView.send('music:library-changed', [])
+        if (lyrics) musicView.send('music:lyrics-saved')
+      }
+    })
   }
   const overlay = desktopLyrics(
     () => store,
@@ -165,14 +173,28 @@ export function musicService(
       const result = await dialog.showOpenDialog({
         title: id ? '重新定位歌曲' : folder ? '添加音乐文件夹' : '添加歌曲',
         properties: folder
-          ? ['openDirectory']
+          ? ['openDirectory', 'multiSelections']
           : id
             ? ['openFile']
             : ['openFile', 'multiSelections'],
         filters: folder ? [] : [{ name: '音频文件', extensions: ['mp3', 'flac', 'wav', 'm4a'] }],
       })
-      if (!result.canceled && result.filePaths.length && generation === viewEpoch)
-        store.library.start(result.filePaths, folder, id)
+      if (result.canceled || !result.filePaths.length || generation !== viewEpoch) return
+      let watchFolders = false
+      if (folder) {
+        const options = await dialog.showMessageBox({
+          type: 'question',
+          message: '添加所选的 ' + result.filePaths.length + ' 个音乐文件夹？',
+          checkboxLabel: '自动收录以后新增的歌曲',
+          checkboxChecked: false,
+          buttons: ['添加', '取消'],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        if (options.response !== 0 || generation !== viewEpoch) return
+        watchFolders = options.checkboxChecked
+      }
+      store.library.start(result.filePaths, folder, id, watchFolders)
     } finally {
       localDialog = false
     }
@@ -216,11 +238,14 @@ export function musicService(
       const track = grant.audition
         ? store.metadata(store.item(id).track)
         : store.library.row(grant.libraryId ?? id)
+      if (!(await store.library.acceptsVolume(grant.file))) return []
       return localLines(grant.file, track, translations === true)
     }
     if (id.startsWith('local-')) {
       const track = store.library.row(id)
-      return track.awaitingLocation ? [] : localLines(track.file, track, translations === true)
+      return track.awaitingLocation || !(await store.library.acceptsVolume(track.file))
+        ? []
+        : localLines(track.file, track, translations === true)
     }
     const library = store.db
       .prepare(
@@ -228,7 +253,7 @@ export function musicService(
       )
       .get(id)
     if (library)
-      return library.awaitingLocation
+      return library.awaitingLocation || !(await store.library.acceptsVolume(library.file))
         ? []
         : localLines(library.file, library, translations === true)
     const item = store.item(id)
@@ -429,7 +454,12 @@ export function musicService(
     const files = []
     for (const id of new Set(ids)) {
       const row = store.library.row(text(id))
-      if (!row.available || row.awaitingLocation || !(await regularFile(row.file)))
+      if (
+        !row.available ||
+        row.awaitingLocation ||
+        !(await store.library.acceptsVolume(row.file)) ||
+        !(await regularFile(row.file))
+      )
         throw Error('文件不可用，请重新定位')
       files.push(row.file)
     }
@@ -441,7 +471,12 @@ export function musicService(
     const row = track.startsWith('online-recording-')
       ? await store.library.onlineCopy(track)
       : store.library.row(track)
-    if (!row || row.awaitingLocation || !(await regularFile(row.file)))
+    if (
+      !row ||
+      row.awaitingLocation ||
+      !(await store.library.acceptsVolume(row.file)) ||
+      !(await regularFile(row.file))
+    )
       throw Error('文件不可用，请重新定位')
     shell.showItemInFolder(row.file)
   })
@@ -491,7 +526,11 @@ export function musicService(
       for (const { row, lyric } of targets) {
         try {
           if (epoch !== viewEpoch) throw Error('窗口已关闭，尚未处理的歌曲已保留')
-          if (store.library.row(row.id).file !== row.file || !(await regularFile(row.file)))
+          if (
+            store.library.row(row.id).file !== row.file ||
+            !(await store.library.acceptsVolume(row.file)) ||
+            !(await regularFile(row.file))
+          )
             throw Error('文件已变化，曲库记录已保留')
           verify?.(row.id)
           await trashAudio(store, row, lyric, (file) => shell.trashItem(file), forgetTracks)
@@ -526,8 +565,9 @@ export function musicService(
     if (typeof id !== 'string' || !id.startsWith('local-')) return null
     const row = store.library.row(id)
     if (!row.duration || row.duration > 900 || !(await store.library.verify(row))) return null
-    const file = await openAudio(row.file)
+    const file = await openAudio(row.file, store.library.row(id).fileIdentity)
     try {
+      if (!(await store.library.acceptsVolume(row.file))) return null
       const stat = await file.stat()
       if (stat.size > 24 * 1024 * 1024) return null
       const bytes = Buffer.alloc(stat.size)
@@ -1291,6 +1331,8 @@ export function musicService(
       taste?.controller?.abort()
       viewEpoch++
       releaseGrant()
+      watchedLibrary?.close()
+      watchedLibrary = null
       store?.library.cancel()
       if (store) {
         try {

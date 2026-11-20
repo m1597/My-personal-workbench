@@ -65,8 +65,7 @@ const launch = () =>
 let app = await launch()
 async function settings() {
   const page = await app.firstWindow()
-  await page.getByRole('button', { name: '更多音乐操作' }).press('Enter')
-  await page.getByRole('menuitem', { name: '音乐设置', exact: true }).press('Enter')
+  await page.getByRole('button', { name: '音乐设置', exact: true }).press('Enter')
   const area = page.getByRole('region', { name: '曲库整理' })
   await expect(area).toBeVisible()
   return { page, area }

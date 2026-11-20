@@ -26,6 +26,7 @@ const names = [
   'downloadTasks',
   'cancelDownloadTask',
   'downloadSelection',
+  'queuePlaylistDownload',
   'lxPreview',
   'lxCancel',
   'setMusicQuality',

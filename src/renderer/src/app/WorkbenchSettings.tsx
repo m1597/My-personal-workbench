@@ -1,4 +1,6 @@
 import { materialDefaults } from './material'
+import { WorkbenchUpdates, type UpdateState } from './WorkbenchUpdates'
+import { Download } from 'lucide-react'
 import { WorkbenchChoice } from './WorkbenchChoice'
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { LayoutDialog } from './LayoutDialog'
@@ -10,7 +12,7 @@ import {
   readStartup,
   writeStartup,
 } from './layoutStorage'
-import { useMusicHostState } from './componentPrototype'
+import { useMusicHostState, type ComponentInventory } from './componentPrototype'
 import { Button, Input, Slider, Switch } from '@fluentui/react-components'
 import { Settings, ArrowLeft, Menu, Search, Palette, PanelsTopLeft, Boxes } from 'lucide-react'
 import {
@@ -34,14 +36,43 @@ export function WorkbenchSettings({
   onChange: (next: Preferences) => void
 }) {
   const t = useTranslation()
+  const [updates, setUpdates] = useState<UpdateState>()
+  useEffect(() => {
+    const api = window.fitbayUpdates
+    if (!api) return
+    const dispose = api.onState(setUpdates)
+    const navigate = api.onOpen(() => {
+      setCategory(3)
+      setQuery('')
+      setExpanded(false)
+      setOpen(true)
+    })
+    return () => {
+      dispose()
+      navigate()
+    }
+  }, [setOpen])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Rescan installed products whenever settings opens or closes.
+  useEffect(() => {
+    let active = true
+    window.fitbayUpdates
+      ?.snapshot()
+      .then((state) => {
+        if (active) setUpdates(state)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [open])
   const [failed, setFailed] = useState(false)
   const [category, setCategory] = useState(0)
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [manage, setManage] = useState(false)
   const [startup, setStartup] = useState(readStartup)
-  const [inventory, setInventory] = useState<{ installed: boolean; version?: string }>()
-  const [sampleInfo, setSampleInfo] = useState<{ installed: boolean; version?: string }>()
+  const [inventory, setInventory] = useState<ComponentInventory>()
+  const [sampleInfo, setSampleInfo] = useState<ComponentInventory>()
   const sampleState = useMusicHostState(window.componentHost)
   const [componentError, setComponentError] = useState('')
   const [revision, refresh] = useState(0)
@@ -54,9 +85,10 @@ export function WorkbenchSettings({
     t('外观', 'Appearance'),
     t('布局与启动', 'Layout and startup'),
     t('组件管理', 'Components'),
+    t('更新', 'Updates'),
   ]
   const keepLabel = t('关闭后继续在后台运行', 'Keep running in background after closing')
-  const icons = [Palette, PanelsTopLeft, Boxes]
+  const icons = [Palette, PanelsTopLeft, Boxes, Download]
   const sampleShowLabel = t('在工作台显示示例组件', 'Show sample in workspace')
   const entries = [
     [
@@ -82,6 +114,17 @@ export function WorkbenchSettings({
         : []),
     ],
   ]
+  entries.push([t('检查全部更新', 'Check all updates')])
+  const componentMatches = [
+    { info: inventory, host: window.musicDock },
+    { info: sampleInfo, host: window.componentHost },
+  ].flatMap(({ info, host }) =>
+    info?.installed && host
+      ? (info.settingsEntries ?? [])
+          .filter((e) => (e.path + ' ' + e.name).toLowerCase().includes(query.trim().toLowerCase()))
+          .map((e) => ({ ...e, host }))
+      : [],
+  )
   const presets = readPresets().items
   const options = ['last', ...presets.map((item) => 'named:' + item.name), 'blank']
   const startupLabel = (key: string) =>
@@ -167,7 +210,26 @@ export function WorkbenchSettings({
         ref={gear}
         appearance="subtle"
         className="settings-trigger"
-        icon={<Settings size={19} />}
+        icon={
+          <span style={{ position: 'relative', display: 'inline-flex' }}>
+            <Settings size={19} />
+            {updates?.rows.some((row) => row.status === 'available') && (
+              <span
+                role="img"
+                aria-label={t('有可用更新', 'Update available')}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  right: 0,
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: '#61acff',
+                }}
+              />
+            )}
+          </span>
+        }
         aria-label={title}
         title={title}
         aria-expanded={open}
@@ -270,15 +332,38 @@ export function WorkbenchSettings({
                         {names[i]} › {name}
                       </Button>
                     ))}
-                  {!entries.some((group, i) =>
-                    group.some((name) =>
-                      (names[i] + name).toLowerCase().includes(query.trim().toLowerCase()),
-                    ),
-                  ) && <p>{t('没有匹配的设置', 'No matching settings')}</p>}
+                  {componentMatches.map((e) => (
+                    <Button
+                      key={e.path}
+                      appearance="subtle"
+                      onClick={async () => {
+                        try {
+                          const result = await e.host.show(true, e.target)
+                          if (result.ok) close()
+                          else {
+                            setComponentError(result.error ?? '设置项已不可用')
+                            refresh((n) => n + 1)
+                          }
+                        } catch (error) {
+                          setComponentError(String(error))
+                        }
+                      }}
+                    >
+                      {e.path.replaceAll(' → ', ' › ')}
+                    </Button>
+                  ))}
+                  {componentError && <p role="alert">{componentError}</p>}
+                  {!componentMatches.length &&
+                    !entries.some((group, i) =>
+                      group.some((name) =>
+                        (names[i] + name).toLowerCase().includes(query.trim().toLowerCase()),
+                      ),
+                    ) && <p>{t('没有匹配的设置', 'No matching settings')}</p>}
                 </>
               ) : (
                 <>
                   <h2>{names[category]}</h2>
+                  {category === 3 && <WorkbenchUpdates state={updates} />}
                   {category === 0 && (
                     <>
                       <p>

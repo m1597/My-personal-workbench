@@ -1,6 +1,5 @@
 export async function openMusicSettings(page) {
-  await page.getByRole('button', { name: '更多音乐操作' }).click()
-  await page.getByRole('menuitem', { name: '音乐设置', exact: true }).click()
+  await page.getByRole('button', { name: '音乐设置', exact: true }).click()
 }
 
 export async function selectMusicSettings(page, name) {

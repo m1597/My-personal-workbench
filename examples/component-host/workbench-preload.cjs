@@ -1,4 +1,30 @@
 const { contextBridge, ipcRenderer } = require('electron')
+let updatePageListener
+let updatePagePending = false
+ipcRenderer.on('updates:open', () => {
+  if (updatePageListener) updatePageListener()
+  else updatePagePending = true
+})
+contextBridge.exposeInMainWorld('fitbayUpdates', {
+  snapshot: () => ipcRenderer.invoke('updates:snapshot'),
+  check: (id) => ipcRenderer.invoke('updates:check', id),
+  install: (id) => ipcRenderer.invoke('updates:install', id),
+  onOpen: (callback) => {
+    updatePageListener = callback
+    if (updatePagePending) {
+      updatePagePending = false
+      callback()
+    }
+    return () => {
+      if (updatePageListener === callback) updatePageListener = undefined
+    }
+  },
+  onState: (callback) => {
+    const listener = (_, state) => callback(state)
+    ipcRenderer.on('updates:state', listener)
+    return () => ipcRenderer.removeListener('updates:state', listener)
+  },
+})
 if (process.argv.includes('--fixture-panels'))
   contextBridge.exposeInMainWorld('builtinDock', {
     status: () => ipcRenderer.invoke('builtin:status'),
@@ -24,11 +50,7 @@ if (process.argv.includes('--fixture-panels'))
   })
 function componentBridge(prefix) {
   return {
-    ...(prefix === 'music-prototype'
-      ? {
-          show: (settings) => ipcRenderer.invoke('music-prototype:show', settings),
-        }
-      : {}),
+    show: (settings, target) => ipcRenderer.invoke(prefix + ':show', settings, target),
     stop: () => ipcRenderer.invoke(`${prefix}:stop`),
     close: () => ipcRenderer.invoke(`${prefix}:close`),
     keepRunning: (value) => ipcRenderer.invoke(`${prefix}:keep-running`, value),

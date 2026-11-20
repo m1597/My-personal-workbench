@@ -23,13 +23,14 @@ for (const id of [101, 102, 103]) {
   })
   store.db
     .prepare(
-      'INSERT INTO recording_copies(version,local,automatic,platform,sourceId) VALUES(?,?,0,?,?)',
+      'INSERT INTO recording_copies(version,local,automatic,platform,sourceId,artScope) VALUES(?,?,0,?,?,?)',
     )
     .run(
       'public-' + id,
       store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file).id,
       'wy',
       String(id),
+      '',
     )
 }
 store.set(
