@@ -1,0 +1,47 @@
+name: Publish FitBay installers
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - shell: pwsh
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          if ($pkg.version -notmatch '^\d+\.\d+\.\d+$' -or $env:GITHUB_REF_NAME -ne "v$($pkg.version)") { throw 'Release tag must match package.json version' }
+          npx --yes --package=$($pkg.packageManager) npm ci
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run dist:win
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node --test tests/product-updates.test.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: installers
+          path: |
+            dist/installers/*.exe
+            dist/installers/SHA256SUMS.txt
+          if-no-files-found: error
+  publish:
+    needs: build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers
+          path: installers
+      - working-directory: installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum -c SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes ./*.exe SHA256SUMS.txt

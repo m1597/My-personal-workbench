@@ -1,10 +1,13 @@
 import { installMusic } from './music-installer.mjs'
+import { productUpdater } from './product-updates.mjs'
 import { installedProducts, registeredProduct } from './installed-products.mjs'
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
 import { shellExposed, snapTarget } from './native-dock.mjs'
 import {
   app,
+  dialog,
+  shell as systemShell,
   BrowserWindow,
   ipcMain,
   protocol,
@@ -125,6 +128,7 @@ async function revealWorkbench() {
   show(shell)
 }
 let traySignature
+let checkUpdates
 function updateTray() {
   if (!tray || quitting) return
   const en = language === 'en'
@@ -146,6 +150,11 @@ function updateTray() {
         click: () => void component.open().catch(console.error),
       })
   }
+  if (checkUpdates)
+    menu.push({
+      label: en ? 'Check for updates' : '检查更新',
+      click: () => void checkUpdates(true),
+    })
   menu.push(
     { type: 'separator' },
     { label: en ? 'Quit FitBay' : '退出 FitBay', click: () => app.quit() },
@@ -384,6 +393,18 @@ else {
       if (fixturePanels) builtins.listen()
       Menu.setApplicationMenu(null)
       nativeTheme.themeSource = 'dark'
+      if (installation && !background) {
+        checkUpdates = productUpdater({
+          installation,
+          app,
+          dialog,
+          shell: systemShell,
+          english: () => language === 'en',
+        })
+        setTimeout(checkUpdates, 10_000).unref()
+        setInterval(checkUpdates, 5 * 60_000).unref()
+        updateTray()
+      }
       ipcMain.handle('workbench:music-installed', async (event) => {
         if (!isShell(event)) throw Error('DENIED')
         return Boolean(await music.discover())
