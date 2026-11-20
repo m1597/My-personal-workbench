@@ -183,6 +183,8 @@ function Library() {
     [draft, edit] = useState(''),
     [editMode, setEditMode] = useState(false),
     [conflict, setConflict] = useState(false),
+    [directoryIssue, setDirectoryIssue] = useState(''),
+    [fileIssue, setFileIssue] = useState(''),
     [notice, say] = useState(''),
     [hot, setHot] = useState(''),
     [label, setLabel] = useState(''),
@@ -226,11 +228,18 @@ function Library() {
       if (!valid) return
       setState(s)
       setHot((previous) => previous || s.shortcut)
-      const list = await api.files().catch((e) => {
-        if (valid) setNames([])
-        throw e
-      })
-      if (valid) setNames(list)
+      try {
+        const list = await api.files()
+        if (valid) {
+          setNames(list)
+          setDirectoryIssue('')
+        }
+      } catch {
+        if (valid) {
+          setNames([])
+          setDirectoryIssue('目录暂时不可用，恢复后会自动刷新')
+        }
+      }
     })
     return () => {
       valid = false
@@ -244,6 +253,7 @@ function Library() {
       .read(state.root, name)
       .then((next) => {
         if (!valid) return
+        setFileIssue('')
         const old = live.current
         if (old.doc && old.draft !== old.doc.text) {
           setConflict(old.doc.revision !== next.revision)
@@ -268,7 +278,7 @@ function Library() {
       .catch((e) => {
         if (valid) {
           setConflict(true)
-          say(message(e))
+          setFileIssue(message(e))
         }
       })
     return () => {
@@ -280,6 +290,7 @@ function Library() {
   }
   function reset(next = '') {
     localStorage.removeItem(draftKey)
+    setFileIssue('')
     setName(next)
     setDoc(undefined)
     edit('')
@@ -454,7 +465,9 @@ function Library() {
           应用快捷键
         </button>
       </details>
-      <small role="status">{notice || state?.registrationError}</small>
+      <small role="status">
+        {directoryIssue || fileIssue || notice || state?.registrationError}
+      </small>
     </main>
   )
 }

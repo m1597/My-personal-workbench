@@ -49,6 +49,7 @@ try {
   await expect(ui.getByRole('button', { name: '解释推导.md' })).toBeVisible()
   await writeFile(target, '外部修改一')
   await expect(ui.locator('.markdown')).toHaveText('外部修改一')
+  await expect(ui.getByRole('status')).not.toContainText(/ENOENT|目录暂时不可用/)
   await ui.getByRole('button', { name: '编辑', exact: true }).click()
   await ui.getByRole('textbox', { name: '提示词正文' }).fill('未保存草稿')
   await writeFile(target, '外部修改二')
