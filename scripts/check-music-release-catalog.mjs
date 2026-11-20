@@ -97,7 +97,7 @@ lx.on('request',({action,info})=>{
      return [{id:'missing',name:title,singer:'Aimer',albumName:({Evening:'Instrumental Edition',Daylight:'Tokyo Live'})[title] || 'Studio Recording'}]
    }
    if(info.keyword==='海へ ギヴン')return [{id:'missing',name:'海へ',singer:'ギヴン',albumName:'海へ'}]
-   if(info.keyword==='i beg you yurisa')return [{id:'highlight',name:'i beg you',singer:'yurisa',interval:'04:29'}]
+   if(info.keyword==='i beg you yurisa')return [{id:'yurisa',name:'i beg you',singer:'yurisa',interval:'04:29'}]
    if(info.keyword==='Vogel im Käfig 澤野弘之')return [{id:'sawano',name:'Vogel im Käfig',singer:'澤野弘之'}]
    if(info.keyword==='夜风 云海')return [{id:'highlight',name:'夜风',singer:'云海',allowPermanentSave:true}]
    if(info.keyword==='缺少曲 青禾')return [{id:'missing',name:'缺少曲',singer:'青禾',albumName:'山色'}]
@@ -145,7 +145,7 @@ async function launch() {
     globalThis.audioRequests = []
     https.request = (url, options, done) => {
       if (
-        !/^https:\/\/1\.1\.1\.1\/(?:recording-(?:17|18)|missing|highlight|sawano)\.mp3$/.test(
+        !/^https:\/\/1\.1\.1\.1\/(?:recording-(?:17|18)|missing|highlight|yurisa|sawano)\.mp3$/.test(
           url.href,
         )
       )
@@ -182,9 +182,14 @@ async function launch() {
     const artist = '00000000-0000-0000-0000-000000000003'
     const artistCredit = [{ artist: { id: artist, name: '青禾' }, name: '青禾' }]
     globalThis.fetch = async (url, options) => {
-      if(url.hostname==='coverartarchive.org') {
-        const wanted=url.pathname==='/release/00000000-0000-0000-0000-000000000002/front-250' ? 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQD14LAAGcARirKHD3AAAAAElFTkSuQmCC' : 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGN4Vm4NAAPfAZk6qrVNAAAAAElFTkSuQmCC'
-        return new Response(Buffer.from(wanted,'base64'),{headers:{'Content-Type':'image/png'}})
+      if (url.hostname === 'coverartarchive.org') {
+        const wanted =
+          url.pathname === '/release/00000000-0000-0000-0000-000000000002/front-250'
+            ? 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQD14LAAGcARirKHD3AAAAAElFTkSuQmCC'
+            : 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGN4Vm4NAAPfAZk6qrVNAAAAAElFTkSuQmCC'
+        return new Response(Buffer.from(wanted, 'base64'), {
+          headers: { 'Content-Type': 'image/png' },
+        })
       }
       if (
         url.origin !== 'https://musicbrainz.org' ||
@@ -389,7 +394,7 @@ async function launch() {
             {
               id: first,
               title: '初雪',
-              releases:[{id:first,status:'Official'}],
+              releases: [{ id: first, status: 'Official' }],
               'primary-type': 'Single',
               'first-release-date': today,
               'artist-credit': artistCredit,
@@ -788,8 +793,19 @@ try {
   await version.getByRole('button', { name: '查找音源' }).click()
   await version.getByRole('combobox', { name: '加入歌单' }).click()
   await page.getByRole('option', { name: '发行试听' }).click()
-  await expect(details.getByRole('status')).toHaveText('已加入发行试听')
+  await expect(details.getByRole('status')).toHaveText('已加入「发行试听」')
+  const membership = () =>
+    page.evaluate(
+      async (id) => (await window.music.state()).playlists.find((p) => p.id === id).tracks,
+      listId,
+    )
+  await expect.poll(async () => (await membership()).length).toBe(3)
+  await version.getByRole('combobox', { name: '加入歌单' }).click()
+  await page.getByRole('option', { name: '发行试听' }).click()
+  await expect(details.getByRole('status')).toHaveText('已在「发行试听」')
+  assert.equal((await membership()).length, 3)
   await version.getByRole('button', { name: '试听' }).click()
+  await expect.poll(() => app.evaluate(() => globalThis.audioRequests.at(-1))).toBe('/yurisa.mp3')
   await played()
   await page.screenshot({ path: path.join(root, 'song-versions.png') })
   await details.getByRole('tab', { name: '参与人员' }).click()
@@ -922,6 +938,12 @@ try {
   console.log(
     'PASS 同曲版组、逐项播放/时长/下载、关注与跨重启新发行、发行版本切换与缺曲搜索 ' + root,
   )
+} catch (error) {
+  console.error(error)
+  const page = await app.firstWindow()
+  console.error(await page.locator('.music-shell').allTextContents())
+  await page.screenshot({ path: path.join(root, 'failure.png') })
+  throw error
 } finally {
   await app.close()
 }

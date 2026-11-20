@@ -106,10 +106,7 @@ try {
     }
     for (let j = 0; j < Math.min(4, await rows.count()); j++) {
       const row = rows.nth(j),
-        title = await row
-          .locator('.catalog-song-title')
-          .first()
-          .textContent()
+        title = await row.locator('.catalog-song-title').first().textContent()
       await row.dispatchEvent('dblclick')
       try {
         await expect

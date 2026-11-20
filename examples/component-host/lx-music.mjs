@@ -597,8 +597,13 @@ export async function saveRecording(url, dir, info, store, signal, auditionId, v
     await rm(temp, { force: true })
   }
 }
-function onlineRecordingId(source,platform,recording,publicSearch=false){
-  return 'online-recording-'+createHash('sha256').update(JSON.stringify([source,platform,recording,...(publicSearch?['public']:[])])).digest('hex')
+function onlineRecordingId(source, platform, recording, publicSearch = false) {
+  return (
+    'online-recording-' +
+    createHash('sha256')
+      .update(JSON.stringify([source, platform, recording, ...(publicSearch ? ['public'] : [])]))
+      .digest('hex')
+  )
 }
 function recordingId(src, row) {
   const id =
@@ -1052,7 +1057,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         WHERE c.platform=? AND c.sourceId=? AND (c.artScope=? OR (c.artScope IS NULL AND c.source=?)) AND t.available=1 AND t.awaitingLocation=0
         ORDER BY t.id LIMIT 1`)
       const scope = artworkScope(src)
-      const sourceId=catalog().list().active
+      const sourceId = catalog().list().active
       const items = []
       for (const row of audition ? rows.slice(0, 20) : rows) {
         if (!text(row?.name) || JSON.stringify(row).length > 16384) continue
@@ -1066,7 +1071,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           auditionId: typeof id === 'string' && !id.startsWith('local-') ? id : null,
         })
         items.push({
-          key, onlineId:onlineRecordingId(sourceId,src.platform,recordingId(src,row)),
+          key,
+          onlineId: onlineRecordingId(sourceId, src.platform, recordingId(src, row)),
           localId: localCopy.get(src.platform, String(recordingId(src, row) || ''), scope, src.name)
             ?.id,
           title: text(row.name),
@@ -1102,7 +1108,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       throw Error('此版本没有可用的录音标识或音质')
     const sourceId = context?.sourceId ?? catalog().list().active
     if (!sourceId) throw Error('请重新选择音乐源')
-    const id=onlineRecordingId(sourceId,src.platform,recording,context?.publicCatalog && selected.platforms?.[match.platform]?.search)
+    const id = onlineRecordingId(
+      sourceId,
+      src.platform,
+      recording,
+      context?.publicCatalog && selected.platforms?.[match.platform]?.search,
+    )
     const { db } = getStore()
     if (!context) db.exec('BEGIN')
     try {
@@ -1161,12 +1172,27 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   bind('publicListCover', (key) => fetchArtwork('', collectionPictures.get(key)))
   bind('publicListSongs', async (platform, id) => {
     const rows = await publicSongs(platform, id)
+    const selected = source()
+    const sourceId = catalog().list().active
+    const src = selected?.platforms?.[platform]
+      ? { ...selected, ...selected.platforms[platform], search: false }
+      : undefined
+    const copy = getStore().db.prepare(
+      'SELECT local FROM online_local_copies WHERE online=? ORDER BY local LIMIT 1',
+    )
     const entries = new Map()
     const result = rows.map((row) => {
       const key = randomUUID()
+      const recording = src && recordingId(src, row)
+      const onlineId =
+        sourceId && recording
+          ? onlineRecordingId(sourceId, platform, recording, selected.platforms[platform].search)
+          : undefined
       entries.set(key, { platform, listId: id, row })
       return {
         key,
+        onlineId,
+        localId: onlineId ? copy.get(onlineId)?.local : undefined,
         title: row.name,
         artist: row.singer,
         album: row.albumName,

@@ -125,15 +125,19 @@ try {
   await expect.poll(async () => (await state()).queue).toEqual([a, a, b, c])
   await expect.poll(() => player.evaluate((el) => !el.paused && el.currentTime >= 3)).toBe(true)
   await button('播放队列').click()
-  await expect(page.locator('.music-queue li')).toHaveText([
-    'Album 110-1 · Artist · Album 110',
-    'Album 110-2 · Artist · Album 110',
-    'Album 110-3 · Artist · Album 110',
+  await expect(page.locator('.music-queue ol li strong')).toHaveText([
+    'Album 110-1',
+    'Album 110-2',
+    'Album 110-3',
   ])
-  await page.keyboard.press('Escape')
-  await button('下一首').click()
+  await page.locator('.music-queue ol li .row-play').first().click()
   await expect.poll(async () => (await state()).queueOccurrence).toBe(1)
   assert.ok(await player.evaluate((el) => !el.paused && el.currentTime < 2))
+  await page.locator('.queue-current .row-play').click()
+  await expect.poll(() => player.evaluate((el) => el.paused)).toBe(true)
+  await page.locator('.queue-current .row-play').click()
+  await expect.poll(() => player.evaluate((el) => !el.paused)).toBe(true)
+  await page.keyboard.press('Escape')
   await button('下一首').click()
   await expect.poll(async () => (await state()).current).toBe(b)
   await button('上一首').click()
@@ -145,10 +149,7 @@ try {
   await page.waitForSelector('.music-shell')
   await expect.poll(async () => (await state()).queueOccurrence).toBe(1)
   await button('播放队列').click()
-  await expect(page.locator('.music-queue li')).toHaveText([
-    'Album 110-2 · Artist · Album 110',
-    'Album 110-3 · Artist · Album 110',
-  ])
+  await expect(page.locator('.music-queue ol li strong')).toHaveText(['Album 110-2', 'Album 110-3'])
   await page.keyboard.press('Escape')
   await button('下一首').click()
   await expect.poll(async () => (await state()).current).toBe(b)

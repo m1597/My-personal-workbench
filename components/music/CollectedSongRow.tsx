@@ -1,6 +1,6 @@
 import { useMusicFeedback } from './musicFeedback'
 import { useContext, useState } from 'react'
-import { OnlineSongRow,RowPlay } from './OnlineSongRow'
+import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { ArtistLinks, SongCatalog } from './SongCredits'
 import { formatTime, type PlaylistTrack } from './LibraryPane'
 import type { CatalogLocation } from './LibraryCatalogPage'
@@ -50,11 +50,13 @@ export function CollectedSongRow({
         void run(async () => {
           const [r] = await window.music.downloadSelection([song.id])
           if (r?.status === 'failed') throw Error(r.error)
-          return r?.status === 'saved' ? feedback.text('已下载并入库', 'Downloaded to library') : feedback.text('已跳过', 'Skipped')
+          return r?.status === 'saved'
+            ? feedback.text('已下载并入库', 'Downloaded to library')
+            : feedback.text('已跳过', 'Skipped')
         })
       }
     >
-      <RowPlay title={song.title} id={song.id} disabled={!song.available} play={play}/>
+      <RowPlay title={song.title} id={song.id} disabled={!song.available} play={play} />
       <div className="library-name">
         <strong>{song.title}</strong>
         <small>

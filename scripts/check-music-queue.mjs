@@ -53,11 +53,11 @@ try {
   await expect.poll(async () => (await snapshot()).queue).toEqual(['B', 'A', 'D'])
   await button('播放队列').click()
   const pop = page.locator('.music-queue')
-  await expect(pop.locator('p').filter({ hasText: '当前曲目 · B · 测试艺人' })).toBeVisible()
+  await expect(pop.locator('.queue-current strong')).toHaveText('B')
   await pop.locator('li').first().click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '查看文件所在位置' })).toBeVisible()
   await page.keyboard.press('Escape')
-  await expect(pop.locator('li')).toHaveText(['A · 测试艺人', 'D · 测试艺人'])
+  await expect(pop.locator('ol li strong')).toHaveText(['A', 'D'])
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
   })
@@ -72,7 +72,7 @@ try {
   assert.deepEqual((await snapshot()).list, titles)
   await openDiscovery(page, false)
   await button('播放队列').click()
-  await expect(pop.locator('p').filter({ hasText: '当前曲目 · C · 测试艺人' })).toBeVisible()
+  await expect(pop.locator('.queue-current strong')).toHaveText('C')
   await page.keyboard.press('Escape')
   await page.getByRole('tab', { name: '曲库' }).click()
   await button('播放A').click()

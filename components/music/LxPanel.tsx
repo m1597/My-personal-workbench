@@ -1,6 +1,6 @@
 import { useMusicFeedback } from './musicFeedback'
 import { PublicPlaylists } from './PublicPlaylists'
-import { OnlineSongRow,RowPlay } from './OnlineSongRow'
+import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { SongCredits } from './SongCredits'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Dropdown, Option, Tab, TabList } from '@fluentui/react-components'
@@ -12,7 +12,7 @@ import { formatTime, type Playlist } from './LibraryPane'
 export type Versions = {
   items: {
     key: string
-    onlineId:string
+    onlineId: string
     localId?: string
     title: string
     artist: string
@@ -179,7 +179,8 @@ export function DownloadPane({
     if (!live.current) return
     setResult(found)
     setQuality(found.quality.includes(preferredQuality) ? preferredQuality : found.quality[0])
-    if (!found.items.length) setStatus(feedback.text('没有找到匹配版本', 'No matching recordings found'))
+    if (!found.items.length)
+      setStatus(feedback.text('没有找到匹配版本', 'No matching recordings found'))
   }
   useEffect(() => {
     live.current = true
@@ -229,8 +230,13 @@ export function DownloadPane({
             const result = await host.lxDownload(item.key, quality, true)
             if (result) {
               const via =
-                result.sources.length > 1 ? feedback.text(' · 自动换源：',' · Switched source: ') + result.sources.join(' → ') : ''
-              setStatus(feedback.text('已下载并入库 · ', 'Downloaded to library · ') + result.file + via)
+                result.sources.length > 1
+                  ? feedback.text(' · 自动换源：', ' · Switched source: ') +
+                    result.sources.join(' → ')
+                  : ''
+              setStatus(
+                feedback.text('已下载并入库 · ', 'Downloaded to library · ') + result.file + via,
+              )
               if (result.localId)
                 setResult(
                   (previous) =>
@@ -252,7 +258,15 @@ export function DownloadPane({
           }, false)
         }
       >
-        <div className="search-play-cover"><ResultCover item={item}/><RowPlay id={item.onlineId} title={item.title} disabled={busy || item.quality?.length===0} play={()=>void act(()=>onPlay(item.key),false)}/></div>
+        <div className="search-play-cover">
+          <ResultCover item={item} />
+          <RowPlay
+            id={item.onlineId}
+            title={item.title}
+            disabled={busy || item.quality?.length === 0}
+            play={() => void act(() => onPlay(item.key), false)}
+          />
+        </div>
         <div className="search-track">
           {recordingName(item.title)}
           <small>

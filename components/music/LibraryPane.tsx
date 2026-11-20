@@ -45,7 +45,8 @@ import {
 } from '@fluentui/react-components'
 import {
   Folder,
-  FileOutput,Download,
+  FileOutput,
+  Download,
   Plus,
   ListMusic,
   ListPlus,
@@ -239,7 +240,7 @@ export function LibraryPane({
   const downloadable = rows.some(
     (r) => r.origin === 'online' && !r.localCopy && selection?.has(r.id),
   )
-  async function download(ids=selectedIds) {
+  async function download(ids = selectedIds) {
     if (batchBusy || !ids.length) return
     setBatchBusy(true)
     setDownloads([])
@@ -698,7 +699,9 @@ export function LibraryPane({
                   }}
                 />
               </form>
-              {librarySearch.error && <small role="alert">{feedback.error(librarySearch.error)}</small>}
+              {librarySearch.error && (
+                <small role="alert">{feedback.error(librarySearch.error)}</small>
+              )}
               {librarySearch.enabled && (librarySearch.pending || librarySearch.ids) && (
                 <small role="status">
                   {librarySearch.pending ? '正在搜索…' : 'AI 找到 ' + rows.length + ' 首'}
@@ -723,9 +726,13 @@ export function LibraryPane({
                   <small role="status">已选 {selectedIds.length} 首</small>
                   {!!downloads.length && (
                     <small role="status">
-                      {feedback.text('已下载 ', 'Downloaded ')}{downloads.filter((r) => r.status === 'saved').length}
-                      {feedback.text(' 首 · 已跳过 ', ' · Skipped ')}{downloads.filter((r) => r.status === 'skipped').length}
-                      {feedback.text(' 首 · 失败 ', ' · Failed ')}{downloads.filter((r) => r.status === 'failed').length}{feedback.text(' 首', '')}
+                      {feedback.text('已下载 ', 'Downloaded ')}
+                      {downloads.filter((r) => r.status === 'saved').length}
+                      {feedback.text(' 首 · 已跳过 ', ' · Skipped ')}
+                      {downloads.filter((r) => r.status === 'skipped').length}
+                      {feedback.text(' 首 · 失败 ', ' · Failed ')}
+                      {downloads.filter((r) => r.status === 'failed').length}
+                      {feedback.text(' 首', '')}
                     </small>
                   )}
                   <Menu>
@@ -810,8 +817,17 @@ export function LibraryPane({
               {job?.started && (
                 <div className="library-job" role="status">
                   <span>
-                    {job.running ? feedback.text('正在导入', 'Importing') : job.cancelled ? feedback.text('导入已取消','Import cancelled') : feedback.text('导入完成','Import complete')}
-                    {feedback.text(' · 新增 ', ' · Added ')}{job.added}{feedback.text(' · 重复 ', ' · Duplicates ')}{job.duplicates}{feedback.text(' · 失败 ', ' · Failed ')}{job.failed}
+                    {job.running
+                      ? feedback.text('正在导入', 'Importing')
+                      : job.cancelled
+                        ? feedback.text('导入已取消', 'Import cancelled')
+                        : feedback.text('导入完成', 'Import complete')}
+                    {feedback.text(' · 新增 ', ' · Added ')}
+                    {job.added}
+                    {feedback.text(' · 重复 ', ' · Duplicates ')}
+                    {job.duplicates}
+                    {feedback.text(' · 失败 ', ' · Failed ')}
+                    {job.failed}
                   </span>
                   {job.running && (
                     <Button size="small" appearance="subtle" onClick={cancel}>
@@ -832,9 +848,14 @@ export function LibraryPane({
                       <TrackMenu
                         key={t.id}
                         localId={t.origin === 'online' && !t.localCopy ? null : t.id}
-                        play={t.available?()=>playRow(t.id):undefined}
-                        lists={userPlaylists} addTo={id=>void membership(id,t.id,true)}
-                        download={t.origin==='online'&&!t.localCopy?()=>void download([t.id]):undefined}
+                        play={t.available ? () => playRow(t.id) : undefined}
+                        lists={userPlaylists}
+                        addTo={(id) => void membership(id, t.id, true)}
+                        download={
+                          t.origin === 'online' && !t.localCopy
+                            ? () => void download([t.id])
+                            : undefined
+                        }
                         queueable={!!t.available}
                         queueShortcut={keyboardResults}
                         onQueue={(next) => onQueue(t.id, next)}
@@ -925,10 +946,13 @@ export function LibraryPane({
                             ) : (
                               <small title={t.artist}>{t.artist}</small>
                             )}
-                            {downloads.some(d=>d.id===t.id && d.status==='saved') && <small role="status">已下载并入库</small>}
+                            {downloads.some((d) => d.id === t.id && d.status === 'saved') && (
+                              <small role="status">已下载并入库</small>
+                            )}
                             {failedDownloads.has(t.id) && (
                               <small title={feedback.error(failedDownloads.get(t.id))}>
-                                {feedback.text('下载失败', 'Download failed')} · {feedback.error(failedDownloads.get(t.id))}
+                                {feedback.text('下载失败', 'Download failed')} ·{' '}
+                                {feedback.error(failedDownloads.get(t.id))}
                               </small>
                             )}
                             {!t.available && <small>文件不可用</small>}
@@ -995,7 +1019,17 @@ export function LibraryPane({
                             ) : null}
                             {!selection && (
                               <>
-                                {t.origin==='online' && !t.localCopy && <Button size="small" appearance="subtle" icon={<Download size={16}/>} aria-label={'下载'+t.title} title="下载" disabled={batchBusy} onClick={()=>void download([t.id])}/>}
+                                {t.origin === 'online' && !t.localCopy && (
+                                  <Button
+                                    size="small"
+                                    appearance="subtle"
+                                    icon={<Download size={16} />}
+                                    aria-label={'下载' + t.title}
+                                    title="下载"
+                                    disabled={batchBusy}
+                                    onClick={() => void download([t.id])}
+                                  />
+                                )}
                                 <Popover>
                                   <PopoverTrigger disableButtonEnhancement>
                                     <Button
@@ -1151,7 +1185,9 @@ export function LibraryPane({
                     </summary>
                     <Input
                       aria-label="筛选本地歌曲"
-                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.preventDefault()
+                      }}
                       placeholder="搜索歌名、艺人或专辑"
                       value={memberQuery}
                       onChange={(_, v) => {

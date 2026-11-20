@@ -94,10 +94,14 @@ function MissingTrack({
   track,
   album,
   onSearch,
+  onBusyChange,
+  disabled,
   active,
 }: {
   active: boolean
   onSearch: () => void
+  onBusyChange: (busy: boolean) => void
+  disabled: boolean
   track: ReleaseTrack
   album: string
 }) {
@@ -107,6 +111,7 @@ function MissingTrack({
   const [status, setStatus] = useState('')
   async function run(action: () => Promise<void>) {
     setBusy(true)
+    onBusyChange(true)
     setStatus('')
     try {
       await action()
@@ -114,6 +119,7 @@ function MissingTrack({
       setStatus(feedback.error(e))
     } finally {
       setBusy(false)
+      onBusyChange(false)
     }
   }
   return (
@@ -127,7 +133,7 @@ function MissingTrack({
       ) : (
         <Button
           size="small"
-          disabled={busy}
+          disabled={busy || disabled}
           onClick={() => {
             onSearch()
             void run(async () => setRecording(await matchTrack(track, album)))
@@ -369,8 +375,10 @@ export function CatalogSongRow({
   album,
   children,
   displayTitle,
+  searching = false,
 }: {
   displayTitle?: string
+  searching?: boolean
   song: Pick<ReleaseTrack, 'artist' | 'title' | 'artistCredits'> & { version?: string }
   play: PlayRecording
   localId?: string
@@ -437,7 +445,7 @@ export function CatalogSongRow({
     <OnlineSongRow
       localId={localId || downloadedId}
       className="highlight-recording"
-      busy={pending}
+      busy={pending || searching}
       play={() => void perform('play')}
       download={() => void perform('download')}
       add={(list, name) => void perform('add', list, name)}
@@ -445,7 +453,7 @@ export function CatalogSongRow({
       <RowPlay
         id={localId || resolvedId}
         title={song.title}
-        disabled={pending}
+        disabled={pending || searching}
         play={() => void perform('play')}
       />
       <div className="catalog-song-text">
@@ -1033,10 +1041,11 @@ export function AlbumEditions({
     }
   }
   const [openTrack, setOpenTrack] = useState<ReleaseTrack>()
+  const [searchingTrack, setSearchingTrack] = useState<ReleaseTrack>()
   const collected = collectedTracks(tracks ?? [], local)
   return (
     <section className="music-album-editions" aria-label="发行版本曲目">
-      <Button size="small" disabled={busy} onClick={() => void request()}>
+      <Button size="small" disabled={busy || !!searchingTrack} onClick={() => void request()}>
         查看完整发行曲目
       </Button>
       {busy && <small role="status">正在查询 MusicBrainz…</small>}
@@ -1054,7 +1063,7 @@ export function AlbumEditions({
             placeholder="选择发行版本"
             value={choices.filter((c) => c.id === selected).map(labelEdition)[0] ?? ''}
             selectedOptions={selected ? [selected] : []}
-            disabled={busy}
+            disabled={busy || !!searchingTrack}
             onOptionSelect={(_, d) => {
               if (d.optionValue) void request(d.optionValue)
             }}
@@ -1075,7 +1084,8 @@ export function AlbumEditions({
               <CatalogSongRow
                 key={[t.disc, t.number, t.title].join(':')}
                 song={t}
-                displayTitle={t.disc+"."+t.number+" "+t.title}
+                searching={!!searchingTrack}
+                displayTitle={t.disc + '.' + t.number + ' ' + t.title}
                 play={actions.play}
                 album={album.title}
                 localId={collected.get(t) || undefined}
@@ -1093,6 +1103,12 @@ export function AlbumEditions({
                     track={t}
                     album={album.title}
                     onSearch={() => setOpenTrack(t)}
+                    disabled={!!searchingTrack}
+                    onBusyChange={(busy) =>
+                      setSearchingTrack((current) =>
+                        busy ? t : current === t ? undefined : current,
+                      )
+                    }
                   />
                 )}
               </CatalogSongRow>

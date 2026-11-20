@@ -1,10 +1,9 @@
 import { useMusicFeedback } from './musicFeedback'
-import { songRow } from './songRow'
+import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { SongCredits } from './SongCredits'
 import { DiscoveryInput } from './DiscoveryInput'
 import { BackButton } from './BackButton'
 import { Button, Checkbox, Dropdown, Option, Tab, TabList } from '@fluentui/react-components'
-import { Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Playlist } from './PlaylistSortMenu'
 import { guardSearchEnter } from './searchSubmit'
@@ -18,6 +17,8 @@ export type PublicList = {
 }
 export type PublicSong = {
   key: string
+  onlineId?: string
+  localId?: string
   title: string
   artist: string
   album: string
@@ -96,8 +97,7 @@ export function PublicPlaylists({
       setPage(1)
       setFilter(keyword)
     } catch (e) {
-      if (version === queryVersion.current)
-        setError(feedback.error(e))
+      if (version === queryVersion.current) setError(feedback.error(e))
     } finally {
       if (version === queryVersion.current) setThinking(false)
     }
@@ -120,7 +120,7 @@ export function PublicPlaylists({
     return () => {
       alive = false
     }
-  }, [platform])
+  }, [platform, feedback.error])
   useEffect(() => {
     let alive = true
     setLoading(true)
@@ -147,8 +147,9 @@ export function PublicPlaylists({
     return () => {
       alive = false
     }
-  }, [platform, tag, page, list, filter])
-  async function action(keys: string[], playlist?: string) {
+  }, [platform, tag, page, list, filter, feedback.error])
+  const [resolved, setResolved] = useState<Record<string, string>>({})
+  async function action(keys: string[], playlist?: string, download = false) {
     if (!keys.length || busy) return
     setBusy(true)
     setError('')
@@ -156,17 +157,42 @@ export function PublicPlaylists({
     try {
       const { ids, skipped } = await host.keepPublicSongs(
         keys,
-        playlist ? 'save' : keys.length > 1 ? 'queue' : 'play',
+        playlist || download ? 'save' : keys.length > 1 ? 'queue' : 'play',
       )
-      if (skipped.length) setError(feedback.text('当前音质不可用：', 'Unavailable at this quality: ') + skipped.join(', '))
+      if (skipped.length)
+        setError(
+          feedback.text('当前音质不可用：', 'Unavailable at this quality: ') + skipped.join(', '),
+        )
       if (!ids.length) return
-      if (playlist) {
+      if (keys.length === 1) setResolved((old) => ({ ...old, [keys[0]]: ids[0] }))
+      if (download) {
+        const results = await host.downloadSelection(ids)
+        const failed = results.find((r) => r.status === 'failed')
+        if (failed) setError(feedback.error(failed.error))
+        setAddedNotice(
+          feedback.text(
+            `已下载并入库 ${results.filter((r) => r.status === 'saved').length} 首`,
+            `Downloaded ${results.filter((r) => r.status === 'saved').length} tracks`,
+          ),
+        )
+        await refresh()
+        const state = await host.state()
+        const copies = new Map(state.onlineTracks.map((row) => [row.id, row.localCopy]))
+        setSongs((rows) =>
+          rows.map((row) => ({
+            ...row,
+            localId: copies.get(row.onlineId || resolved[row.key]) || undefined,
+          })),
+        )
+      } else if (playlist) {
         const receipt = await host.setMembership(playlist, ids, true)
         if (receipt && 'added' in receipt)
-          setAddedNotice(feedback.text(
-            `已加入 ${receipt.added} 首，原已在歌单中 ${receipt.skipped} 首`,
-            `Added ${receipt.added}, already in playlist ${receipt.skipped}`,
-          ))
+          setAddedNotice(
+            feedback.text(
+              `已加入 ${receipt.added} 首，原已在歌单中 ${receipt.skipped} 首`,
+              `Added ${receipt.added}, already in playlist ${receipt.skipped}`,
+            ),
+          )
         await refresh()
         setSelected([])
       } else {
@@ -241,7 +267,13 @@ export function PublicPlaylists({
     <section className="public-playlists" aria-label="公开歌单">
       {list ? (
         <>
-          <BackButton to="playlists" onClick={() => { setList(undefined); setAddedNotice('') }} />
+          <BackButton
+            to="playlists"
+            onClick={() => {
+              setList(undefined)
+              setAddedNotice('')
+            }}
+          />
           <h2>{list.name}</h2>
           <div className="public-actions">
             <Button
@@ -277,12 +309,21 @@ export function PublicPlaylists({
           {addedNotice && <small role="status">{addedNotice}</small>}
           <ul className="public-songs">
             {songs.map((s) => (
-              <li
+              <OnlineSongRow
                 key={s.key}
-                {...songRow(() => {
-                  if (!busy) void action([s.key])
-                })}
+                className="public-recording"
+                busy={busy}
+                localId={s.localId}
+                play={() => void action([s.key])}
+                download={() => void action([s.key], undefined, true)}
+                add={(list) => void action([s.key], list)}
               >
+                <RowPlay
+                  id={resolved[s.key] || s.onlineId}
+                  title={s.title}
+                  disabled={busy}
+                  play={() => void action([s.key])}
+                />
                 <Checkbox
                   aria-label={'选择 ' + s.title}
                   checked={selected.includes(s.key)}
@@ -298,14 +339,7 @@ export function PublicPlaylists({
                     <SongCredits song={s} />
                   </small>
                 </div>
-                <Button
-                  appearance="subtle"
-                  icon={<Play size={16} />}
-                  aria-label={'播放 ' + s.title}
-                  disabled={busy}
-                  onClick={() => void action([s.key])}
-                />
-              </li>
+              </OnlineSongRow>
             ))}
           </ul>
         </>

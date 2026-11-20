@@ -1,9 +1,8 @@
-import { songRow } from './songRow'
 import { SongCredits } from './SongCredits'
-import { TrackMenu } from './TrackMenu'
+import { useMusicFeedback } from './musicFeedback'
 import { useState } from 'react'
 import { Button, Popover, PopoverSurface, PopoverTrigger } from '@fluentui/react-components'
-import { RowPlay } from './OnlineSongRow'
+import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { ListMusic } from 'lucide-react'
 type Song = {
   id: string
@@ -16,6 +15,67 @@ type Song = {
 function localFile(song: Song) {
   if (song.origin === 'online') return song.localCopy ? song.id : null
   return song.origin ? song.id : song.localId
+}
+function QueueSong({
+  song,
+  play,
+  close,
+  current = false,
+}: {
+  song: Song
+  play(): void
+  close(): void
+  current?: boolean
+}) {
+  const feedback = useMusicFeedback()
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('')
+  const id = song.localId || song.id
+  async function run(action: () => Promise<string>) {
+    setBusy(true)
+    setStatus('')
+    try {
+      setStatus(await action())
+    } catch (error) {
+      setStatus(feedback.error(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <OnlineSongRow
+      className="queue-recording"
+      busy={busy}
+      localId={localFile(song) || undefined}
+      canDownload={song.origin === 'online'}
+      play={play}
+      download={() =>
+        void run(async () => {
+          const [result] = await window.music.downloadSelection([id])
+          if (result?.status === 'failed') throw Error(result.error)
+          return feedback.text(
+            result?.status === 'saved' ? '已下载并入库' : '已跳过',
+            result?.status === 'saved' ? 'Downloaded to library' : 'Skipped',
+          )
+        })
+      }
+      add={(list, name) =>
+        void run(async () => {
+          const receipt = await window.music.setMembership(list, id, true)
+          return feedback.membership(name, Boolean(receipt && 'added' in receipt && receipt.added))
+        })
+      }
+    >
+      <RowPlay title={song.title} id={current ? song.id : undefined} play={play} disabled={busy} />
+      <div className="catalog-song-text">
+        <strong>{song.title}</strong>
+        <small>
+          <SongCredits song={song} beforeOpen={close} />
+        </small>
+        {status && <small role="status">{status}</small>}
+      </div>
+    </OnlineSongRow>
+  )
 }
 export function PlaybackQueue({
   onOpen,
@@ -74,26 +134,29 @@ export function PlaybackQueue({
       >
         <strong>播放队列</strong>
         {active && (
-          <TrackMenu localId={localFile(active)}>
-            <p {...songRow(() => play(active.id))}>
-              当前曲目 · <strong>{active.title}</strong>{' '}
-              <RowPlay title={active.title} id={active.id} play={() => play(active.id)}/>
-              · <SongCredits song={active} beforeOpen={() => setOpen(false)} />
-            </p>
-          </TrackMenu>
+          <>
+            <p>当前曲目</p>
+            <ul className="queue-current">
+              <QueueSong
+                current
+                song={active}
+                play={() => play(active.id)}
+                close={() => setOpen(false)}
+              />
+            </ul>
+          </>
         )}
         <small>接下来</small>
         {upcoming.length ? (
           <ol>
             {upcoming.map(({ row, occurrence }) => {
               return (
-                <TrackMenu key={row.id + ':' + occurrence} localId={localFile(row)}>
-                  <li {...songRow(() => play(row.id, occurrence))}>
-                    <strong>{row.title}</strong>{' '}
-                    <RowPlay title={row.title} id={row.id} play={() => play(row.id, occurrence)}/>
-                    · <SongCredits song={row} beforeOpen={() => setOpen(false)} />
-                  </li>
-                </TrackMenu>
+                <QueueSong
+                  key={row.id + ':' + occurrence}
+                  song={row}
+                  play={() => play(row.id, occurrence)}
+                  close={() => setOpen(false)}
+                />
               )
             })}
           </ol>

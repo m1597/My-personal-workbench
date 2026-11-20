@@ -5,7 +5,10 @@ export const RevealTrackContext = createContext<(id: string) => void>(() => {})
 
 export function TrackMenu({
   children,
-  play,download,addTo,lists,
+  play,
+  download,
+  addTo,
+  lists,
   queueable,
   onQueue,
   queueShortcut,
@@ -15,10 +18,10 @@ export function TrackMenu({
 }: {
   children: ReactElement
   localId?: string | null
-  play?():void
-  download?():void
-  addTo?(id:string):void
-  lists?:{id:string;name:string}[]
+  play?(): void
+  download?(): void
+  addTo?(id: string): void
+  lists?: { id: string; name: string }[]
   queueable?: boolean
   onQueue?(next: boolean): void
   queueShortcut?: boolean
@@ -32,9 +35,32 @@ export function TrackMenu({
       <MenuTrigger disableButtonEnhancement>{children}</MenuTrigger>
       <MenuPopover className="component-popup">
         <MenuList>
-          {play && <MenuItem disabled={queueable===false} onClick={play}>播放</MenuItem>}
+          {play && (
+            <MenuItem disabled={queueable === false} onClick={play}>
+              播放
+            </MenuItem>
+          )}
           {download && <MenuItem onClick={download}>下载</MenuItem>}
-          {addTo && <Menu><MenuTrigger disableButtonEnhancement><MenuItem>加入歌单</MenuItem></MenuTrigger><MenuPopover className="component-popup"><MenuList>{lists?.length?lists.map(l=><MenuItem key={l.id} onClick={()=>addTo(l.id)}>{l.name}</MenuItem>):<MenuItem disabled>请先新建歌单</MenuItem>}</MenuList></MenuPopover></Menu>}
+          {addTo && (
+            <Menu>
+              <MenuTrigger disableButtonEnhancement>
+                <MenuItem>加入歌单</MenuItem>
+              </MenuTrigger>
+              <MenuPopover className="component-popup">
+                <MenuList>
+                  {lists?.length ? (
+                    lists.map((l) => (
+                      <MenuItem key={l.id} onClick={() => addTo(l.id)}>
+                        {l.name}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem disabled>请先新建歌单</MenuItem>
+                  )}
+                </MenuList>
+              </MenuPopover>
+            </Menu>
+          )}
           {localId && <MenuItem onClick={() => reveal(localId)}>查看文件所在位置</MenuItem>}
           {onQueue && (
             <>

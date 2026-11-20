@@ -64,7 +64,13 @@ try {
       const matches = payload.tracks.filter((t) => t.title !== '正午重鼓').map((t) => t.index)
       return Response.json({
         choices: [
-          { message: { content: JSON.stringify({ matches: [...matches, 999, -1, ...matches] }) } },
+          {
+            message: {
+              content: JSON.stringify({
+                matches: [...matches, 999, -1, ...matches],
+              }),
+            },
+          },
         ],
       })
     }
@@ -75,6 +81,21 @@ try {
     await element.press(key)
   }
   const calls = () => app.evaluate(() => globalThis.scopeSearchCalls)
+  const guardedEnter = async (input) => {
+    for (const flags of [{ isComposing: true }, { keyCode: 229 }, { repeat: true }]) {
+      const prevented = await input.evaluate((el, flags) => {
+        const event = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+          ...flags,
+        })
+        el.dispatchEvent(event)
+        return event.defaultPrevented
+      }, flags)
+      assert.equal(prevented, true, 'IME/repeated Enter must not submit')
+    }
+  }
   const input = page.getByRole('searchbox', { name: '搜索本地歌曲' })
   const toggle = page.getByRole('button', { name: 'AI 搜索', exact: true })
   const rows = page.locator('li.library-row')
@@ -112,6 +133,8 @@ try {
     await expect(toggle).toHaveAttribute('aria-pressed', 'true')
     const previous = (await calls()).length
     await input.fill(query)
+    assert.equal((await calls()).length, previous)
+    await guardedEnter(input)
     assert.equal((await calls()).length, previous)
     await expect(page.getByRole('button', { name: '提交 AI 搜索' })).toBeEnabled()
     await input.press('Enter')

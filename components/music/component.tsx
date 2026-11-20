@@ -173,8 +173,8 @@ declare global {
       ReleaseAPI & {
         analysisRecording(id: string): Promise<Uint8Array | null>
         albums(): Promise<Album[]>
-        albumCover(id: string,edition?:string,group?:string): Promise<string | null>
-        trackCover(id: string,edition?:string,group?:string): Promise<string | null>
+        albumCover(id: string, edition?: string, group?: string): Promise<string | null>
+        trackCover(id: string, edition?: string, group?: string): Promise<string | null>
         publicGenres(p: string): Promise<{ id: string; name: string }[]>
         publicLists(
           p: string,
@@ -1528,7 +1528,11 @@ function Music() {
       )}
       {removal && (
         <div className="playlist-undo" role="status">
-          <span>{language === 'en' ? `Removed from playlist: ${removal.count}` : `已从歌单移除 ${removal.count} 首`}</span>
+          <span>
+            {language === 'en'
+              ? `Removed from playlist: ${removal.count}`
+              : `已从歌单移除 ${removal.count} 首`}
+          </span>
           <Button
             size="small"
             onClick={() => {
@@ -2465,12 +2469,13 @@ function Music() {
   )
   return (
     <RevealTrackContext.Provider value={(id) => void act(() => host.revealTrack(id))}>
-      <RowPlayback.Provider value={{id:now,paused,toggle:togglePlayback}}>
-      <RecordingLists.Provider value={state?.playlists.filter(list=>!list.system) ?? []}>
-        <MusicLanguage.Provider value={language}>
-          <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
-        </MusicLanguage.Provider>
-      </RecordingLists.Provider></RowPlayback.Provider>
+      <RowPlayback.Provider value={{ id: now, paused, toggle: togglePlayback }}>
+        <RecordingLists.Provider value={state?.playlists.filter((list) => !list.system) ?? []}>
+          <MusicLanguage.Provider value={language}>
+            <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
+          </MusicLanguage.Provider>
+        </RecordingLists.Provider>
+      </RowPlayback.Provider>
     </RevealTrackContext.Provider>
   )
 }

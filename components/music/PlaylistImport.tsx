@@ -37,7 +37,9 @@ export function usePlaylistImport(active: boolean) {
     if (!files?.length || reading.current) return
     setError('')
     if (files.length !== 1 || !/\.m3u8?$/i.test(files[0].name)) {
-      setError(feedback.text('请一次选择一个 M3U 或 M3U8 文件', 'Choose one M3U or M3U8 file at a time.'))
+      setError(
+        feedback.text('请一次选择一个 M3U 或 M3U8 文件', 'Choose one M3U or M3U8 file at a time.'),
+      )
       return
     }
     reading.current = true
