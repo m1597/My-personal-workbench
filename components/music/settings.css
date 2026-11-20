@@ -1,3 +1,7 @@
+.music-settings:focus {
+  outline: 2px solid var(--colorBrandStroke1);
+  outline-offset: -2px;
+}
 .music-settings {
   width: 100%;
   min-width: 0;

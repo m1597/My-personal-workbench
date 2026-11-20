@@ -14,6 +14,7 @@ import { QuickListenControls } from './QuickListenControls'
 import type { SourceInventory } from './MusicSourcesSettings'
 import {
   MusicSettings,
+  isSettingsCategory,
   type MusicPreferences,
   type SettingsCategory,
   type TransportAction,
@@ -158,6 +159,7 @@ type State = {
 type Presentation = 'full' | 'bar' | 'background'
 type Mode = {
   settingsRequest?: number
+  settingsTarget?: string
   language?: 'zh-CN' | 'en'
   mode: string
   presentation: Presentation
@@ -230,7 +232,7 @@ declare global {
         lxInfo(): Promise<string>
         lxImport(link?: string): Promise<void>
         lxCancel(scope?: 'import' | 'search' | 'download'): Promise<void>
-        downloadTasks(): Promise<{ id: string; title: string; status: string; detail: string }[]>
+        downloadTasks(): Promise<{ id: string; title: string; status: string; detail: string; collection?: string; failedIds?: string[] }[]>
         cancelDownloadTask(id: string): Promise<void>
         searchHistory(
           action?: 'list' | 'add' | 'remove' | 'clear',
@@ -523,6 +525,14 @@ function Music() {
       if (request > handledSettings) {
         handledSettings = request
         setGuide(null)
+        if (isSettingsCategory(v.settingsTarget)) {
+          setSettingsCategory(v.settingsTarget)
+          requestAnimationFrame(() => {
+            const pane = document.querySelector<HTMLElement>('.music-settings')
+            pane?.focus()
+            pane?.scrollIntoView({ block: 'start' })
+          })
+        }
         setTab('settings')
       }
       setLanguage(v.language === 'en' ? 'en' : 'zh-CN')

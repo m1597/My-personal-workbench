@@ -7,5 +7,16 @@
   "name": "Music",
   "uiEntry": "index.html",
   "capabilities": ["view.transfer"],
-  "modes": ["standalone", "docked"]
+  "modes": ["standalone", "docked"],
+  "settingsEntries": [
+    { "target": "library", "name": "本地曲库", "path": "Music → 音乐设置 → 本地曲库" },
+    { "target": "sources", "name": "音乐源", "path": "Music → 音乐设置 → 音乐源" },
+    { "target": "mcp", "name": "MCP", "path": "Music → 音乐设置 → MCP" },
+    { "target": "downloads", "name": "下载", "path": "Music → 音乐设置 → 下载" },
+    { "target": "model", "name": "模型与推荐", "path": "Music → 音乐设置 → 模型与推荐" },
+    { "target": "lyrics", "name": "歌词", "path": "Music → 音乐设置 → 歌词" },
+    { "target": "playback", "name": "播放", "path": "Music → 音乐设置 → 播放" },
+    { "target": "keys", "name": "快捷键", "path": "Music → 音乐设置 → 快捷键" },
+    { "target": "plugins", "name": "插件", "path": "Music → 音乐设置 → 插件" }
+  ]
 }

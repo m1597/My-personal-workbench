@@ -112,6 +112,9 @@ const categories = [
   { id: 'plugins', name: '插件', icon: Plug },
 ] as const
 export type SettingsCategory = (typeof categories)[number]['id']
+export function isSettingsCategory(value: unknown): value is SettingsCategory {
+  return categories.some(({ id }) => id === value)
+}
 
 export type TasteStatus = {
   exclusions?: { kind: 'folder' | 'playlist'; id: string; name: string }[]
@@ -374,7 +377,12 @@ export function MusicSettings({
           </Button>
         ))}
       </nav>
-      <div className="music-settings">
+      <div
+        className="music-settings"
+        role="region"
+        aria-label={categories.find((item) => item.id === category)?.name}
+        tabIndex={-1}
+      >
         {category === 'plugins' && plugins}
         {category === 'library' && (
           <section>
