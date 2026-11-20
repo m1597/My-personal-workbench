@@ -173,4 +173,11 @@
     font-size: var(--font-size-caption);
     padding-inline: 2px;
   }
+  .music-navigation .music-view-actions {
+    max-width: 100%;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    padding-inline: 0;
+  }
 }

@@ -81,17 +81,19 @@ export function PlayerOptionsPane({
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   useEffect(() => {
     if (category !== 'playback' || !navigator.mediaDevices) return
-    let alive = true
-    const update = () =>
+    let generation = 0
+    const update = () => {
+      const current = ++generation
       void outputs()
         .then((items) => {
-          if (alive) setDevices(items)
+          if (generation === current) setDevices(items)
         })
         .catch(() => {})
+    }
     update()
     navigator.mediaDevices.addEventListener('devicechange', update)
     return () => {
-      alive = false
+      generation++
       navigator.mediaDevices.removeEventListener('devicechange', update)
     }
   }, [category])
