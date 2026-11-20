@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 
 const registry = 'Software\\FitBay\\Installations'
-const names = { workbench: 'Workbench', music: 'Music', prompts: 'Prompts' }
+const names = { toolkit: 'Toolkit', workbench: 'Workbench', music: 'Music', prompts: 'Prompts' }
 let readValue
 function installDirectory(name) {
   if (!readValue) {

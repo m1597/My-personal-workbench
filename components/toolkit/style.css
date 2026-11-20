@@ -1,0 +1,130 @@
+* {
+  box-sizing: border-box;
+}
+html {
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  background: rgba(32, 42, 53, 0.9);
+  color: #edf4fa;
+  font:
+    14px / 1.5 "HarmonyOS Sans SC",
+    "Microsoft YaHei UI",
+    sans-serif;
+}
+[hidden] {
+  display: none !important;
+}
+main {
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+h1 {
+  font-size: 21px;
+}
+h2 {
+  font-size: 16px;
+}
+section,
+fieldset {
+  min-width: 0;
+  background: #2a3643;
+  border: 1px solid #495a69;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+label {
+  display: grid;
+  gap: 4px;
+}
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: #303f4e;
+  border: 1px solid #647889;
+  border-radius: 5px;
+  padding: 6px 10px;
+  max-width: 100%;
+}
+button:hover {
+  background: #425467;
+}
+button:disabled {
+  opacity: 0.55;
+}
+input,
+textarea {
+  width: 100%;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.notice {
+  color: #f1cd97;
+  white-space: pre-wrap;
+}
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  user-select: text;
+}
+.preview {
+  max-height: 180px;
+  max-width: 100%;
+  object-fit: contain;
+}
+.screen,
+.pinned {
+  padding: 0;
+  position: fixed;
+  inset: 0;
+}
+.screen > img,
+.pinned img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+.screen {
+  cursor: crosshair;
+  touch-action: none;
+}
+.rect {
+  position: absolute;
+  border: 2px solid #a2d1ed;
+  box-shadow: 0 0 0 100vmax #0006;
+  pointer-events: none;
+}
+.bar {
+  position: absolute;
+  max-width: 100%;
+  background: #283644f5;
+  padding: 6px;
+  border: 1px solid #647889;
+  border-radius: 7px;
+  cursor: auto;
+}
+.tip {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  background: #233445;
+  padding: 6px 12px;
+  pointer-events: none;
+}

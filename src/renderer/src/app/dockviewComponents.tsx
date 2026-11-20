@@ -29,7 +29,33 @@ export function BuiltinContent({ id }: { id: string }) {
       return null
   }
 }
+function ToolkitPanel() {
+  const t = useTranslation()
+  const [message, setMessage] = useState('')
+  async function open(capture: boolean) {
+    try {
+      if (!window.fitbayToolkit) throw Error(t('未检测到工具集', 'Toolkit is unavailable'))
+      await (capture ? window.fitbayToolkit.capture() : window.fitbayToolkit.open())
+      setMessage('')
+    } catch (e) {
+      setMessage(String(e))
+    }
+  }
+  return (
+    <section className="empty-workspace quick-start">
+      <h2>{t('截图与划词', 'Desktop tools')}</h2>
+      <button type="button" className="primary-button" onClick={() => void open(true)}>
+        {t('框选屏幕', 'Capture region')}
+      </button>
+      <button type="button" onClick={() => void open(false)}>
+        {t('工具与快捷键设置', 'Tool and shortcut settings')}
+      </button>
+      {message && <p role="alert">{message}</p>}
+    </section>
+  )
+}
 export const components = {
+  toolkit: ToolkitPanel,
   module: ModulePanel,
   'component-slot': ComponentSlot,
 }

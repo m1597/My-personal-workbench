@@ -74,18 +74,26 @@ async function writeInstallerInclude(output, appOutDir) {
 
 const files = {}
 const { version } = JSON.parse(await readFile('package.json', 'utf8'))
-const promptsOnly = process.argv.includes('--prompts')
-for (const product of promptsOnly ? ['prompts'] : ['music', 'workbench']) {
-  const music = product === 'music'
+const optionalProduct = process.argv.includes('--toolkit')
+  ? 'toolkit'
+  : process.argv.includes('--prompts')
+    ? 'prompts'
+    : undefined
+const products = {
+  music: ['Music', 'FitBay Music', 'FitBay Music'],
+  workbench: ['Workbench', 'FitBay', 'FitBay 工作台'],
+  prompts: ['Prompts', 'FitBay Prompts', 'FitBay 提示词仓库'],
+  toolkit: ['Toolkit', 'FitBay Toolkit', 'FitBay 工具集'],
+}
+for (const product of optionalProduct ? [optionalProduct] : ['music', 'workbench']) {
   const { app, modules } = await prepareProduct(product)
   if (product === 'workbench') {
     const hash = createHash('sha256')
     for await (const chunk of createReadStream(files.music)) hash.update(chunk)
     await writeFile(path.join(app, 'music-setup.sha256'), hash.digest('hex'))
   }
-  const title = promptsOnly ? 'FitBay Prompts' : music ? 'FitBay Music' : 'FitBay'
-  const shortcut = promptsOnly ? 'FitBay 提示词仓库' : music ? title : 'FitBay 工作台'
-  const filename = `FitBay-${promptsOnly ? 'Prompts' : music ? 'Music' : 'Workbench'}-Setup-${version}-x64.exe`
+  const [label, title, shortcut] = products[product]
+  const filename = `FitBay-${label}-Setup-${version}-x64.exe`
   const output = path.resolve('.cache', 'fitbay-build', product)
   const include = path.join(output, 'fitbay-owned-files.nsh')
   await build({
@@ -102,6 +110,7 @@ for (const product of promptsOnly ? ['prompts'] : ['music', 'workbench']) {
       npmRebuild: true,
       // Skip builder's fallback to every production dependency of the workspace.
       // Only this product's locked runtime closure is copied in afterPack.
+      ...(product === 'toolkit' && { onNodeModuleFile: () => false }),
       beforeBuild: async () => false,
       files: ['**/*'],
       afterPack: async ({ appOutDir }) => {
@@ -121,5 +130,5 @@ for (const product of promptsOnly ? ['prompts'] : ['music', 'workbench']) {
   })
   files[product] = path.join(output, filename)
 }
-if (promptsOnly) console.log(files.prompts)
+if (optionalProduct) console.log(files[optionalProduct])
 else await deliverInstallers(files.workbench, files.music, version)

@@ -48,6 +48,11 @@ if (process.argv.includes('--fixture-panels'))
       return () => ipcRenderer.removeListener('builtin:activate', listener)
     },
   })
+contextBridge.exposeInMainWorld('fitbayToolkit', {
+  available: () => ipcRenderer.invoke('toolkit-launch:available'),
+  capture: () => ipcRenderer.invoke('toolkit-launch:capture'),
+  open: () => ipcRenderer.invoke('toolkit-launch:open'),
+})
 function componentBridge(prefix) {
   return {
     show: (settings, target) => ipcRenderer.invoke(prefix + ':show', settings, target),

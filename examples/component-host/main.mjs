@@ -1,3 +1,4 @@
+import { toolkitLauncher } from './toolkit-launcher.mjs'
 import { installMusic } from './music-installer.mjs'
 import { updateCatalog, saveInstaller, productUpdater } from './product-updates.mjs'
 import { installedProducts, registeredProduct } from './installed-products.mjs'
@@ -493,6 +494,15 @@ else {
         setTimeout(checkUpdates, 10_000).unref()
         setInterval(checkUpdates, 5 * 60_000).unref()
         updateTray()
+      }
+      for (const action of ['available', 'open', 'capture']) {
+        ipcMain.handle('toolkit-launch:' + action, async (event) => {
+          if (!isShell(event)) throw Error('DENIED')
+          const launch = await toolkitLauncher(app.isPackaged, profile)
+          if (action === 'available') return Boolean(launch)
+          if (!launch) throw Error('未检测到工具集')
+          return launch(action === 'capture')
+        })
       }
       ipcMain.handle('workbench:music-installed', async (event) => {
         if (!isShell(event)) throw Error('DENIED')

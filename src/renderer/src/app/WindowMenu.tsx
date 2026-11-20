@@ -18,6 +18,15 @@ import { readPresets, switchLayout, currentLayoutName, selectLayoutName } from '
 import { LayoutDialog } from './LayoutDialog'
 import { useMusicHostState } from './componentPrototype'
 
+declare global {
+  interface Window {
+    fitbayToolkit?: {
+      capture(): Promise<boolean>
+      available(): Promise<boolean>
+      open(): Promise<boolean>
+    }
+  }
+}
 export function WindowMenu() {
   const t = useTranslation()
   const music = useMusicHostState()
@@ -41,7 +50,12 @@ export function WindowMenu() {
   const [activeName, setActiveName] = useState(currentLayoutName)
   const layoutTrigger = useRef<HTMLButtonElement>(null)
   const panels = workspace.api?.panels ?? []
+  const [toolkit, setToolkit] = useState(false)
   const inspect = useCallback(() => {
+    void window.fitbayToolkit
+      ?.available()
+      .then(setToolkit)
+      .catch(() => setToolkit(false))
     void window.promptDock
       ?.inventory()
       .then((r) => setPrompts(r.installed))
@@ -102,6 +116,25 @@ export function WindowMenu() {
         </MenuTrigger>
         <MenuPopover className="component-popup workbench-menu">
           <MenuList aria-label={t('组件菜单', 'Components menu')} id="window-menu">
+            {toolkit && (
+              <MenuItem
+                onClick={() => {
+                  const api = workspace.api
+                  if (!api) return
+                  const existing = api.getPanel('component-toolkit')
+                  if (existing) existing.api.setActive()
+                  else
+                    api.addPanel({
+                      id: 'component-toolkit',
+                      component: 'toolkit',
+                      title: t('截图与划词', 'Desktop tools'),
+                      minimumWidth: 180,
+                    })
+                }}
+              >
+                {t('截图与划词工具集', 'Screenshot and selection tools')}
+              </MenuItem>
+            )}
             {modules.map((module) => (
               <MenuItem
                 key={module.id}
@@ -177,7 +210,7 @@ export function WindowMenu() {
                 />
               </MenuSplitGroup>
             )}
-            {!modules.length && !installed && !sample && !hasPrompts && (
+            {!modules.length && !toolkit && !installed && !sample && !hasPrompts && (
               <MenuItem disabled>{t('未检测到已安装组件', 'No installed components')}</MenuItem>
             )}
           </MenuList>

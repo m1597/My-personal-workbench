@@ -39,6 +39,7 @@ function validLayout(value: unknown): value is SerializedDockview {
     !ids.every(
       (id) =>
         ['component-example', 'component-music', 'component-prompts'].includes(id) ||
+        id === 'component-toolkit' ||
         retiredPanelIds.includes(id),
     )
   )
@@ -52,7 +53,9 @@ function validLayout(value: unknown): value is SerializedDockview {
         panel.contentComponent ===
           (['component-example', 'component-music', 'component-prompts'].includes(id)
             ? 'component-slot'
-            : 'module') &&
+            : id === 'component-toolkit'
+              ? 'toolkit'
+              : 'module') &&
         !panel.tabComponent &&
         ['minimumWidth', 'minimumHeight', 'maximumWidth', 'maximumHeight'].every((field) => {
           const size = panel[field]
@@ -164,6 +167,17 @@ function restoreSnapshot(api: DockviewApi, snapshot: SerializedDockview, gap: nu
   applyLayout(api, layout, gap)
   const slot = api.getPanel('component-example')
   if (slot && !window.componentHost?.sampleEnabled) api.removePanel(slot)
+  const toolkit = api.getPanel('component-toolkit')
+  if (toolkit) {
+    if (!window.fitbayToolkit) api.removePanel(toolkit)
+    else
+      void window.fitbayToolkit
+        .available()
+        .then((available) => {
+          if (!available && api.getPanel('component-toolkit') === toolkit) api.removePanel(toolkit)
+        })
+        .catch(() => {})
+  }
   const music = api.getPanel('component-music')
   if (music && !window.musicDock) api.removePanel(music)
 }

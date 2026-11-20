@@ -1,7 +1,10 @@
 ﻿!include "LogicLib.nsh"
 !include "FileFunc.nsh"
 
-!if "${APP_ID}" == "io.github.m1597.fitbay.music"
+!if "${APP_ID}" == "io.github.m1597.fitbay.toolkit"
+  !define FITBAY_SLOT "Toolkit"
+  !define FITBAY_PEER "Music"
+!else if "${APP_ID}" == "io.github.m1597.fitbay.music"
   !define FITBAY_SLOT "Music"
   !define FITBAY_PEER "Workbench"
 !else if "${APP_ID}" == "io.github.m1597.fitbay.prompts"
@@ -93,6 +96,14 @@
       ReadRegStr $1 HKCU "${FITBAY_REG}" "Workbench"
     !else
       ReadRegStr $1 HKCU "${FITBAY_REG}" "Prompts"
+    !endif
+    ${If} $1 != ""
+      !insertmacro rejectOverlap "$1"
+    ${EndIf}
+    !if "${FITBAY_SLOT}" == "Toolkit"
+      ReadRegStr $1 HKCU "${FITBAY_REG}" "Workbench"
+    !else
+      ReadRegStr $1 HKCU "${FITBAY_REG}" "Toolkit"
     !endif
     ${If} $1 != ""
       !insertmacro rejectOverlap "$1"
