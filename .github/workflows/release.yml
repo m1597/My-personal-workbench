@@ -1,7 +1,7 @@
 name: Publish FitBay installers
 on:
   push:
-    branches: ["codex/release-0.2.1", "codex/desktop-shortcut-candidate"]
+    branches: ["codex/release-0.2.1", "codex/desktop-shortcut-candidate", "codex/preview-0.2.3"]
     tags: ["v*"]
 permissions:
   contents: read

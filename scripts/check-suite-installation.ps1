@@ -96,6 +96,8 @@ foreach ($p in @('Workbench')+$components) {
   Verify $p $dest $Previous
   Set-Content -LiteralPath (Join-Path $dest 'existing-file.txt') -Value $p
 }
+node scripts/check-upgrade-data.mjs seed $locations.Music
+if ($LASTEXITCODE) { throw 'Could not seed baseline data' }
 $foreign = $null
 if ([version]$Previous -lt [version]'0.2.2') {
   $legacy = @(NewDesktopLinks)
@@ -110,6 +112,8 @@ if ([version]$Previous -lt [version]'0.2.2') {
 }
 Run-Setup $setup $all
 Verify-Desktop $oldRoot $foreign
+node scripts/check-upgrade-data.mjs verify $locations.Music
+if ($LASTEXITCODE) { throw 'Upgrade data verification failed' }
 if ($foreign -and (!(Test-Path -LiteralPath $foreign) -or $shell.CreateShortcut($foreign).TargetPath -ne $replacement.TargetPath)) {
   throw 'Upgrade removed or replaced the unrelated same-name shortcut'
 }
