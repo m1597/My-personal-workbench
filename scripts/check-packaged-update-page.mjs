@@ -23,6 +23,9 @@ await cp(wb.modules, path.join(productRoot, 'node_modules'), { recursive: true }
 const music = await prepareProduct('music')
 const musicRoot = path.join(root, 'music-product')
 await cp(music.app, musicRoot, { recursive: true })
+const musicPackage = path.join(musicRoot, 'package.json')
+const installedMusic = JSON.parse(await readFile(musicPackage, 'utf8'))
+await writeFile(musicPackage, JSON.stringify({ ...installedMusic, version: '0.1.0' }))
 // Replace only the installed location lookup inside this disposable package.
 const discovery = path.join(productRoot, 'host/installed-products.mjs')
 const src = await readFile(discovery, 'utf8')

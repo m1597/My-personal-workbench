@@ -85,7 +85,7 @@ const products = {
   prompts: ['Prompts', 'FitBay Prompts', 'FitBay 文件库'],
   toolkit: ['Toolkit', 'FitBay Toolkit', 'FitBay 工具集'],
 }
-for (const product of optionalProduct ? [optionalProduct] : ['music', 'workbench']) {
+for (const product of optionalProduct ? [optionalProduct] : Object.keys(products)) {
   const { app, modules } = await prepareProduct(product)
   if (product === 'workbench') {
     const hash = createHash('sha256')
@@ -135,4 +135,4 @@ for (const product of optionalProduct ? [optionalProduct] : ['music', 'workbench
   files[product] = path.join(output, filename)
 }
 if (optionalProduct) console.log(files[optionalProduct])
-else await deliverInstallers(files.workbench, files.music, version)
+else await deliverInstallers(files, version)

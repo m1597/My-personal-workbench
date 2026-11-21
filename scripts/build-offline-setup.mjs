@@ -27,16 +27,23 @@ export async function buildOfflineSetup(workbench, music, output) {
   )
 }
 
-export async function deliverInstallers(workbench, music, version) {
+export async function deliverInstallers(files, version) {
   const dest = path.resolve('dist/installers')
   await mkdir(dest, { recursive: true })
   const stage = await mkdtemp(path.resolve('dist/.installers-'))
-  const names = [path.basename(workbench), path.basename(music), `FitBay-Setup-${version}-x64.exe`]
-  const [w, m, selector] = names.map((name) => path.join(stage, name))
+  const names = Object.values(files).map((file) => path.basename(file))
+  const selector = `FitBay-Setup-${version}-x64.exe`
   try {
-    await copyFile(workbench, w)
-    await copyFile(music, m)
-    await buildOfflineSetup(w, m, selector)
+    for (const file of Object.values(files))
+      await copyFile(file, path.join(stage, path.basename(file)))
+    await buildOfflineSetup(files.workbench, files.music, path.join(stage, selector))
+    names.push(selector)
+    const plugin = 'path.fitbayplugin'
+    await copyFile(
+      path.resolve('dist/component-prototype/plugin-packs', plugin),
+      path.join(stage, plugin),
+    )
+    names.push(plugin)
     const sums = []
     for (const name of names) {
       const hash = createHash('sha256')

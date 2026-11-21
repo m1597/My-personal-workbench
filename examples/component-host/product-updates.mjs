@@ -6,7 +6,7 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 const repo = 'm1597/My-personal-workbench'
-const products = { music: 'Music', workbench: 'Workbench' }
+const products = { music: 'Music', workbench: 'Workbench', prompts: 'Prompts', toolkit: 'Toolkit' }
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 
 export function selectUpdate(release, product, installed) {

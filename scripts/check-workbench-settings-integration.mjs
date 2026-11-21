@@ -87,7 +87,7 @@ try {
     })
     .toBeTruthy()
   const live = await shell.evaluate(() => window.fitbayUpdates.snapshot())
-  await expect(shell.getByText(/未接入在线更新/)).toHaveCount(3)
+  await expect(shell.getByText(/未接入在线更新/)).toHaveCount(1)
   await writeFile(path.join(root, 'live.json'), JSON.stringify(live, null, 2))
   await app.evaluate(() => {
     globalThis.fixtureFetch = async () => new Response('{}', { status: 503 })
@@ -99,7 +99,7 @@ try {
   })
   await shell.getByRole('button', { name: '重试' }).first().click()
   await expect(shell.getByText(/已是最新/)).toHaveCount(1)
-  await expect(shell.getByText(/检查失败/)).toHaveCount(1)
+  await expect(shell.getByText(/检查失败/)).toHaveCount(3)
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].setContentSize(920, 680),
   )

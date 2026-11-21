@@ -22,12 +22,50 @@ jobs:
           npm run dist:win
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node --test tests/product-updates.test.mjs
+      - name: Verify upgrade from the previous stable Windows release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $oldTag = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE) { throw 'Could not identify the upgrade baseline' }
+          $previous = $oldTag.TrimStart('v')
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $baseline = Join-Path $env:RUNNER_TEMP 'fitbay-baseline'
+          gh release download $oldTag --repo $env:GITHUB_REPOSITORY --dir $baseline --pattern 'FitBay-Workbench-*.exe' --pattern 'FitBay-Music-*.exe'
+          if ($LASTEXITCODE) { throw 'Could not download previous installers' }
+          $suite = Join-Path $env:RUNNER_TEMP 'FitBay upgrade'
+          function Install-And-Verify($product, $folder, $expected, $installer, $chooseDirectory) {
+            $flags = '/S /currentuser'
+            if ($chooseDirectory) { $flags += " /D=$folder" }
+            $result = Start-Process -FilePath $installer -ArgumentList $flags -PassThru -Wait
+            if ($result.ExitCode) { throw "$product installer exited $($result.ExitCode)" }
+            $actual = Get-ItemPropertyValue 'HKCU:\Software\FitBay\Installations' $product
+            $metadata = Get-Content (Join-Path $actual 'resources/app/package.json') -Raw | ConvertFrom-Json
+            if ($actual -ne $folder -or $metadata.version -ne $expected -or $metadata.fitbayProduct -ne $product.ToLowerInvariant()) { throw "$product installed at $actual with version $($metadata.version)" }
+          }
+          foreach ($product in 'Workbench','Music') {
+            $folder = if ($product -eq 'Workbench') { $suite } else { Join-Path $suite Music }
+            Install-And-Verify $product $folder $previous "$baseline/FitBay-$product-Setup-$previous-x64.exe" ($product -eq 'Workbench')
+            Set-Content -LiteralPath (Join-Path $folder 'upgrade-marker.txt') -Value $product
+          }
+          foreach ($product in 'Workbench','Music','Prompts','Toolkit') {
+            $folder = switch ($product) { 'Workbench' { $suite } 'Music' { Join-Path $suite Music } default { Join-Path $env:RUNNER_TEMP "FitBay $product" } }
+            Install-And-Verify $product $folder $version "dist/installers/FitBay-$product-Setup-$version-x64.exe" ($product -in 'Prompts','Toolkit')
+          }
+          foreach ($folder in $suite,(Join-Path $suite Music)) {
+            if (!(Test-Path -LiteralPath (Join-Path $folder 'upgrade-marker.txt'))) { throw "Upgrade removed an existing user file in $folder" }
+          }
+          Copy-Item "docs/releases/$env:GITHUB_REF_NAME.md" dist/installers/RELEASE-NOTES.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: installers
           path: |
             dist/installers/*.exe
+            dist/installers/*.fitbayplugin
             dist/installers/SHA256SUMS.txt
+            dist/installers/RELEASE-NOTES.md
           if-no-files-found: error
   publish:
     needs: build
@@ -44,4 +82,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha256sum -c SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes ./*.exe SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file RELEASE-NOTES.md ./*.exe ./*.fitbayplugin SHA256SUMS.txt
