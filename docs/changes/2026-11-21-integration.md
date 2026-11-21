@@ -1,0 +1,20 @@
+# 2026-11-21 FitBay 独立集成验收
+
+产品版本 0.1.0，Windows x64。验收从 `codex/music-dock-material` 的提交 `29f43803a45a9f03e7ef68b0218b0c82cf6f445c` 导出源码，复用本机已装依赖，在单独目录运行 `npm run build:prototype`。首轮构建在 Vite 转换时内存分配失败，限制构建并行度后成功。[构建日志](../../tmp/integration-29f4380/build-retry.log)
+
+## 后台实测
+
+每组从新的 Electron profile 启动，使用不可获焦的测试窗口。操作通过 Playwright 或宿主 preload 触发。共享连接使用临时测试值。下列三项脚本均以 0 退出。
+
+| 对象及脚本 | 起点与操作 | 验收条件与实际结果 |
+| --- | --- | --- |
+| 公共标签栏及旧布局，`check-host-component-tabs.mjs` | 从工作台打开组件，分组、切换 Music 与工具集，将两个组件写为旧标题，重启恢复 | 通过。分组内容顶边对齐，混合标签栏高 32 px，分列状态高 38 px。三个原生视图顶边与对应内容区偏差不超过 1 px。恢复四个标签，文件库与工具集显示新名称，Music 与工具集保持同组。[几何记录](../../tmp/integration-29f4380/src/tmp/host-tabs-l0NJ2l/metrics.json) · [恢复截图](../../tmp/integration-29f4380/src/tmp/host-tabs-l0NJ2l/restored.png) |
+| 工作台设置与组件，`check-shared-api-page.mjs` | 工作台保存测试模型，从设置搜索进入 Music，修改模型后返回，再从搜索打开文件库 API 页 | 通过。Music 读到工作台设置，工作台读回 Music 的修改，文件库搜索结果打开目标设置页。密钥输入受遮挡，保存后输入框清空。[日志](../../tmp/integration-29f4380/shared-api-page.log) |
+| 文件库与共享连接，`check-prompt-connections.mjs` | 独立文件库打开样例文档、保存配置、加入工作台再分离，分别从宿主与组件编辑；切换工具集文字与视觉用途 | 通过。两端即时读回修改，动作显示随用途和视觉模型更新。公共快照和被检查的数据库文件均未检出明文测试值。[日志](../../tmp/integration-29f4380/prompt-connections.log) · [停靠截图](../../tmp/integration-29f4380/src/tmp/prompt-connections-wYMLtJ/docked.png) |
+| 宿主释放文件库资源，`1dc9b41` | 打开文件库 API 设置以初始化 SQLite，单关组件后重开。分别在停靠状态退出、分离状态拦截首次退出后再次退出 | 两次进程退出码均为 0，探针未记录主进程异常或错误弹框。[停靠退出](../../tmp/integration-29f4380/dispose-docked.json) · [分离退出](../../tmp/integration-29f4380/dispose-detached.json) |
+
+## 候选包与下次交接
+
+回算 `dist/installers` 中 11 月 20 日工作台、Music、组合安装包的 SHA-256，三项均与同目录清单相符。这批产物早于本轮源码交付。构建缓存另有文件库及工具集 0.1.0 安装包，工具集现存包摘要以 `43585725` 开头，与工具集早期开发记录的 `E17C0B23` 不同。当前未找到将这两个缓存包与本轮源码、候选范围对应的分发交接。[文件名、时间和完整摘要](../../tmp/integration-29f4380/installers.json)
+
+候选安装、升级、独立组件发现与卸载保留待验。由打包与组件分发组交接构建来源、版本及产物位置后，用该批实物复验。工具集并行修改也按后续交付版本复验。本轮限于上述本地专项，未运行全仓检查，未核验远程 CI。没有需要用户立即操作的前台场景；多屏混合 DPI 和原生拖放仍沿用[宿主跨入口验收](../宿主跨入口验收.md)中的待验记录。
