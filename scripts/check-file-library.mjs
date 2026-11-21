@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, writeFile, copyFile, rename, realpath } from 'node:fs/p
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { _electron, expect } from '@playwright/test'
+await mkdir('tmp', { recursive: true })
 const evidence = await mkdtemp(path.resolve('tmp/file-library-'))
 const profile = path.join(evidence, 'profile'),
   a = path.join(evidence, 'A'),
