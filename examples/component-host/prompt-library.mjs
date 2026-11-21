@@ -220,7 +220,7 @@ export async function promptLibrary(profile, changed) {
     async select(folder, remember) {
       const next = await selectedDirectory(folder)
       if (remember) await preference('defaultRoot', next)
-      root = next
+      if (!remember || !root) root = next
       monitor()
       refresh()
     },

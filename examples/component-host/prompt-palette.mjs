@@ -1,6 +1,11 @@
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
 import path from 'node:path'
+import { app } from 'electron'
+import { randomUUID } from 'node:crypto'
+import { mkdir, unlink } from 'node:fs/promises'
+import { atomicWrite } from './prompt-actions.mjs'
+import { toolkitLauncher } from './toolkit-launcher.mjs'
 import { watch } from 'node:fs'
 import { openConnections, apiUses } from './api-connections.mjs'
 import { BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, safeStorage } from 'electron'
@@ -217,6 +222,23 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
       active = ''
       if (old) register(old)
       throw e
+    }
+  })
+  handle('batch', 'editor', async (tool, items) => {
+    if (!['rename', 'resize'].includes(tool)) throw Error('未知批量工具')
+    const files = await library.selectedPaths(items)
+    const launch = await toolkitLauncher(app.isPackaged, profile)
+    if (!launch) throw Error('请先安装工具集')
+    const id = randomUUID(),
+      folder = path.join(profile, 'toolkit', 'incoming'),
+      request = path.join(folder, id + '.json')
+    await mkdir(folder, { recursive: true })
+    await atomicWrite(request, JSON.stringify({ version: 1, tool, files }))
+    try {
+      await launch(false, tool, id)
+    } catch {
+      await unlink(request).catch(() => {})
+      throw Error('无法启动工具集')
     }
   })
   handle('choosePalette', 'editor', async () => {
