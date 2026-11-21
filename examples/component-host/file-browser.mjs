@@ -37,6 +37,18 @@ export function fileBrowser(authorized, favorites, recent) {
     return item.isFile() ? String(item.dev) + '/' + String(item.ino) : ''
   }
   return {
+    async selectedPaths(items) {
+      if (!Array.isArray(items) || !items.length || items.length > 100)
+        throw Error('请选择 1 至 100 个文件')
+      return Promise.all(
+        items.map(async ({ root, name }) => {
+          if (!authorized(root)) throw Error('文件位置不可用')
+          const file = await checked(root, name)
+          if (!(await stat(file)).isFile()) throw Error('文件已变化，请重新选择')
+          return file
+        }),
+      )
+    },
     identity: identityOf,
     async locate(root, name, identity) {
       if (!authorized(root)) return null

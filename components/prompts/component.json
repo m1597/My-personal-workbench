@@ -8,5 +8,21 @@
   "uiEntry": "index.html",
   "capabilities": ["view.transfer"],
   "modes": ["standalone", "docked"],
-  "settingsEntries": [{ "target": "api", "name": "API 与模型", "path": "文件库 → API 与模型" }]
+  "settingsEntries": [
+    {
+      "target": "directory",
+      "name": "目录",
+      "path": "文件库 → 目录"
+    },
+    {
+      "target": "shortcut",
+      "name": "全局快捷键",
+      "path": "文件库 → 全局快捷键"
+    },
+    {
+      "target": "api",
+      "name": "API 与模型",
+      "path": "文件库 → API 与模型"
+    }
+  ]
 }

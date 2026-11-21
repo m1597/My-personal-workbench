@@ -6,6 +6,12 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { _electron, expect } from '@playwright/test'
 await mkdir('tmp', { recursive: true })
+async function openSettings(ui, category) {
+  await ui.getByRole('button', { name: '文件库设置', exact: true }).click()
+  const toggle = ui.getByRole('button', { name: '设置分类', exact: true })
+  if (await toggle.isVisible()) await toggle.click()
+  await ui.getByRole('button', { name: category, exact: true }).click()
+}
 const evidence = await mkdtemp(path.resolve('tmp/file-library-'))
 const profile = path.join(evidence, 'profile'),
   a = path.join(evidence, 'A'),
@@ -83,7 +89,8 @@ try {
   await button(first).press('Space')
   const dialog = ui.getByRole('dialog', { name: '图片预览' })
   await expect(dialog.locator('img')).toBeVisible()
-  await ui.getByRole('button', { name: '关闭预览' }).click()
+  await dialog.press('Space')
+  await expect(dialog).toHaveCount(0)
   await ui.getByRole('button', { name: '打开同名 TXT' }).click()
   await expect(ui.locator('article pre')).toHaveText('图片配套描述')
   await ui.getByRole('button', { name: '复制正文' }).click()
@@ -184,8 +191,9 @@ try {
   results.push(
     'Windows Shell 改名、回收站删除并切换下一项、还原、图片覆盖与缩略图更新、跨常用目录移动',
   )
-  await ui.getByText(/全局快捷键 ·/).click()
+  await openSettings(ui, '全局快捷键')
   await choose('设置调用目录', b)
+  await ui.getByRole('button', { name: '返回', exact: true }).click()
   await choose('打开文件夹', b)
   await ui.getByRole('button', { name: '返回默认目录' }).click()
   assert.equal((await ui.evaluate(() => window.promptLibrary.state())).paletteRoot, b)
