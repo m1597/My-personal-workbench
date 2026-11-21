@@ -43,14 +43,18 @@ export function RecommendationComposer({
   const [error, setError] = useState('')
   async function generate() {
     if (busy || !validCount) return
-    if (!models.providers.find((p) => p.id === models.active)?.hasKey) {
-      openSettings()
-      return
-    }
     onGenerating(true)
     setBusy(true)
     setError('')
     try {
+      const connection =
+        window.fitbayConnections && (await window.fitbayConnections.snapshot()).rows[0]?.value
+      if (
+        !(connection?.configured ?? models.providers.find((p) => p.id === models.active)?.hasKey)
+      ) {
+        openSettings()
+        return
+      }
       await window.music.generate(description, 'auto', false, target, effectiveWeight)
       await refresh()
     } catch (e) {

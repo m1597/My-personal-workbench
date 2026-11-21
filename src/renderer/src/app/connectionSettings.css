@@ -1,0 +1,46 @@
+.api-connections {
+  display: grid;
+  gap: 18px;
+  max-width: 960px;
+  color: var(--text);
+}
+.api-connections table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.api-connections th,
+.api-connections td {
+  text-align: left;
+  padding: 8px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+}
+.api-connections th {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.api-connections form {
+  display: grid;
+  gap: 12px;
+  max-width: 620px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--control);
+}
+.api-connections form label {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) minmax(0, 3fr);
+  align-items: center;
+  gap: 12px;
+}
+.api-connections form button {
+  justify-self: start;
+}
+@media (max-width: 660px) {
+  .api-connections form label {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

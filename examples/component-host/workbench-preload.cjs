@@ -1,4 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron')
+contextBridge.exposeInMainWorld('fitbayConnections', {
+  snapshot: () => ipcRenderer.invoke('connections:snapshot'),
+  write: (use, input) => ipcRenderer.invoke('connections:write', use, input),
+})
 let updatePageListener
 let updatePagePending = false
 ipcRenderer.on('updates:open', () => {

@@ -1,41 +1,18 @@
 import { validateSuggestions } from './music/offline-source.mjs'
-const providers = {
-  deepseek: {
-    label: 'DeepSeek',
-    model: 'deepseek-flash',
-    url: 'https://api.deepseek.com/chat/completions',
-  },
-  openai: {
-    label: 'OpenAI',
-    model: 'gpt-5-mini',
-    url: 'https://api.openai.com/v1/responses',
-  },
-  claude: {
-    label: 'Claude',
-    model: 'claude-haiku-5-5',
-    url: 'https://api.anthropic.com/v1/messages',
-  },
-  gemini: {
-    label: 'Gemini',
-    model: 'gemini-3.5-flash',
-    url: 'https://generativelanguage.googleapis.com/v1beta/models/',
-  },
-}
-const setting = 'recommendation-providers'
-function config(store) {
-  const value = JSON.parse(store.get(setting) || '{"active":"deepseek","accounts":{}}')
-  if (!Object.hasOwn(providers, value.active)) value.active = 'deepseek'
-  return value
-}
+import { providers, protocols, setting, config } from './music-connection.mjs'
 export function modelInfo(store) {
-  const { active, accounts } = config(store)
+  const { active: legacy, accounts } = config(store)
+  const shared = store.connections?.read('music.model')
+  const active = shared
+    ? { chat: 'deepseek', responses: 'openai', claude: 'claude', gemini: 'gemini' }[shared.protocol]
+    : legacy
   return {
     active,
     providers: Object.entries(providers).map(([id, p]) => ({
       id,
       label: p.label,
-      model: accounts[id]?.model || p.model,
-      hasKey: !!accounts[id]?.secret,
+      model: shared && id === active ? shared.model : accounts[id]?.model || p.model,
+      hasKey: shared && id === active ? shared.configured : !!accounts[id]?.secret,
     })),
   }
 }
@@ -59,6 +36,20 @@ export function configureModel(store, vault, id, model, key, forget = false) {
     secret = vault.encryptString(key.trim()).toString('base64')
   }
   state.accounts[id] = { model, secret }
+  if (store.connections) {
+    const shared = store.connections.read('music.model')
+    const sameAccount = shared?.protocol === protocols[id]
+    store.connections.write('music.model', {
+      separate: !sameAccount,
+      endpoint: sameAccount ? shared.endpoint : providers[id].url,
+      protocol: protocols[id],
+      model,
+      key:
+        key.trim() ||
+        (!sameAccount && secret ? vault.decryptString(Buffer.from(secret, 'base64')) : ''),
+      clearKey: forget,
+    })
+  }
   state.active = id
   store.set(setting, JSON.stringify(state))
 }
@@ -78,21 +69,39 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
             ? profileInstructions
             : recommendationInstructions +
               ' 生成和补推时按 requestWeight 与 tasteWeight 的百分比权衡本次输入和已授权口味，权重为零的因素不参与。每首歌曲另附 requestFit 和 tasteFit 两个 0 到 100 的整数，分别独立衡量对本次输入、已提供口味的吻合度；缺乏对应信息填 50。理由说明具体依据。若给出 douyinChart，只有其中的同名同署名录音可作为已核验的热门作品；按权重兼顾口味及榜单名次，100%要求时仅从榜单选择。榜单缺失时不得声称已上榜。按 recording 的版本、翻唱、伴奏偏好处理。scope=direct 时只给直接相关的候选；可信直接候选已经用尽时返回 directExhausted:true，songs 可以为空。scope=related 才允许靠近主题的相邻风格，并在 reason 解释联系。'
-  const { active, accounts } = config(store),
-    p = providers[active],
-    account = accounts[active]
-  if (!account?.secret) throw Error('请先在模型设置中填写 ' + p.label + ' API Key')
-  let key
-  try {
-    key = vault.decryptString(Buffer.from(account.secret, 'base64'))
-  } catch {
-    throw Error('无法解密此密钥，请重新填写')
+  const legacy = config(store)
+  const shared = store.connections?.read('music.model')
+  const resolved = shared ? store.connections.resolve('music.model') : null
+  const active = shared
+    ? { chat: 'deepseek', responses: 'openai', claude: 'claude', gemini: 'gemini' }[shared.protocol]
+    : legacy.active
+  const p = providers[active],
+    account = shared ?? legacy.accounts[active]
+  let key = resolved?.key
+  if (!key && !shared && account?.secret) {
+    try {
+      key = vault.decryptString(Buffer.from(account.secret, 'base64'))
+    } catch {
+      throw Error('无法解密此密钥，请重新填写')
+    }
   }
+  if (!key) throw Error('请先在模型设置中填写 API Key')
   const input = JSON.stringify(payload)
   const model = account.model,
     headers = { 'Content-Type': 'application/json' }
-  let url = p.url,
+  let url = shared?.endpoint ?? p.url,
     body
+  if (shared) {
+    const suffix = {
+      deepseek: '/chat/completions',
+      openai: '/responses',
+      claude: '/messages',
+      gemini: '/models',
+    }[active]
+    url = url.replace(/\/+$/, '')
+    if (!url.endsWith(suffix)) url += suffix
+    if (active === 'gemini') url += '/'
+  }
   if (active === 'claude') {
     headers['x-api-key'] = key
     headers['anthropic-version'] = '2023-06-01'

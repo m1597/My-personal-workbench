@@ -1,3 +1,4 @@
+import { openConnections, apiUses } from './api-connections.mjs'
 import { WatchedLibrary } from './watched-library.mjs'
 import { execFile } from 'node:child_process'
 import { registerCleanup, recoverRenames } from './library-cleanup.mjs'
@@ -40,6 +41,7 @@ import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { searchCollection } from './search-collection.mjs'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
+import { importMusicConnection } from './music-connection.mjs'
 import { ipcMain, clipboard, dialog, nativeImage, safeStorage, shell } from 'electron'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
@@ -65,6 +67,12 @@ export function musicService(
     if (!store) {
       const root = path.join(profile, 'fitbay-music')
       store = new MusicStore(root)
+      store.connections = openConnections(profile, safeStorage)
+      try {
+        importMusicConnection(store, store.connections)
+      } catch {
+        /* Keep local playback and the legacy account available for recovery. */
+      }
       recoverRenames(store)
       recoverFavoriteMoves(store)
       recoveringTrash = recoverTrash(store, forgetTracks, (file) => shell.trashItem(file))
@@ -837,6 +845,20 @@ export function musicService(
       { kind, description: description.trim() },
       AbortSignal.timeout(60000),
     )
+  })
+  bind('connectionSnapshot', () => ({
+    rows: [
+      {
+        use: 'music.model',
+        ...apiUses['music.model'],
+        value: store.connections.read('music.model'),
+      },
+    ],
+    choices: store.connections.choices(),
+  }))
+  bind('writeConnection', (use, input) => {
+    if (use !== 'music.model') throw Error('未知配置用途')
+    return store.connections.write(use, input)
   })
   bind('configureModel', (id, model, key, forget) => {
     if (pending) throw Error('请先结束当前生成')

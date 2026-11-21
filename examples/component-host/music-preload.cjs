@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 const names = [
+  'connectionSnapshot',
+  'writeConnection',
   'musicGuide',
   'copyMcpCommand',
   'mcpAgents',
@@ -134,6 +136,18 @@ const names = [
 const bridge = Object.fromEntries(
   names.map((name) => [name, (...args) => ipcRenderer.invoke('music:' + name, ...args)]),
 )
+for (const name of ['aiCatalogQuery', 'searchCollection']) {
+  const invoke = bridge[name]
+  bridge[name] = async (...args) => {
+    try {
+      return await invoke(...args)
+    } catch (error) {
+      if (error.message.includes('请先在模型设置中填写 API Key'))
+        window.dispatchEvent(new Event('music-model-required'))
+      throw error
+    }
+  }
+}
 bridge.previewPlaylist = (file) =>
   ipcRenderer.invoke('music:previewPlaylist', webUtils.getPathForFile(file))
 contextBridge.exposeInMainWorld(
@@ -166,6 +180,10 @@ bridge.onSourcesChanged = (listener) => {
   ipcRenderer.on('music:sources-changed', notify)
   return () => ipcRenderer.removeListener('music:sources-changed', notify)
 }
+contextBridge.exposeInMainWorld('fitbayConnections', {
+  snapshot: bridge.connectionSnapshot,
+  write: bridge.writeConnection,
+})
 contextBridge.exposeInMainWorld('music', Object.freeze(bridge))
 contextBridge.exposeInMainWorld('musicWindow', {
   thumbnailState: (state) => ipcRenderer.send('music-sample:thumbnail-state', state),

@@ -1,3 +1,5 @@
+import { importInstalledMusicConnection } from './music-connection.mjs'
+import { openConnections, apiUses } from './api-connections.mjs'
 import { toolkitLauncher } from './toolkit-launcher.mjs'
 import { installMusic } from './music-installer.mjs'
 import { updateCatalog, saveInstaller, productUpdater } from './product-updates.mjs'
@@ -14,6 +16,7 @@ import {
   protocol,
   screen,
   nativeTheme,
+  safeStorage,
   net,
   systemPreferences,
   Menu,
@@ -430,6 +433,39 @@ else {
       if (fixturePanels) builtins.listen()
       Menu.setApplicationMenu(null)
       nativeTheme.themeSource = 'dark'
+      const connections = openConnections(profile, safeStorage)
+      app.once('will-quit', () => connections.close())
+      let musicMigrationPending = false
+      try {
+        importInstalledMusicConnection(profile, connections)
+      } catch {
+        musicMigrationPending = true
+      }
+      async function installedUses() {
+        const installed = {
+          music: !!(await music.discover(false)),
+          prompts: !!(await prompts.discover(false)),
+          toolkit: !!(await toolkitLauncher(app.isPackaged, profile)),
+        }
+        return Object.keys(apiUses).filter((use) => installed[use.split('.')[0]])
+      }
+      ipcMain.handle('connections:snapshot', async (event) => {
+        if (!isShell(event)) throw Error('DENIED')
+        return {
+          rows: (await installedUses()).map((use) => ({
+            use,
+            ...apiUses[use],
+            migrationPending:
+              use === 'music.model' && musicMigrationPending && !connections.read(use),
+            value: connections.read(use),
+          })),
+          choices: connections.choices(),
+        }
+      })
+      ipcMain.handle('connections:write', async (event, use, input) => {
+        if (!isShell(event) || !(await installedUses()).includes(use)) throw Error('DENIED')
+        return connections.write(use, input)
+      })
       const catalog = updateCatalog({
         request: (...args) => net.fetch(...args),
         inventory: async () => {

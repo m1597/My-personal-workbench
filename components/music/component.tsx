@@ -548,7 +548,16 @@ function Music() {
       setPresentation(v.presentation)
     }
     void window.musicWindow.status().then(mode)
-    return window.musicWindow.subscribe(mode)
+    const requestModel = () => {
+      setSettingsCategory('model')
+      setTab('settings')
+    }
+    window.addEventListener('music-model-required', requestModel)
+    const unsubscribe = window.musicWindow.subscribe(mode)
+    return () => {
+      unsubscribe()
+      window.removeEventListener('music-model-required', requestModel)
+    }
   }, [])
   useEffect(() => {
     if (tab !== 'library' && tab !== 'playlists') return

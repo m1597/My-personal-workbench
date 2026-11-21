@@ -1,3 +1,4 @@
+import { ConnectionSettings } from './ConnectionSettings'
 import { materialDefaults } from './material'
 import { WorkbenchUpdates, type UpdateState } from './WorkbenchUpdates'
 import { Download } from 'lucide-react'
@@ -86,9 +87,10 @@ export function WorkbenchSettings({
     t('布局与启动', 'Layout and startup'),
     t('组件管理', 'Components'),
     t('更新', 'Updates'),
+    t('API 与模型', 'API and models'),
   ]
   const keepLabel = t('关闭后继续在后台运行', 'Keep running in background after closing')
-  const icons = [Palette, PanelsTopLeft, Boxes, Download]
+  const icons = [Palette, PanelsTopLeft, Boxes, Download, Settings]
   const sampleShowLabel = t('在工作台显示示例组件', 'Show sample in workspace')
   const entries = [
     [
@@ -114,7 +116,7 @@ export function WorkbenchSettings({
         : []),
     ],
   ]
-  entries.push([t('检查全部更新', 'Check all updates')])
+  entries.push([t('检查全部更新', 'Check all updates')], [t('组件连接', 'Component connections')])
   const componentMatches = [
     { info: inventory, host: window.musicDock },
     { info: sampleInfo, host: window.componentHost },
@@ -363,6 +365,7 @@ export function WorkbenchSettings({
               ) : (
                 <>
                   <h2>{names[category]}</h2>
+                  {category === 4 && <ConnectionSettings />}
                   {category === 3 && <WorkbenchUpdates state={updates} />}
                   {category === 0 && (
                     <>

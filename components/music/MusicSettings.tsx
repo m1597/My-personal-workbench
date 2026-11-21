@@ -1,3 +1,4 @@
+import { ConnectionSettings } from '../../src/renderer/src/app/ConnectionSettings'
 import { recordShortcut } from './recordShortcut'
 import { MusicMcpSettings } from './MusicMcpSettings'
 import { useEffect, useState } from 'react'
@@ -517,6 +518,7 @@ export function MusicSettings({
               any: '都可以',
               prefer: '优先伴奏',
             })}
+            {!(editing || guideTarget === 'model') && <ConnectionSettings />}
             <div className="settings-buttons">
               <span>{models.providers.find((p) => p.id === models.active)?.label}</span>
               <Button
