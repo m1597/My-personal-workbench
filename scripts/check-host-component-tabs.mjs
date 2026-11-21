@@ -89,13 +89,7 @@ try {
       }
     }
     records[label] = rows
-    const screenshot = await app.evaluate(async ({ BrowserWindow }) => {
-      const shell = BrowserWindow.getAllWindows().find((win) =>
-        win.webContents.getURL().includes('/out/renderer/'),
-      )
-      return (await shell.capturePage()).toPNG()
-    })
-    await writeFile(path.join(root, label + '.png'), Buffer.from(screenshot))
+    await page.screenshot({ path: path.join(root, label + '.png') })
     return rows
   }
   async function menu(name) {

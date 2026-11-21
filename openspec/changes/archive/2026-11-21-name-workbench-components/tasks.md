@@ -10,4 +10,6 @@
 
 从快速开始分别打开工具集与文件库，在组件菜单再次打开工具集后仅有一个对应标签。工具集快速开始、菜单及标签使用组件组交付的 src/renderer/public/toolkit.png。为隔离资料写入旧中文标题，关闭并重启，确认 component-toolkit 与 component-prompts 均恢复新标题，原分组及数量不变。组件首页工具与系统外壳图标由各组件组验收。
 
-[快速开始](../../../../tmp/host-tabs-R6RvSW/quick.png) · [旧布局恢复](../../../../tmp/host-tabs-R6RvSW/restored.png) · [复验脚本](../../../../scripts/check-host-component-tabs.mjs)。
+[快速开始](../../../../tmp/host-tabs-hbg4aD/quick.png) · [旧布局恢复](../../../../tmp/host-tabs-hbg4aD/restored.png) · [复验脚本](../../../../scripts/check-host-component-tabs.mjs)。
+
+桌面 FitBay.cmd --verify-desktop 实测三个宿主入口，在[组件菜单](../../../../tmp/desktop-check-29545-4223/menu.png)也确认同一工具箱图标。
