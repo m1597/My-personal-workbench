@@ -8,6 +8,9 @@ await cp('examples/component-host', `${root}/host`, {
   recursive: true,
   filter: (file) => !/(?:^|[\\/])plugins$/.test(file),
 })
+await mkdir(`${root}/host/toolkit-local`, { recursive: true })
+for (const file of ['local-files.mjs', 'word-pdf.ps1'])
+  await cp('components/toolkit/' + file, `${root}/host/toolkit-local/${file}`)
 await cp('src/renderer/public/fitbay.png', `${root}/host/fitbay.png`)
 await mkdir(`${root}/host/music`, { recursive: true })
 for (const f of [

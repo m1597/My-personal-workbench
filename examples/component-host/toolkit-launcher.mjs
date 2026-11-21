@@ -45,11 +45,16 @@ export async function toolkitLauncher(packaged, profile) {
   const cmd = packaged ? path.resolve(root, '../../FitBay Toolkit.exe') : process.execPath
   const args = packaged ? [] : [root]
   await migrateOnce(profile, root, cmd, args)
-  return (capture) =>
+  return (capture, page) =>
     new Promise((resolve, reject) => {
       const child = spawn(
         cmd,
-        [...args, '--workbench-profile=' + profile, ...(capture ? ['--toolkit-capture'] : [])],
+        [
+          ...args,
+          '--workbench-profile=' + profile,
+          ...(capture ? ['--toolkit-capture'] : []),
+          ...(page ? ['--toolkit-page=' + page] : []),
+        ],
         {
           detached: true,
           stdio: 'ignore',

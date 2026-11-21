@@ -17,15 +17,19 @@ import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { release } from 'node:os'
 import koffi from 'koffi'
+import { installLocalFiles } from './local-files.mjs'
+import { nativeImage } from 'electron'
 import { complete } from './model.mjs'
 import { toolkitConnections } from './toolkit-connections.mjs'
 import { readSelectionOrOcr } from './native.mjs'
 const here = import.meta.dirname
+const catalog = JSON.parse(readFileSync(path.join(here, 'catalog.json'), 'utf8'))
 const shared =
   process.argv.find((x) => x.startsWith('--workbench-profile='))?.slice(20) ||
   (app.isPackaged
     ? path.join(app.getPath('appData'), 'FitBay', 'desktop-profile')
     : path.resolve(here, '../../local/desktop-profile'))
+app.setAppUserModelId('io.github.m1597.fitbay.toolkit')
 app.setPath('userData', path.join(shared, 'toolkit'))
 mkdirSync(app.getPath('userData'), { recursive: true })
 if (!app.requestSingleInstanceLock()) {
@@ -74,9 +78,11 @@ async function startToolkit() {
     renameSync(`${file}.tmp`, file)
     cfg = next
   }
+  const backgroundTest = process.env.WORKBENCH_TEST_BACKGROUND === '1'
   function show(data, options = {}) {
     const win = new BrowserWindow({
-      width: 510,
+      icon: path.join(here, 'toolkit.ico'),
+      width: 550,
       height: 610,
       minWidth: 280,
       show: false,
@@ -93,6 +99,15 @@ async function startToolkit() {
         preload: path.join(here, 'preload.cjs'),
       },
     })
+    if (process.platform === 'win32')
+      win.setAppDetails({
+        appId: 'io.github.m1597.fitbay.toolkit',
+        relaunchIcon: path.join(here, 'toolkit.ico'),
+        relaunchDisplayName: '工具集',
+        relaunchCommand: app.isPackaged
+          ? '"' + process.execPath + '"'
+          : '"' + process.execPath + '" "' + here + '"',
+      })
     const id = win.webContents.id
     states.set(id, { ...data, win, abort: new AbortController(), history: [] })
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -103,13 +118,18 @@ async function startToolkit() {
     })
     win.on('page-title-updated', (e) => e.preventDefault())
     win.once('ready-to-show', () => {
+      if (backgroundTest) {
+        win.setPosition(-30000, -30000)
+        win.showInactive()
+        return
+      }
       win.show()
       if (options.alwaysOnTop) win.setAlwaysOnTop(true, 'screen-saver')
     })
     void win.loadFile(path.join(here, 'index.html'))
     return win
   }
-  let targetRoute
+  let targetTool, targetRoute
   const connections = toolkitConnections({
     shared,
     packaged: app.isPackaged,
@@ -139,16 +159,18 @@ async function startToolkit() {
     targetRoute = route === 'translation' || route === 'vision' ? route : undefined
     if (!home || home.isDestroyed()) home = show({ kind: 'home' }, { title: 'FitBay 工具集' })
     else {
-      home.restore()
-      home.show()
-      home.focus()
+      if (!backgroundTest) {
+        home.restore()
+        home.show()
+        home.focus()
+      }
       if (targetRoute) home.webContents.send('toolkit:settings-target', targetRoute)
     }
   }
   function fail(e) {
     show({ kind: 'message', text: e.message }, { height: 230 })
   }
-  async function capture() {
+  async function capture(intent) {
     if (overlay && !overlay.isDestroyed()) {
       overlay.focus()
       return
@@ -167,7 +189,7 @@ async function startToolkit() {
         (sources.length === 1 ? sources[0] : null)
       if (!source || source.thumbnail.isEmpty()) throw Error('无法读取当前显示器')
       overlay = show(
-        { kind: 'screen', full: source.thumbnail },
+        { kind: 'screen', full: source.thumbnail, intent },
         {
           ...d.bounds,
           minWidth: 1,
@@ -178,7 +200,11 @@ async function startToolkit() {
           alwaysOnTop: true,
         },
       )
-      overlay.setBounds(d.bounds)
+      const currentOverlay = overlay
+      currentOverlay.once('close', () => {
+        if (overlay === currentOverlay) overlay = undefined
+      })
+      overlay.setBounds(backgroundTest ? { ...d.bounds, x: -30000, y: -30000 } : d.bounds)
     } finally {
       capturing = false
     }
@@ -210,7 +236,7 @@ async function startToolkit() {
       try {
         bind(id, cfg[id].key)
       } catch (e) {
-        notice += `${id} ${e.message} `
+        notice += `${id === 'capture' ? '截图' : '划词'}快捷键：${e.message} `
       }
   function handle(name, kinds, fn) {
     ipcMain.handle(`toolkit:${name}`, (e, v) => {
@@ -223,14 +249,16 @@ async function startToolkit() {
   const kinds = ['home', 'screen', 'result', 'pin', 'message']
   handle('state', kinds, (s) => ({
     kind: s.kind,
+    intent: s.intent,
     text: s.text,
     image: (s.full || s.image)?.toDataURL(),
     settings:
       s.kind === 'home'
         ? {
-            capture: { ...cfg.capture, enabled: bound.has('capture') },
+            capture: { ...cfg.capture },
             selection: { ...cfg.selection, enabled: bound.has('selection') },
             notice,
+            catalog,
           }
         : undefined,
   }))
@@ -238,9 +266,11 @@ async function startToolkit() {
   handle('settings', ['result'], (_s, route) => settings(route))
   handle('settingsTarget', ['home'], () => targetRoute)
   handle('connections', ['home'], () => connections.snapshot())
-  handle('capture', ['home'], () => {
-    if (!bound.has('capture')) throw Error('请先启用截图')
-    return capture()
+  installLocalFiles(handle)
+  handle('toolTarget', ['home'], () => targetTool)
+  handle('capture', ['home'], (_, intent) => {
+    if (!cfg.capture.enabled) throw Error('请先启用截图')
+    return capture(['annotate', 'measure'].includes(intent) ? intent : undefined)
   })
   handle('enable', ['home'], (_, v) => {
     if (
@@ -290,6 +320,32 @@ async function startToolkit() {
     if (!s.image) throw Error('请先框选')
     return s.image
   }
+  handle('selectionImage', ['screen'], (s) => selected(s).toDataURL())
+  handle('applyAnnotation', ['screen'], (s, data) => {
+    if (
+      typeof data !== 'string' ||
+      data.length > 160000000 ||
+      !data.startsWith('data:image/png;base64,')
+    )
+      throw Error('标注图像无效')
+    const original = selected(s).getSize(),
+      image = nativeImage.createFromDataURL(data),
+      size = image.getSize()
+    if (image.isEmpty() || size.width !== original.width || size.height !== original.height)
+      throw Error('标注尺寸不匹配')
+    s.image = image
+  })
+  handle('extractText', ['screen'], async (s) => {
+    const text = await readSelectionOrOcr(selected(s).toPNG(), undefined, s.abort.signal)
+    if (!s.win.isDestroyed() && !s.abort.signal.aborted) {
+      show({ kind: 'result', text })
+      s.win.close()
+    }
+  })
+  handle('copyMeasuredColor', ['screen'], (s, hex) => {
+    if (s.intent !== 'measure' || !/^#[0-9A-F]{6}$/.test(hex)) throw Error('请先取色')
+    clipboard.writeText(hex)
+  })
   handle('copy', ['screen'], (s) => {
     clipboard.writeImage(selected(s))
     s.win.close()
@@ -372,7 +428,7 @@ async function startToolkit() {
             { type: 'image_url', image_url: { url: selected(s).toDataURL() } },
           ]
         else {
-          s.text ??= await readSelectionOrOcr(selected(s).toPNG())
+          s.text ??= await readSelectionOrOcr(selected(s).toPNG(), undefined, s.abort.signal)
           content = `${prompt}\n\n${s.text}`
         }
       }
@@ -410,20 +466,21 @@ async function startToolkit() {
       return
     }
     if (argv.includes('--toolkit-capture')) {
-      if (!bound.has('capture')) {
+      if (!cfg.capture.enabled) {
         fail(Error('请先在工具集设置中启用截图'))
         return
       }
       void capture().catch(fail)
-    } else settings()
+    } else {
+      targetTool = argv.find((v) => v.startsWith('--toolkit-page='))?.slice(15)
+      settings()
+      home.webContents.send('toolkit:tool-target', targetTool)
+    }
   }
   app.on('second-instance', (_event, argv) => openIntent(argv))
   app.on('will-quit', () => globalShortcut.unregisterAll())
-  const icon = app.isPackaged
-    ? path.join(here, 'fitbay.png')
-    : path.resolve(here, '../../src/renderer/public/fitbay.png')
-  const tray = new Tray(icon)
-  tray.setToolTip('FitBay 截图与划词')
+  const tray = new Tray(path.join(here, 'toolkit.ico'))
+  tray.setToolTip('工具集')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '工具集设置', click: settings },

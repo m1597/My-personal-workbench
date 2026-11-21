@@ -119,7 +119,11 @@ for (const product of optionalProduct ? [optionalProduct] : ['music', 'workbench
         })
         await writeInstallerInclude(include, appOutDir)
       },
-      win: { executableName: title, artifactName: filename },
+      win: {
+        executableName: title,
+        artifactName: filename,
+        ...(product === 'toolkit' && { icon: path.resolve('components/toolkit/toolkit.ico') }),
+      },
       nsis: {
         include,
         packElevateHelper: false,

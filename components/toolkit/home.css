@@ -1,0 +1,245 @@
+body:has(.tools-surface) {
+  background: radial-gradient(ellipse at top left, #343e50 0, transparent 62%), #202631;
+  color: #eef3fa;
+}
+.home-title,
+.tools-heading,
+.tool-row,
+.measure-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.home-title,
+.tools-heading {
+  justify-content: space-between;
+}
+.home-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.tools-surface,
+.tool-list,
+.tool-page,
+.tool-results {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.tools-heading {
+  margin: 8px 0 0;
+}
+.tools-heading h2 {
+  font-size: 15px;
+}
+.primary-tools {
+  padding: 0 12px;
+  background: #313947b8;
+  border-color: #505969;
+  border-radius: 12px;
+  gap: 0;
+}
+.tool-row {
+  padding: 12px 0;
+  min-height: 74px;
+}
+.tool-row + .tool-row {
+  border-top: 1px solid #535c6d;
+}
+.tool-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.tool-text strong {
+  font-size: 17px;
+}
+.tool-text small,
+.tool-item small {
+  color: #c4cad6;
+}
+.tool-row > button {
+  padding: 7px 12px;
+  white-space: nowrap;
+}
+.tool-row:first-child > button {
+  background: #72bcfa;
+  color: #10273c;
+  border-color: #88caff;
+}
+.badge {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #34536b;
+  color: #8ad4ff;
+  flex-shrink: 0;
+}
+.badge.selection {
+  background: #434e72;
+  color: #b3baff;
+}
+.tool-glyph {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  flex: none;
+}
+.badge svg {
+  width: 27px;
+  height: 27px;
+}
+.gear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tool-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 195px), 1fr));
+}
+.tool-item {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  text-align: left;
+  padding: 9px 11px;
+  gap: 0 8px;
+  background: #2d3745;
+}
+.tool-item svg {
+  grid-row: span 2;
+  color: #9ec8e5;
+}
+.tool-item small {
+  font-size: 12px;
+  grid-column: 2;
+}
+.tool-page li {
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+.tool-page li button {
+  margin-left: 5px;
+}
+.tool-results {
+  overflow-wrap: anywhere;
+}
+.tool-results:empty {
+  display: none;
+}
+.tool-results .added {
+  color: #a5e8ba;
+  background: #24392e;
+}
+.tool-results .removed {
+  color: #ffbbbb;
+  background: #422e35;
+}
+.tool-results pre {
+  padding: 2px 5px;
+}
+.compare-view {
+  display: grid;
+  place-items: center;
+  background: #17212d;
+  height: clamp(140px, 40vh, 480px);
+}
+.compare-view img {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+.screen .bar {
+  gap: 3px;
+}
+.screen .bar button:has(.tool-glyph) {
+  font-size: 0;
+  padding: 7px;
+}
+.screen .bar button:has(.tool-glyph):hover {
+  background: #4b6278;
+}
+.screen .bar button svg {
+  display: block;
+}
+.annotation-canvas,
+.ruler-line,
+.annotation-controls,
+.measure-panel {
+  position: fixed;
+}
+.annotation-canvas {
+  touch-action: none;
+  cursor: crosshair;
+}
+.ruler-line {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.ruler-line line {
+  stroke: #6ecaff;
+  stroke-width: 2;
+}
+.measure-panel {
+  left: 12px;
+  bottom: 12px;
+  background: #283544ed;
+  padding: 8px;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 16px;
+  height: 16px;
+  border: 1px solid white;
+}
+@media (max-width: 380px) {
+  #app:not(.screen):not(.pinned) {
+    padding: 10px;
+  }
+  .tool-row {
+    gap: 8px;
+  }
+  .badge {
+    width: 32px;
+    height: 36px;
+  }
+  .tool-text strong {
+    font-size: 15px;
+  }
+  .tool-text small {
+    font-size: 12px;
+  }
+  .tool-row > button {
+    padding: 5px 7px;
+  }
+  .tool-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tools-surface {
+  container-type: inline-size;
+}
+@container (min-width: 660px) {
+  .tool-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+:host(.toolkit-panel) .home-title {
+  justify-content: flex-end;
+}
+:host(.toolkit-panel) .home-title h1 {
+  display: none;
+}

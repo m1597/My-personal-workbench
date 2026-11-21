@@ -3,7 +3,7 @@
   "fitbayProduct": "toolkit",
   "productName": "FitBay Toolkit",
   "version": "0.1.0",
-  "description": "FitBay 截图与划词助手",
+  "description": "FitBay 工具集",
   "author": "FitBay",
   "main": "main.mjs",
   "license": "MIT"

@@ -136,6 +136,9 @@ export async function prepareProduct(product) {
       await cp(path.join(prototype, 'prompts'), path.join(app, 'prompts'), { recursive: true })
     else await cp('out/renderer', path.join(app, 'workbench'), { recursive: true })
   }
+  await cp(path.join(prototype, 'host/toolkit-local'), path.join(app, 'host/toolkit-local'), {
+    recursive: true,
+  })
   await cp('LICENSE', path.join(app, 'LICENSE'))
   await writeFile(path.join(app, 'THIRD_PARTY_NOTICES.txt'), await notices())
   await writeFile(

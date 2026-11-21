@@ -2,6 +2,23 @@ const { contextBridge, ipcRenderer } = require('electron')
 const commands = [
   'state',
   'initial',
+  'toolTarget',
+  'selectionImage',
+  'applyAnnotation',
+  'extractText',
+  'copyMeasuredColor',
+  'chooseFiles',
+  'readImage',
+  'readText',
+  'chooseOutput',
+  'finishOutput',
+  'writeImage',
+  'writeAlbumPdf',
+  'clipboardSnapshot',
+  'clipboardAction',
+  'planRename',
+  'applyRename',
+  'convertDoc',
   'settings',
   'configure',
   'connections',
@@ -22,6 +39,9 @@ contextBridge.exposeInMainWorld('toolkit', {
   ...Object.fromEntries(
     commands.map((name) => [name, (value) => ipcRenderer.invoke('toolkit:' + name, value)]),
   ),
+  onToolTarget: (callback) => {
+    ipcRenderer.on('toolkit:tool-target', (_, id) => callback(id))
+  },
   onConnectionChange: (callback) => {
     ipcRenderer.on('toolkit:connections-changed', () => callback())
   },

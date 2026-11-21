@@ -53,9 +53,25 @@ if (process.argv.includes('--fixture-panels'))
     },
   })
 contextBridge.exposeInMainWorld('fitbayToolkit', {
+  local: Object.fromEntries(
+    [
+      'chooseFiles',
+      'readImage',
+      'readText',
+      'chooseOutput',
+      'finishOutput',
+      'writeImage',
+      'writeAlbumPdf',
+      'clipboardSnapshot',
+      'clipboardAction',
+      'planRename',
+      'applyRename',
+      'convertDoc',
+    ].map((name) => [name, (value) => ipcRenderer.invoke('toolkit-local:' + name, value)]),
+  ),
   available: () => ipcRenderer.invoke('toolkit-launch:available'),
   capture: () => ipcRenderer.invoke('toolkit-launch:capture'),
-  open: () => ipcRenderer.invoke('toolkit-launch:open'),
+  open: (tool) => ipcRenderer.invoke('toolkit-launch:open', tool),
 })
 function componentBridge(prefix) {
   return {

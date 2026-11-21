@@ -7,8 +7,8 @@ import { randomUUID } from 'node:crypto'
 export const apiUses = Object.freeze({
   'prompts.model': { component: '文件库', purpose: '模型' },
   'music.model': { component: 'Music', purpose: '模型与推荐' },
-  'toolkit.translation': { component: '截图与划词', purpose: '翻译' },
-  'toolkit.vision': { component: '截图与划词', purpose: '视觉模型' },
+  'toolkit.translation': { component: '工具集', purpose: '翻译' },
+  'toolkit.vision': { component: '工具集', purpose: '视觉模型' },
 })
 
 // Each process opens the same profile database. BEGIN IMMEDIATE serializes first

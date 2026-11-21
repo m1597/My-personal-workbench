@@ -1,40 +1,10 @@
+import { el, field, feedback } from './ui-dom.js'
+import { toolkitHome, glyph } from './tools-view.js'
+import { measureScreen, annotateRegion } from './screen-tools.js'
+export { api, root, notice, el, button, error, field, picture, settingsContents }
 const api = window.toolkit
 const root = document.querySelector('#app')
-const el = (tag, text, cls) => {
-  const n = document.createElement(tag)
-  if (text) n.textContent = text
-  if (cls) n.className = cls
-  return n
-}
-const notice = el('div', '', 'notice')
-notice.setAttribute('role', 'status')
-function error(e) {
-  notice.textContent = String(e.message || e).replace(/^.*?Error: /, '')
-}
-function button(label, action) {
-  const b = el('button', label)
-  b.onclick = async () => {
-    b.disabled = true
-    try {
-      notice.textContent = ''
-      await action(b)
-    } catch (e) {
-      error(e)
-    } finally {
-      b.disabled = false
-    }
-  }
-  return b
-}
-function field(parent, label, value, type = 'text') {
-  const wrap = el('label', label),
-    input = el('input')
-  input.type = type
-  input.value = value
-  wrap.append(input)
-  parent.append(wrap)
-  return input
-}
+const { button, error, notice } = feedback()
 function picture(src, cls) {
   const img = el('img', '', cls)
   img.src = src
@@ -177,8 +147,8 @@ function connectionEditor(parent) {
     .catch(error)
 }
 
-async function home(s) {
-  root.append(el('h1', '工具集'), notice)
+function settingsContents(s, target) {
+  target.append(el('h2', '工具集设置'))
   notice.textContent = s.notice
   for (const [id, title] of [
     ['capture', '屏幕截图'],
@@ -199,12 +169,11 @@ async function home(s) {
       toggle,
       button('应用快捷键', () => set(s[id].enabled)),
     )
-    if (id === 'capture') row.append(button('立即截图', () => api.capture()))
-    else box.append(el('p', '在阅读器中选中文字，然后按快捷键。'))
+    if (id === 'selection') box.append(el('p', '在阅读器中选中文字，然后按快捷键。'))
     box.append(row)
-    root.append(box)
+    target.append(box)
   }
-  connectionEditor(root)
+  connectionEditor(target)
 }
 async function screenView(s) {
   root.className = 'screen'
@@ -221,10 +190,29 @@ async function screenView(s) {
     ['复制', api.copy],
     ['保存', api.save],
     ['贴图置顶', api.pin],
+    ['提取文字', api.extractText],
     ['截图翻译', () => ask('translate')],
     ['向模型提问', () => ask('question')],
-  ])
-    bar.append(button(name, () => fn()))
+    ['标注', () => annotateRegion(rect, bar)],
+  ]) {
+    const action = button(name, () => fn())
+    action.title = name
+    action.setAttribute('aria-label', name)
+    action.prepend(
+      glyph(
+        {
+          复制: 'copy',
+          保存: 'save',
+          贴图置顶: 'pin',
+          截图翻译: 'translate',
+          向模型提问: 'ask',
+          提取文字: 'ocr',
+          标注: 'annotate',
+        }[name],
+      ),
+    )
+    bar.append(action)
+  }
   try {
     for (const a of await api.actions())
       bar.append(button(a.displayName, () => ask('custom', a.id)))
@@ -256,7 +244,8 @@ async function screenView(s) {
     })
   }
   root.onpointerdown = (e) => {
-    if (bar.contains(e.target) || e.button !== 0) return
+    if (root.classList.contains('annotating') || bar.contains(e.target) || e.button !== 0) return
+    rect.style.backgroundImage = ''
     root.setPointerCapture(e.pointerId)
     start = end = point(e)
     rect.hidden = false
@@ -289,6 +278,10 @@ async function screenView(s) {
       bar.style.top =
         Math.max(0, b + bar.offsetHeight + 5 <= innerHeight ? b + 4 : y - bar.offsetHeight - 4) +
         'px'
+      if (s.intent === 'annotate') {
+        s.intent = null
+        await annotateRegion(rect, bar)
+      }
     } catch (e) {
       error(e)
       tip.textContent = notice.textContent
@@ -376,8 +369,9 @@ window.addEventListener('keydown', (e) => {
 api
   .state()
   .then((s) => {
-    if (s.kind === 'home') return home(s.settings)
-    if (s.kind === 'screen') return screenView(s)
+    if (s.kind === 'home')
+      return toolkitHome(s.settings, { api, root, notice, error, button, settingsContents })
+    if (s.kind === 'screen') return s.intent === 'measure' ? measureScreen(s) : screenView(s)
     if (s.kind === 'result') return result(s)
     if (s.kind === 'pin') {
       root.className = 'pinned'

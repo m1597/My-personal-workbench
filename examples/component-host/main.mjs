@@ -477,7 +477,7 @@ else {
             ['music', 'Music'],
             ['sample', '示例组件'],
             ['prompts', '文件库'],
-            ['toolkit', '截图与划词'],
+            ['toolkit', '工具集'],
           ]) {
             const root =
               id === 'workbench'
@@ -538,13 +538,40 @@ else {
         setInterval(checkUpdates, 5 * 60_000).unref()
         updateTray()
       }
+      let toolkitFileState
+      const { installLocalFiles } = await import('./toolkit-local/local-files.mjs')
+      installLocalFiles((name, _kinds, fn) => {
+        ipcMain.handle('toolkit-local:' + name, async (event, v) => {
+          if (!isShell(event) || !(await installedToolkitRoot(app.isPackaged)))
+            throw Error('工具集不可用')
+          if (toolkitFileState?.win !== shell) toolkitFileState = { win: shell }
+          return fn(toolkitFileState, v)
+        })
+      })
       for (const action of ['available', 'open', 'capture']) {
-        ipcMain.handle('toolkit-launch:' + action, async (event) => {
+        ipcMain.handle('toolkit-launch:' + action, async (event, page) => {
           if (!isShell(event)) throw Error('DENIED')
           const launch = await toolkitLauncher(app.isPackaged, profile)
           if (action === 'available') return Boolean(launch)
           if (!launch) throw Error('未检测到工具集')
-          return launch(action === 'capture')
+          if (
+            page !== undefined &&
+            ![
+              'files',
+              'settings',
+              'annotate',
+              'measure',
+              'compare',
+              'album',
+              'compress',
+              'clipboard',
+              'diff',
+              'pairs',
+              'convert',
+            ].includes(page)
+          )
+            throw Error('未知工具')
+          return launch(action === 'capture', page)
         })
       }
       ipcMain.handle('workbench:music-installed', async (event) => {
