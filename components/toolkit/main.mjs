@@ -86,7 +86,7 @@ async function startToolkit() {
       height: 610,
       minWidth: 280,
       show: false,
-      backgroundColor: '#202a35',
+      backgroundColor: '#202227',
       ...(Number(release().split('.')[2]) >= 22621 &&
       ['home', 'result', 'message'].includes(data.kind)
         ? { backgroundColor: '#00000000', backgroundMaterial: 'acrylic' }

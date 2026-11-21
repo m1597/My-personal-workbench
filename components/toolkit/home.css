@@ -1,7 +1,3 @@
-body:has(.tools-surface) {
-  background: radial-gradient(ellipse at top left, #343e50 0, transparent 62%), #202631;
-  color: #eef3fa;
-}
 .home-title,
 .tools-heading,
 .tool-row,
@@ -34,8 +30,8 @@ body:has(.tools-surface) {
 }
 .primary-tools {
   padding: 0 12px;
-  background: #313947b8;
-  border-color: #505969;
+  background: var(--glass);
+  border-color: var(--stroke);
   border-radius: 12px;
   gap: 0;
 }
@@ -44,7 +40,7 @@ body:has(.tools-surface) {
   min-height: 74px;
 }
 .tool-row + .tool-row {
-  border-top: 1px solid #535c6d;
+  border-top: 1px solid var(--stroke);
 }
 .tool-text {
   flex: 1;
@@ -57,16 +53,16 @@ body:has(.tools-surface) {
 }
 .tool-text small,
 .tool-item small {
-  color: #c4cad6;
+  color: var(--text-secondary);
 }
 .tool-row > button {
   padding: 7px 12px;
   white-space: nowrap;
 }
 .tool-row:first-child > button {
-  background: #72bcfa;
-  color: #10273c;
-  border-color: #88caff;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent-border);
 }
 .badge {
   width: 42px;
@@ -74,13 +70,12 @@ body:has(.tools-surface) {
   display: grid;
   place-items: center;
   border-radius: 10px;
-  background: #34536b;
-  color: #8ad4ff;
+  background: var(--accent-soft);
+  color: var(--accent);
   flex-shrink: 0;
 }
-.badge.selection {
-  background: #434e72;
-  color: #b3baff;
+.tool-row:first-child > button:hover {
+  background: var(--accent-hover);
 }
 .tool-glyph {
   width: 20px;
@@ -111,11 +106,11 @@ body:has(.tools-surface) {
   text-align: left;
   padding: 9px 11px;
   gap: 0 8px;
-  background: #2d3745;
+  background: var(--control);
 }
 .tool-item svg {
   grid-row: span 2;
-  color: #9ec8e5;
+  color: var(--icon-muted);
 }
 .tool-item small {
   font-size: 12px;
@@ -148,7 +143,7 @@ body:has(.tools-surface) {
 .compare-view {
   display: grid;
   place-items: center;
-  background: #17212d;
+  background: var(--base);
   height: clamp(140px, 40vh, 480px);
 }
 .compare-view img {
@@ -166,7 +161,7 @@ body:has(.tools-surface) {
   padding: 7px;
 }
 .screen .bar button:has(.tool-glyph):hover {
-  background: #4b6278;
+  background: var(--hover);
 }
 .screen .bar button svg {
   display: block;
@@ -194,7 +189,7 @@ body:has(.tools-surface) {
 .measure-panel {
   left: 12px;
   bottom: 12px;
-  background: #283544ed;
+  background: var(--solid-surface);
   padding: 8px;
   border-radius: 8px;
   flex-wrap: wrap;

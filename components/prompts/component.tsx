@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ComponentTheme } from '../../src/renderer/src/app/ComponentTheme'
+import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import './style.css'
 import { PromptConnectionSettings, ActionConnection } from './PromptConnections'
 import { FileBrowser, DiskImage, type Entry, type Listing } from './FileBrowser'
@@ -44,6 +44,7 @@ declare global {
     }
   }
 }
+configureBackdrop()
 const api = window.promptLibrary
 const message = (e: unknown) => String(e).replace(/^.*Error: /, '')
 function Palette() {
@@ -202,9 +203,18 @@ function Library() {
         if (!s.settingsTarget || s.settingsTarget === 'api') setSettings(true)
       }
     }
-    const off = window.sampleHost.subscribe(apply)
-    void window.sampleHost.hello({ protocol: '0.1' }).then(apply)
-    return off
+    let waiting = true
+    const off = window.sampleHost.subscribe((state) => {
+      waiting = false
+      apply(state)
+    })
+    void window.sampleHost.hello({ protocol: '0.1' }).then((state) => {
+      if (waiting) apply(state)
+    })
+    return () => {
+      waiting = false
+      off()
+    }
   }, [])
   // biome-ignore lint/correctness/useExhaustiveDependencies: disk notifications explicitly invalidate the directory snapshot.
   useEffect(() => {
@@ -317,7 +327,7 @@ function Library() {
     update()
   }
   return (
-    <>
+    <ComponentTheme surface={dock ? 'embedded' : 'window'}>
       {settings && (
         <main className="library prompt-settings">
           <header>
@@ -564,14 +574,18 @@ function Library() {
           {directoryIssue || fileIssue || notice || state?.registrationError}
         </small>
       </main>
-    </>
+    </ComponentTheme>
   )
 }
 const palette = new URLSearchParams(location.search).has('palette')
 const container = document.getElementById('root')
 if (container)
   createRoot(container).render(
-    <ComponentTheme surface={palette ? 'window' : 'embedded'}>
-      {palette ? <Palette /> : <Library />}
-    </ComponentTheme>,
+    palette ? (
+      <ComponentTheme surface="window">
+        <Palette />
+      </ComponentTheme>
+    ) : (
+      <Library />
+    ),
   )
