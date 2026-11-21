@@ -238,3 +238,10 @@
 :host(.toolkit-panel) .home-title h1 {
   display: none;
 }
+
+.fitbay-settings-shell {
+  min-height: min(440px, 82vh);
+}
+#app:has(.fitbay-settings-shell) .fitbay-settings-content section {
+  margin: 8px;
+}

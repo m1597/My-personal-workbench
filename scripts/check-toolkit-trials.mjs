@@ -109,7 +109,7 @@ for file in ('exe-icon.png','window-icon.png','shortcut-icon.png'):
   await expect(B('框选屏幕')).toBeVisible()
   for (const process of new Set([app, backend]))
     await process.evaluate(
-      ({ dialog, clipboard, nativeImage }, f) => {
+      ({ dialog, clipboard, nativeImage, ClipboardItem }, f) => {
         globalThis.picked = []
         globalThis.testOutput = f.output
         globalThis.saveName = ''
@@ -118,9 +118,15 @@ for file in ('exe-icon.png','window-icon.png','shortcut-icon.png'):
           filePaths: opts.properties.includes('openDirectory') ? [f.output] : globalThis.picked,
         })
         dialog.showSaveDialog = async () => ({ canceled: false, filePath: globalThis.saveName })
-        clipboard.readText = () => 'Sample text'
-        clipboard.readHTML = () => '<p><strong>Sample</strong> text</p>'
-        clipboard.readImage = () => nativeImage.createFromPath(f.red)
+        clipboard.read = async () => [
+          new ClipboardItem({
+            'text/plain': 'Sample text',
+            'text/html': '<p><strong>Sample</strong> text</p>',
+            'image/png': new Blob([nativeImage.createFromPath(f.red).toPNG()], {
+              type: 'image/png',
+            }),
+          }),
+        ]
         clipboard.writeText = (t) => {
           globalThis.copied = t
         }
@@ -161,6 +167,17 @@ for file in ('exe-icon.png','window-icon.png','shortcut-icon.png'):
   await expect(B('两图对比')).toHaveCount(0)
   await expect(home.getByRole('button', { name: /^图片压缩/ })).toBeVisible()
   await B('清除选择').click()
+  await tool('图片改尺寸')
+  await choose(['red.png'])
+  await home.getByLabel('输出宽度（像素）').fill('37')
+  await home.getByLabel('输出高度（像素）').fill('29')
+  await B('生成尺寸副本').click()
+  await expect(home.locator('.tool-results')).toContainText('37 × 29')
+  python(
+    'from PIL import Image;import sys;assert Image.open(sys.argv[1]).size==(37,29)',
+    path.join(output, 'red.png'),
+  )
+  await back()
   await tool('两图对比')
   await choose(['red.png', 'blue.webp'])
   await expect(home.locator('.compare-view img')).toHaveCount(2)
@@ -218,6 +235,11 @@ for file in ('exe-icon.png','window-icon.png','shortcut-icon.png'):
   await tool('逐行文本对比')
   await home.getByLabel('原文').fill('a\nb\nc')
   await home.getByLabel('新文本').fill('a\nadded\nb\nc')
+  await B('设置').click()
+  await expect(home.getByLabel('全局快捷键').first()).toBeVisible()
+  await shot('pane-settings')
+  await B('返回').click()
+  await expect(home.getByLabel('原文')).toHaveValue('a\nb\nc')
   await B('比较文本').click()
   await expect(home.locator('.added')).toHaveText(/added/)
   await expect(home.locator('.removed')).toHaveCount(0)

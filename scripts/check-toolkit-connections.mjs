@@ -45,9 +45,9 @@ try {
   await pin.close()
   overlay = await region()
   await app.evaluate(({ clipboard }) => {
-    globalThis.originalCopy = clipboard.writeImage
-    clipboard.writeImage = (image) => {
-      globalThis.hasCopy = !image.isEmpty()
+    globalThis.originalCopy = clipboard.write
+    clipboard.write = async ([item]) => {
+      globalThis.hasCopy = (await item.getType('image/png')).size > 0
     }
   })
   await overlay
@@ -58,7 +58,7 @@ try {
     })
   assert(
     await app.evaluate(({ clipboard }) => {
-      clipboard.writeImage = globalThis.originalCopy
+      clipboard.write = globalThis.originalCopy
       return globalThis.hasCopy
     }),
   )
@@ -98,6 +98,7 @@ try {
   app = await _electron.launch(standalone)
   home = await app.firstWindow()
   await home.getByRole('button', { name: '设置', exact: true }).click()
+  await category(home, 'API 与模型')
   await expect(home.getByLabel('模型名')).toHaveValue('legacy-text')
   const legacy = JSON.parse(await readFile(settings, 'utf8'))
   assert.deepEqual(legacy.capture, keys.capture)
@@ -204,4 +205,11 @@ try {
   console.log('PASS damaged credential replacement and stale concurrent edit rejection')
 } finally {
   facade.close()
+}
+
+async function category(page, name) {
+  const action = page.getByRole('button', { name, exact: true })
+  const toggle = page.locator('.fitbay-category-toggle')
+  if ((await toggle.isVisible()) && !(await action.isVisible())) await toggle.click()
+  await action.click()
 }

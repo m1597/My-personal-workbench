@@ -100,6 +100,9 @@ pre {
   pointer-events: none;
 }
 .screen {
+  display: block;
+  overflow: hidden;
+  user-select: none;
   cursor: crosshair;
   touch-action: none;
 }

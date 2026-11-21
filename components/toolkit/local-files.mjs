@@ -15,6 +15,8 @@ const formats = {
   jpeg: 'image/jpeg',
   webp: 'image/webp',
   bmp: 'image/bmp',
+  gif: 'image/gif',
+  avif: 'image/avif',
   md: 'text/plain',
   txt: 'text/plain',
   docx: 'application/docx',
@@ -72,6 +74,23 @@ async function exists(file) {
     throw e
   }
 }
+export async function setToolInputs(s, paths, allowOther = false) {
+  if (paths.length > 100) throw Error('每批最多 100 个文件')
+  const inputs = new Map()
+  for (const p of new Set(paths)) {
+    const st = await lstat(p)
+    if (!st.isFile() || (!allowOther && !formats[ext(p)]) || st.size > 64 * 1024 * 1024)
+      throw Error('请选择 64 MiB 以内的支持格式文件')
+    inputs.set(randomUUID(), p)
+  }
+  s.inputs = inputs
+  s.renamePlan = null
+  return [...inputs].map(([id, p]) => ({
+    id,
+    name: path.basename(p),
+    type: formats[ext(p)] || 'application/octet-stream',
+  }))
+}
 export function installLocalFiles(handle) {
   const register = (name, fn) => handle(name, ['home'], fn)
   function file(s, id) {
@@ -85,17 +104,7 @@ export function installLocalFiles(handle) {
       filters: [{ name: '图片、提示词或 Word 文档', extensions: Object.keys(formats) }],
     })
     if (r.canceled) return null
-    if (r.filePaths.length > 100) throw Error('每批最多 100 个文件')
-    const inputs = new Map()
-    for (const p of new Set(r.filePaths)) {
-      const st = await lstat(p)
-      if (!st.isFile() || !formats[ext(p)] || st.size > 64 * 1024 * 1024)
-        throw Error('请选择 64 MiB 以内的支持格式文件')
-      inputs.set(randomUUID(), p)
-    }
-    s.inputs = inputs
-    s.renamePlan = null
-    return [...inputs].map(([id, p]) => ({ id, name: path.basename(p), type: formats[ext(p)] }))
+    return setToolInputs(s, r.filePaths)
   })
   register('readText', async (s, id) => {
     const p = file(s, id),
@@ -190,23 +199,33 @@ export function installLocalFiles(handle) {
       await rm(dir, { recursive: true, force: true })
     }
   })
-  register('clipboardSnapshot', (s) => {
-    const text = clipboard.readText()
-    const img = clipboard.readImage()
-    if (text.length > 4e6) throw Error('剪贴板文字过长')
-    s.clip = { text, image: img.isEmpty() ? null : img }
-    return { text, html: clipboard.readHTML().slice(0, 4000000), image: !img.isEmpty() }
+  register('clipboardSnapshot', async (s) => {
+    const items = await clipboard.read()
+    const get = (type) => items.find((item) => item.types.includes(type))?.getType(type)
+    const [plain, rich, image] = await Promise.all([
+      get('text/plain'),
+      get('text/html'),
+      get('image/png'),
+    ])
+    if (plain?.size > 16000000 || image?.size > 64000000) throw Error('剪贴板内容过大')
+    const text = (await plain?.text()) || ''
+    s.clip = { text, image: image ? Buffer.from(await image.arrayBuffer()) : null }
+    return {
+      text,
+      html: rich && rich.size <= 16000000 ? (await rich.text()).slice(0, 4000000) : '',
+      image: !!image,
+    }
   })
   register('clipboardAction', async (s, { kind, markdown }) => {
     if (!s.clip) throw Error('请先读取剪贴板')
     if (kind === 'plain' && s.clip.text) {
-      clipboard.writeText(s.clip.text)
+      await clipboard.writeText(s.clip.text)
       return '已复制纯文本'
     }
     if (kind === 'copy-markdown') {
       if (!s.clip.text || typeof markdown !== 'string' || markdown.length > 8000000)
         throw Error('没有可导出的 Markdown')
-      clipboard.writeText(markdown)
+      await clipboard.writeText(markdown)
       return '已复制 Markdown'
     }
     const suffix = kind === 'png' ? 'png' : 'md'
@@ -226,7 +245,7 @@ export function installLocalFiles(handle) {
       throw Error('Markdown 无效')
     await writeFile(
       r.filePath,
-      kind === 'png' ? s.clip.image.toPNG() : kind === 'markdown' ? markdown : s.clip.text,
+      kind === 'png' ? s.clip.image : kind === 'markdown' ? markdown : s.clip.text,
       { flag: 'wx' },
     ).catch((e) => {
       if (e.code === 'EEXIST') throw Error('文件已存在，请选择其他名称')
@@ -234,30 +253,33 @@ export function installLocalFiles(handle) {
     })
     return '已保存 ' + path.basename(r.filePath)
   })
-  register('planRename', async (s, { prefix, pairs }) => {
+  register('planRename', async (s, { prefix, pairs, ids: singleIds }) => {
     s.renamePlan = null
     validName(prefix)
+    const single = Array.isArray(singleIds)
+    const groups = single ? singleIds.map((id) => [id]) : pairs
     if (
-      !Array.isArray(pairs) ||
-      !pairs.length ||
-      pairs.length > 50 ||
-      pairs.length * 2 !== s.inputs?.size
+      !Array.isArray(groups) ||
+      !groups.length ||
+      groups.length * (single ? 1 : 2) !== s.inputs?.size
     )
-      throw Error('每张图需要一份提示词，请选择数量相同的图片与文本')
+      throw Error('请重新选择完整的一批文件')
     const ids = new Set(),
       plan = [],
       rows = []
-    for (const [i, pair] of pairs.entries()) {
-      if (!Array.isArray(pair) || pair.length !== 2) throw Error('请先选择配对')
-      const [image, text] = pair.map((id) => file(s, id))
+    for (const [i, group] of groups.entries()) {
+      if (!Array.isArray(group) || group.length !== (single ? 1 : 2)) throw Error('请先选择配对')
+      const paths = group.map((id) => file(s, id))
       if (
-        !formats[ext(image)].startsWith('image/') ||
-        !['txt', 'md'].includes(ext(text)) ||
-        pair.some((id) => ids.has(id))
+        !single &&
+        (!formats[ext(paths[0])]?.startsWith('image/') || !['txt', 'md'].includes(ext(paths[1])))
       )
-        throw Error('每张图片和每份提示词只能使用一次')
-      for (const id of pair) ids.add(id)
-      for (const p of [image, text]) {
+        throw Error('请配对图片与文本')
+      for (const id of group) {
+        if (ids.has(id)) throw Error('文件重复')
+        ids.add(id)
+      }
+      for (const p of paths) {
         const name = validName(prefix + '-' + String(i + 1).padStart(3, '0') + path.extname(p))
         const to = path.join(path.dirname(p), name)
         const issue = (await exists(to)) ? '目标名称已存在' : ''

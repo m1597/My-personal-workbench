@@ -1,11 +1,19 @@
 import { api, root, picture, el, button } from './view.js'
 import { makeCanvas } from './tools-view.js'
 export { measureScreen, annotateRegion }
-function measureScreen(s) {
+function measureScreen(s, bounds, onBack) {
   root.className = 'screen measuring'
   const surface = picture(s.image),
     line = document.createElementNS('http://www.w3.org/2000/svg', 'svg'),
     seg = document.createElementNS(line.namespaceURI, 'line')
+  if (bounds)
+    Object.assign(surface.style, {
+      position: 'absolute',
+      left: bounds.x + 'px',
+      top: bounds.y + 'px',
+      width: bounds.width + 'px',
+      height: bounds.height + 'px',
+    })
   line.classList.add('ruler-line')
   line.append(seg)
   const bar = el('div', '', 'measure-panel'),
@@ -21,8 +29,16 @@ function measureScreen(s) {
   }
   function update(e) {
     if (!canvas.width || !surface.complete) return
-    const x = Math.min(canvas.width - 1, Math.floor((e.clientX * canvas.width) / innerWidth)),
-      y = Math.min(canvas.height - 1, Math.floor((e.clientY * canvas.height) / innerHeight))
+    const box = surface.getBoundingClientRect()
+    if (
+      e.clientX < box.left ||
+      e.clientX >= box.right ||
+      e.clientY < box.top ||
+      e.clientY >= box.bottom
+    )
+      return
+    const x = Math.floor(((e.clientX - box.left) * canvas.width) / box.width)
+    const y = Math.floor(((e.clientY - box.top) * canvas.height) / box.height)
     const rgb = canvas.getContext('2d').getImageData(x, y, 1, 1).data
     hex =
       '#' +
@@ -72,6 +88,15 @@ function measureScreen(s) {
     button('复制颜色', () => api.copyMeasuredColor(hex)),
     button('关闭', () => api.dismiss()),
   )
+  if (onBack)
+    bar.append(
+      button('返回选区', () => {
+        surface.remove()
+        line.remove()
+        bar.remove()
+        onBack()
+      }),
+    )
   root.append(surface, line, bar)
 }
 async function annotateRegion(rect, bar) {

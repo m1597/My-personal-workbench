@@ -1,8 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 const commands = [
   'state',
+  'screenReady',
   'initial',
   'toolTarget',
+  'batchInputs',
   'selectionImage',
   'applyAnnotation',
   'extractText',

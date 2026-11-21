@@ -4,6 +4,7 @@ import {
   Tray,
   Menu,
   clipboard,
+  ClipboardItem,
   desktopCapturer,
   dialog,
   globalShortcut,
@@ -13,11 +14,11 @@ import {
   screen,
 } from 'electron'
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
+import { writeFile, readFile, unlink, lstat } from 'node:fs/promises'
 import path from 'node:path'
 import { release } from 'node:os'
 import koffi from 'koffi'
-import { installLocalFiles } from './local-files.mjs'
+import { installLocalFiles, setToolInputs } from './local-files.mjs'
 import { nativeImage } from 'electron'
 import { complete } from './model.mjs'
 import { toolkitConnections } from './toolkit-connections.mjs'
@@ -125,7 +126,7 @@ async function startToolkit() {
       states.delete(id)
     })
     win.on('page-title-updated', (e) => e.preventDefault())
-    win.once('ready-to-show', () => {
+    const reveal = () => {
       if (backgroundTest) {
         win.setPosition(-30000, -30000)
         win.showInactive()
@@ -133,8 +134,26 @@ async function startToolkit() {
       }
       win.show()
       if (options.alwaysOnTop) win.setAlwaysOnTop(true, 'screen-saver')
+    }
+    if (data.kind === 'screen') {
+      const deadline = setTimeout(() => {
+        if (!win.isDestroyed()) {
+          win.destroy()
+          fail(Error('截图加载超时，请重试'))
+        }
+      }, 15000)
+      win.once('closed', () => clearTimeout(deadline))
+      states.get(id).reveal = () => {
+        clearTimeout(deadline)
+        reveal()
+      }
+      win.webContents.once('render-process-gone', () => {
+        if (!win.isDestroyed()) win.destroy()
+      })
+    } else win.once('ready-to-show', reveal)
+    void win.loadFile(path.join(here, 'index.html')).catch(() => {
+      if (!win.isDestroyed()) win.destroy()
     })
-    void win.loadFile(path.join(here, 'index.html'))
     return win
   }
   let targetTool, targetRoute
@@ -214,6 +233,12 @@ async function startToolkit() {
         fromHost,
       )
       const currentOverlay = overlay
+      currentOverlay.webContents.on('before-input-event', (event, input) => {
+        if (input.type === 'keyDown' && input.key === 'Escape') {
+          event.preventDefault()
+          currentOverlay.close()
+        }
+      })
       currentOverlay.once('close', () => {
         if (overlay === currentOverlay) overlay = undefined
       })
@@ -277,17 +302,50 @@ async function startToolkit() {
           }
         : undefined,
   }))
+  handle('screenReady', ['screen'], (s) => {
+    s.reveal?.()
+    s.reveal = null
+  })
   handle('dismiss', kinds, (s) => s.win.close())
   handle('settings', ['result'], (s, route) => settings(route, s.hosted))
   handle('settingsTarget', ['home'], () => targetRoute)
   handle('connections', ['home'], () => connections.snapshot())
   installLocalFiles(handle)
+  handle('batchInputs', ['home'], async (s, request) => {
+    if (!request || request.id !== targetTool?.id || request.tool !== targetTool.tool)
+      throw Error('批次已过期')
+    const { id, tool } = targetTool
+    targetTool = undefined
+    const requestFile = path.join(shared, 'toolkit', 'incoming', id + '.json')
+    try {
+      const stat = await lstat(requestFile)
+      if (!stat.isFile() || stat.size > 1000000) throw Error('批次无效')
+      const data = JSON.parse(await readFile(requestFile, 'utf8'))
+      if (
+        data.version !== 1 ||
+        data.tool !== tool ||
+        !Array.isArray(data.files) ||
+        !data.files.length ||
+        data.files.length > 100 ||
+        !data.files.every((f) => typeof f === 'string' && path.isAbsolute(f))
+      )
+        throw Error('批次无效')
+      if (
+        tool === 'resize' &&
+        !data.files.every((f) => /\.(png|jpe?g|bmp|webp|gif|avif)$/i.test(f))
+      )
+        throw Error('请选择图片')
+      return await setToolInputs(s, data.files, tool === 'rename')
+    } finally {
+      await unlink(requestFile).catch(() => {})
+    }
+  })
   handle('toolTarget', ['home'], () => targetTool)
   handle('capture', ['home'], (s, intent) => {
     if (!cfg.capture.enabled) throw Error('请先启用截图')
     return capture(['annotate', 'measure'].includes(intent) ? intent : undefined, s.hosted)
   })
-  handle('enable', ['home'], (_, v) => {
+  function setShortcut(v) {
     if (
       !['capture', 'selection'].includes(v?.id) ||
       typeof v.enabled !== 'boolean' ||
@@ -310,7 +368,8 @@ async function startToolkit() {
       }
       throw error
     }
-  })
+  }
+  handle('enable', ['home'], (_, v) => setShortcut(v))
   handle('configure', ['home'], (_s, value) => connections.save(value))
   handle('crop', ['screen'], (s, v) => {
     if (
@@ -358,11 +417,12 @@ async function startToolkit() {
     }
   })
   handle('copyMeasuredColor', ['screen'], (s, hex) => {
-    if (s.intent !== 'measure' || !/^#[0-9A-F]{6}$/.test(hex)) throw Error('请先取色')
-    clipboard.writeText(hex)
+    if (!/^#[0-9A-F]{6}$/.test(hex)) throw Error('请先取色')
+    return clipboard.writeText(hex)
   })
-  handle('copy', ['screen'], (s) => {
-    clipboard.writeImage(selected(s))
+  handle('copy', ['screen'], async (s) => {
+    const png = new Blob([selected(s).toPNG()], { type: 'image/png' })
+    await clipboard.write([new ClipboardItem({ 'image/png': png })])
     s.win.close()
   })
   handle('save', ['screen'], async (s) => {
@@ -404,7 +464,7 @@ async function startToolkit() {
   })
   handle('copyAnswer', ['result'], (s) => {
     const last = s.history.at(-1)
-    if (last?.role === 'assistant') clipboard.writeText(last.content)
+    if (last?.role === 'assistant') return clipboard.writeText(last.content)
   })
   handle('actions', ['screen', 'result'], async (s) => {
     const result = await reader?.listActions()
@@ -477,6 +537,21 @@ async function startToolkit() {
     return value
   })
   function openIntent(argv) {
+    const shortcutJob = argv.find((v) => /^--toolkit-page=shortcuts-[0-9a-f-]{36}$/.test(v))
+    if (shortcutJob) {
+      const file = path.join(shared, 'toolkit', shortcutJob.slice(15))
+      let result
+      try {
+        const v = JSON.parse(readFileSync(file, 'utf8'))
+        if (v) setShortcut(v)
+        result = { settings: { capture: cfg.capture, selection: cfg.selection, notice } }
+      } catch (e) {
+        result = { error: e.code ? '快捷键请求不可用' : e.message }
+      }
+      writeFileSync(file + '.tmp', JSON.stringify(result))
+      renameSync(file + '.tmp', file + '.reply')
+      return
+    }
     if (argv.includes('--toolkit-migrate-connections')) {
       void connections.snapshot().catch(() => {})
       return
@@ -491,6 +566,17 @@ async function startToolkit() {
       void capture(undefined, fromHost).catch((error) => fail(error, fromHost))
     } else {
       targetTool = argv.find((v) => v.startsWith('--toolkit-page='))?.slice(15)
+      const batch = argv.find((v) => v.startsWith('--toolkit-batch='))?.slice(16)
+      if (batch) {
+        if (
+          !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(batch) ||
+          !['rename', 'resize'].includes(targetTool)
+        ) {
+          fail(Error('批次无效'))
+          return
+        }
+        targetTool = { id: batch, tool: targetTool }
+      }
       settings()
       home.webContents.send('toolkit:tool-target', targetTool)
     }

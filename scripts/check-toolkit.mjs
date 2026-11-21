@@ -44,6 +44,7 @@ try {
   const home = await app.firstWindow()
   await expect(home.getByText('工具集', { exact: true })).toBeVisible()
   await home.getByRole('button', { name: '设置', exact: true }).click()
+  await category(home, 'API 与模型')
   const marker = randomUUID()
   await expect(home.getByText('保存 API 配置')).toBeEnabled()
   await home.getByLabel('API 密钥').fill(marker)
@@ -61,6 +62,7 @@ try {
   await home.getByLabel('模型名').fill('vision-test')
   await home.getByText('保存 API 配置').click()
   await expect(home.getByRole('status')).toContainText('已保存')
+  await category(home, '快捷键')
   const fields = home.getByLabel('全局快捷键')
   await fields.first().fill(keys.selection.key)
   await home.getByText('应用快捷键').first().click()
@@ -136,15 +138,15 @@ try {
   assert.equal(requests.length, 0)
   overlay = await region()
   await app.evaluate(({ clipboard }) => {
-    globalThis.clipboardImage = clipboard.writeImage
-    clipboard.writeImage = (image) => {
-      globalThis.copiedImage = image.toPNG().length
+    globalThis.clipboardImage = clipboard.write
+    clipboard.write = async ([item]) => {
+      globalThis.copiedImage = (await item.getType('image/png')).size
     }
   })
   await overlay.getByText('复制', { exact: true }).click()
   assert(
     await app.evaluate(({ clipboard }) => {
-      clipboard.writeImage = globalThis.clipboardImage
+      clipboard.write = globalThis.clipboardImage
       return globalThis.copiedImage > 0
     }),
   )
@@ -329,11 +331,12 @@ if (process.argv.includes('--absent')) {
   try {
     const home = await standalone.firstWindow()
     await home.getByRole('button', { name: '设置', exact: true }).click()
+    await category(home, 'API 与模型')
     await expect(home.getByLabel('模型名')).toHaveValue('test')
     await home.getByLabel('用途').selectOption('vision')
     await expect(home.getByLabel('模型名')).toHaveValue('vision-test')
     const waiting = standalone.waitForEvent('window')
-    await home.getByText('返回工具集').click()
+    await home.getByRole('button', { name: '返回', exact: true }).click()
     await home.getByText('框选屏幕', { exact: true }).click()
     const overlay = await waiting
     await expect(overlay.locator('.screen')).toBeVisible()
@@ -347,4 +350,11 @@ if (process.argv.includes('--absent')) {
   } finally {
     await standalone.close()
   }
+}
+
+async function category(page, name) {
+  const action = page.getByRole('button', { name, exact: true })
+  const toggle = page.locator('.fitbay-category-toggle')
+  if ((await toggle.isVisible()) && !(await action.isVisible())) await toggle.click()
+  await action.click()
 }
