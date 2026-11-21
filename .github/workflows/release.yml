@@ -1,6 +1,7 @@
 name: Publish FitBay installers
 on:
   push:
+    branches: ["codex/release-0.2.1"]
     tags: ["v*"]
 permissions:
   contents: read
@@ -16,7 +17,7 @@ jobs:
       - shell: pwsh
         run: |
           $pkg = Get-Content package.json | ConvertFrom-Json
-          if ($pkg.version -notmatch '^\d+\.\d+\.\d+$' -or $env:GITHUB_REF_NAME -ne "v$($pkg.version)") { throw 'Release tag must match package.json version' }
+          if ($pkg.version -notmatch '^\d+\.\d+\.\d+$' -or ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$($pkg.version)")) { throw 'Release tag must match package.json version' }
           npx --yes --package=$($pkg.packageManager) npm ci
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           npm run dist:win
@@ -40,7 +41,7 @@ jobs:
           ./scripts/check-host-only.ps1 -Installer "dist/installers/FitBay-Workbench-Setup-$version-x64.exe" -Root $root
           node scripts/check-settings-installation.mjs $root --candidate
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          Copy-Item "docs/releases/$env:GITHUB_REF_NAME.md" dist/installers/RELEASE-NOTES.md
+          Copy-Item "docs/releases/v$version.md" dist/installers/RELEASE-NOTES.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: installers
@@ -51,6 +52,7 @@ jobs:
             dist/installers/RELEASE-NOTES.md
           if-no-files-found: error
   publish:
+    if: startsWith(github.ref, 'refs/tags/')
     needs: build
     permissions:
       contents: write
