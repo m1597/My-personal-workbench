@@ -1,3 +1,4 @@
+import { SettingsShell } from '../../src/renderer/src/app/ComponentSettings'
 import { ConnectionSettings } from '../../src/renderer/src/app/ConnectionSettings'
 import { recordShortcut } from './recordShortcut'
 import { MusicMcpSettings } from './MusicMcpSettings'
@@ -7,7 +8,7 @@ import { ModelSettings, type ModelInfo } from './ModelSettings'
 import { LibraryCleanup } from './LibraryCleanup'
 import { LibraryTools } from './LibraryTools'
 import type { ImportJob } from './LibraryPane'
-import { AudioLines, Download, Keyboard, Library, PanelLeft, Plug, Sparkles } from 'lucide-react'
+import { AudioLines, Download, Keyboard, Library, Plug, Sparkles } from 'lucide-react'
 import { MusicSourcesSettings } from './MusicSourcesSettings'
 import { PlayerOptionsPane } from './PlayerOptionsPane'
 import './settings.css'
@@ -244,6 +245,7 @@ export function MusicSettings({
   plugins,
   category,
   selectCategory,
+  onBack,
   script,
   guideTarget,
   prefs,
@@ -251,6 +253,7 @@ export function MusicSettings({
   job,
   refresh,
 }: {
+  onBack: () => void
   plugins: React.ReactNode
   script: string
   guideTarget?: string
@@ -261,7 +264,6 @@ export function MusicSettings({
   job: ImportJob
   refresh: () => Promise<void>
 }) {
-  const [navOpen, setNavOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [feedback, setFeedback] = useState<{ category: SettingsCategory; text: string }>()
   const [busy, setBusy] = useState(false)
@@ -344,40 +346,16 @@ export function MusicSettings({
     }
   }
   return (
-    <div className="library-layout settings-layout">
-      <Button
-        className="library-nav-toggle"
-        size="small"
-        appearance="subtle"
-        icon={<PanelLeft size={15} />}
-        aria-expanded={navOpen}
-        aria-controls="settings-categories"
-        onClick={() => setNavOpen(!navOpen)}
-      >
-        设置分类
-      </Button>
-      <nav
-        className="library-sidebar"
-        id="settings-categories"
-        aria-label="设置分类"
-        data-open={navOpen}
-      >
-        {categories.map(({ id, name, icon: Icon }) => (
-          <Button
-            key={id}
-            appearance="subtle"
-            icon={<Icon size={16} />}
-            aria-pressed={category === id}
-            onClick={() => {
-              selectCategory(id)
-              setNavOpen(false)
-              setFeedback(undefined)
-            }}
-          >
-            {name}
-          </Button>
-        ))}
-      </nav>
+    <SettingsShell
+      title="音乐设置"
+      categories={categories}
+      active={category}
+      onBack={onBack}
+      onSelect={(id) => {
+        selectCategory(id)
+        setFeedback(undefined)
+      }}
+    >
       <section
         className="music-settings"
         aria-label={categories.find((item) => item.id === category)?.name}
@@ -654,6 +632,6 @@ export function MusicSettings({
           </div>
         )}
       </section>
-    </div>
+    </SettingsShell>
   )
 }

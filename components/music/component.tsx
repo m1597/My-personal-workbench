@@ -23,13 +23,13 @@ import {
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Button, Checkbox, Slider, Tab, TabList } from '@fluentui/react-components'
+import { SettingsGear } from '../../src/renderer/src/app/ComponentSettings'
 import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import {
   AudioLines,
   Heart,
   Disc3,
   CircleHelp,
-  Settings,
   PanelBottomClose,
   PanelTopOpen,
   PanelTopClose,
@@ -452,11 +452,15 @@ function Music() {
   function openSettings(category: SettingsCategory) {
     setSettingsCategory(category)
     setTab('settings')
-    requestAnimationFrame(() => document.querySelector('.music-scroll')?.scrollTo(0, 0))
   }
-  const [tab, setTab] = useState('library'),
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [tab, setPage] = useState('library'),
     [libraryCollection, setLibraryCollection] = useState('all'),
     [playlistCollection, setPlaylistCollection] = useState('favorites')
+  const setTab = useCallback((page: string) => {
+    setSettingsOpen(page === 'settings')
+    if (page !== 'settings') setPage(page)
+  }, [])
   const catalog = useCatalogNavigation(tab)
   const [libraryVisit, resetLibrary] = useState(0)
   const [online, setOnline] = useState<{
@@ -558,7 +562,7 @@ function Music() {
       unsubscribe()
       window.removeEventListener('music-model-required', requestModel)
     }
-  }, [])
+  }, [setTab])
   useEffect(() => {
     if (tab !== 'library' && tab !== 'playlists') return
     let mounted = true
@@ -1407,8 +1411,47 @@ function Music() {
   const content = (
     <ComponentTheme
       surface={docked ? 'embedded' : 'window'}
-      className={presentation === 'bar' ? 'music-shell music-bar-only' : 'music-shell'}
+      className={
+        presentation === 'bar'
+          ? 'music-shell music-bar-only'
+          : settingsOpen
+            ? 'music-shell music-settings-open'
+            : 'music-shell'
+      }
     >
+      {settingsOpen && state && (
+        <div className="music-settings-page">
+          <MusicSettings
+            plugins={
+              <PluginSettings
+                rows={pluginRows}
+                reload={refreshPlugins}
+                open={(id) => {
+                  setSelectedPlugin(id)
+                  setTab('extensions')
+                }}
+              />
+            }
+            onBack={() => {
+              setSettingsOpen(false)
+              requestAnimationFrame(() =>
+                document.querySelector<HTMLButtonElement>('button[aria-label="音乐设置"]')?.focus(),
+              )
+            }}
+            category={settingsCategory}
+            selectCategory={(category) => {
+              setGuide(null)
+              setSettingsCategory(category)
+            }}
+            script={script}
+            guideTarget={guide === null ? undefined : guideSteps[guide].target}
+            models={state.models}
+            prefs={state.prefs}
+            job={state.importJob}
+            refresh={refresh}
+          />
+        </div>
+      )}
       {!docked && (
         <header className="music-header">
           <div className="music-mark">
@@ -1488,22 +1531,13 @@ function Music() {
               打开 Music 使用引导
             </span>
           </span>
-          <span className="music-guide-trigger">
-            <Button
-              size="small"
-              appearance="subtle"
-              icon={<Settings size={17} />}
-              aria-label="音乐设置"
-              aria-describedby="music-settings-hint"
-              onClick={() => {
-                setGuide(null)
-                openSettings(settingsCategory)
-              }}
-            />
-            <span role="tooltip" id="music-settings-hint">
-              音乐设置
-            </span>
-          </span>
+          <SettingsGear
+            label="音乐设置"
+            onClick={() => {
+              setGuide(null)
+              openSettings(settingsCategory)
+            }}
+          />
           <Button
             appearance="subtle"
             size="small"
@@ -1742,32 +1776,6 @@ function Music() {
             }
             refresh={refresh}
           />
-        ) : tab === 'settings' ? (
-          state && (
-            <MusicSettings
-              plugins={
-                <PluginSettings
-                  rows={pluginRows}
-                  reload={refreshPlugins}
-                  open={(id) => {
-                    setSelectedPlugin(id)
-                    setTab('extensions')
-                  }}
-                />
-              }
-              category={settingsCategory}
-              selectCategory={(category) => {
-                setGuide(null)
-                setSettingsCategory(category)
-              }}
-              script={script}
-              guideTarget={guide === null ? undefined : guideSteps[guide].target}
-              models={state.models}
-              prefs={state.prefs}
-              job={state.importJob}
-              refresh={refresh}
-            />
-          )
         ) : tab === 'feed' ? (
           <ArtistReleases
             play={playSearchResult}

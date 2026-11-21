@@ -1,6 +1,6 @@
 import { openToolkitPanel, ToolkitIcon } from './ToolkitEntry'
 import { useTranslation } from './preferences'
-import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, type ReactElement } from 'react'
 import {
   Button,
   Menu,
@@ -10,7 +10,18 @@ import {
   MenuSplitGroup,
   MenuItem,
 } from '@fluentui/react-components'
-import { ChevronDown, Check, Eye, EyeOff, Plus, PanelsTopLeft } from 'lucide-react'
+import {
+  ChevronDown,
+  Check,
+  Eye,
+  EyeOff,
+  Plus,
+  PanelsTopLeft,
+  AudioLines,
+  Folder,
+  Boxes,
+  X,
+} from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { modules } from './moduleRegistry'
 import { openModule } from './workspace'
@@ -28,6 +39,45 @@ declare global {
       open(tool?: string): Promise<boolean>
     }
   }
+}
+function ComponentMenuRow({
+  name,
+  icon,
+  status,
+  checked,
+  open,
+  action,
+}: {
+  name: string
+  icon: ReactElement
+  status: string
+  checked?: boolean
+  open: () => void
+  action: { label: string; icon: ReactElement; disabled: boolean; run: () => void }
+}) {
+  return (
+    <MenuSplitGroup className="component-menu-row">
+      <MenuItem
+        role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+        aria-checked={checked}
+        aria-label={name}
+        onClick={open}
+      >
+        <span className="component-menu-columns">
+          <span aria-hidden="true">{icon}</span>
+          <span>{name}</span>
+          <small>{status}</small>
+        </span>
+      </MenuItem>
+      <MenuItem
+        aria-label={action.label}
+        title={action.label}
+        disabled={action.disabled}
+        icon={action.icon}
+        onClick={action.run}
+      />
+    </MenuSplitGroup>
+  )
 }
 export function WindowMenu() {
   const t = useTranslation()
@@ -90,6 +140,16 @@ export function WindowMenu() {
       setMusicError(String(error))
     }
   }
+  const toolkitOpen = workspace.visible.includes('component-toolkit')
+  const promptRunning = promptState?.phase === 'ready' || promptState?.phase === 'attaching'
+  const promptHidden = promptState?.presentation === 'background'
+  function status(open: boolean, background: boolean) {
+    return open
+      ? background
+        ? t('后台运行', 'In background')
+        : t('显示中', 'Visible')
+      : t('未打开', 'Not open')
+  }
   function arrange(position: 'right' | 'bottom') {
     if (panels.length !== 2) return
     panels[1].api.moveTo({ group: panels[0].group, position })
@@ -118,15 +178,68 @@ export function WindowMenu() {
         </MenuTrigger>
         <MenuPopover className="component-popup workbench-menu">
           <MenuList aria-label={t('组件菜单', 'Components menu')} id="window-menu">
+            {installed && (
+              <ComponentMenuRow
+                name="Music"
+                icon={<AudioLines size={16} />}
+                status={status(running, hidden)}
+                checked={running}
+                open={() => void toggleRunning(window.musicDock)}
+                action={{
+                  label: visibilityLabel,
+                  icon: hidden ? <EyeOff size={16} /> : <Eye size={16} />,
+                  disabled: music?.phase !== 'ready',
+                  run: () => void window.musicDock?.toggleVisibility(),
+                }}
+              />
+            )}
             {toolkit && (
-              <MenuItem
+              <ComponentMenuRow
+                name={t('工具集', 'Toolkit')}
                 icon={<ToolkitIcon />}
-                onClick={() =>
+                status={toolkitOpen ? t('已打开', 'Open') : t('未打开', 'Not open')}
+                open={() =>
                   workspace.api && openToolkitPanel(workspace.api, t('工具集', 'Toolkit'))
                 }
-              >
-                {t('工具集', 'Toolkit')}
-              </MenuItem>
+                action={{
+                  label: t('关闭工具集', 'Close toolkit'),
+                  icon: <X size={16} />,
+                  disabled: !toolkitOpen,
+                  run: () => workspace.api?.getPanel('component-toolkit')?.api.close(),
+                }}
+              />
+            )}
+            {hasPrompts && (
+              <ComponentMenuRow
+                name={t('文件库', 'File library')}
+                icon={<Folder size={16} />}
+                status={status(promptRunning, promptHidden)}
+                checked={promptRunning}
+                open={() => void toggleRunning(window.promptDock)}
+                action={{
+                  label: promptHidden
+                    ? t('显示文件库', 'Show file library')
+                    : t('隐藏文件库', 'Hide file library'),
+                  icon: promptHidden ? <EyeOff size={16} /> : <Eye size={16} />,
+                  disabled: promptState?.phase !== 'ready',
+                  run: () => void window.promptDock?.toggleVisibility(),
+                }}
+              />
+            )}
+            {sample && (
+              <ComponentMenuRow
+                name={t('示例组件', 'Sample component')}
+                icon={<Boxes size={16} />}
+                status={status(sampleRunning, sampleHidden)}
+                checked={sampleRunning}
+                open={() => void toggleRunning(window.componentHost)}
+                action={{
+                  label: sampleVisibilityLabel,
+                  icon: sampleHidden ? <EyeOff size={16} /> : <Eye size={16} />,
+                  disabled: sampleState?.phase !== 'ready',
+                  run: () => void window.componentHost?.toggleVisibility(),
+                }}
+              />
             )}
             {modules.map((module) => (
               <MenuItem
@@ -139,70 +252,6 @@ export function WindowMenu() {
                 {module.title}
               </MenuItem>
             ))}
-            {hasPrompts && (
-              <MenuItem
-                role="menuitemcheckbox"
-                aria-checked={promptState?.phase === 'ready'}
-                onClick={() => void toggleRunning(window.promptDock)}
-              >
-                {t('文件库', 'File library')}
-              </MenuItem>
-            )}
-            {sample && (
-              <MenuSplitGroup>
-                <MenuItem
-                  role="menuitemcheckbox"
-                  aria-checked={sampleRunning}
-                  icon={sampleRunning ? <Check size={16} /> : <Plus size={16} />}
-                  aria-label={t('示例组件', 'Sample component')}
-                  onClick={() => void toggleRunning(window.componentHost)}
-                >
-                  {t('示例组件', 'Sample component')}
-                  <small>
-                    {sampleState?.phase === 'ready'
-                      ? sampleHidden
-                        ? t('后台运行', 'In background')
-                        : t('显示中', 'Visible')
-                      : t('未打开', 'Not open')}
-                  </small>
-                </MenuItem>
-                <MenuItem
-                  disabled={sampleState?.phase !== 'ready'}
-                  aria-label={sampleVisibilityLabel}
-                  title={sampleVisibilityLabel}
-                  icon={sampleHidden ? <EyeOff size={16} /> : <Eye size={16} />}
-                  onClick={() => void window.componentHost?.toggleVisibility()}
-                />
-              </MenuSplitGroup>
-            )}
-            {installed && (
-              <MenuSplitGroup>
-                <MenuItem
-                  role="menuitemcheckbox"
-                  aria-label="Music"
-                  aria-checked={running}
-                  icon={running ? <Check size={16} /> : <Plus size={16} />}
-                  onClick={() => void toggleRunning(window.musicDock)}
-                >
-                  <span>Music</span>
-                  <small>
-                    {running
-                      ? hidden
-                        ? t('后台运行', 'In background')
-                        : t('显示中', 'Visible')
-                      : t('未打开', 'Not open')}
-                  </small>
-                </MenuItem>
-                <MenuItem
-                  className="music-menu-reveal"
-                  aria-label={visibilityLabel}
-                  title={visibilityLabel}
-                  disabled={music?.phase !== 'ready'}
-                  icon={hidden ? <EyeOff size={16} /> : <Eye size={16} />}
-                  onClick={() => void window.musicDock?.toggleVisibility()}
-                />
-              </MenuSplitGroup>
-            )}
             {!modules.length && !toolkit && !installed && !sample && !hasPrompts && (
               <MenuItem disabled>{t('未检测到已安装组件', 'No installed components')}</MenuItem>
             )}
