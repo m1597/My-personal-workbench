@@ -12,12 +12,22 @@ $exe = @{ Workbench='FitBay'; Music='FitBay Music'; Prompts='FitBay Prompts'; To
 $components = @('Music','Prompts','Toolkit')
 $desktop = [Environment]::GetFolderPath('DesktopDirectory')
 $shell = New-Object -ComObject WScript.Shell
+$desktopFolder = (New-Object -ComObject Shell.Application).NameSpace($desktop)
 $baselineLinks = @(Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' -Force | ForEach-Object FullName)
 function NewDesktopLinks {
   Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' -Force | Where-Object { $_.FullName -notin $baselineLinks }
 }
 function ShortcutTarget($link) {
-  $target = $shell.CreateShortcut($link.FullName).TargetPath
+  $item = $desktopFolder.ParseName($link.Name)
+  $target = $item.ExtendedProperty('System.Link.TargetParsingPath')
+  if (!$target) {
+    # WSH uses the system ANSI code page on some Windows images. Read the
+    # same link bytes under an ASCII name when testing localized shortcuts.
+    $copy = Join-Path $env:RUNNER_TEMP 'fitbay-target-inspection.lnk'
+    Copy-Item -LiteralPath $link.FullName -Destination $copy -Force
+    $target = $shell.CreateShortcut($copy).TargetPath
+    if (!$target) { throw "Could not read $($link.FullName) ($($link.Length) bytes): $([Convert]::ToBase64String([IO.File]::ReadAllBytes($copy)))" }
+  }
   Write-Host "$($link.Name) -> [$target]"
   if ($target) { return [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($target)) }
 }
