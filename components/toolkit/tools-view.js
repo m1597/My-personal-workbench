@@ -368,6 +368,57 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
         .catch(error)
       return
     }
+    if (active === 'pairs') {
+      const prefix = field(panel, '新名称前缀', '图片')
+      const texts = files.filter((f) => f.type === 'text/plain')
+      const matches = new Map()
+      const stem = (name) => name.replace(/\.[^.]+$/, '').toLowerCase()
+      for (const image of imgs) {
+        const label = el('label', image.name + ' 的提示词'),
+          select = el('select')
+        select.add(new Option('请选择提示词', ''))
+        for (const t of texts) select.add(new Option(t.name, t.id))
+        const exact = texts.filter((t) => stem(t.name) === stem(image.name))
+        if (exact.length === 1) select.value = exact[0].id
+        label.append(select)
+        panel.append(label)
+        matches.set(image.id, select)
+      }
+      let revision = 0,
+        token
+      const apply = button('确认重命名', async () => {
+        notice.textContent = await api.applyRename(token)
+        files = []
+        draw()
+      })
+      apply.disabled = true
+      prefix.oninput = () => {
+        revision++
+        apply.disabled = true
+        out.replaceChildren()
+      }
+      for (const select of matches.values()) select.onchange = prefix.oninput
+      panel.append(
+        button('预览名称', async () => {
+          const version = ++revision
+          apply.disabled = true
+          const next = await api.planRename({
+            prefix: prefix.value,
+            pairs: [...matches].map(([id, select]) => [id, select.value]),
+          })
+          const { rows } = next
+          if (version !== revision) return
+          token = next.token
+          out.replaceChildren(
+            ...rows.map((r) => el('p', r.from + ' → ' + r.to + (r.issue ? ' · ' + r.issue : ''))),
+          )
+          apply.disabled = !rows.length || rows.some((r) => r.issue)
+        }),
+        out,
+        apply,
+      )
+      return
+    }
     if (active === 'album') {
       if (imgs.length < 2) {
         panel.append(el('p', '请选择至少两张图片'))
