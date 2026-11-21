@@ -1,6 +1,8 @@
+import { SettingsGear, SettingsShell } from '../../src/renderer/src/app/ComponentSettings'
+import { WindowNewRegular } from '@fluentui/react-icons'
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ComponentTheme } from '../../src/renderer/src/app/ComponentTheme'
+import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import './style.css'
 import { PromptConnectionSettings, ActionConnection } from './PromptConnections'
 import { FileBrowser, DiskImage, type Entry, type Listing } from './FileBrowser'
@@ -21,6 +23,7 @@ declare global {
     promptLibrary: {
       identity(root: string, name: string): Promise<string>
       locate(root: string, name: string, identity: string): Promise<Entry | null>
+      batch(tool: 'rename' | 'resize', items: { root: string; name: string }[]): Promise<void>
       browse(root: string, dir: string, query: string, all: boolean): Promise<Listing>
       image(root: string, name: string, thumbnail: boolean): Promise<string>
       companion(root: string, name: string): Promise<string>
@@ -44,6 +47,7 @@ declare global {
     }
   }
 }
+configureBackdrop()
 const api = window.promptLibrary
 const message = (e: unknown) => String(e).replace(/^.*Error: /, '')
 function Palette() {
@@ -167,6 +171,7 @@ function Library() {
     [tick, refresh] = useState(0),
     [dock, setDock] = useState(false),
     [settings, setSettings] = useState(false),
+    [category, setCategory] = useState('directory'),
     [pinOpen, setPinOpen] = useState(false)
   const name = entry?.name || '',
     fileRoot = entry?.root
@@ -199,12 +204,26 @@ function Library() {
       setDock(s.mode === 'docked')
       if ((s.settingsRequest ?? 0) > request) {
         request = s.settingsRequest ?? 0
-        if (!s.settingsTarget || s.settingsTarget === 'api') setSettings(true)
+        setCategory(
+          s.settingsTarget === 'api' || s.settingsTarget === 'shortcut'
+            ? s.settingsTarget
+            : 'directory',
+        )
+        setSettings(true)
       }
     }
-    const off = window.sampleHost.subscribe(apply)
-    void window.sampleHost.hello({ protocol: '0.1' }).then(apply)
-    return off
+    let waiting = true
+    const off = window.sampleHost.subscribe((state) => {
+      waiting = false
+      apply(state)
+    })
+    void window.sampleHost.hello({ protocol: '0.1' }).then((state) => {
+      if (waiting) apply(state)
+    })
+    return () => {
+      waiting = false
+      off()
+    }
   }, [])
   // biome-ignore lint/correctness/useExhaustiveDependencies: disk notifications explicitly invalidate the directory snapshot.
   useEffect(() => {
@@ -289,7 +308,7 @@ function Library() {
   }
   function reset(item?: Entry) {
     const next = item?.name || ''
-    if (item?.type !== 'image') enlarge(false)
+    if (item?.type !== 'image' && item?.type !== 'text') enlarge(false)
     localStorage.removeItem(draftKey)
     setFileIssue('')
     setPinOpen(false)
@@ -307,7 +326,7 @@ function Library() {
     )
   }
   async function folder(mode: 'temp' | 'remember' | 'default') {
-    if (!discard()) return
+    if ((mode !== 'remember' || !state?.root) && !discard()) return
     const previous = state?.root
     await (mode === 'default' ? api.default() : api.choose(mode === 'remember'))
     if ((await api.state()).root !== previous) {
@@ -317,27 +336,77 @@ function Library() {
     update()
   }
   return (
-    <>
+    <ComponentTheme surface={dock ? 'embedded' : 'window'}>
       {settings && (
         <main className="library prompt-settings">
-          <header>
-            <h1>API 与模型</h1>
-            <button type="button" onClick={() => setSettings(false)}>
-              返回仓库
-            </button>
-          </header>
-          <PromptConnectionSettings />
+          <SettingsShell
+            title="文件库设置"
+            categories={[
+              { id: 'directory', name: '目录' },
+              { id: 'shortcut', name: '全局快捷键' },
+              { id: 'api', name: 'API 与模型' },
+            ]}
+            active={category}
+            onSelect={setCategory}
+            onBack={() => setSettings(false)}
+          >
+            {category === 'directory' && (
+              <>
+                <p>默认目录 · {state?.defaultRoot || '尚未设置'}</p>{' '}
+                <button type="button" onClick={() => void attempt(() => folder('remember'))}>
+                  设置默认目录
+                </button>
+              </>
+            )}
+            {category === 'shortcut' && (
+              <>
+                <div className="tools">
+                  <small>调用目录 · {state?.paletteRoot || state?.defaultRoot || '尚未设置'}</small>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void attempt(async () => {
+                        await api.choosePalette()
+                        update()
+                      })
+                    }
+                  >
+                    设置调用目录
+                  </button>
+                </div>
+                <label>
+                  快捷键
+                  <input value={hot} onChange={(e) => setHot(e.target.value)} />
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void attempt(async () => {
+                      await api.shortcut(hot)
+                      update()
+                      say('快捷键已保存')
+                    })
+                  }
+                >
+                  应用快捷键
+                </button>
+              </>
+            )}
+            {category === 'api' && <PromptConnectionSettings />}
+            {category !== 'api' && <small role="status">{notice}</small>}
+          </SettingsShell>
         </main>
       )}
       <main hidden={settings} className="library">
         <header>
           <h1>文件库</h1>
           <div className="tools">
-            <button type="button" onClick={() => setSettings(true)}>
-              API 与模型
-            </button>
+            <SettingsGear label="文件库设置" onClick={() => setSettings(true)} />
             <button
               type="button"
+              className="fitbay-settings-action"
+              title={dock ? '独立打开' : '加入工作台'}
+              aria-label={dock ? '独立打开' : '加入工作台'}
               onClick={() =>
                 void attempt(async () => {
                   const r = await window.sampleHost.transfer(dock ? 'detach' : 'attach')
@@ -345,7 +414,7 @@ function Library() {
                 })
               }
             >
-              {dock ? '独立打开' : '加入工作台'}
+              <WindowNewRegular fontSize={18} />
             </button>
           </div>
         </header>
@@ -353,9 +422,7 @@ function Library() {
           <button type="button" onClick={() => void attempt(() => folder('temp'))}>
             打开文件夹
           </button>
-          <button type="button" onClick={() => void attempt(() => folder('remember'))}>
-            设置默认目录
-          </button>
+
           <button
             type="button"
             disabled={!state?.defaultRoot}
@@ -381,6 +448,31 @@ function Library() {
             enlarge={() => enlarge(true)}
           />
           <article className={entry ? 'file-preview active' : 'file-preview'}>
+            {enlarged && entry && (
+              <dialog
+                ref={imageDialog}
+                aria-label={entry.type === 'image' ? '图片预览' : '文本预览'}
+                onKeyDown={(e) => {
+                  if (e.code === 'Space') {
+                    e.preventDefault()
+                    if (!e.repeat) imageDialog.current?.close()
+                  }
+                }}
+                onClose={() => enlarge(false)}
+                className="large-preview"
+              >
+                <button type="button" onClick={() => imageDialog.current?.close()}>
+                  关闭预览
+                </button>
+                {entry.type === 'image' ? (
+                  <DiskImage file={entry} tick={tick} />
+                ) : /\.md$/i.test(name) ? (
+                  <MarkdownPreview text={draft} />
+                ) : (
+                  <pre>{draft}</pre>
+                )}
+              </dialog>
+            )}
             {entry && entry.type !== 'text' && (
               <>
                 <h2>{name}</h2>
@@ -404,19 +496,6 @@ function Library() {
                       >
                         打开同名 TXT
                       </button>
-                    )}
-                    {enlarged && (
-                      <dialog
-                        ref={imageDialog}
-                        aria-label="图片预览"
-                        onClose={() => enlarge(false)}
-                        className="large-preview"
-                      >
-                        <button type="button" onClick={() => imageDialog.current?.close()}>
-                          关闭预览
-                        </button>
-                        <DiskImage file={entry} tick={tick} />
-                      </dialog>
                     )}
                   </>
                 ) : (
@@ -527,51 +606,23 @@ function Library() {
             )}
           </article>
         </section>
-        <details>
-          <summary>全局快捷键 · {state?.shortcut}</summary>
-          <div className="tools">
-            <small>调用目录 · {state?.paletteRoot || state?.defaultRoot || '尚未设置'}</small>
-            <button
-              type="button"
-              onClick={() =>
-                void attempt(async () => {
-                  await api.choosePalette()
-                  update()
-                })
-              }
-            >
-              设置调用目录
-            </button>
-          </div>
-          <label>
-            快捷键
-            <input value={hot} onChange={(e) => setHot(e.target.value)} />
-          </label>
-          <button
-            type="button"
-            onClick={() =>
-              void attempt(async () => {
-                await api.shortcut(hot)
-                update()
-                say('快捷键已保存')
-              })
-            }
-          >
-            应用快捷键
-          </button>
-        </details>
+
         <small role="status">
           {directoryIssue || fileIssue || notice || state?.registrationError}
         </small>
       </main>
-    </>
+    </ComponentTheme>
   )
 }
 const palette = new URLSearchParams(location.search).has('palette')
 const container = document.getElementById('root')
 if (container)
   createRoot(container).render(
-    <ComponentTheme surface={palette ? 'window' : 'embedded'}>
-      {palette ? <Palette /> : <Library />}
-    </ComponentTheme>,
+    palette ? (
+      <ComponentTheme surface="window">
+        <Palette />
+      </ComponentTheme>
+    ) : (
+      <Library />
+    ),
   )

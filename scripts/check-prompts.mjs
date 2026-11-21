@@ -4,6 +4,12 @@ import { mkdir, mkdtemp, writeFile, readFile, rename } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { createPromptActionReader } from '../examples/component-host/prompt-actions.mjs'
 
+async function openSettings(ui, category) {
+  await ui.getByRole('button', { name: '文件库设置', exact: true }).click()
+  const toggle = ui.getByRole('button', { name: '设置分类', exact: true })
+  if (await toggle.isVisible()) await toggle.click()
+  await ui.getByRole('button', { name: category, exact: true }).click()
+}
 const root = path.resolve('dist/component-prototype')
 const evidence = await mkdtemp(path.resolve('tmp/prompts-'))
 console.log(evidence)
@@ -40,7 +46,9 @@ async function choose(ui, button, folder) {
 }
 try {
   let ui = await launch()
+  await openSettings(ui, '目录')
   await choose(ui, '设置默认目录', a)
+  await ui.getByRole('button', { name: '返回', exact: true }).click()
   await ui.getByRole('button', { name: '解释推导.md' }).click()
   await expect(ui.getByText('初稿', { exact: false }).last()).toBeVisible()
   await rename(a, a + '.moved')
@@ -107,7 +115,7 @@ try {
   await ui.getByRole('button', { name: '解释推导.md' }).click()
   await expect(ui.getByRole('textbox', { name: '提示词正文' })).toHaveValue('测试关闭恢复')
   if (desktop) {
-    await ui.getByText(/全局快捷键 ·/).click()
+    await openSettings(ui, '全局快捷键')
     await ui.getByRole('textbox', { name: '快捷键' }).fill('Control+Alt+Shift+F10')
     await ui.getByRole('button', { name: '应用快捷键' }).click()
     await expect(ui.getByRole('status')).toHaveText('快捷键已保存')

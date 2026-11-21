@@ -16,7 +16,7 @@ body,
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  background: linear-gradient(135deg, var(--workbench-popup-tint), var(--solid-surface));
+  background: transparent;
   color: var(--text);
   font-family: inherit;
   overflow: auto;
@@ -50,7 +50,7 @@ select {
   font: inherit;
   color: inherit;
   background: var(--control);
-  border: 1px solid var(--stroke-strong);
+  border: 1px solid var(--stroke);
   border-radius: 5px;
   padding: 5px 9px;
 }
@@ -58,7 +58,10 @@ button,
 summary {
   cursor: pointer;
 }
-button:hover,
+button:not(:disabled):hover {
+  background: var(--hover);
+  border-color: var(--stroke-strong);
+}
 .selected {
   background: var(--accent-soft);
 }
@@ -189,7 +192,7 @@ summary {
   width: 100%;
   min-width: 0;
 }
-.prompt-settings option {
+select option {
   background: var(--solid-surface);
   color: var(--text);
 }
@@ -213,7 +216,7 @@ summary {
   grid-template-rows: minmax(0, 1fr);
 }
 .locations {
-  border-inline-end: 1px solid var(--stroke-strong);
+  border-inline-end: 1px solid var(--stroke);
   padding-inline-end: 6px;
 }
 .locations h2 {

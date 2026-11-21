@@ -11,6 +11,7 @@ const methods = [
   'shortcut',
   'identity',
   'locate',
+  'batch',
   'browse',
   'image',
   'companion',

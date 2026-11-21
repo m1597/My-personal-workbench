@@ -90,6 +90,19 @@ export function FileBrowser({
     unavailable: [],
     truncated: false,
   })
+  const [marked, mark] = useState<string[]>([])
+  const anchor = useRef('')
+  const selected = data.rows.filter((row) => row.type !== 'dir' && marked.includes(id(row) || ''))
+  async function send(tool: 'rename' | 'resize') {
+    try {
+      await window.promptLibrary.batch(
+        tool,
+        selected.map(({ root, name }) => ({ root, name })),
+      )
+    } catch (e) {
+      issue(String(e).replace(/^.*Error: /, ''))
+    }
+  }
   const viewKey = JSON.stringify(['file-library-view', root, dir])
   const [view, setView] = useState('list')
   useEffect(() => {
@@ -126,6 +139,7 @@ export function FileBrowser({
             if (!live) return
             const old = state.current
             setData(next)
+            mark((previous) => previous.filter((key) => next.rows.some((row) => id(row) === key)))
             old.issue(
               next.unavailable.length
                 ? '目录暂时不可用，恢复后会自动刷新 · ' + next.unavailable.join('、')
@@ -299,6 +313,24 @@ export function FileBrowser({
             <option value="grid">缩略图</option>
           </select>
         </div>
+        {selected.length > 0 && (
+          <div className="tools">
+            <small>已选 {selected.length} 项</small>
+            <button type="button" onClick={() => void send('rename')}>
+              批量重命名
+            </button>
+            <button
+              type="button"
+              disabled={!selected.every((row) => row.type === 'image')}
+              onClick={() => void send('resize')}
+            >
+              改尺寸
+            </button>
+            <button type="button" onClick={() => mark([])}>
+              清除多选
+            </button>
+          </div>
+        )}
         {dir && <small>{dir}</small>}
         <div className={'entries ' + view}>
           {data.rows.map((r) => (
@@ -306,18 +338,40 @@ export function FileBrowser({
               type="button"
               key={id(r)}
               title={r.root + ' / ' + r.name}
-              className={id(current) === id(r) ? 'selected' : ''}
-              onClick={() => {
+              aria-pressed={marked.includes(id(r) || '')}
+              className={id(current) === id(r) || marked.includes(id(r) || '') ? 'selected' : ''}
+              onClick={(event) => {
+                const key = id(r) || ''
+                if (r.type !== 'dir' && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+                  const prior = anchor.current || id(current) || key
+                  const rows = data.rows
+                    .filter((row) => row.type !== 'dir')
+                    .map((row) => id(row) || '')
+                  if (event.shiftKey) {
+                    const a = Math.max(0, rows.indexOf(prior)),
+                      b = rows.indexOf(key)
+                    mark(rows.slice(Math.min(a, b), Math.max(a, b) + 1))
+                  } else
+                    mark((prev) => {
+                      const base = prev.length ? prev : prior !== key ? [prior] : []
+                      return base.includes(key) ? base.filter((k) => k !== key) : [...base, key]
+                    })
+                  anchor.current = key
+                  return
+                }
+                mark([])
+                anchor.current = key
                 if (r.type === 'dir') {
                   if (r.root === root) navigate(r.name)
                   else void activate(r.root, r.name)
                 } else if (id(current) !== id(r) && allow()) select(r)
               }}
               onKeyDown={(e) => {
-                if (e.code === 'Space' && r.type === 'image') {
+                if (e.code === 'Space' && (r.type === 'image' || r.type === 'text')) {
                   e.preventDefault()
-                  if (allow()) {
-                    select(r)
+                  if (e.repeat) return
+                  if (id(current) === id(r) || allow()) {
+                    if (id(current) !== id(r)) select(r)
                     enlarge()
                   }
                 }
