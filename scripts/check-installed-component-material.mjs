@@ -64,7 +64,7 @@ try {
     ['加入工作台', 'embedded', '1'],
   ]) {
     await library(
-      `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(button)}).click()`,
+      `[...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || b.textContent.trim()) === ${JSON.stringify(button)}).click()`,
     )
     await expect
       .poll(() => library("document.querySelector('[data-surface]').dataset.surface"))
