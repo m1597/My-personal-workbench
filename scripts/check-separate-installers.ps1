@@ -82,6 +82,10 @@ function InstallProduct($p, [switch]$discoverMusic) {
   try {
     foreach ($folder in 'Desktop','Programs') {
       $link=Join-Path $known[$folder] ($p.Shortcut+'.lnk')
+      if ($folder -eq 'Desktop' -and $p.Name -ne 'Workbench') {
+        if (Test-Path -LiteralPath $link) {throw "Unexpected component desktop shortcut: $link"}
+        continue
+      }
       if (-not (Test-Path -LiteralPath $link -PathType Leaf)) {throw "Missing shortcut: $link"}
       $sc=$shell.CreateShortcut($link)
       try {if (-not (SamePath $sc.TargetPath $exe)) {throw "Shortcut does not launch the installed program: $link"}}
@@ -162,6 +166,7 @@ function RemoveProduct($p) {
       throw "Uninstalling $($p.Name) removed the other installed product or its registration."
     }
     foreach ($folder in 'Desktop','Programs') {
+      if ($folder -eq 'Desktop' -and $peer.Name -ne 'Workbench') {continue}
       if (-not (Test-Path -LiteralPath (Join-Path $known[$folder] ($peer.Shortcut+'.lnk')))) {throw 'Uninstall removed the other shortcut.'}
     }
   }
