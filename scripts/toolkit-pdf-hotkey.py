@@ -1,25 +1,29 @@
-"""Activate the isolated PDF fixture and exercise its registered Windows shortcut."""
+"""Activate only the isolated Chrome PDF fixture, without moving the mouse."""
 import time
-
+import ctypes
 import win32api
-import win32con
+
 import win32gui
+import win32process
+from win32com.client import Dispatch
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys
 
 viewer = Desktop(backend="win32").window(title_re=".*FitBaySelectionTest.*Google Chrome.*")
 handle = viewer.handle
-flags = win32con.SWP_NOSIZE | win32con.SWP_NOMOVE
-win32gui.SetWindowPos(handle, win32con.HWND_TOPMOST, 0, 0, 0, 0, flags)
-try:
-    left, top, _, _ = win32gui.GetWindowRect(handle)
-    point = (left + 130, top + 20)
-    assert win32gui.GetAncestor(win32gui.WindowFromPoint(point), 2) == handle
-    win32api.SetCursorPos(point)
-    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0)
-    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
-    time.sleep(0.2)
-finally:
-    win32gui.SetWindowPos(handle, win32con.HWND_NOTOPMOST, 0, 0, 0, 0, flags)
+if win32gui.GetForegroundWindow() != handle:
+    Dispatch("WScript.Shell").AppActivate(win32process.GetWindowThreadProcessId(handle)[1])
+    time.sleep(0.15)
+    if win32gui.GetForegroundWindow() != handle:
+        user32 = ctypes.windll.user32
+        caller = win32api.GetCurrentThreadId()
+        foreground = win32gui.GetForegroundWindow()
+        threads = {win32process.GetWindowThreadProcessId(w)[0] for w in [handle, foreground] if w}
+        attached = [t for t in threads if t != caller and user32.AttachThreadInput(caller,t,True)]
+        try:
+            user32.BringWindowToTop(handle)
+            user32.SetForegroundWindow(handle)
+        finally:
+            for t in attached: user32.AttachThreadInput(caller,t,False)
 assert win32gui.GetForegroundWindow() == handle
 send_keys("^%{F9}")

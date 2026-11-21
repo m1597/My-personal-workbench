@@ -43,6 +43,7 @@ const app = await _electron.launch({
 try {
   const home = await app.firstWindow()
   await expect(home.getByText('工具集', { exact: true })).toBeVisible()
+  await home.getByRole('button', { name: '设置', exact: true }).click()
   const marker = randomUUID()
   await expect(home.getByText('保存 API 配置')).toBeEnabled()
   await home.getByLabel('API 密钥').fill(marker)
@@ -86,7 +87,7 @@ try {
   console.log('PASS settings, conflict, narrow window', folder)
   // Keep the captured region on a dedicated, synthetic surface.
   const fixtureReady = app.waitForEvent('window')
-  await app.evaluate(async ({ BrowserWindow, screen }) => {
+  await app.evaluate(async ({ BrowserWindow, screen, desktopCapturer }) => {
     const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     globalThis.toolkitFixture = new BrowserWindow({ ...d.bounds, frame: false, skipTaskbar: true })
     await globalThis.toolkitFixture.loadURL(
@@ -95,14 +96,21 @@ try {
           '<title>FitBaySelectionTest</title><body style="margin:0;background:white;color:black"><div style="font:48px Arial;margin:30px">HELLO FITBAY 123</div></body>',
         ),
     )
-    globalThis.toolkitFixture.focus()
+    desktopCapturer.getSources = async ({ thumbnailSize }) => [
+      {
+        display_id: String(d.id),
+        thumbnail: (await globalThis.toolkitFixture.webContents.capturePage()).resize(
+          thumbnailSize,
+        ),
+      },
+    ]
   })
   const fixture = await fixtureReady
   async function region() {
-    await app.evaluate(() => globalThis.toolkitFixture.focus())
-    const waiting = app.waitForEvent('window')
-    await home.evaluate(() => window.toolkit.capture())
-    const overlay = await waiting
+    const [overlay] = await Promise.all([
+      app.waitForEvent('window', { timeout: 12000 }),
+      home.evaluate(() => window.toolkit.capture()),
+    ])
     await expect(overlay.locator('.screen img')).toBeVisible()
     await overlay.waitForFunction(() => document.querySelector('img')?.naturalWidth > 0)
     await overlay.mouse.click(9, 9)
@@ -166,7 +174,7 @@ try {
   await expect(result.getByText('测试接口回答 1')).toBeVisible({ timeout: 25000 })
   assert.equal(requests[0].model, 'test')
   assert.equal(requests[0].path, '/v1/chat/completions')
-  assert.match(requests[0].messages[0].content, /HELLO/i)
+  assert(/HELLO/i.test(requests[0].messages[0].content), 'OCR 未返回合成样张文字')
   await result.close()
   console.log('PASS local OCR to text-only API')
   overlay = await region()
@@ -271,7 +279,6 @@ try {
   assert.equal(requests.at(-1).messages[0].content[0].text, '图中的数字是什么？')
   assert.equal(requests.at(-1).messages[0].content[1].type, 'image_url')
   await visual.close()
-  await fixture.close()
   if (process.argv.includes('--host')) {
     const host = await _electron.launch({
       args: [
@@ -290,7 +297,7 @@ try {
         .poll(() => shell.evaluate(async () => (await window.promptDock.status()).phase))
         .toBe('ready')
       await shell.getByRole('button', { name: '组件', exact: true }).click()
-      await shell.getByText('工具集', { exact: true }).click()
+      await shell.locator('#window-menu').getByText('工具集', { exact: true }).click()
       const waiting = app.waitForEvent('window', { timeout: 20000 })
       await shell.getByRole('button', { name: '框选屏幕' }).click()
       const overlay = await waiting
@@ -309,6 +316,7 @@ try {
       await host.close()
     }
   }
+  await fixture.close()
 } finally {
   await app.close()
   server.close()
@@ -320,11 +328,13 @@ if (process.argv.includes('--absent')) {
   })
   try {
     const home = await standalone.firstWindow()
+    await home.getByRole('button', { name: '设置', exact: true }).click()
     await expect(home.getByLabel('模型名')).toHaveValue('test')
     await home.getByLabel('用途').selectOption('vision')
     await expect(home.getByLabel('模型名')).toHaveValue('vision-test')
     const waiting = standalone.waitForEvent('window')
-    await home.getByText('立即截图').click()
+    await home.getByText('返回工具集').click()
+    await home.getByText('框选屏幕', { exact: true }).click()
     const overlay = await waiting
     await expect(overlay.locator('.screen')).toBeVisible()
     assert.deepEqual(await overlay.evaluate(() => window.toolkit.actions()), [])

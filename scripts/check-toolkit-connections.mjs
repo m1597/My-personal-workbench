@@ -25,10 +25,10 @@ let app, host
 try {
   app = await _electron.launch(standalone)
   let home = await app.firstWindow()
-  await expect(home.getByText('立即截图')).toBeVisible()
+  await expect(home.getByText('框选屏幕')).toBeVisible()
   async function region() {
     const ready = app.waitForEvent('window')
-    await home.getByText('立即截图').click()
+    await home.getByText('框选屏幕').click()
     const overlay = await ready
     await expect(overlay.locator('.screen img')).toBeVisible()
     await overlay.mouse.move(20, 20)
@@ -62,6 +62,7 @@ try {
       return globalThis.hasCopy
     }),
   )
+  await expect.poll(() => overlay.isClosed()).toBe(true)
   overlay = await region()
   const resultReady = app.waitForEvent('window')
   await overlay.getByText('截图翻译').click()
@@ -96,6 +97,7 @@ try {
   await expect(form.getByLabel('模型', { exact: true })).toHaveValue('legacy-text')
   app = await _electron.launch(standalone)
   home = await app.firstWindow()
+  await home.getByRole('button', { name: '设置', exact: true }).click()
   await expect(home.getByLabel('模型名')).toHaveValue('legacy-text')
   const legacy = JSON.parse(await readFile(settings, 'utf8'))
   assert.deepEqual(legacy.capture, keys.capture)
@@ -117,7 +119,7 @@ try {
   await home.getByLabel('用途').selectOption('vision')
   await home
     .getByLabel('连接', { exact: true })
-    .selectOption({ label: '复用 · 截图与划词 · 翻译 — from-toolkit' })
+    .selectOption({ label: '复用 · 工具集 · 翻译 — from-toolkit' })
   await home.getByText('保存 API 配置').click()
   await expect(home.getByRole('status')).toContainText('已保存')
   await expect
