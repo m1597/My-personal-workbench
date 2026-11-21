@@ -93,6 +93,9 @@ export function FileBrowser({
   const [marked, mark] = useState<string[]>([])
   const anchor = useRef('')
   const selected = data.rows.filter((row) => row.type !== 'dir' && marked.includes(id(row) || ''))
+  function isSelected(row: Entry) {
+    return marked.length ? marked.includes(id(row) || '') : id(current) === id(row)
+  }
   async function send(tool: 'rename' | 'resize') {
     try {
       await window.promptLibrary.batch(
@@ -338,8 +341,8 @@ export function FileBrowser({
               type="button"
               key={id(r)}
               title={r.root + ' / ' + r.name}
-              aria-pressed={marked.includes(id(r) || '')}
-              className={id(current) === id(r) || marked.includes(id(r) || '') ? 'selected' : ''}
+              aria-pressed={isSelected(r)}
+              className={isSelected(r) ? 'selected' : ''}
               onClick={(event) => {
                 const key = id(r) || ''
                 if (r.type !== 'dir' && (event.ctrlKey || event.metaKey || event.shiftKey)) {
