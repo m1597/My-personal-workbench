@@ -1,18 +1,29 @@
 import path from 'node:path'
-import { mkdir, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { fileBrowser } from './file-browser.mjs'
+import { mkdir, opendir, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { watch, watchFile, unwatchFile } from 'node:fs'
 import {
   actionCatalogue,
   atomicWrite,
+  checkedDiskPath,
   promptExtension,
   promptPath,
   readPrompt,
 } from './prompt-actions.mjs'
 
 export async function promptLibrary(profile, changed) {
+  async function selectedDirectory(folder) {
+    const resolved = await realpath(folder)
+    if (!(await stat(resolved)).isDirectory()) throw Error('目录不可用')
+    try {
+      return await checkedDiskPath(path.resolve(folder), '')
+    } catch {
+      return resolved
+    }
+  }
   const file = path.join(profile, 'prompt-library', 'preferences.json')
   await mkdir(path.dirname(file), { recursive: true })
-  let prefs = { defaultRoot: '', shortcut: 'Control+Alt+Shift+P' }
+  let prefs = { defaultRoot: '', shortcut: 'Control+Alt+Shift+P', favorites: [], paletteRoot: '' }
   let preferenceError = ''
   try {
     const stored = JSON.parse(await readFile(file, 'utf8'))
@@ -22,42 +33,121 @@ export async function promptLibrary(profile, changed) {
       typeof stored.shortcut !== 'string'
     )
       throw Error('invalid preferences')
-    prefs = { defaultRoot: stored.defaultRoot, shortcut: stored.shortcut }
+    prefs = {
+      defaultRoot: stored.defaultRoot,
+      shortcut: stored.shortcut,
+      favorites: Array.isArray(stored.favorites)
+        ? stored.favorites.filter((p) => typeof p === 'string' && path.isAbsolute(p))
+        : [],
+      paletteRoot:
+        typeof stored.paletteRoot === 'string' && path.isAbsolute(stored.paletteRoot)
+          ? stored.paletteRoot
+          : '',
+    }
   } catch (e) {
     if (e.code !== 'ENOENT') preferenceError = '配置不可用，请重新选择默认目录或快捷键'
   }
   let root = prefs.defaultRoot,
-    watcher,
     timer
   let pending = Promise.resolve()
   let saving = Promise.resolve(),
     searchId = 0
   const catalog = actionCatalogue(profile)
   function refresh() {
+    if (closed) return
     clearTimeout(timer)
     timer = setTimeout(changed, 120)
   }
-  let watchedRoot
-  function rootChanged(current, previous) {
-    if (current.ino !== previous.ino || current.nlink !== previous.nlink) {
-      watchContents()
-      refresh()
+  const watches = new Map()
+  let probeTimer,
+    probeGeneration = 0,
+    closed = false
+  function watchUnavailable(paths) {
+    const generation = ++probeGeneration
+    clearTimeout(probeTimer)
+    if (!paths.length || closed) return
+    async function probe() {
+      for (const unavailable of paths) {
+        if (closed || generation !== probeGeneration) return
+        const folder = [root, ...favorites()].filter(Boolean).find((f) => {
+          const rel = path.relative(f, unavailable)
+          return !path.isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + path.sep)
+        })
+        if (!folder) continue
+        try {
+          const dir = await opendir(
+            await checkedDiskPath(folder, path.relative(folder, unavailable)),
+          )
+          await dir.close()
+        } catch {
+          continue
+        }
+        if (closed || generation !== probeGeneration) return
+        watches.get(folder)?.()
+        watches.delete(folder)
+        monitor()
+        refresh()
+        return
+      }
+      if (!closed && generation === probeGeneration)
+        probeTimer = setTimeout(() => void probe(), 1200)
     }
+    probeTimer = setTimeout(() => void probe(), 1200)
   }
+  const favorites = () => [...new Set([prefs.defaultRoot, ...prefs.favorites].filter(Boolean))]
+  const authorized = (folder) =>
+    Boolean(folder && (folder === root || favorites().includes(folder)))
+  const recent = new Map()
+  let browseSequence = 0
+  const browser = fileBrowser(authorized, favorites, () => [...recent.values()].reverse())
   function monitor() {
-    if (watchedRoot) unwatchFile(watchedRoot, rootChanged)
-    watchedRoot = root
-    if (root) watchFile(root, { interval: 550, persistent: false, bigint: true }, rootChanged)
-    watchContents()
-  }
-  function watchContents() {
-    watcher?.close()
-    if (!root) return
-    try {
-      watcher = watch(root, { recursive: true }, refresh)
-      watcher.on('error', refresh)
-    } catch {
-      refresh()
+    const roots = new Set([...favorites(), root, prefs.paletteRoot].filter(Boolean))
+    for (const [folder, stop] of watches)
+      if (!roots.has(folder)) {
+        stop()
+        watches.delete(folder)
+      }
+    for (const folder of roots) {
+      if (watches.has(folder)) continue
+      let watcher
+      function attach() {
+        watcher?.close()
+        watcher = undefined
+        try {
+          watcher = watch(folder, { recursive: true }, (_, name) => {
+            if (name) {
+              const key = path.join(folder, name)
+              recent.delete(key)
+              recent.set(key, { root: folder, name })
+              if (recent.size > 256) recent.delete(recent.keys().next().value)
+            }
+            refresh()
+          })
+          watcher.on('error', () => {
+            watcher?.close()
+            watcher = undefined
+            refresh()
+          })
+        } catch {
+          /* Retry on root polling once the directory is reachable. */
+        }
+      }
+      attach()
+      function poll(current, previous) {
+        if (
+          current.ino !== previous.ino ||
+          current.nlink !== previous.nlink ||
+          (!watcher && current.nlink)
+        ) {
+          attach()
+          refresh()
+        }
+      }
+      watchFile(folder, { interval: 650, persistent: false, bigint: true }, poll)
+      watches.set(folder, () => {
+        unwatchFile(folder, poll)
+        watcher?.close()
+      })
     }
   }
   monitor()
@@ -76,13 +166,6 @@ export async function promptLibrary(profile, changed) {
     async function walk(dir) {
       const entries = await readdir(dir, { withFileTypes: true }).catch((e) => {
         if (dir === folder) {
-          if (folder === root) {
-            clearTimeout(timer)
-            timer = setTimeout(() => {
-              watchContents()
-              changed()
-            }, 850)
-          }
           throw e
         }
         return []
@@ -99,13 +182,43 @@ export async function promptLibrary(profile, changed) {
     return results.sort((a, b) => a.localeCompare(b))
   }
   function assertRoot(expected) {
-    if (!root || root !== expected) throw Error('目录已切换，请刷新')
+    if (!authorized(expected)) throw Error('目录已切换，请刷新')
   }
   return {
-    state: () => ({ root, ...prefs, preferenceError }),
+    ...browser,
+    async browse(folder, ...args) {
+      const seq = ++browseSequence
+      const listing = await browser.browse(folder, ...args)
+      if (seq === browseSequence) watchUnavailable(listing.unavailable)
+      return listing
+    },
+    state: () => ({ root, ...prefs, favorites: favorites(), preferenceError }),
+    async favorite(folder, add) {
+      if (!authorized(folder) || typeof add !== 'boolean') throw Error('目录不可用')
+      if (!add && folder === prefs.defaultRoot) throw Error('默认目录始终显示在常用位置')
+      await preference(
+        'favorites',
+        add
+          ? [...new Set([...prefs.favorites, folder])]
+          : prefs.favorites.filter((f) => f !== folder),
+      )
+      monitor()
+      refresh()
+    },
+    async activate(folder) {
+      if (!favorites().includes(folder)) throw Error('目录不可用')
+      root = folder
+      monitor()
+      refresh()
+    },
+    async paletteFolder(folder) {
+      const next = await selectedDirectory(folder)
+      await preference('paletteRoot', next)
+      monitor()
+      refresh()
+    },
     async select(folder, remember) {
-      const next = await realpath(folder)
-      if (!(await stat(next)).isDirectory()) throw Error('目录不可用')
+      const next = await selectedDirectory(folder)
       if (remember) await preference('defaultRoot', next)
       root = next
       monitor()
@@ -143,7 +256,8 @@ export async function promptLibrary(profile, changed) {
     async search(query) {
       if (typeof query !== 'string' || query.length > 400) throw Error('搜索词过长')
       const request = ++searchId
-      const folder = prefs.defaultRoot || root
+      const folder = prefs.paletteRoot || prefs.defaultRoot
+      if (!folder) throw Error('请在文件库的全局快捷键中设置调用目录')
       const needle = query.trim().toLocaleLowerCase(),
         hits = []
       for (const name of await files(folder)) {
@@ -162,12 +276,15 @@ export async function promptLibrary(profile, changed) {
       return hits
     },
     async selection(folder, name) {
-      if (!folder || folder !== (prefs.defaultRoot || root)) throw Error('提示词目录已改变')
+      if (!folder || folder !== (prefs.paletteRoot || prefs.defaultRoot))
+        throw Error('提示词目录已改变')
       return (await readPrompt(folder, name)).text
     },
     close() {
-      if (watchedRoot) unwatchFile(watchedRoot, rootChanged)
-      watcher?.close()
+      closed = true
+      clearTimeout(probeTimer)
+      for (const stop of watches.values()) stop()
+      watches.clear()
       clearTimeout(timer)
     },
   }

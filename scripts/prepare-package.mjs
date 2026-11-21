@@ -18,6 +18,7 @@ const commonHostFiles = [
   'music-installer.mjs',
   'component-view.mjs',
   'prompt-actions.mjs',
+  'file-browser.mjs',
   'prompt-library.mjs',
   'prompt-palette.mjs',
   'prompt-preload.cjs',

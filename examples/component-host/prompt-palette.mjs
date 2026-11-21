@@ -219,7 +219,29 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
       throw e
     }
   })
-  for (const method of ['files', 'read', 'save', 'pin']) handle(method, 'editor', library[method])
+  handle('choosePalette', 'editor', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+    if (!result.canceled) await library.paletteFolder(result.filePaths[0])
+  })
+  handle('copy', 'editor', (text) => {
+    if (typeof text !== 'string' || Buffer.byteLength(text) > 4 * 1024 * 1024)
+      throw Error('文本过大')
+    clipboard.writeText(text)
+  })
+  for (const method of [
+    'identity',
+    'locate',
+    'browse',
+    'image',
+    'companion',
+    'favorite',
+    'activate',
+    'files',
+    'read',
+    'save',
+    'pin',
+  ])
+    handle(method, 'editor', library[method])
   handle('search', 'panel', library.search)
   handle('dismiss', 'panel', () => panel.hide())
   handle('use', 'panel', async (folder, name, insert) => {

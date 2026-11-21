@@ -3,27 +3,35 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, realpath, rename, unlink } from 'node:fs/promises'
 
 export const promptExtension = /\.(md|txt)$/i
-export async function promptPath(root, relative) {
+// A substituted drive has its own lifetime. Keep its letter in preferences but
+// compare resolved paths on the underlying volume to reject redirected children.
+export async function checkedDiskPath(root, relative) {
   if (
     !path.isAbsolute(root) ||
     typeof relative !== 'string' ||
     path.isAbsolute(relative) ||
-    !promptExtension.test(relative) ||
-    relative
-      .split(/[\\/]/)
-      .some(
-        (part) =>
-          !part ||
-          part === '.' ||
-          part === '..' ||
-          part.includes(':') ||
-          part.includes(String.fromCharCode(0)),
-      )
+    (relative !== '' &&
+      relative
+        .split(/[\\/]/)
+        .some(
+          (part) =>
+            !part ||
+            part === '.' ||
+            part === '..' ||
+            part.includes(':') ||
+            part.includes(String.fromCharCode(0)),
+        ))
   )
     throw Error('FILE_UNAVAILABLE')
+  const drive = path.parse(root).root
+  const expected = path.join(await realpath(drive), path.relative(drive, root), relative)
   const file = path.join(root, relative)
-  if ((await realpath(file)) !== file) throw Error('FILE_UNAVAILABLE')
+  if ((await realpath(file)) !== expected) throw Error('FILE_UNAVAILABLE')
   return file
+}
+export async function promptPath(root, relative) {
+  if (!promptExtension.test(relative)) throw Error('FILE_UNAVAILABLE')
+  return checkedDiskPath(root, relative)
 }
 export async function readPrompt(root, relative) {
   const handle = await open(await promptPath(root, relative), 'r')
