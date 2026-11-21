@@ -17,7 +17,8 @@ import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { release } from 'node:os'
 import koffi from 'koffi'
-import { complete, modelEndpoint } from './model.mjs'
+import { complete } from './model.mjs'
+import { toolkitConnections } from './toolkit-connections.mjs'
 import { readSelectionOrOcr } from './native.mjs'
 const here = import.meta.dirname
 const shared =
@@ -108,12 +109,40 @@ async function startToolkit() {
     void win.loadFile(path.join(here, 'index.html'))
     return win
   }
-  function settings() {
+  let targetRoute
+  const connections = toolkitConnections({
+    shared,
+    packaged: app.isPackaged,
+    safeStorage,
+    legacy: cfg,
+    onMigrated: () => {
+      const next = { ...cfg }
+      delete next.secret
+      delete next.model
+      delete next.endpoint
+      persist(next)
+    },
+    onChange: () => {
+      if (home && !home.isDestroyed()) home.webContents.send('toolkit:connections-changed')
+    },
+  })
+  if (process.argv.includes('--toolkit-migrate-connections')) {
+    try {
+      await connections.snapshot()
+    } finally {
+      connections.close()
+      app.quit()
+    }
+    return
+  }
+  function settings(route) {
+    targetRoute = route === 'translation' || route === 'vision' ? route : undefined
     if (!home || home.isDestroyed()) home = show({ kind: 'home' }, { title: 'FitBay 工具集' })
     else {
       home.restore()
       home.show()
       home.focus()
+      if (targetRoute) home.webContents.send('toolkit:settings-target', targetRoute)
     }
   }
   function fail(e) {
@@ -201,15 +230,14 @@ async function startToolkit() {
         ? {
             capture: { ...cfg.capture, enabled: bound.has('capture') },
             selection: { ...cfg.selection, enabled: bound.has('selection') },
-            endpoint: cfg.endpoint,
-            model: cfg.model,
-            hasKey: !!cfg.secret,
             notice,
           }
         : undefined,
   }))
   handle('dismiss', kinds, (s) => s.win.close())
-  handle('settings', kinds, settings)
+  handle('settings', ['result'], (_s, route) => settings(route))
+  handle('settingsTarget', ['home'], () => targetRoute)
+  handle('connections', ['home'], () => connections.snapshot())
   handle('capture', ['home'], () => {
     if (!bound.has('capture')) throw Error('请先启用截图')
     return capture()
@@ -238,22 +266,7 @@ async function startToolkit() {
       throw error
     }
   })
-  handle('configure', ['home'], (_, v) => {
-    if (
-      typeof v?.endpoint !== 'string' ||
-      typeof v.model !== 'string' ||
-      !v.model.trim() ||
-      typeof v.key !== 'string'
-    )
-      throw Error('请填写地址和模型')
-    modelEndpoint(v.endpoint)
-    const secret = v.key
-      ? safeStorage.encryptString(v.key).toString('base64')
-      : v.endpoint === cfg.endpoint
-        ? cfg.secret
-        : ''
-    persist({ ...cfg, endpoint: v.endpoint, model: v.model.trim(), secret })
-  })
+  handle('configure', ['home'], (_s, value) => connections.save(value))
   handle('crop', ['screen'], (s, v) => {
     if (
       !Array.isArray(v) ||
@@ -348,6 +361,8 @@ async function startToolkit() {
       if (mode === 'explain') prompt = '请用简体中文解释选区内容。'
       if (!prompt || prompt.length > 120000) throw Error('请输入问题或缩短提示词')
       const follow = mode === 'follow' && s.history.length
+      const route = follow ? s.route : image ? 'vision' : 'translation'
+      const service = await connections.resolve(route)
       const history = follow ? s.history : []
       let content = prompt
       if (!follow) {
@@ -362,8 +377,14 @@ async function startToolkit() {
         }
       }
       const messages = [...history, { role: 'user', content }]
-      const key = cfg.secret ? safeStorage.decryptString(Buffer.from(cfg.secret, 'base64')) : ''
-      const answer = await complete(cfg, key, messages, s.abort.signal)
+      const answer = await complete(service, service.key, messages, s.abort.signal).catch(
+        (error) => {
+          if (/HTTP (401|403)\b/.test(error.message))
+            throw Error('TOOLKIT_CONFIG_' + route + ' ' + error.message)
+          throw error
+        },
+      )
+      s.route = route
       s.history = [...messages, { role: 'assistant', content: answer }]
       return answer
     } finally {
@@ -384,6 +405,10 @@ async function startToolkit() {
     return value
   })
   function openIntent(argv) {
+    if (argv.includes('--toolkit-migrate-connections')) {
+      void connections.snapshot().catch(() => {})
+      return
+    }
     if (argv.includes('--toolkit-capture')) {
       if (!bound.has('capture')) {
         fail(Error('请先在工具集设置中启用截图'))
@@ -406,7 +431,10 @@ async function startToolkit() {
     ]),
   )
   tray.on('click', settings)
-  app.on('before-quit', () => tray.destroy())
+  app.on('before-quit', () => {
+    connections.close()
+    tray.destroy()
+  })
   app.on('window-all-closed', () => {})
   openIntent(process.argv)
 }

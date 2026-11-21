@@ -128,3 +128,37 @@ pre {
   padding: 6px 12px;
   pointer-events: none;
 }
+
+.connections select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  background: #303f4e;
+  border: 1px solid #647889;
+  border-radius: 5px;
+  padding: 6px 10px;
+}
+.connection-fields {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.connections label,
+.connections input {
+  min-width: 0;
+}
+.connection-status {
+  color: #bfcedc;
+  overflow-wrap: anywhere;
+}
+.connections button {
+  justify-self: start;
+}
+.notice:empty {
+  display: none;
+}
+
+.connections input::placeholder {
+  color: #afbecd;
+}

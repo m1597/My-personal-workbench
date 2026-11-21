@@ -10,6 +10,7 @@ const pkg = JSON.parse(await readFile('package.json', 'utf8'))
 const commonHostFiles = [
   'main.mjs',
   'toolkit-launcher.mjs',
+  'connection-vault.mjs',
   'product-updates.mjs',
   'installed-products.mjs',
   'music-installer.mjs',
@@ -87,7 +88,12 @@ export async function prepareProduct(product) {
     await rm(stage, { recursive: true, force: true })
     await cp('components/toolkit', app, { recursive: true })
     await cp('src/renderer/public/fitbay.png', path.join(app, 'fitbay.png'))
-    for (const f of ['prompt-actions.mjs', 'installed-products.mjs'])
+    for (const f of [
+      'api-connections.mjs',
+      'connection-vault.mjs',
+      'prompt-actions.mjs',
+      'installed-products.mjs',
+    ])
       await cp(path.join('examples/component-host', f), path.join(app, f))
     await cp('LICENSE', path.join(app, 'LICENSE'))
     const modules = path.join(stage, 'runtime')

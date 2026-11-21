@@ -6,9 +6,17 @@
 
 分别在「屏幕截图」和「划词助手」输入组合键并应用。截图时拖动框选，选择复制、保存或贴图置顶；Esc 取消。PDF 须包含可选文字，选中后按划词快捷键。扫描件可走截图翻译。复制取词检查前台窗口和剪贴板更新来源，未读到新选区时给出提示。
 
-模型设置使用兼容 Chat Completions 的地址和模型名，远程服务使用 HTTPS，本机服务也接受 HTTP。视觉提问需选支持图像输入的模型。密钥由 Windows 用户上下文下的 Electron safeStorage 加密，存放在公共 profile 下独立的 toolkit/settings.json。普通复制、保存、贴图都在本机完成。截图翻译使用 Windows OCR，将识别文字发给模型。视觉提问发送裁剪后的 PNG。结果窗口可复制最新回答、置顶、输入后追问；关闭窗口清除会话。
+组件设置与工作台「全局设置 → API 与模型」读写同一绑定。翻译与文字问答、视觉问答可单独配置，或显式复用某个已有连接。可填 Chat Completions、Responses、Claude Messages 或 Gemini generateContent 的 API 基址与模型名。远端使用 HTTPS，本机服务也接受 HTTP 和空密钥。视觉模型需支持图片。密钥通过 Windows 当前用户 DPAPI 加密后存入公共 profile 的 api-connections.sqlite；旧版 toolkit/settings.json 中的受保护密钥在原工具集用户目录解密、重新加密。迁移失败会保留原文件，允许逐项更换。普通复制、保存、贴图都在本机完成。截图翻译使用 Windows OCR，将识别文字发给模型。视觉提问发送裁剪后的 PNG。结果窗口可复制最新回答、置顶、输入后追问；关闭窗口清除会话。
 
 自定义动作来自提示词仓库 v1 的 listActions 和 resolveAction，每次执行重新读取模板。文字动作可消费划词或截图 OCR，图片动作消费选区原图。[仓库组接口](../../openspec/changes/pin-prompt-actions/interface.md)
+
+## 2026-11-21 共享 API 配置验收
+
+独立工具与工作台分别打开设置页。工作台先启动时导入原工具集的加密密钥和两个用途，原快捷键与停用状态保持一致。使用随机测试凭据校验跨进程解密、磁盘不含明文和密码框遮盖。两个打开的窗口双向修改模型后均自动刷新；显式复用后两个用途指向同一连接，改回单独配置后各自保存。损坏旧密钥能够分用途修复，过期表单不能写入改绑后的其他连接。
+
+在空配置下从桌面打开截图、复制及贴图。点击截图翻译时出现直达对应设置的按钮。[320 像素设置页](../../tmp/toolkit-connections-z6gznH/settings-320.png)和[680 像素设置页](../../tmp/toolkit-connections-z6gznH/settings-680.png)使用合成的长地址；已检查标签、输入框、保存按钮的对齐及窗口边界，长地址在输入框内滚动。复现运行 `node scripts/check-toolkit-connections.mjs`。
+
+本机回环接口分别收到了文字模型和视觉模型各自的请求路径与模型名。Chrome PDF 划词的翻译与解释、OCR 翻译仅发送文字，图像动作和自由视觉问答收到 PNG，追问沿用同一用途。[PDF 阅读器](../../tmp/toolkit-2vVGsq/pdf-selection.png)、[置顶贴图](../../tmp/toolkit-2vVGsq/pin.png)、[视觉追问](../../tmp/toolkit-2vVGsq/answer.png)。HTTP 503 后在原窗口重试成功；协议检查覆盖 Chat、Responses、Claude、Gemini 及 401、415 和 60 秒超时。真实服务由用户随后自行验证，本轮未调用。
 
 ## 本地验证
 

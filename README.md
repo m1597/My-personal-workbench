@@ -54,7 +54,7 @@ npm ci 按锁文件安装，通过项目 postinstall 下载 Electron，不安装
 
 ## 截图与划词工具集
 
-从「组件 → 截图与划词工具集」打开停靠面板，或双击 `scripts/open-toolkit.cmd` 独立运行。默认 `Ctrl+Alt+S` 框选，`Ctrl+Alt+T` 读取当前应用选中的文字。工具集设置可分别启停工具、更换快捷键和配置兼容 Chat Completions 的 API。关闭窗口后可从系统托盘重新打开或退出。[操作和验收记录](docs/changes/2026-11-20-desktop-toolkit.md)
+从「组件 → 截图与划词工具集」打开停靠面板，或双击 `scripts/open-toolkit.cmd` 独立运行。默认 `Ctrl+Alt+S` 框选，`Ctrl+Alt+T` 读取当前应用选中的文字。工具集设置可分别启停工具、更换快捷键，并为翻译与文字问答、视觉问答选择各自的服务。工作台「全局设置 → API 与模型」可编辑同一份配置。关闭窗口后可从系统托盘重新打开或退出。[操作和验收记录](docs/changes/2026-11-20-desktop-toolkit.md)
 
 ## 当前工作区
 

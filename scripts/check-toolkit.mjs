@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
@@ -14,7 +15,7 @@ let fail = false
 const server = createServer(async (req, res) => {
   const chunks = []
   for await (const c of req) chunks.push(c)
-  requests.push(JSON.parse(Buffer.concat(chunks)))
+  requests.push({ ...JSON.parse(Buffer.concat(chunks)), path: req.url })
   res.writeHead(fail ? 503 : 200, { 'content-type': 'application/json' })
   res.end(
     JSON.stringify({ choices: [{ message: { content: '测试接口回答 ' + requests.length } }] }),
@@ -42,7 +43,9 @@ const app = await _electron.launch({
 try {
   const home = await app.firstWindow()
   await expect(home.getByText('工具集', { exact: true })).toBeVisible()
-  await home.getByLabel('API 密钥').fill('test-only-key')
+  const marker = randomUUID()
+  await expect(home.getByText('保存 API 配置')).toBeEnabled()
+  await home.getByLabel('API 密钥').fill(marker)
   await home.getByText('保存 API 配置').click()
   await expect(home.getByRole('status')).toContainText('已保存')
   assert(
@@ -50,8 +53,13 @@ try {
       await (
         await import('node:fs/promises')
       ).readFile(path.join(profile, 'toolkit/settings.json'), 'utf8')
-    ).includes('test-only-key'),
+    ).includes(marker),
   )
+  await home.getByLabel('用途').selectOption('vision')
+  await home.getByLabel('服务地址').fill('http://127.0.0.1:' + server.address().port + '/vision')
+  await home.getByLabel('模型名').fill('vision-test')
+  await home.getByText('保存 API 配置').click()
+  await expect(home.getByRole('status')).toContainText('已保存')
   const fields = home.getByLabel('全局快捷键')
   await fields.first().fill(keys.selection.key)
   await home.getByText('应用快捷键').first().click()
@@ -156,6 +164,8 @@ try {
   await overlay.getByText('截图翻译').click()
   let result = await waiting
   await expect(result.getByText('测试接口回答 1')).toBeVisible({ timeout: 25000 })
+  assert.equal(requests[0].model, 'test')
+  assert.equal(requests[0].path, '/v1/chat/completions')
   assert.match(requests[0].messages[0].content, /HELLO/i)
   await result.close()
   console.log('PASS local OCR to text-only API')
@@ -174,6 +184,10 @@ try {
   await result.getByLabel('问题').fill('下一步？')
   await result.getByText('追问', { exact: true }).click()
   await expect(result.getByText('测试接口回答 4')).toBeVisible()
+  for (const request of requests.slice(1, 4)) {
+    assert.equal(request.model, 'vision-test')
+    assert.equal(request.path, '/vision/chat/completions')
+  }
   assert.equal(requests[3].messages.length, 3)
   await app.evaluate(({ clipboard }) => {
     globalThis.clipboardText = clipboard.writeText
@@ -229,6 +243,10 @@ try {
       await expect(selected.getByText('测试接口回答 5')).toBeVisible()
       assert.equal(typeof requests[4].messages[0].content, 'string')
       await selected.screenshot({ path: path.join(folder, 'pdf-selection.png') })
+      await selected.getByText('解释', { exact: true }).click()
+      await expect(selected.getByText('测试接口回答 6')).toBeVisible()
+      assert.match(requests.at(-1).messages[0].content, /解释/)
+      assert.equal(requests.at(-1).model, 'test')
       await selected.close()
       await page.mouse.click(700, 350)
       const before = requests.length
@@ -302,6 +320,9 @@ if (process.argv.includes('--absent')) {
   })
   try {
     const home = await standalone.firstWindow()
+    await expect(home.getByLabel('模型名')).toHaveValue('test')
+    await home.getByLabel('用途').selectOption('vision')
+    await expect(home.getByLabel('模型名')).toHaveValue('vision-test')
     const waiting = standalone.waitForEvent('window')
     await home.getByText('立即截图').click()
     const overlay = await waiting
