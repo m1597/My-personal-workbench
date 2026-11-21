@@ -33,30 +33,13 @@ jobs:
           $previous = $oldTag.TrimStart('v')
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $baseline = Join-Path $env:RUNNER_TEMP 'fitbay-baseline'
-          gh release download $oldTag --repo $env:GITHUB_REPOSITORY --dir $baseline --pattern 'FitBay-Workbench-*.exe' --pattern 'FitBay-Music-*.exe'
+          gh release download $oldTag --repo $env:GITHUB_REPOSITORY --dir $baseline --pattern 'FitBay-*-Setup-*-x64.exe'
           if ($LASTEXITCODE) { throw 'Could not download previous installers' }
-          $suite = Join-Path $env:RUNNER_TEMP 'FitBay upgrade'
-          function Install-And-Verify($product, $folder, $expected, $installer, $chooseDirectory) {
-            $flags = '/S /currentuser'
-            if ($chooseDirectory) { $flags += " /D=$folder" }
-            $result = Start-Process -FilePath $installer -ArgumentList $flags -PassThru -Wait
-            if ($result.ExitCode) { throw "$product installer exited $($result.ExitCode)" }
-            $actual = Get-ItemPropertyValue 'HKCU:\Software\FitBay\Installations' $product
-            $metadata = Get-Content (Join-Path $actual 'resources/app/package.json') -Raw | ConvertFrom-Json
-            if ($actual -ne $folder -or $metadata.version -ne $expected -or $metadata.fitbayProduct -ne $product.ToLowerInvariant()) { throw "$product installed at $actual with version $($metadata.version)" }
-          }
-          foreach ($product in 'Workbench','Music') {
-            $folder = if ($product -eq 'Workbench') { $suite } else { Join-Path $suite Music }
-            Install-And-Verify $product $folder $previous "$baseline/FitBay-$product-Setup-$previous-x64.exe" ($product -eq 'Workbench')
-            Set-Content -LiteralPath (Join-Path $folder 'upgrade-marker.txt') -Value $product
-          }
-          foreach ($product in 'Workbench','Music','Prompts','Toolkit') {
-            $folder = switch ($product) { 'Workbench' { $suite } 'Music' { Join-Path $suite Music } default { Join-Path $env:RUNNER_TEMP "FitBay $product" } }
-            Install-And-Verify $product $folder $version "dist/installers/FitBay-$product-Setup-$version-x64.exe" ($product -in 'Prompts','Toolkit')
-          }
-          foreach ($folder in $suite,(Join-Path $suite Music)) {
-            if (!(Test-Path -LiteralPath (Join-Path $folder 'upgrade-marker.txt'))) { throw "Upgrade removed an existing user file in $folder" }
-          }
+          ./scripts/check-suite-installation.ps1 -BaselineDir $baseline -Previous $previous
+          $root = Join-Path $env:RUNNER_TEMP 'Host only'
+          ./scripts/check-host-only.ps1 -Installer "dist/installers/FitBay-Workbench-Setup-$version-x64.exe" -Root $root
+          node scripts/check-settings-installation.mjs $root --candidate
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Copy-Item "docs/releases/$env:GITHUB_REF_NAME.md" dist/installers/RELEASE-NOTES.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -83,3 +66,27 @@ jobs:
         run: |
           sha256sum -c SHA256SUMS.txt
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file RELEASE-NOTES.md ./*.exe ./*.fitbayplugin SHA256SUMS.txt
+  verify-live:
+    needs: publish
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          npx --yes --package=$($pkg.packageManager) npm ci
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $asset = "FitBay-Workbench-Setup-$($pkg.version)-x64.exe"
+          $downloads = Join-Path $env:RUNNER_TEMP 'host-download'
+          gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --dir $downloads --pattern $asset
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $root = Join-Path $env:RUNNER_TEMP 'FitBay live'
+          ./scripts/check-host-only.ps1 -Installer (Join-Path $downloads $asset) -Root $root
+          node scripts/check-settings-installation.mjs $root

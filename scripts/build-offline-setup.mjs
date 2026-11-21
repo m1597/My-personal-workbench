@@ -33,7 +33,7 @@ export async function deliverInstallers(files, version) {
   await mkdir(dest, { recursive: true })
   const stage = await mkdtemp(path.resolve('dist/.installers-'))
   const names = Object.values(files).map((file) => path.basename(file))
-  const selector = `FitBay-Setup-${version}-x64.exe`
+  const selector = `FitBay-Offline-Setup-${version}-x64.exe`
   try {
     for (const file of Object.values(files))
       await copyFile(file, path.join(stage, path.basename(file)))

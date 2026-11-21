@@ -36,7 +36,7 @@ jobs:
         with:
           name: FitBay-offline-candidate
           path: |
-            dist/installers/FitBay-Setup-*.exe
+            dist/installers/FitBay-Offline-Setup-*.exe
             dist/installers/SHA256SUMS.txt
           if-no-files-found: error
           compression-level: 0

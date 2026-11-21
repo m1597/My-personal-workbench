@@ -1,5 +1,7 @@
 # FitBay
 
+**Windows x64 首次安装** · [下载 FitBay 工作台](https://github.com/m1597/My-personal-workbench/releases/download/v0.2.1/FitBay-Workbench-Setup-0.2.1-x64.exe)。安装后可在工作台设置中按需下载 Music、提示词仓库和工具集。需要在没有网络的电脑上安装时，可在同一发行页选择文件名含 `Offline` 的完整离线包。
+
 Windows 安装版在启动约 10 秒后检查 GitHub 正式发行版，运行期间每 5 分钟检查一次。右键 FitBay 托盘图标可立即「检查更新」。工作台和 Music 分别比较版本，用户确认后下载对应安装包，校验 GitHub 提供的 SHA-256，再启动安装向导。请沿用原安装位置。
 
 发布者更新 package.json 和锁文件中的版本后，在包含发布工作流的提交上推送对应标签（例如 `v0.2.0`）。GitHub Actions 在 Windows 构建总安装包和四个独立安装包并发布 Release，已安装更新功能的客户端随后会收到提示。此前安装的版本需要手动升级一次。[下载正式发行版](https://github.com/m1597/My-personal-workbench/releases)

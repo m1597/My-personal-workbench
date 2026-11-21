@@ -5,7 +5,7 @@ if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows'
   throw 'This acceptance test installs real products and requires a fresh Windows runner.'
 }
 $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-$setup = (Resolve-Path "dist/installers/FitBay-Setup-$version-x64.exe").Path
+$setup = (Resolve-Path "dist/installers/FitBay-Offline-Setup-$version-x64.exe").Path
 $root = Join-Path $env:RUNNER_TEMP 'FitBay suite acceptance'
 $registration = 'HKCU:\Software\FitBay\Installations'
 $exe = @{ Workbench='FitBay'; Music='FitBay Music'; Prompts='FitBay Prompts'; Toolkit='FitBay Toolkit' }
@@ -71,3 +71,4 @@ foreach ($p in @('Workbench')+$components) {
   if ((Get-Content -LiteralPath (Join-Path $locations[$p] 'existing-file.txt')) -ne $p) { throw "$p lost its marker" }
 }
 Write-Host "PASS $Previous to ${version}: four existing directories and markers preserved"
+foreach ($p in $components + @('Workbench')) { Remove-TestProduct $p $locations[$p] }
