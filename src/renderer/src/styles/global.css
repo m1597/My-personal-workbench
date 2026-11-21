@@ -570,8 +570,25 @@ input:disabled {
 .workbench-menu.fui-MenuPopover {
   min-width: 200px;
 }
-.workbench-menu .music-menu-reveal {
-  flex: 0 0 32px;
+.component-menu-row.fui-MenuSplitGroup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+}
+.component-menu-columns {
+  display: grid;
+  grid-template-columns: 18px minmax(5em, 1fr) minmax(4.5em, auto);
+  align-items: center;
+  gap: 8px;
+}
+.component-menu-columns > :first-child {
+  display: grid;
+  place-items: center;
+}
+.component-menu-columns small {
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+}
+.component-menu-row > :last-child {
   justify-content: center;
 }
 .workbench-dialog.fui-DialogSurface {

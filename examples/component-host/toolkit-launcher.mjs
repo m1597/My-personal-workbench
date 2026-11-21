@@ -53,6 +53,7 @@ export async function toolkitLauncher(packaged, profile, installation) {
         cmd,
         [
           ...args,
+          '--fitbay-hosted',
           '--workbench-profile=' + profile,
           ...(capture ? ['--toolkit-capture'] : []),
           ...(page ? ['--toolkit-page=' + page] : []),

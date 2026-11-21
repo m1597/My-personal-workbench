@@ -79,8 +79,9 @@ async function startToolkit() {
     renameSync(`${file}.tmp`, file)
     cfg = next
   }
+  let hosted = process.argv.includes('--fitbay-hosted')
   const backgroundTest = process.env.WORKBENCH_TEST_BACKGROUND === '1'
-  function show(data, options = {}) {
+  function show(data, options = {}, fromHost = hosted) {
     const win = new BrowserWindow({
       icon: path.join(here, 'toolkit.ico'),
       width: 550,
@@ -94,6 +95,7 @@ async function startToolkit() {
         : {}),
       autoHideMenuBar: true,
       ...options,
+      skipTaskbar: fromHost || Boolean(options.skipTaskbar),
       webPreferences: {
         sandbox: true,
         contextIsolation: true,
@@ -110,7 +112,13 @@ async function startToolkit() {
           : '"' + process.execPath + '" "' + here + '"',
       })
     const id = win.webContents.id
-    states.set(id, { ...data, win, abort: new AbortController(), history: [] })
+    states.set(id, {
+      ...data,
+      win,
+      hosted: fromHost,
+      abort: new AbortController(),
+      history: [],
+    })
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     win.webContents.on('will-navigate', (e) => e.preventDefault())
     win.once('closed', () => {
@@ -174,10 +182,14 @@ async function startToolkit() {
     }
     return
   }
-  function settings(route) {
+  function settings(route, fromHost = hosted) {
     targetRoute = route === 'translation' || route === 'vision' ? route : undefined
-    if (!home || home.isDestroyed()) home = show({ kind: 'home' }, { title: 'FitBay 工具集' })
+    if (!home || home.isDestroyed())
+      home = show({ kind: 'home' }, { title: 'FitBay 工具集' }, fromHost)
     else {
+      const state = states.get(home.webContents.id)
+      state.hosted = fromHost
+      home.setSkipTaskbar(fromHost)
       if (!backgroundTest) {
         home.restore()
         home.show()
@@ -186,10 +198,10 @@ async function startToolkit() {
       if (targetRoute) home.webContents.send('toolkit:settings-target', targetRoute)
     }
   }
-  function fail(e) {
-    show({ kind: 'message', text: e.message }, { height: 230 })
+  function fail(e, fromHost = hosted) {
+    show({ kind: 'message', text: e.message }, { height: 230 }, fromHost)
   }
-  async function capture(intent) {
+  async function capture(intent, fromHost = hosted) {
     if (overlay && !overlay.isDestroyed()) {
       overlay.focus()
       return
@@ -218,6 +230,7 @@ async function startToolkit() {
           skipTaskbar: true,
           alwaysOnTop: true,
         },
+        fromHost,
       )
       const currentOverlay = overlay
       currentOverlay.webContents.on('before-input-event', (event, input) => {
@@ -235,10 +248,10 @@ async function startToolkit() {
     }
   }
   const foreground = koffi.load('user32.dll').func('intptr_t __stdcall GetForegroundWindow()')
-  async function select() {
+  async function select(fromHost = hosted) {
     const hwnd = foreground()
     const text = await readSelectionOrOcr(undefined, String(hwnd))
-    show({ kind: 'result', text })
+    show({ kind: 'result', text }, {}, fromHost)
   }
   function bind(id, key) {
     if (typeof key !== 'string' || key.length > 80 || !key.includes('+'))
@@ -247,10 +260,12 @@ async function startToolkit() {
     if (old === key) return
     if (
       [...bound.values()].some((k) => k.toLowerCase() === key.toLowerCase()) ||
-      !globalShortcut.register(
-        key,
-        () => void (id === 'capture' ? capture() : select()).catch(fail),
-      )
+      !globalShortcut.register(key, () => {
+        const fromHost = hosted
+        void (id === 'capture' ? capture(undefined, fromHost) : select(fromHost)).catch((error) =>
+          fail(error, fromHost),
+        )
+      })
     )
       throw Error('快捷键已占用，请换一个组合键')
     if (old) globalShortcut.unregister(old)
@@ -292,7 +307,7 @@ async function startToolkit() {
     s.reveal = null
   })
   handle('dismiss', kinds, (s) => s.win.close())
-  handle('settings', ['result'], (_s, route) => settings(route))
+  handle('settings', ['result'], (s, route) => settings(route, s.hosted))
   handle('settingsTarget', ['home'], () => targetRoute)
   handle('connections', ['home'], () => connections.snapshot())
   installLocalFiles(handle)
@@ -326,9 +341,9 @@ async function startToolkit() {
     }
   })
   handle('toolTarget', ['home'], () => targetTool)
-  handle('capture', ['home'], (_, intent) => {
+  handle('capture', ['home'], (s, intent) => {
     if (!cfg.capture.enabled) throw Error('请先启用截图')
-    return capture(['annotate', 'measure'].includes(intent) ? intent : undefined)
+    return capture(['annotate', 'measure'].includes(intent) ? intent : undefined, s.hosted)
   })
   function setShortcut(v) {
     if (
@@ -397,7 +412,7 @@ async function startToolkit() {
   handle('extractText', ['screen'], async (s) => {
     const text = await readSelectionOrOcr(selected(s).toPNG(), undefined, s.abort.signal)
     if (!s.win.isDestroyed() && !s.abort.signal.aborted) {
-      show({ kind: 'result', text })
+      show({ kind: 'result', text }, {}, s.hosted)
       s.win.close()
     }
   })
@@ -439,6 +454,7 @@ async function startToolkit() {
         minWidth: 1,
         useContentSize: true,
       },
+      s.hosted,
     )
     s.win.close()
   })
@@ -509,7 +525,7 @@ async function startToolkit() {
   }
   handle('ask', ['screen', 'result'], async (s, v) => {
     if (s.kind === 'screen') {
-      show({ kind: 'result', image: selected(s), initial: v })
+      show({ kind: 'result', image: selected(s), initial: v }, {}, s.hosted)
       s.win.close()
       return
     }
@@ -540,12 +556,14 @@ async function startToolkit() {
       void connections.snapshot().catch(() => {})
       return
     }
+    hosted = argv.includes('--fitbay-hosted')
     if (argv.includes('--toolkit-capture')) {
       if (!cfg.capture.enabled) {
         fail(Error('请先在工具集设置中启用截图'))
         return
       }
-      void capture().catch(fail)
+      const fromHost = hosted
+      void capture(undefined, fromHost).catch((error) => fail(error, fromHost))
     } else {
       targetTool = argv.find((v) => v.startsWith('--toolkit-page='))?.slice(15)
       const batch = argv.find((v) => v.startsWith('--toolkit-batch='))?.slice(16)
