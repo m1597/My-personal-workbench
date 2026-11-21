@@ -31,16 +31,16 @@ async function migrateOnce(profile, root, cmd, args) {
     )
   await migrations.get(profile)
 }
-export async function installedToolkitRoot(packaged) {
+export async function installedToolkitRoot(packaged, installation) {
   const root = packaged
-    ? await registeredProduct('toolkit')
+    ? await (installation ? installation.find('toolkit') : registeredProduct('toolkit'))
     : path.resolve(import.meta.dirname, '../../../components/toolkit')
   if (!root || !existsSync(path.join(root, 'main.mjs'))) return
   if (packaged && !existsSync(path.resolve(root, '../../FitBay Toolkit.exe'))) return
   return root
 }
-export async function toolkitLauncher(packaged, profile) {
-  const root = await installedToolkitRoot(packaged)
+export async function toolkitLauncher(packaged, profile, installation) {
+  const root = await installedToolkitRoot(packaged, installation)
   if (!root) return
   const cmd = packaged ? path.resolve(root, '../../FitBay Toolkit.exe') : process.execPath
   const args = packaged ? [] : [root]

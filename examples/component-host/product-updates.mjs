@@ -16,16 +16,42 @@ export function selectUpdate(release, product, installed) {
   const parts = installed.split('.').map(Number)
   const diff = version.split('.').map((part, i) => Number(part) - parts[i])
   if (!(diff.find((n) => n !== 0) > 0)) return
+  return releaseInstaller(release, product)
+}
+
+export async function latestRelease(request) {
+  const response = await request(`https://api.github.com/repos/${repo}/releases/latest`, {
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!response.ok) throw Error('Release unavailable')
+  return response.json()
+}
+
+export function releaseInstaller(release, product) {
+  const version = release?.tag_name?.replace(/^v/, '')
+  if (
+    !versionPattern.test(version) ||
+    release.draft ||
+    release.prerelease ||
+    !Object.hasOwn(products, product)
+  )
+    return
   const name = `FitBay-${products[product]}-Setup-${version}-x64.exe`
   const url = `https://github.com/${repo}/releases/download/${release.tag_name}/${name}`
   const asset = release.assets?.find(
     (item) => item.name === name && item.browser_download_url === url,
   )
-  if (!asset || !/^sha256:[a-f0-9]{64}$/.test(asset.digest) || !(asset.size > 0)) return
+  if (
+    !asset ||
+    !/^sha256:[a-f0-9]{64}$/.test(asset.digest) ||
+    !Number.isSafeInteger(asset.size) ||
+    asset.size <= 0
+  )
+    return
   return { version, name, url, digest: asset.digest, size: asset.size }
 }
 
-export async function saveInstaller(update, temp, request = fetch) {
+export async function saveInstaller(update, temp, request = fetch, progress = () => {}) {
   const dir = await mkdtemp(path.join(temp, 'fitbay-update-'))
   const file = path.join(dir, update.name)
   try {
@@ -36,6 +62,7 @@ export async function saveInstaller(update, temp, request = fetch) {
     const verify = new Transform({
       transform(chunk, _, next) {
         bytes += chunk.length
+        progress(Math.min(100, Math.floor((100 * bytes) / update.size)))
         hash.update(chunk)
         next(bytes > update.size ? Error('Size mismatch') : null, chunk)
       },
@@ -80,11 +107,7 @@ export function updateCatalog({ inventory, launch, request = fetch, changed = ()
       if (selected.length) {
         let release
         try {
-          const response = await request(`https://api.github.com/repos/${repo}/releases/latest`, {
-            signal: AbortSignal.timeout(15000),
-          })
-          if (!response.ok) throw Error('Release unavailable')
-          release = await response.json()
+          release = await latestRelease(request)
         } catch {
           release = null
         }

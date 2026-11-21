@@ -11,6 +11,7 @@ const commonHostFiles = [
   'main.mjs',
   'toolkit-launcher.mjs',
   'product-updates.mjs',
+  'component-installation.mjs',
   'api-connections.mjs',
   'music-connection.mjs',
   'connection-vault.mjs',
@@ -90,6 +91,9 @@ export async function prepareProduct(product) {
     const app = path.join(stage, 'app')
     await rm(stage, { recursive: true, force: true })
     await cp('components/toolkit', app, { recursive: true })
+    const manifest = path.join(app, 'package.json')
+    const metadata = JSON.parse(await readFile(manifest, 'utf8'))
+    await writeFile(manifest, JSON.stringify({ ...metadata, version: pkg.version }, null, 2) + '\n')
     await cp('src/renderer/public/fitbay.png', path.join(app, 'fitbay.png'))
     for (const f of [
       'api-connections.mjs',

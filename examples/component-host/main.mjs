@@ -1,6 +1,7 @@
 import { importInstalledMusicConnection } from './music-connection.mjs'
 import { openConnections, apiUses } from './api-connections.mjs'
 import { toolkitLauncher, installedToolkitRoot } from './toolkit-launcher.mjs'
+import { componentInstallation } from './component-installation.mjs'
 import { installMusic } from './music-installer.mjs'
 import { updateCatalog, saveInstaller, productUpdater } from './product-updates.mjs'
 import { installedProducts, registeredProduct } from './installed-products.mjs'
@@ -447,7 +448,7 @@ else {
         const installed = {
           music: !!(await music.discover(false)),
           prompts: !!(await prompts.discover(false)),
-          toolkit: !!(await toolkitLauncher(app.isPackaged, profile)),
+          toolkit: !!(await toolkitLauncher(app.isPackaged, profile, installation)),
         }
         return Object.keys(apiUses).filter((use) => installed[use.split('.')[0]])
       }
@@ -468,6 +469,17 @@ else {
         if (!isShell(event) || !(await installedUses()).includes(use)) throw Error('DENIED')
         return connections.write(use, input)
       })
+      const componentSetup = componentInstallation(installation, app.getPath('temp'), (...args) =>
+        net.fetch(...args),
+      )
+      ipcMain.handle('component-setup:list', (event) => {
+        if (!isShell(event)) throw Error('DENIED')
+        return componentSetup.list()
+      })
+      ipcMain.handle('component-setup:install', (event, id) => {
+        if (!isShell(event)) throw Error('DENIED')
+        return componentSetup.install(id)
+      })
       const catalog = updateCatalog({
         request: (...args) => net.fetch(...args),
         inventory: async () => {
@@ -485,7 +497,7 @@ else {
                   ? await installation.find(id)
                   : here
                 : id === 'toolkit'
-                  ? await installedToolkitRoot(app.isPackaged)
+                  ? await installedToolkitRoot(app.isPackaged, installation)
                   : await { music, sample, prompts }[id].discover(false)
             if (!root) continue
             const packaged = installation && id !== 'sample' && (await installation.find(id))
@@ -542,7 +554,7 @@ else {
       const { installLocalFiles } = await import('./toolkit-local/local-files.mjs')
       installLocalFiles((name, _kinds, fn) => {
         ipcMain.handle('toolkit-local:' + name, async (event, v) => {
-          if (!isShell(event) || !(await installedToolkitRoot(app.isPackaged)))
+          if (!isShell(event) || !(await installedToolkitRoot(app.isPackaged, installation)))
             throw Error('工具集不可用')
           if (toolkitFileState?.win !== shell) toolkitFileState = { win: shell }
           return fn(toolkitFileState, v)
@@ -551,7 +563,7 @@ else {
       for (const action of ['available', 'open', 'capture']) {
         ipcMain.handle('toolkit-launch:' + action, async (event, page) => {
           if (!isShell(event)) throw Error('DENIED')
-          const launch = await toolkitLauncher(app.isPackaged, profile)
+          const launch = await toolkitLauncher(app.isPackaged, profile, installation)
           if (action === 'available') return Boolean(launch)
           if (!launch) throw Error('未检测到工具集')
           if (
