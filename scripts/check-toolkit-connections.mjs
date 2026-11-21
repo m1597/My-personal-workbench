@@ -8,7 +8,13 @@ import { openConnections } from '../examples/component-host/api-connections.mjs'
 
 const profile = await mkdtemp(path.resolve('tmp/toolkit-connections-'))
 const settings = path.join(profile, 'toolkit/settings.json')
-const args = [path.resolve('components/toolkit'), '--workbench-profile=' + profile]
+const standalone = process.argv.includes('--packaged')
+  ? {
+      executablePath: path.resolve('.cache/fitbay-build/toolkit/win-unpacked/FitBay Toolkit.exe'),
+      args: [],
+    }
+  : { args: [path.resolve('components/toolkit')] }
+standalone.args.push('--workbench-profile=' + profile)
 const marker = randomUUID()
 const endpoint = 'http://127.0.0.1:18080/' + 'long-service-name/'.repeat(5) + 'v1'
 const keys = {
@@ -17,7 +23,7 @@ const keys = {
 }
 let app, host
 try {
-  app = await _electron.launch({ args })
+  app = await _electron.launch(standalone)
   let home = await app.firstWindow()
   await expect(home.getByText('立即截图')).toBeVisible()
   async function region() {
@@ -44,7 +50,12 @@ try {
       globalThis.hasCopy = !image.isEmpty()
     }
   })
-  await overlay.getByText('复制', { exact: true }).click()
+  await overlay
+    .getByText('复制', { exact: true })
+    .click()
+    .catch((error) => {
+      if (!overlay.isClosed()) throw error
+    })
   assert(
     await app.evaluate(({ clipboard }) => {
       clipboard.writeImage = globalThis.originalCopy
@@ -83,7 +94,7 @@ try {
   await shell.getByRole('button', { name: '翻译', exact: true }).click()
   const form = shell.locator('.api-connections form')
   await expect(form.getByLabel('模型', { exact: true })).toHaveValue('legacy-text')
-  app = await _electron.launch({ args })
+  app = await _electron.launch(standalone)
   home = await app.firstWindow()
   await expect(home.getByLabel('模型名')).toHaveValue('legacy-text')
   const legacy = JSON.parse(await readFile(settings, 'utf8'))

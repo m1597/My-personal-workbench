@@ -14,7 +14,7 @@
 
 独立工具与工作台分别打开设置页。工作台先启动时导入原工具集的加密密钥和两个用途，原快捷键与停用状态保持一致。使用随机测试凭据校验跨进程解密、磁盘不含明文和密码框遮盖。两个打开的窗口双向修改模型后均自动刷新；显式复用后两个用途指向同一连接，改回单独配置后各自保存。损坏旧密钥能够分用途修复，过期表单不能写入改绑后的其他连接。
 
-在空配置下从桌面打开截图、复制及贴图。点击截图翻译时出现直达对应设置的按钮。[320 像素设置页](../../tmp/toolkit-connections-z6gznH/settings-320.png)和[680 像素设置页](../../tmp/toolkit-connections-z6gznH/settings-680.png)使用合成的长地址；已检查标签、输入框、保存按钮的对齐及窗口边界，长地址在输入框内滚动。复现运行 `node scripts/check-toolkit-connections.mjs`。
+在空配置下从桌面打开截图、复制及贴图。点击截图翻译时出现直达对应设置的按钮。[320 像素设置页](../../tmp/toolkit-connections-z6gznH/settings-320.png)和[680 像素设置页](../../tmp/toolkit-connections-z6gznH/settings-680.png)使用合成的长地址；已检查标签、输入框、保存按钮的对齐及窗口边界，长地址在输入框内滚动。复现运行 `node scripts/check-toolkit-connections.mjs`。加 `--packaged` 可从独立的 FitBay Toolkit.exe 重跑同一套验收，已实测通过。
 
 本机回环接口分别收到了文字模型和视觉模型各自的请求路径与模型名。Chrome PDF 划词的翻译与解释、OCR 翻译仅发送文字，图像动作和自由视觉问答收到 PNG，追问沿用同一用途。[PDF 阅读器](../../tmp/toolkit-2vVGsq/pdf-selection.png)、[置顶贴图](../../tmp/toolkit-2vVGsq/pin.png)、[视觉追问](../../tmp/toolkit-2vVGsq/answer.png)。HTTP 503 后在原窗口重试成功；协议检查覆盖 Chat、Responses、Claude、Gemini 及 401、415 和 60 秒超时。真实服务由用户随后自行验证，本轮未调用。
 
