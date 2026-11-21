@@ -91,6 +91,7 @@ export async function prepareProduct(product) {
     const app = path.join(stage, 'app')
     await rm(stage, { recursive: true, force: true })
     await cp('components/toolkit', app, { recursive: true })
+    await cp('src/renderer/src/styles/tokens.css', path.join(app, 'tokens.css'))
     const manifest = path.join(app, 'package.json')
     const metadata = JSON.parse(await readFile(manifest, 'utf8'))
     await writeFile(manifest, JSON.stringify({ ...metadata, version: pkg.version }, null, 2) + '\n')

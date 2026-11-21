@@ -1,0 +1,2 @@
+/* The package stages the same shared stylesheet at this URL. */
+@import url("../../src/renderer/src/styles/tokens.css");
