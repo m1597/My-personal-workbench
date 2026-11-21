@@ -34,6 +34,54 @@ function glyph(name) {
   svg.append(p)
   return svg
 }
+function lineDiff(a, b) {
+  const lines = (s) => (s ? s.replace(/\r\n?/g, '\n').split('\n') : [])
+  const x = lines(a),
+    y = lines(b)
+  let first = 0,
+    last = 0
+  while (first < x.length && first < y.length && x[first] === y[first]) first++
+  while (
+    last < x.length - first &&
+    last < y.length - first &&
+    x[x.length - last - 1] === y[y.length - last - 1]
+  )
+    last++
+  const m = x.length - first - last,
+    n = y.length - first - last
+  if ((m + 1) * (n + 1) > 6000000 || x.length + y.length > 20000)
+    throw Error('文本过长，请分段比较')
+  const lcs = new Uint32Array((m + 1) * (n + 1)),
+    offset = (i, j) => i * (n + 1) + j
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      lcs[offset(i, j)] =
+        x[first + i] === y[first + j]
+          ? 1 + lcs[offset(i + 1, j + 1)]
+          : Math.max(lcs[offset(i + 1, j)], lcs[offset(i, j + 1)])
+  const out = []
+  function row(sign, i, j, text) {
+    out.push([sign, i == null ? '·' : i + 1, j == null ? '·' : j + 1, text])
+  }
+  for (let i = 0; i < first; i++) row(' ', i, i, x[i])
+  let i = 0,
+    j = 0
+  while (i < m || j < n) {
+    if (i < m && j < n && x[first + i] === y[first + j]) {
+      row(' ', first + i, first + j, x[first + i])
+      i++
+      j++
+    } else if (i < m && (j === n || lcs[offset(i + 1, j)] >= lcs[offset(i, j + 1)])) {
+      row('−', first + i, null, x[first + i])
+      i++
+    } else {
+      row('+', null, first + j, y[first + j])
+      j++
+    }
+  }
+  for (let k = last; k > 0; k--) row(' ', x.length - k, y.length - k, x[x.length - k])
+  return out
+}
 function makeCanvas(w, h) {
   if (!w || !h || w * h > 40000000 || w > 32760 || h > 32760)
     throw Error('图片尺寸过大，请缩小输入或改用 PDF')
@@ -221,6 +269,42 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       panel,
     )
     panel.append(el('h2', toolNames[active][0]))
+    if (active === 'diff') {
+      const input = (name) => {
+        const l = el('label', name),
+          t = el('textarea')
+        t.rows = 6
+        l.append(t)
+        panel.append(l)
+        return t
+      }
+      const a = input('原文'),
+        b = input('新文本')
+      if (files.length === 2 && files.every((f) => f.type === 'text/plain')) {
+        a.disabled = b.disabled = true
+        void Promise.all(files.map((f) => api.readText(f.id)))
+          .then(([left, right]) => {
+            a.value = left
+            b.value = right
+          })
+          .catch(error)
+          .finally(() => {
+            a.disabled = b.disabled = false
+          })
+      }
+      panel.append(
+        button('比较文本', () => {
+          out.replaceChildren()
+          for (const [sign, i, j, text] of lineDiff(a.value, b.value)) {
+            const line = el('pre', sign + '  ' + i + ' │ ' + j + '   ' + text)
+            line.className = sign === '+' ? 'added' : sign === '−' ? 'removed' : ''
+            out.append(line)
+          }
+        }),
+        out,
+      )
+      return
+    }
     if (active === 'clipboard') {
       panel.append(
         button('读取剪贴板', async () => {
