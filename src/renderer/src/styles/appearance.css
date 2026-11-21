@@ -120,22 +120,22 @@
   background: var(--accent-soft);
 }
 
-.dockview-theme-workbench
-  .dv-tabs-and-actions-container:has(.dv-tab[data-tab-panel-id="component-music"]) {
+/* Share the live Music strip dimensions across every row, including empty slots. */
+.dockview-theme-workbench:has(.dv-tab ~ .dv-tab) {
   --dv-tabs-and-actions-container-height: 32px;
-  padding-block: 0;
 }
-.dockview-theme-workbench
-  .dv-tabs-and-actions-container:has(.dv-tab[data-tab-panel-id="component-music"]):not(
-    :has(.dv-tab ~ .dv-tab)
-  ) {
-  --dv-tabs-and-actions-container-height: 38px;
+.dockview-theme-workbench:has(
+  .dv-tabs-and-actions-container:has([data-tab-panel-id="component-music"]):not(
+      :has(.dv-tab ~ .dv-tab)
+    )
+) {
+  --dv-tabs-and-actions-container-height: var(--panel-tab-height);
 }
-.dockview-theme-workbench .dv-tab[data-tab-panel-id="component-music"] {
+.dockview-theme-workbench .dv-tab {
   margin-block-start: var(--space-4);
 }
-.dv-tab[data-tab-panel-id="component-music"] .dv-default-tab,
-.dv-tab[data-tab-panel-id="component-music"] .dv-default-tab-content {
+.dockview-theme-workbench .dv-default-tab,
+.dockview-theme-workbench .dv-default-tab-content {
   display: inline-flex;
   align-items: center;
 }
