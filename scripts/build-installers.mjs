@@ -47,6 +47,7 @@ nsis.nsisTemplatesDir = templates
 // upgrade. Let the new component installer check each link's target instead.
 const installUtil = path.join(templates, 'include', 'installUtil.nsh')
 const uninstallScript = await readFile(installUtil, 'utf8')
+// biome-ignore lint/suspicious/noTemplateCurlyInString: literal NSIS control flow.
 const updateFlag = '  ${if} ${isDeleteAppData}'
 if (uninstallScript.split(updateFlag).length !== 2) throw Error('Unexpected old uninstaller flags')
 await writeFile(
