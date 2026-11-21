@@ -143,7 +143,7 @@ export function componentView({
     if (!standalone || standalone.isDestroyed()) {
       standalone = new BaseWindow({
         ...options(660, 620),
-        title: prompts ? '提示词仓库' : music ? 'Music' : '示例组件 · 独立窗口',
+        title: prompts ? '文件库' : music ? 'Music' : '示例组件 · 独立窗口',
       })
       watchNativeDock(standalone, {
         target: (point) => {

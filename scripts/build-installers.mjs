@@ -82,7 +82,7 @@ const optionalProduct = process.argv.includes('--toolkit')
 const products = {
   music: ['Music', 'FitBay Music', 'FitBay Music'],
   workbench: ['Workbench', 'FitBay', 'FitBay 工作台'],
-  prompts: ['Prompts', 'FitBay Prompts', 'FitBay 提示词仓库'],
+  prompts: ['Prompts', 'FitBay Prompts', 'FitBay 文件库'],
   toolkit: ['Toolkit', 'FitBay Toolkit', 'FitBay 工具集'],
 }
 for (const product of optionalProduct ? [optionalProduct] : ['music', 'workbench']) {

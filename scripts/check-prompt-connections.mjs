@@ -26,7 +26,7 @@ async function page(fragment) {
 }
 try {
   const ui = await page('/prompts/index.html')
-  await expect(ui.getByRole('heading', { name: '提示词仓库' })).toBeVisible()
+  await expect(ui.getByRole('heading', { name: '文件库' })).toBeVisible()
   await expect(ui.getByLabel('API Key')).toHaveCount(0)
   await app.evaluate(({ dialog }, folder) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] })
@@ -67,7 +67,7 @@ try {
   const shell = await page('/workbench/index.html')
   await shell.getByRole('button', { name: '工作台设置' }).click()
   await shell.getByRole('button', { name: 'API 与模型', exact: true }).click()
-  const row = shell.getByRole('row').filter({ hasText: '提示词仓库' })
+  const row = shell.getByRole('row').filter({ hasText: '文件库' })
   await row.getByRole('button').click()
   const form = shell.locator('.api-connections form')
   await expect(form.getByLabel('模型', { exact: true })).toHaveValue('library-model')
@@ -105,7 +105,7 @@ try {
   await ui.getByRole('button', { name: '保存连接' }).click()
   await expect(form.getByLabel('模型', { exact: true })).toHaveValue('own-again')
   await app.evaluate(({ BaseWindow }) => {
-    const w = BaseWindow.getAllWindows().find((w) => w.getTitle() === '提示词仓库')
+    const w = BaseWindow.getAllWindows().find((w) => w.getTitle() === '文件库')
     w.setSize(380, 570)
   })
   await ui.screenshot({ path: path.join(evidence, 'standalone-narrow.png') })

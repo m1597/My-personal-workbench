@@ -476,7 +476,7 @@ else {
             ['workbench', 'FitBay'],
             ['music', 'Music'],
             ['sample', '示例组件'],
-            ['prompts', '提示词仓库'],
+            ['prompts', '文件库'],
             ['toolkit', '截图与划词'],
           ]) {
             const root =

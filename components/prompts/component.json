@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "protocol": "0.1",
   "hostApi": "0.1",
-  "name": "提示词仓库",
+  "name": "文件库",
   "uiEntry": "index.html",
   "capabilities": ["view.transfer"],
   "modes": ["standalone", "docked"],
-  "settingsEntries": [{ "target": "api", "name": "API 与模型", "path": "提示词仓库 → API 与模型" }]
+  "settingsEntries": [{ "target": "api", "name": "API 与模型", "path": "文件库 → API 与模型" }]
 }

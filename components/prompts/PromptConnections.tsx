@@ -90,8 +90,8 @@ export function PromptConnectionSettings() {
   const { state, failed, refresh } = useConnections()
   const [notice, say] = useState('')
   return (
-    <section aria-label="提示词仓库连接">
-      <h2>提示词仓库连接</h2>
+    <section aria-label="文件库连接">
+      <h2>文件库连接</h2>
       {failed ? (
         <Retry refresh={refresh} />
       ) : state ? (

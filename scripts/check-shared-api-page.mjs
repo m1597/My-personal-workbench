@@ -45,8 +45,8 @@ try {
   await b(w, 'API 与模型').click()
   await b(section, '模型与推荐').click()
   await expect(form.getByLabel('模型', { exact: true })).toHaveValue('demo-b')
-  await w.getByRole('searchbox').fill('提示词仓库')
-  await b(w, '提示词仓库 › API 与模型').click()
+  await w.getByRole('searchbox').fill('文件库')
+  await b(w, '文件库 › API 与模型').click()
   await expect
     .poll(() => app.windows().some((p) => p.url().includes('/prompts/index.html')))
     .toBe(true)
