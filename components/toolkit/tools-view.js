@@ -182,6 +182,35 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       panel,
     )
     panel.append(el('h2', toolNames[active][0]))
+    if (active === 'compare') {
+      if (imgs.length !== 2) {
+        panel.append(el('p', '请选择两张图片'))
+        return
+      }
+      const viewer = el('div', '', 'compare-view'),
+        slider = field(panel, '上层不透明度', '50', 'range')
+      slider.min = 0
+      slider.max = 100
+      void Promise.all(imgs.map((f) => loadImage(f.id)))
+        .then(([a, b]) => {
+          if (current !== generation) return
+          a.alt = imgs[0].name
+          b.alt = imgs[1].name
+          viewer.append(a, b)
+          function opacity(v) {
+            slider.value = v
+            b.style.opacity = Number(v) / 100
+          }
+          slider.oninput = () => opacity(slider.value)
+          opacity(50)
+          panel.append(
+            viewer,
+            button('切换图片', () => opacity(Number(slider.value) >= 50 ? 0 : 100)),
+          )
+        })
+        .catch(error)
+      return
+    }
   }
   draw()
   async function openTarget(id) {
