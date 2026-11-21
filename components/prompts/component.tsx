@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ComponentTheme } from '../../src/renderer/src/app/ComponentTheme'
 import './style.css'
+import { PromptConnectionSettings, ActionConnection } from './PromptConnections'
 import { MarkdownPreview } from './MarkdownPreview'
 
 type Doc = { text: string; revision: string }
@@ -190,7 +191,9 @@ function Library() {
     [label, setLabel] = useState(''),
     [kind, setKind] = useState<'text' | 'image'>('text'),
     [tick, refresh] = useState(0),
-    [dock, setDock] = useState(false)
+    [dock, setDock] = useState(false),
+    [settings, setSettings] = useState(false),
+    [pinOpen, setPinOpen] = useState(false)
   const draftKey = JSON.stringify(['draft', state?.root, name])
   function changeDraft(text: string) {
     edit(text)
@@ -215,7 +218,14 @@ function Library() {
   }
   useEffect(() => api.onChange(() => refresh((n) => n + 1)), [])
   useEffect(() => {
-    const apply = (s: { mode: string }) => setDock(s.mode === 'docked')
+    let request = 0
+    const apply = (s: { mode: string; settingsRequest?: number; settingsTarget?: string }) => {
+      setDock(s.mode === 'docked')
+      if ((s.settingsRequest ?? 0) > request) {
+        request = s.settingsRequest ?? 0
+        if (!s.settingsTarget || s.settingsTarget === 'api') setSettings(true)
+      }
+    }
     const off = window.sampleHost.subscribe(apply)
     void window.sampleHost.hello({ protocol: '0.1' }).then(apply)
     return off
@@ -291,6 +301,7 @@ function Library() {
   function reset(next = '') {
     localStorage.removeItem(draftKey)
     setFileIssue('')
+    setPinOpen(false)
     setName(next)
     setDoc(undefined)
     edit('')
@@ -314,21 +325,38 @@ function Library() {
     }
     update()
   }
+  if (settings)
+    return (
+      <main className="library prompt-settings">
+        <header>
+          <h1>API 与模型</h1>
+          <button type="button" onClick={() => setSettings(false)}>
+            返回仓库
+          </button>
+        </header>
+        <PromptConnectionSettings />
+      </main>
+    )
   return (
     <main className="library">
       <header>
         <h1>提示词仓库</h1>
-        <button
-          type="button"
-          onClick={() =>
-            void attempt(async () => {
-              const r = await window.sampleHost.transfer(dock ? 'detach' : 'attach')
-              if (!r.ok) say(r.error || '工作台不可用')
-            })
-          }
-        >
-          {dock ? '独立打开' : '加入工作台'}
-        </button>
+        <div className="tools">
+          <button type="button" onClick={() => setSettings(true)}>
+            API 与模型
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void attempt(async () => {
+                const r = await window.sampleHost.transfer(dock ? 'detach' : 'attach')
+                if (!r.ok) say(r.error || '工作台不可用')
+              })
+            }
+          >
+            {dock ? '独立打开' : '加入工作台'}
+          </button>
+        </div>
       </header>
       <div className="tools">
         <button type="button" onClick={() => void attempt(() => folder('temp'))}>
@@ -416,7 +444,7 @@ function Library() {
               ) : (
                 <pre>{draft}</pre>
               )}
-              <details>
+              <details open={pinOpen} onToggle={(event) => setPinOpen(event.currentTarget.open)}>
                 <summary>固定为工具集动作</summary>
                 <label>
                   显示名
@@ -429,6 +457,7 @@ function Library() {
                     <option value="image">图片</option>
                   </select>
                 </label>
+                {pinOpen && <ActionConnection kind={kind} />}
                 <button
                   type="button"
                   disabled={!doc || dirty || conflict}

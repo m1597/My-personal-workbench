@@ -1,7 +1,9 @@
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
 import path from 'node:path'
-import { BrowserWindow, clipboard, dialog, globalShortcut, ipcMain } from 'electron'
+import { watch } from 'node:fs'
+import { openConnections, apiUses } from './api-connections.mjs'
+import { BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, safeStorage } from 'electron'
 import { promptLibrary } from './prompt-library.mjs'
 
 function windowsTarget() {
@@ -122,6 +124,79 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
       return fn(...args)
     })
   }
+  let connections, connectionWatcher, notifyTimer
+  let disposed = false
+  function notifyConnectionChange() {
+    clearTimeout(notifyTimer)
+    notifyTimer = setTimeout(() => {
+      if (editor && !editor.isDestroyed()) editor.send('prompt:connections-changed')
+    }, 35)
+  }
+  function settingsStore() {
+    connections ??= openConnections(profile, safeStorage)
+    if (!connectionWatcher) {
+      connectionWatcher = watch(profile, { persistent: false }, (_, file) => {
+        if (!file || file.startsWith('api-connections.sqlite')) notifyConnectionChange()
+      })
+      connectionWatcher.on('error', () => {
+        connectionWatcher?.close()
+        connectionWatcher = undefined
+        notifyConnectionChange()
+      })
+    }
+    return connections
+  }
+  handle('connections', 'editor', () => {
+    try {
+      const store = settingsStore()
+      const own = store.read('prompts.model')
+      const text = store.read('toolkit.translation'),
+        image = store.read('toolkit.vision')
+      const bindings = Object.entries(apiUses).map(([use, label]) => ({
+        id: store.read(use)?.id,
+        name: [label.component, label.purpose].join(' · '),
+      }))
+      const owners = (id) => bindings.filter((b) => b.id === id).map((b) => b.name)
+      const reused = !!own && owners(own.id).length > 1
+      return {
+        own,
+        reused,
+        text,
+        image,
+        choices: store
+          .choices()
+          .filter((c) => c.id !== own?.id || reused)
+          .map((c) => ({ ...c, owners: owners(c.id).join(' / ') })),
+      }
+    } catch {
+      throw Error('连接设置暂不可用')
+    }
+  })
+  handle('save-connection', 'editor', (value) => {
+    try {
+      const store = settingsStore()
+      if (value?.mode === 'reuse' && typeof value.connectionId === 'string') {
+        store.write('prompts.model', { reuse: value.connectionId })
+      } else if (
+        value?.mode === 'own' &&
+        typeof value.endpoint === 'string' &&
+        typeof value.model === 'string' &&
+        (value.key === undefined || typeof value.key === 'string') &&
+        typeof value.protocol === 'string'
+      ) {
+        store.write('prompts.model', {
+          separate: true,
+          endpoint: value.endpoint,
+          model: value.model,
+          key: value.key,
+          protocol: value.protocol,
+        })
+      } else throw Error()
+      notifyConnectionChange()
+    } catch {
+      throw Error('无法保存连接设置')
+    }
+  })
   handle('state', 'editor', () => ({
     ...library.state(),
     registrationError: registrationError || library.state().preferenceError,
@@ -166,7 +241,12 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
       active = ''
     },
     dispose() {
+      if (disposed) return
+      disposed = true
       this.stop()
+      clearTimeout(notifyTimer)
+      connectionWatcher?.close()
+      connections?.close()
       library.close()
       for (const name of handlers) ipcMain.removeHandler(name)
     },

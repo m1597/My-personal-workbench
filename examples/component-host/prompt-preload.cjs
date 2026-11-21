@@ -34,3 +34,9 @@ contextBridge.exposeInMainWorld('sampleHost', {
     return () => ipcRenderer.removeListener('prompt-sample:state', listener)
   },
 })
+
+contextBridge.exposeInMainWorld('promptConnections', {
+  snapshot: () => ipcRenderer.invoke('prompt:connections'),
+  save: (value) => ipcRenderer.invoke('prompt:save-connection', value),
+  subscribe: (callback) => event('prompt:connections-changed', callback),
+})

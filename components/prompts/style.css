@@ -170,3 +170,40 @@ summary {
   padding: 8px;
   background: var(--base);
 }
+
+.prompt-settings section {
+  max-width: 640px;
+  width: 100%;
+  margin-inline: auto;
+}
+.prompt-settings form {
+  display: grid;
+  gap: 8px;
+}
+.prompt-settings label {
+  display: grid;
+  grid-template-columns: minmax(6em, auto) minmax(0, 1fr);
+}
+.prompt-settings input,
+.prompt-settings select {
+  width: 100%;
+  min-width: 0;
+}
+.prompt-settings option {
+  background: var(--solid-surface);
+  color: var(--text);
+}
+.prompt-settings button[type="submit"] {
+  justify-self: start;
+}
+.action-connection {
+  display: grid;
+  gap: 4px;
+  margin-block: 8px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 420px) {
+  .prompt-settings label {
+    grid-template-columns: 1fr;
+  }
+}

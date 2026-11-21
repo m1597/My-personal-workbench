@@ -7,5 +7,6 @@
   "name": "提示词仓库",
   "uiEntry": "index.html",
   "capabilities": ["view.transfer"],
-  "modes": ["standalone", "docked"]
+  "modes": ["standalone", "docked"],
+  "settingsEntries": [{ "target": "api", "name": "API 与模型", "path": "提示词仓库 → API 与模型" }]
 }
