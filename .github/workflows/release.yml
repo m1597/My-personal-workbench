@@ -41,7 +41,7 @@ jobs:
           ./scripts/check-host-only.ps1 -Installer "dist/installers/FitBay-Workbench-Setup-$version-x64.exe" -Root $root
           node scripts/check-settings-installation.mjs $root --candidate
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          if ($env:GITHUB_REF_TYPE -eq "tag") { Copy-Item "docs/releases/v$version.md" dist/installers/RELEASE-NOTES.md }
+          Copy-Item "docs/releases/v$version.md" dist/installers/RELEASE-NOTES.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: installers
