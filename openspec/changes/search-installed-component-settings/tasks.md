@@ -16,3 +16,5 @@
 公共协议读取已安装组件 component.json 中的 settingsEntries，每条提供 target、name、path。宿主按清单匹配路径，打开前重新查询目标，随后发送递增 settingsRequest 及 settingsTarget。Music 负责分类与字段聚焦、高亮；当前应用内快捷键路径为「Music › 音乐设置 › 快捷键 › 应用内快捷键」。
 
 开发宿主从搜索框进入更新、歌词、快捷键、应用内快捷键，最后一项断言实际开关获得焦点。三次组件导航前后同一音频元素继续播放，未触发暂停且时钟推进。无匹配词显示空结果。临时打包目录中，移走 Music 后点击旧结果显示设置项已不可用并移除条目；重新打开设置不返回未安装组件。运行记录见 [开发入口](../../../tmp/settings-search-final.log) 与[打包入口](../../../tmp/settings-packaged-final.log)。
+
+提示词仓库登记的 API 与模型也进入已安装组件索引。2026-11-21 从全局搜索选择「提示词仓库 › API 与模型」，在组件窗口确认密码输入框可见。复验入口为 scripts/check-shared-api-page.mjs。

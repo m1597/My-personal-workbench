@@ -73,6 +73,7 @@ export function WorkbenchSettings({
   const [manage, setManage] = useState(false)
   const [startup, setStartup] = useState(readStartup)
   const [inventory, setInventory] = useState<ComponentInventory>()
+  const [promptInfo, setPromptInfo] = useState<ComponentInventory>()
   const [sampleInfo, setSampleInfo] = useState<ComponentInventory>()
   const sampleState = useMusicHostState(window.componentHost)
   const [componentError, setComponentError] = useState('')
@@ -120,6 +121,7 @@ export function WorkbenchSettings({
   const componentMatches = [
     { info: inventory, host: window.musicDock },
     { info: sampleInfo, host: window.componentHost },
+    { info: promptInfo, host: window.promptDock },
   ].flatMap(({ info, host }) =>
     info?.installed && host
       ? (info.settingsEntries ?? [])
@@ -165,6 +167,14 @@ export function WorkbenchSettings({
         .catch((error) => {
           if (active) setComponentError(String(error))
         })
+    window.promptDock
+      ?.inventory()
+      .then((info) => {
+        if (active) setPromptInfo(info)
+      })
+      .catch(() => {
+        if (active) setPromptInfo(undefined)
+      })
     window.musicDock
       ?.inventory()
       .then((value) => {

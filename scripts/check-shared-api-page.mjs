@@ -37,7 +37,7 @@ try {
   const player = app.windows().find((p) => p.url().includes('/music/index.html')),
     music = player.locator('.api-connections form')
   if (await b(player, '跳过').isVisible()) await b(player, '跳过').click()
-  await b(player, '模型与推荐').click()
+  await b(player.getByRole('navigation', { name: '设置分类' }), '模型与推荐').click()
   await expect(music.getByLabel('模型', { exact: true })).toHaveValue('demo-a')
   await music.getByLabel('模型', { exact: true }).fill('demo-b')
   await b(music, '保存配置').click()
@@ -45,6 +45,13 @@ try {
   await b(w, 'API 与模型').click()
   await b(section, '模型与推荐').click()
   await expect(form.getByLabel('模型', { exact: true })).toHaveValue('demo-b')
+  await w.getByRole('searchbox').fill('提示词仓库')
+  await b(w, '提示词仓库 › API 与模型').click()
+  await expect
+    .poll(() => app.windows().some((p) => p.url().includes('/prompts/index.html')))
+    .toBe(true)
+  const prompts = app.windows().find((p) => p.url().includes('/prompts/index.html'))
+  await expect(prompts.locator('input[type=password]')).toBeVisible()
   console.log('PASS global to Music and Music to global; masked key', root)
 } finally {
   await app.close()
