@@ -211,6 +211,63 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
         .catch(error)
       return
     }
+    if (active === 'album') {
+      if (imgs.length < 2) {
+        panel.append(el('p', '请选择至少两张图片'))
+        return
+      }
+      const order = el('ol')
+      for (const [i, f] of imgs.entries()) {
+        const li = el('li', f.name)
+        for (const [d, label] of [
+          [-1, '上移'],
+          [1, '下移'],
+        ]) {
+          const b = button(label, () => {
+            const j = files.indexOf(f),
+              k = files.indexOf(imgs[i + d])
+            ;[files[j], files[k]] = [files[k], files[j]]
+            draw()
+          })
+          b.disabled = !imgs[i + d]
+          li.append(b)
+        }
+        order.append(li)
+      }
+      panel.append(order)
+      panel.append(
+        button('导出长图', () =>
+          exportTo(async (batch) => {
+            const sizes = []
+            for (const f of imgs) {
+              const im = await loadImage(f.id)
+              sizes.push([im.naturalWidth, im.naturalHeight])
+            }
+            const width = Math.max(...sizes.map((v) => v[0])),
+              canvas = makeCanvas(
+                width,
+                sizes.reduce((n, v) => n + v[1], 0),
+              ),
+              ctx = canvas.getContext('2d')
+            let y = 0
+            for (const f of imgs) {
+              const im = await loadImage(f.id)
+              ctx.drawImage(im, Math.floor((width - im.naturalWidth) / 2), y)
+              y += im.naturalHeight
+            }
+            notice.textContent =
+              '已导出 ' + (await api.writeImage({ batch, format: 'png', data: canvas.toDataURL() }))
+          }),
+        ),
+        button('导出 PDF', () =>
+          exportTo(async (batch) => {
+            notice.textContent =
+              '已导出 ' + (await api.writeAlbumPdf({ batch, ids: imgs.map((f) => f.id) }))
+          }),
+        ),
+      )
+      return
+    }
   }
   draw()
   async function openTarget(id) {
