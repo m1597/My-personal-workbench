@@ -6,3 +6,7 @@
 - [x] 独立与停靠 API 设置双向同步及遮盖凭据通过。外部改名、回收站删除和还原、覆盖、跨目录移动、重启、权限恢复与虚拟盘符重连通过。
 
 文件库和工具集开发版本均为 0.1.0。共享控件源提交 bcb75ab；批量交接使用 [v1 协议](batch-interface.md)。使用独立 profile 从 Electron 组件入口验证。设置与联测截图在 tmp/file-controls-hZRURb，磁盘变更证据在 tmp/file-library-8D3SI3，API 复验在 tmp/prompt-connections-42sPck。接收端使用同一工作区工具集组在途实现。安装包和远程 CI 待集成验收。
+
+独立审核后补测普通点击 A、Ctrl 加选 B、Ctrl 取消 A，此时只有 B 保留选中高亮。重新加选 A 后，两张图片均完成尺寸副本及重命名联测。证据在 tmp/file-controls-gd9ZpB。本组实现提交 b757532，公共控件接入提交 aee0eec。
+
+工具集 0.1.0 当前接收端对单文件设置 64 MiB 上限，连仅修改名称的入口也受此限；超过限制时整批拒绝。大素材改名交工具集组解除接收限制后复验。干净检出运行 npm run check 时，两份已有集成验收 Markdown 的表格格式未过。单项运行 lint、类型检查、构建、doctor 测试及生产交互 16 项通过；开发模式交互测试未全绿。

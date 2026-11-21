@@ -45,6 +45,10 @@ try {
   await button(ui, 'a.png').click()
   await button(ui, 'b.png').click({ modifiers: ['Control'] })
   await expect(ui.getByText('已选 2 项')).toBeVisible()
+  await button(ui, 'a.png').click({ modifiers: ['Control'] })
+  await expect(button(ui, 'a.png')).not.toHaveClass(/selected/)
+  await expect(button(ui, 'b.png')).toHaveAttribute('aria-pressed', 'true')
+  await button(ui, 'a.png').click({ modifiers: ['Control'] })
   for (const mode of ['standalone', 'docked']) {
     if (mode === 'docked') await button(ui, '加入工作台').click()
     const scroll = await rows.evaluate((el) => {
