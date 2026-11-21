@@ -57,6 +57,7 @@ if (process.argv.includes('--fixture-panels'))
     },
   })
 contextBridge.exposeInMainWorld('fitbayToolkit', {
+  shortcuts: (value) => ipcRenderer.invoke('toolkit-launch:shortcuts', value),
   local: Object.fromEntries(
     [
       'chooseFiles',

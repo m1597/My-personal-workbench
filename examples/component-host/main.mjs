@@ -1,6 +1,10 @@
 import { importInstalledMusicConnection } from './music-connection.mjs'
 import { openConnections, apiUses } from './api-connections.mjs'
-import { toolkitLauncher, installedToolkitRoot } from './toolkit-launcher.mjs'
+import {
+  toolkitShortcutRequest,
+  toolkitLauncher,
+  installedToolkitRoot,
+} from './toolkit-launcher.mjs'
 import { componentInstallation } from './component-installation.mjs'
 import { installMusic } from './music-installer.mjs'
 import { updateCatalog, saveInstaller, productUpdater } from './product-updates.mjs'
@@ -550,6 +554,12 @@ else {
         setInterval(checkUpdates, 5 * 60_000).unref()
         updateTray()
       }
+      ipcMain.handle('toolkit-launch:shortcuts', async (event, value) => {
+        if (!isShell(event)) throw Error('DENIED')
+        const launch = await toolkitLauncher(app.isPackaged, profile, installation)
+        if (!launch) throw Error('未检测到工具集')
+        return toolkitShortcutRequest(launch, profile, value)
+      })
       let toolkitFileState
       const { installLocalFiles } = await import('./toolkit-local/local-files.mjs')
       installLocalFiles((name, _kinds, fn) => {

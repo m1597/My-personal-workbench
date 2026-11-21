@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { readFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { setTimeout as delay } from 'node:timers/promises'
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { registeredProduct } from './installed-products.mjs'
 // Workbench may open its API settings before the upgraded component is launched.
 const migrations = new Map()
@@ -69,4 +71,45 @@ export async function toolkitLauncher(packaged, profile, installation) {
         resolve(true)
       })
     })
+}
+
+export async function toolkitShortcutRequest(launch, profile, value) {
+  if (
+    value !== null &&
+    (!['capture', 'selection'].includes(value?.id) ||
+      typeof value.key !== 'string' ||
+      value.key.length > 100 ||
+      typeof value.enabled !== 'boolean')
+  )
+    throw Error('无效快捷键')
+  const id = randomUUID(),
+    dir = path.join(profile, 'toolkit'),
+    file = path.join(dir, 'shortcuts-' + id)
+  await mkdir(dir, { recursive: true })
+  await writeFile(
+    file,
+    JSON.stringify(
+      value === null ? null : { id: value.id, key: value.key, enabled: value.enabled },
+    ),
+    { flag: 'wx' },
+  )
+  try {
+    await launch(false, 'shortcuts-' + id)
+    for (let i = 0; i < 100; i++) {
+      let result
+      try {
+        result = JSON.parse(await readFile(file + '.reply', 'utf8'))
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e
+      }
+      if (result) {
+        if (result.error) throw Error(result.error)
+        return result.settings
+      }
+      await delay(100)
+    }
+    throw Error('工具集未响应，请重新打开设置')
+  } finally {
+    await Promise.all([file, file + '.reply'].map((p) => rm(p, { force: true })))
+  }
 }
