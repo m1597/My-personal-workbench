@@ -416,7 +416,7 @@ async function startToolkit() {
       s.win.close()
     }
   })
-  handle('copyMeasuredColor', ['screen'], (s, hex) => {
+  handle('copyMeasuredColor', ['screen'], (_sender, hex) => {
     if (!/^#[0-9A-F]{6}$/.test(hex)) throw Error('请先取色')
     return clipboard.writeText(hex)
   })
