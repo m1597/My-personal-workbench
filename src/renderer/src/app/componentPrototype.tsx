@@ -1,3 +1,4 @@
+import { openInDefaultGrid } from './defaultGrid'
 import type { Material } from './material'
 import { useTranslation } from './preferences'
 import { useEffect, useRef, useState } from 'react'
@@ -129,14 +130,16 @@ export function useComponentPrototype(
         const slot =
           existing && !relocate
             ? existing
-            : api.addPanel({
-                id: panelId,
-                title,
-                component: 'component-slot',
-                position: target
-                  ? { referenceGroup: target.id, direction: hit?.direction ?? 'within' }
-                  : undefined,
-              })
+            : !hit
+              ? openInDefaultGrid(api, { id: panelId, title, component: 'component-slot' })
+              : api.addPanel({
+                  id: panelId,
+                  title,
+                  component: 'component-slot',
+                  position: target
+                    ? { referenceGroup: target.id, direction: hit?.direction ?? 'within' }
+                    : undefined,
+                })
         attachingGroups.set(slot.api, slot.group.id)
         slot.api.setActive()
         const provisional = JSON.stringify(api.toJSON())
@@ -177,7 +180,7 @@ export function useComponentPrototype(
         if (last?.mode === 'docked') {
           const slot =
             api.getPanel(panelId) ??
-            api.addPanel({ id: panelId, title, component: 'component-slot' })
+            openInDefaultGrid(api, { id: panelId, title, component: 'component-slot' })
           slot.api.setActive()
         } else api.getPanel(panelId)?.api.setActive()
       })

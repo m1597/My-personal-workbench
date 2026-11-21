@@ -83,12 +83,7 @@ function validLayout(value: unknown): value is SerializedDockview {
       return Array.isArray(node.data) && node.data.every((child) => visit(child, depth + 1))
     if (node.type !== 'leaf' || !record(node.data)) return false
     const group = node.data
-    if (
-      typeof group.id !== 'string' ||
-      groups.has(group.id) ||
-      !Array.isArray(group.views) ||
-      group.views.length === 0
-    )
+    if (typeof group.id !== 'string' || groups.has(group.id) || !Array.isArray(group.views))
       return false
     groups.add(group.id)
     for (const id of group.views) {
@@ -134,6 +129,7 @@ function retirePlaceholders(layout: SerializedDockview) {
       return node.data.length > 0
     }
     const group = node.data
+    if (!group.views.length) return true
     group.views = group.views.filter((id) => !retiredPanelIds.includes(id))
     if (group.views.length) firstGroup ??= group.id
     if (!group.views.length && layout.activeGroup === group.id) delete layout.activeGroup

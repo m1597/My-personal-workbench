@@ -1,3 +1,4 @@
+import { openInDefaultGrid } from './defaultGrid'
 import { addFixturePanels } from '../../../../tests/fixtures/workspace/layout'
 import type { DockviewApi } from 'dockview-react'
 import { minimumPanelSize, modules, fixtureWorkspace } from './moduleRegistry'
@@ -18,7 +19,7 @@ export function showDockedModule(api: DockviewApi, id: string) {
   }
   const module = modules.find((item) => item.id === id)
   if (!module) return
-  api.addPanel({
+  openInDefaultGrid(api, {
     id,
     title: module.title,
     component: 'module',

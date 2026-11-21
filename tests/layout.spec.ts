@@ -140,6 +140,10 @@ test('关闭部分及全部模块保持状态，重置后持久恢复默认', as
   for (const id of [1, 2, 3, 4]) {
     await page.getByRole('button', { name: '组件', exact: true }).click()
     await page.getByRole('menuitem', { name: `模块 ${id}`, exact: true }).click()
+    if (id === 3) {
+      await restart(3)
+      await expect(page.locator('.dv-groupview')).toHaveCount(4)
+    }
   }
   await expect.poll(async () => (await saved()).panels).toEqual(baseline.panels)
   await page.evaluate((key) => {
@@ -151,7 +155,7 @@ test('关闭部分及全部模块保持状态，重置后持久恢复默认', as
     })
   }, key)
   await restart()
-  await expect(page.locator('.dv-groupview')).toHaveCount(1)
+  await expect(page.locator('.dv-groupview')).toHaveCount(4)
   await expect.poll(async () => (await saved()).panels).toEqual(baseline.panels)
   await page.getByRole('button', { name: '布局', exact: true }).click()
   await page.getByRole('menuitem', { name: '管理布局', exact: true }).click()

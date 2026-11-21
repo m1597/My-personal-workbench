@@ -1,3 +1,4 @@
+import { openInDefaultGrid } from './defaultGrid'
 import { useTranslation } from './preferences'
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import {
@@ -124,7 +125,7 @@ export function WindowMenu() {
                   const existing = api.getPanel('component-toolkit')
                   if (existing) existing.api.setActive()
                   else
-                    api.addPanel({
+                    openInDefaultGrid(api, {
                       id: 'component-toolkit',
                       component: 'toolkit',
                       title: t('截图与划词', 'Desktop tools'),
