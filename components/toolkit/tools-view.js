@@ -1,3 +1,4 @@
+import { createSettingsGear, createSettingsShell } from './settings-shell.js'
 import { el, field } from './ui-dom.js'
 export { toolkitHome, glyph, makeCanvas }
 /* Local toolkit pages use opaque file IDs returned by the native picker. */
@@ -14,8 +15,11 @@ const glyphs = {
   compress: 'M3 3l6 6m-5 0h5V4m12 17l-6-6m0 5v-5h5',
   clipboard: 'M7 5H4v16h16V5h-3 M8 3h8v4H8z M8 12h8m-8 4h6',
   diff: 'M3 7h8m-4-4v8m6 6h8',
+  rename: 'M3 6h12m-12 6h7m-6 5h4m3 2l2-5 6-6 3 3-7 6z',
+  resize: 'M3 9V3h6m6 0h6v6m0 6v6h-6m-6 0H3v-6 M7 17l9-9m-5 0h5v5',
   pairs: 'M2 5h8v6H2z M14 13h8v6h-8z M13 6h5v4M6 14v4h5',
   convert: 'M3 3h8l3 4v4M3 3v18h7m2-5h9m-4-4l4 4-4 4',
+  cancel: 'M5 5l14 14m0-14L5 19',
   copy: 'M3 4h12v3M7 8h13v13H7z',
   save: 'M3 3h15l3 3v15H3z M7 3v6h9V3 M7 21v-8h10v8',
   pin: 'M7 3h10l-2 7 4 4H5l4-4z M12 14v7',
@@ -151,32 +155,58 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     active = '',
     generation = 0
   const head = el('div', '', 'home-title'),
-    gear = button('设置', () => settingsPage())
-  gear.prepend(glyph('settings'))
-  gear.className = 'gear'
+    gear = createSettingsGear({ label: '设置', onClick: () => void settingsPage().catch(error) })
   head.append(el('h1', '工具集'), gear)
   const surface = el('div', '', 'tools-surface'),
     settingsBox = el('div')
   settingsBox.hidden = true
   root.append(head, notice, surface, settingsBox)
   notice.textContent = s.notice
-  function settingsPage() {
-    if (!settingsContents) return api.open('settings')
-    generation++
+  async function settingsPage() {
     surface.hidden = true
     settingsBox.hidden = false
     head.hidden = true
-    settingsBox.scrollIntoView()
     if (!settingsBox.childElementCount) {
-      settingsBox.append(
-        button('返回工具集', () => {
+      const shell = createSettingsShell({
+        title: '工具集设置',
+        categories: [
+          { id: 'keys', name: '快捷键' },
+          { id: 'api', name: 'API 与模型' },
+        ],
+        active: 'keys',
+        onSelect: showCategory,
+        onBack: () => {
           settingsBox.hidden = true
           head.hidden = false
           surface.hidden = false
-          draw()
-        }),
-      )
-      settingsContents(s, settingsBox)
+        },
+      })
+      const panels = el('div')
+      function showCategory(id) {
+        for (const box of panels.children)
+          box.hidden = (id === 'api') !== box.classList.contains('connections')
+      }
+      settingsBox.append(shell.element)
+      shell.content.append(panels)
+      try {
+        const values = api.shortcutSettings ? await api.shortcutSettings() : s
+        settingsContents(values, panels, { api, button, notice, error })
+        api.onSettingsTarget?.((route) => {
+          if (route) {
+            shell.select('api')
+            showCategory('api')
+          }
+        })
+        const route = await api.settingsTarget?.()
+        shell.select(route ? 'api' : 'keys')
+        showCategory(route ? 'api' : 'keys')
+      } catch (e) {
+        settingsBox.replaceChildren()
+        settingsBox.hidden = true
+        head.hidden = false
+        surface.hidden = false
+        throw e
+      }
     }
   }
   api.onSettingsTarget?.(() => settingsPage())
@@ -191,6 +221,8 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     return (
       !files.length ||
       {
+        resize: allImages && count > 0,
+        rename: files.length > 0,
         diff: texts === 2 && texts === files.length,
         compare: allImages && count === 2,
         album: allImages && count >= 2,
@@ -368,12 +400,12 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
         .catch(error)
       return
     }
-    if (active === 'pairs') {
+    if (active === 'pairs' || active === 'rename') {
       const prefix = field(panel, '新名称前缀', '图片')
       const texts = files.filter((f) => f.type === 'text/plain')
       const matches = new Map()
       const stem = (name) => name.replace(/\.[^.]+$/, '').toLowerCase()
-      for (const image of imgs) {
+      for (const image of active === 'pairs' ? imgs : []) {
         const label = el('label', image.name + ' 的提示词'),
           select = el('select')
         select.add(new Option('请选择提示词', ''))
@@ -404,7 +436,9 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
           apply.disabled = true
           const next = await api.planRename({
             prefix: prefix.value,
-            pairs: [...matches].map(([id, select]) => [id, select.value]),
+            ...(active === 'rename'
+              ? { ids: files.map((f) => f.id) }
+              : { pairs: [...matches].map(([id, select]) => [id, select.value]) }),
           })
           const { rows } = next
           if (version !== revision) return
@@ -476,6 +510,39 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       )
       return
     }
+    if (active === 'resize') {
+      if (!imgs.length) {
+        panel.append(button('选择图片', pick))
+        return
+      }
+      const width = field(panel, '输出宽度（像素）', '800', 'number')
+      const height = field(panel, '输出高度（像素）', '600', 'number')
+      panel.append(
+        button('生成尺寸副本', async () => {
+          const w = Number(width.value),
+            h = Number(height.value)
+          if (![w, h].every((v) => Number.isInteger(v) && v > 0 && v <= 16384) || w * h > 32000000)
+            throw Error('宽高须为正整数且不超过 16384，最多 3200 万像素')
+          await exportTo(async (batch) => {
+            out.replaceChildren()
+            for (const f of imgs) {
+              const im = await loadImage(f.id),
+                canvas = makeCanvas(w, h)
+              canvas.getContext('2d').drawImage(im, 0, 0, w, h)
+              const name = await api.writeImage({
+                batch,
+                id: f.id,
+                format: 'png',
+                data: canvas.toDataURL(),
+              })
+              out.append(el('p', name + ' · ' + w + ' × ' + h))
+            }
+          })
+        }),
+        out,
+      )
+      return
+    }
     const compress = active === 'compress',
       inputs = compress
         ? imgs
@@ -522,7 +589,14 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     )
   }
   draw()
+  let lastBatch
   async function openTarget(id) {
+    if (id && typeof id === 'object') {
+      if (lastBatch === id.id) return
+      lastBatch = id.id
+      files = await api.batchInputs(id)
+      id = id.tool
+    }
     settingsBox.hidden = true
     head.hidden = false
     surface.hidden = false

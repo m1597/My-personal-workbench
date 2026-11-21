@@ -1,6 +1,6 @@
 body:has(.tools-surface) {
-  background: radial-gradient(ellipse at top left, #343e50 0, transparent 62%), #202631;
-  color: #eef3fa;
+  background: var(--workbench-material);
+  color: var(--text);
 }
 .home-title,
 .tools-heading,
@@ -34,8 +34,8 @@ body:has(.tools-surface) {
 }
 .primary-tools {
   padding: 0 12px;
-  background: #313947b8;
-  border-color: #505969;
+  background: var(--panel-surface);
+  border-color: var(--stroke);
   border-radius: 12px;
   gap: 0;
 }
@@ -111,7 +111,7 @@ body:has(.tools-surface) {
   text-align: left;
   padding: 9px 11px;
   gap: 0 8px;
-  background: #2d3745;
+  background: var(--control);
 }
 .tool-item svg {
   grid-row: span 2;
@@ -242,4 +242,11 @@ body:has(.tools-surface) {
 }
 :host(.toolkit-panel) .home-title h1 {
   display: none;
+}
+
+.fitbay-settings-shell {
+  min-height: min(440px, 82vh);
+}
+#app:has(.fitbay-settings-shell) .fitbay-settings-content section {
+  margin: 8px;
 }

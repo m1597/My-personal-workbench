@@ -5,7 +5,8 @@
   container-type: inline-size;
   color: #edf4fa;
   color-scheme: dark;
-  background: linear-gradient(135deg, #303947de, #202632ed);
+  background: var(--workbench-material);
+  backdrop-filter: var(--material-panel);
   font:
     14px / 1.5 "HarmonyOS Sans SC",
     "Microsoft YaHei UI",
