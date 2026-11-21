@@ -1,4 +1,4 @@
-import { readFile, realpath } from 'node:fs/promises'
+import { readFile, realpath, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
@@ -21,14 +21,44 @@ function installDirectory(name) {
   return data.toString('utf16le', 0, Math.max(size[0] - 2, 0))
 }
 
+async function productAt(directory, id, local = false) {
+  if (!directory || !path.isAbsolute(directory)) return
+  try {
+    const expected = path.join(directory, 'resources/app')
+    const root = await realpath(expected)
+    if (local && path.relative(expected, root)) return
+    const exe = id === 'workbench' ? 'FitBay.exe' : `FitBay ${names[id]}.exe`
+    const entry =
+      id === 'toolkit'
+        ? 'main.mjs'
+        : id === 'workbench'
+          ? 'workbench/index.html'
+          : `${id}/component.json`
+    if (
+      ['music', 'prompts'].includes(id) &&
+      !(await stat(path.join(root, id, 'index.html'))).isFile()
+    )
+      return
+    if (id === 'music' && !(await stat(path.join(root, 'host/music-service.mjs'))).isFile()) return
+    const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
+    if (
+      pkg.fitbayProduct === id &&
+      typeof pkg.version === 'string' &&
+      pkg.version &&
+      (await stat(path.join(directory, exe))).isFile() &&
+      (await stat(path.join(root, entry))).isFile()
+    )
+      return root
+  } catch {
+    // Incomplete or stale installations are not launchable.
+  }
+}
+
 export async function registeredProduct(id) {
   const name = names[id]
   try {
     const directory = installDirectory(name)
-    if (!path.isAbsolute(directory)) return undefined
-    const root = await realpath(path.join(directory, 'resources/app'))
-    const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
-    return pkg.fitbayProduct === id ? root : undefined
+    return productAt(directory, id)
   } catch {
     return undefined
   }
@@ -39,5 +69,17 @@ export async function installedProducts(applicationRoot) {
     await readFile(path.join(applicationRoot, 'package.json'), 'utf8'),
   )
   if (!Object.hasOwn(names, product)) throw Error('安装包的产品标识无效')
-  return { product, find: (id) => (id === product ? applicationRoot : registeredProduct(id)) }
+  async function find(id) {
+    if (id === product) return applicationRoot
+    if (!Object.hasOwn(names, id)) return
+    if (product === 'workbench') {
+      const parent = await realpath(path.resolve(applicationRoot, '../..'))
+      for (const name of [names[id], 'FitBay ' + names[id]]) {
+        const root = await productAt(path.join(parent, name), id, true)
+        if (root) return root
+      }
+    }
+    return registeredProduct(id)
+  }
+  return { product, find }
 }

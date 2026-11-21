@@ -1,3 +1,4 @@
+import { ComponentInstallSettings } from './ComponentInstallSettings'
 import { ConnectionSettings } from './ConnectionSettings'
 import { materialDefaults } from './material'
 import { WorkbenchUpdates, type UpdateState } from './WorkbenchUpdates'
@@ -497,8 +498,12 @@ export function WorkbenchSettings({
                   )}
                   {category === 2 && (
                     <>
+                      <ComponentInstallSettings
+                        key={revision}
+                        onInstalled={() => refresh((n) => n + 1)}
+                      />
                       <div className="component-inventory">
-                        <h3>Music</h3>
+                        <h3>{t('Music 运行设置', 'Music runtime settings')}</h3>
                         <Button
                           size="small"
                           onClick={() => {

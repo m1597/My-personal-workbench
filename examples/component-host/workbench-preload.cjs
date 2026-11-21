@@ -3,6 +3,10 @@ contextBridge.exposeInMainWorld('fitbayConnections', {
   snapshot: () => ipcRenderer.invoke('connections:snapshot'),
   write: (use, input) => ipcRenderer.invoke('connections:write', use, input),
 })
+contextBridge.exposeInMainWorld('fitbayComponentSetup', {
+  list: () => ipcRenderer.invoke('component-setup:list'),
+  install: (id) => ipcRenderer.invoke('component-setup:install', id),
+})
 let updatePageListener
 let updatePagePending = false
 ipcRenderer.on('updates:open', () => {
