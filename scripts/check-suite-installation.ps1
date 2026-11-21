@@ -16,10 +16,17 @@ $baselineLinks = @(Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' -Force | 
 function NewDesktopLinks {
   Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' -Force | Where-Object { $_.FullName -notin $baselineLinks }
 }
+function ShortcutTarget($link) {
+  $target = $shell.CreateShortcut($link.FullName).TargetPath
+  Write-Host "$($link.Name) -> [$target]"
+  if ($target) { return [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($target)) }
+}
 function Verify-Desktop($hostDir, $preserved) {
   $links = @(NewDesktopLinks | Where-Object { $_.FullName -ne $preserved })
-  if ($links.Count -ne 1 -or $shell.CreateShortcut($links[0].FullName).TargetPath -ne (Join-Path $hostDir 'FitBay.exe')) {
-    throw "Expected only the workbench desktop shortcut, found: $($links.Name -join ', ')"
+  $expected = Join-Path $hostDir 'FitBay.exe'
+  $targets = @($links | ForEach-Object { ShortcutTarget $_ })
+  if ($links.Count -ne 1 -or $targets.Count -ne 1 -or $targets[0] -ne $expected) {
+    throw "Expected one desktop link to [$expected], found: [$($targets -join ', ')]"
   }
 }
 function Run-Setup($file, $flags) {
@@ -83,7 +90,7 @@ $foreign = $null
 if ([version]$Previous -lt [version]'0.2.2') {
   $legacy = @(NewDesktopLinks)
   if ($legacy.Count -ne 4) { throw "Expected four desktop shortcuts from legacy installers" }
-  $musicLink = @($legacy | Where-Object { $shell.CreateShortcut($_.FullName).TargetPath -eq (Join-Path $locations.Music 'FitBay Music.exe') })
+  $musicLink = @($legacy | Where-Object { (ShortcutTarget $_) -eq (Join-Path $locations.Music 'FitBay Music.exe') })
   if ($musicLink.Count -ne 1) { throw 'Missing legacy Music desktop shortcut' }
   $foreign = $musicLink[0].FullName
   Copy-Item -LiteralPath $foreign -Destination (Join-Path $desktop 'Renamed legacy Music.lnk')
