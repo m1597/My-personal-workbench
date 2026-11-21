@@ -1,9 +1,8 @@
-import { useLayoutEffect, useRef, useState, type ReactNode, type ComponentType } from 'react'
+import { useLayoutEffect, useRef, useMemo, type ReactNode, type ComponentType } from 'react'
 import { createPortal } from 'react-dom'
 import {
   createSettingsGear,
   createSettingsShell,
-  type Shell,
 } from '../../../../components/toolkit/settings-shell.js'
 
 export function SettingsGear({ label, onClick }: { label: string; onClick: () => void }) {
@@ -30,7 +29,6 @@ type Props<T extends string> = {
 export function SettingsShell<T extends string>(props: Props<T>) {
   const host = useRef<HTMLDivElement>(null)
   const latest = useRef(props)
-  const [shell, setShell] = useState<Shell>()
   useLayoutEffect(() => {
     latest.current = props
   })
@@ -39,30 +37,33 @@ export function SettingsShell<T extends string>(props: Props<T>) {
     props.categories.map(({ id, name }) => [id, name]),
   ])
   // biome-ignore lint/correctness/useExhaustiveDependencies: Rebuild the DOM only when navigation labels or keys change.
+  const shell = useMemo(
+    () =>
+      createSettingsShell({
+        title: props.title,
+        categories: props.categories,
+        active: props.active,
+        onSelect: (id: T) => latest.current.onSelect(id),
+        onBack: () => latest.current.onBack(),
+      }),
+    [signature],
+  )
   useLayoutEffect(() => {
-    const view = createSettingsShell({
-      ...latest.current,
-      onSelect: (id: T) => latest.current.onSelect(id),
-      onBack: () => latest.current.onBack(),
-    })
-    host.current?.replaceChildren(view.element)
-    setShell(view)
-    return () => view.element.remove()
-  }, [signature])
+    host.current?.replaceChildren(shell.element)
+    return () => shell.element.remove()
+  }, [shell])
   useLayoutEffect(() => {
-    shell?.select(props.active)
+    shell.select(props.active)
   }, [shell, props.active])
   return (
     <div ref={host} style={{ height: '100%', minHeight: 0, minWidth: 0 }}>
-      {shell && (
-        <>
-          {createPortal(props.children, shell.content)}
-          {props.categories.map(({ id, icon: Icon }) => {
-            const target = shell.icons.get(id)
-            return Icon && target ? createPortal(<Icon size={16} />, target, id) : null
-          })}
-        </>
-      )}
+      <>
+        {createPortal(props.children, shell.content)}
+        {props.categories.map(({ id, icon: Icon }) => {
+          const target = shell.icons.get(id)
+          return Icon && target ? createPortal(<Icon size={16} />, target, id) : null
+        })}
+      </>
     </div>
   )
 }
