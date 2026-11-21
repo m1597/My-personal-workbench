@@ -42,6 +42,24 @@ function makeCanvas(w, h) {
   c.height = h
   return c
 }
+async function compressImage(img, limit) {
+  let w = img.naturalWidth,
+    h = img.naturalHeight
+  for (;;) {
+    const c = makeCanvas(w, h),
+      ctx = c.getContext('2d')
+    ctx.fillStyle = 'white'
+    ctx.fillRect(0, 0, w, h)
+    ctx.drawImage(img, 0, 0, w, h)
+    for (const q of [0.92, 0.8, 0.65, 0.45, 0.25]) {
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', q))
+      if (blob && blob.size <= limit) return c.toDataURL('image/jpeg', q)
+    }
+    if (w === 1 && h === 1) throw Error('无法达到指定大小')
+    w = Math.max(1, Math.floor(w * 0.72))
+    h = Math.max(1, Math.floor(h * 0.72))
+  }
+}
 function toolkitHome(s, { api, root, notice, error, button, settingsContents }) {
   async function loadImage(id) {
     const img = new Image()
@@ -268,6 +286,50 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       )
       return
     }
+    const compress = active === 'compress',
+      inputs = compress
+        ? imgs
+        : files.filter((f) => f.type === 'application/docx' || f.type.startsWith('image/'))
+    if (!inputs.length) {
+      panel.append(el('p', compress ? '请选择图片' : '请选择图片或 DOCX 文档'))
+      return
+    }
+    const size = compress ? field(panel, '每张最大 KB', '250', 'number') : null
+    panel.append(
+      button(compress ? '压缩并导出' : '开始转换', async () => {
+        const limit = Number(size?.value) * 1024
+        if (compress && (!Number.isFinite(limit) || limit < 1024)) throw Error('请输入至少 1 KB')
+        await exportTo(async (batch) => {
+          out.replaceChildren()
+          for (const f of inputs) {
+            try {
+              let saved
+              if (f.type === 'application/docx') saved = await api.convertDoc({ id: f.id, batch })
+              else {
+                const im = await loadImage(f.id)
+                let data
+                if (compress) data = await compressImage(im, limit)
+                else {
+                  const c = makeCanvas(im.naturalWidth, im.naturalHeight)
+                  c.getContext('2d').drawImage(im, 0, 0)
+                  data = c.toDataURL()
+                }
+                saved = await api.writeImage({
+                  batch,
+                  id: f.id,
+                  format: compress ? 'jpg' : 'png',
+                  data,
+                })
+              }
+              out.append(el('p', f.name + ' → ' + saved))
+            } catch (e) {
+              out.append(el('p', f.name + ' · ' + e.message))
+            }
+          }
+        })
+      }),
+      out,
+    )
   }
   draw()
   async function openTarget(id) {
