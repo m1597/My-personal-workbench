@@ -87,7 +87,7 @@ try {
     })
     .toBeTruthy()
   const live = await shell.evaluate(() => window.fitbayUpdates.snapshot())
-  await expect(shell.getByText(/未接入在线更新/)).toBeVisible()
+  await expect(shell.getByText(/未接入在线更新/)).toHaveCount(3)
   await writeFile(path.join(root, 'live.json'), JSON.stringify(live, null, 2))
   await app.evaluate(() => {
     globalThis.fixtureFetch = async () => new Response('{}', { status: 503 })

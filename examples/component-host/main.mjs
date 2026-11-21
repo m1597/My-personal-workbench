@@ -1,6 +1,6 @@
 import { importInstalledMusicConnection } from './music-connection.mjs'
 import { openConnections, apiUses } from './api-connections.mjs'
-import { toolkitLauncher } from './toolkit-launcher.mjs'
+import { toolkitLauncher, installedToolkitRoot } from './toolkit-launcher.mjs'
 import { installMusic } from './music-installer.mjs'
 import { updateCatalog, saveInstaller, productUpdater } from './product-updates.mjs'
 import { installedProducts, registeredProduct } from './installed-products.mjs'
@@ -474,16 +474,21 @@ else {
             ['workbench', 'FitBay'],
             ['music', 'Music'],
             ['sample', '示例组件'],
+            ['prompts', '提示词仓库'],
+            ['toolkit', '截图与划词'],
           ]) {
             const root =
               id === 'workbench'
                 ? installation
                   ? await installation.find(id)
                   : here
-                : await (id === 'music' ? music : sample).discover(false)
+                : id === 'toolkit'
+                  ? await installedToolkitRoot(app.isPackaged)
+                  : await { music, sample, prompts }[id].discover(false)
             if (!root) continue
             const packaged = installation && id !== 'sample' && (await installation.find(id))
-            const file = packaged || id === 'workbench' ? 'package.json' : 'component.json'
+            const file =
+              packaged || id === 'workbench' || id === 'toolkit' ? 'package.json' : 'component.json'
             const { version } = JSON.parse(readFileSync(path.join(packaged || root, file), 'utf8'))
             rows.push({ id, name, version, installable: Boolean(packaged) })
           }
