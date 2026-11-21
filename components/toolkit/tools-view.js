@@ -60,6 +60,27 @@ async function compressImage(img, limit) {
     h = Math.max(1, Math.floor(h * 0.72))
   }
 }
+function asMarkdown(html, text) {
+  if (!html) return text
+  const template = document.createElement('template')
+  template.innerHTML = html
+  function walk(node) {
+    if (node.nodeType === 3) return node.textContent
+    if (node.nodeType !== 1 && node.nodeType !== 11) return ''
+    const tag = node.nodeName.toLowerCase()
+    if (['style', 'script', 'noscript', 'iframe', 'object'].includes(tag)) return ''
+    const body = Array.from(node.childNodes, walk).join('')
+    if (['strong', 'b'].includes(tag)) return '**' + body + '**'
+    if (['em', 'i'].includes(tag)) return '*' + body + '*'
+    if (/^h[1-6]$/.test(tag)) return '#'.repeat(Number(tag[1])) + ' ' + body + '\n\n'
+    if (tag === 'a' && /^https?:\/\//i.test(node.getAttribute('href') || ''))
+      return '[' + body + '](' + node.getAttribute('href') + ')'
+    if (tag === 'li') return '- ' + body + '\n'
+    if (tag === 'br') return '\n'
+    return ['p', 'div', 'ul', 'ol'].includes(tag) ? body + '\n\n' : body
+  }
+  return walk(template.content).trim() || text
+}
 function toolkitHome(s, { api, root, notice, error, button, settingsContents }) {
   async function loadImage(id) {
     const img = new Image()
@@ -200,6 +221,40 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       panel,
     )
     panel.append(el('h2', toolNames[active][0]))
+    if (active === 'clipboard') {
+      panel.append(
+        button('读取剪贴板', async () => {
+          const c = await api.clipboardSnapshot()
+          out.replaceChildren()
+          if (!c.text && !c.image) {
+            out.append(el('p', '剪贴板没有文字或图片'))
+            return
+          }
+          if (c.text) out.append(el('pre', c.text.slice(0, 800)))
+          for (const [id, label] of [
+            ['plain', '复制纯文本'],
+            ['copy-markdown', '复制 Markdown'],
+            ['markdown', '保存 Markdown'],
+            ['prompt', '存为提示词'],
+            ['png', '保存 PNG'],
+          ])
+            if (id === 'png' ? c.image : c.text)
+              out.append(
+                button(label, async () => {
+                  notice.textContent = await api.clipboardAction({
+                    kind: id,
+                    markdown: asMarkdown(c.html, c.text),
+                  })
+                }),
+              )
+        }),
+        out,
+      )
+      return
+    }
+    panel.append(button(files.length ? '重新选择文件' : '选择文件', pick))
+    const imgs = images()
+    if (files.length) panel.append(el('small', files.map((f) => f.name).join(' · ')))
     if (active === 'compare') {
       if (imgs.length !== 2) {
         panel.append(el('p', '请选择两张图片'))
