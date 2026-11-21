@@ -12,12 +12,16 @@ const root = await mkdtemp(path.resolve('tmp/selector-'))
 const compiler = await windows.getMakeNsisPath()
 const log = path.join(root, 'calls.txt')
 const probe = path.join(root, 'probe.nsi')
-for (const id of ['Workbench', 'Music']) {
+const products = ['Workbench', 'Music', 'Prompts', 'Toolkit']
+const files = {}
+for (const id of products) {
+  files[id.toLowerCase()] = path.join(root, id + '.exe')
   await writeFile(
     probe,
     `Unicode true
 RequestExecutionLevel user
 SilentInstall silent
+InstallDir "${root}\\independent"
 Name "FitBay acceptance"
 OutFile "${root}\\${id}.exe"
 Section
@@ -38,14 +42,17 @@ SectionEnd`,
   assert.equal(result.status, 0)
 }
 const selector = path.join(root, 'selector-test.exe')
-await buildOfflineSetup(path.join(root, 'Workbench.exe'), path.join(root, 'Music.exe'), selector)
+await buildOfflineSetup(files, selector)
 const installDir = path.join(root, '自选 FitBay 目录')
-for (const [args, fail, calls] of [
-  [[], '', ['Workbench']],
-  [['/WITHMUSIC'], '', ['Workbench', 'Music']],
-  [['/WITHMUSIC'], 'Workbench', ['Workbench']],
-  [['/WITHMUSIC'], 'Music', ['Workbench', 'Music']],
-]) {
+const cases = []
+for (let mask = 0; mask < 8; mask++) {
+  const optional = products.slice(1).filter((_, i) => mask & (1 << i))
+  const args = optional.map((id) => '/WITH' + id.toUpperCase())
+  cases.push([args, '', ['Workbench', ...optional]])
+}
+for (const [index, fail] of products.entries())
+  cases.push([['/WITHMUSIC', '/WITHPROMPTS', '/WITHTOOLKIT'], fail, products.slice(0, index + 1)])
+for (const [args, fail, calls] of cases) {
   await writeFile(log, '')
   const result = spawnSync(selector, ['/S', ...args, `/D=${installDir}`], {
     windowsVerbatimArguments: true,
@@ -56,7 +63,7 @@ for (const [args, fail, calls] of [
   assert.equal(result.status, fail ? 7 : 0)
   assert.deepEqual(
     (await readFile(log, 'utf16le')).trim().split(/\r?\n/),
-    calls.map((id) => `${id} ${id === 'Music' ? path.join(installDir, 'Music') : installDir}`),
+    calls.map((id) => `${id} ${id === 'Workbench' ? installDir : path.join(root, 'independent')}`),
   )
 }
-console.log('PASS 离线选择器默认仅工作台、附加 Music、两阶段错误传播和停止顺序。')
+console.log('PASS 离线选择器全部八种组件组合、四阶段错误传播和路径参数。')

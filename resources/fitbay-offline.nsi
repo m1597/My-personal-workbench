@@ -12,15 +12,15 @@ ShowInstDetails show
 !include "FileFunc.nsh"
 !include "Sections.nsh"
 
-!define MUI_COMPONENTSPAGE_TEXT_TOP "请选择要安装的产品。下一步选择 FitBay 安装目录，勾选的 Music 会自动安装到其中的 Music 子目录。"
+!define MUI_COMPONENTSPAGE_TEXT_TOP "请选择要安装的产品。下一步选择 FitBay 安装目录，首次安装的组件将放入对应子目录。"
 !define MUI_COMPONENTSPAGE_NODESC
 !insertmacro MUI_PAGE_COMPONENTS
-!define MUI_DIRECTORYPAGE_TEXT_TOP "请选择 FitBay 工作台的安装目录。以后单独补装 Music 时也会自动识别此位置。"
+!define MUI_DIRECTORYPAGE_TEXT_TOP "请选择 FitBay 工作台的安装目录。已安装的组件将沿用原位置升级。"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-!macro InstallProduct id label destination
+!macro InstallProduct id label arguments
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
   ClearErrors
@@ -28,7 +28,7 @@ ShowInstDetails show
   IfErrors 0 +2
     Abort "无法解包${label}安装器。"
   ClearErrors
-  ExecWait '"$PLUGINSDIR\${id}.exe" /currentuser /S /D=${destination}' $1
+  ExecWait '"$PLUGINSDIR\${id}.exe" /currentuser /S ${arguments}' $1
   ${If} ${Errors}
     SetErrorLevel 2
     Abort "无法启动${label}安装器。"
@@ -43,21 +43,35 @@ ShowInstDetails show
 
 Section "FitBay 工作台（必选）"
   SectionIn RO
-  !insertmacro InstallProduct WORKBENCH "工作台" "$INSTDIR"
+  !insertmacro InstallProduct WORKBENCH "工作台" "/D=$INSTDIR"
   ; Keep the verified standalone installer for a later offline addition.
   SetOutPath "$INSTDIR\resources\app"
   File "/oname=music-offline-setup.exe" "${MUSIC}"
 SectionEnd
 
 Section /o "FitBay Music" MusicSection
-  !insertmacro InstallProduct MUSIC "Music" "$INSTDIR\Music"
+  !insertmacro InstallProduct MUSIC "Music" ""
 SectionEnd
+
+Section /o "提示词仓库（文件库）" PromptsSection
+  !insertmacro InstallProduct PROMPTS "提示词仓库" ""
+SectionEnd
+
+Section /o "工具集" ToolkitSection
+  !insertmacro InstallProduct TOOLKIT "工具集" ""
+SectionEnd
+
+!macro SelectRequested flag section
+  ClearErrors
+  ${GetOptions} $0 "/WITH${flag}" $1
+  ${IfNot} ${Errors}
+    !insertmacro SelectSection ${section}
+  ${EndIf}
+!macroend
 
 Function .onInit
   ${GetParameters} $0
-  ClearErrors
-  ${GetOptions} $0 "/WITHMUSIC" $1
-  ${IfNot} ${Errors}
-    !insertmacro SelectSection ${MusicSection}
-  ${EndIf}
+  !insertmacro SelectRequested MUSIC ${MusicSection}
+  !insertmacro SelectRequested PROMPTS ${PromptsSection}
+  !insertmacro SelectRequested TOOLKIT ${ToolkitSection}
 FunctionEnd

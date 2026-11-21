@@ -1,0 +1,43 @@
+name: Verify four-product offline installer
+on:
+  push:
+    branches: [codex/four-product-installer]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Build candidate and check all checkbox combinations
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          npx --yes --package=$($pkg.packageManager) npm ci
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run dist:win
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/check-offline-setup.mjs
+      - name: Install and upgrade real packages in isolated directories
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP 'baseline'
+          gh release download v0.2.0 --repo $env:GITHUB_REPOSITORY --dir $dest --pattern 'FitBay-*-Setup-0.2.0-x64.exe'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/check-suite-installation.ps1 -BaselineDir $dest -Previous 0.2.0
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: FitBay-offline-candidate
+          path: |
+            dist/installers/FitBay-Setup-*.exe
+            dist/installers/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

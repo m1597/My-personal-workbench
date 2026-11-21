@@ -5,7 +5,7 @@ import { copyFile, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promise
 import path from 'node:path'
 import windows from 'app-builder-lib/out/toolsets/windows.js'
 
-export async function buildOfflineSetup(workbench, music, output) {
+export async function buildOfflineSetup(files, output) {
   const compiler = await windows.getMakeNsisPath()
   execFileSync(
     compiler.path,
@@ -13,8 +13,9 @@ export async function buildOfflineSetup(workbench, music, output) {
       '/V2',
       '/INPUTCHARSET',
       'UTF8',
-      `/DWORKBENCH=${path.resolve(workbench)}`,
-      `/DMUSIC=${path.resolve(music)}`,
+      ...['workbench', 'music', 'prompts', 'toolkit'].map(
+        (id) => `/D${id.toUpperCase()}=${path.resolve(files[id])}`,
+      ),
       `/DOUTPUT=${path.resolve(output)}`,
       'fitbay-offline.nsi',
     ],
@@ -36,7 +37,7 @@ export async function deliverInstallers(files, version) {
   try {
     for (const file of Object.values(files))
       await copyFile(file, path.join(stage, path.basename(file)))
-    await buildOfflineSetup(files.workbench, files.music, path.join(stage, selector))
+    await buildOfflineSetup(files, path.join(stage, selector))
     names.push(selector)
     const plugin = 'path.fitbayplugin'
     await copyFile(

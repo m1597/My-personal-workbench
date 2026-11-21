@@ -3,26 +3,22 @@
 
 !if "${APP_ID}" == "io.github.m1597.fitbay.toolkit"
   !define FITBAY_SLOT "Toolkit"
-  !define FITBAY_PEER "Music"
 !else if "${APP_ID}" == "io.github.m1597.fitbay.music"
   !define FITBAY_SLOT "Music"
-  !define FITBAY_PEER "Workbench"
 !else if "${APP_ID}" == "io.github.m1597.fitbay.prompts"
   !define FITBAY_SLOT "Prompts"
-  !define FITBAY_PEER "Music"
 !else
   !define FITBAY_SLOT "Workbench"
-  !define FITBAY_PEER "Music"
 !endif
 !define /ifndef FITBAY_REG "Software\FitBay\Installations"
 
 !macro FitBayDefaultDir
   !ifndef BUILD_UNINSTALLER
-    !if "${FITBAY_SLOT}" == "Music"
+    !if "${FITBAY_SLOT}" != "Workbench"
       SetRegView 64
       ReadRegStr $0 HKCU "${FITBAY_REG}" "Workbench"
       ${If} $0 != ""
-        StrCpy $INSTDIR "$0\Music"
+        StrCpy $INSTDIR "$0\${FITBAY_SLOT}"
       ${EndIf}
     !endif
   !endif
@@ -59,6 +55,33 @@
     ${EndIf}
   !macroend
 
+  ; Allow only the registered, named direct children when (re)installing Workbench.
+  !macro FitBayCheckPeer peer allowed
+    !if "${FITBAY_SLOT}" != "${peer}"
+      ReadRegStr $1 HKCU "${FITBAY_REG}" "${peer}"
+      ${If} $1 != ""
+        System::Call 'kernel32::GetFullPathNameW(w "$1\.", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'
+        ${If} $0 == 0
+        ${OrIf} $0 >= ${NSIS_MAX_STRLEN}
+          Goto invalidPath
+        ${EndIf}
+        !if "${FITBAY_SLOT}" == "Workbench"
+          ${If} "$2\${peer}" == "$1"
+            StrCpy ${allowed} "${peer}"
+          ${Else}
+            !insertmacro rejectOverlap "$1"
+          ${EndIf}
+        !else if "${peer}" == "Workbench"
+          ${If} "$1\${FITBAY_SLOT}" != "$2"
+            !insertmacro rejectOverlap "$1"
+          ${EndIf}
+        !else
+          !insertmacro rejectOverlap "$1"
+        !endif
+      ${EndIf}
+    !endif
+  !macroend
+
   Function FitBayValidateDestination
     System::Call 'kernel32::GetFullPathNameW(w "$INSTDIR\.", i ${NSIS_MAX_STRLEN}, w .r2, p 0) i.r0'
     ${If} $0 == 0
@@ -92,45 +115,13 @@
     ${If} $1 != ""
       !insertmacro rejectOverlap "$1"
     ${EndIf}
-    !if "${FITBAY_SLOT}" == "Prompts"
-      ReadRegStr $1 HKCU "${FITBAY_REG}" "Workbench"
-    !else
-      ReadRegStr $1 HKCU "${FITBAY_REG}" "Prompts"
-    !endif
-    ${If} $1 != ""
-      !insertmacro rejectOverlap "$1"
-    ${EndIf}
-    !if "${FITBAY_SLOT}" == "Toolkit"
-      ReadRegStr $1 HKCU "${FITBAY_REG}" "Workbench"
-    !else
-      ReadRegStr $1 HKCU "${FITBAY_REG}" "Toolkit"
-    !endif
-    ${If} $1 != ""
-      !insertmacro rejectOverlap "$1"
-    ${EndIf}
-    ReadRegStr $1 HKCU "${FITBAY_REG}" "${FITBAY_PEER}"
     StrCpy $4 ""
-    ${If} $1 != ""
-      System::Call 'kernel32::GetFullPathNameW(w "$1\.", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'
-      ${If} $0 == 0
-      ${OrIf} $0 >= ${NSIS_MAX_STRLEN}
-        Goto invalidPath
-      ${EndIf}
-      !if "${FITBAY_SLOT}" == "Music"
-        StrCmp "$1\Music" "$2" peerChecked
-      !else if "${FITBAY_SLOT}" == "Workbench"
-        ${If} "$2\Music" == "$1"
-          StrCpy $4 "Music"
-          Goto peerChecked
-        ${EndIf}
-      !endif
-      !insertmacro rejectOverlap "$1"
-    ${EndIf}
-    !if "${FITBAY_SLOT}" == "Music"
-    peerChecked:
-    !else if "${FITBAY_SLOT}" == "Workbench"
-    peerChecked:
-    !endif
+    StrCpy $5 ""
+    StrCpy $6 ""
+    !insertmacro FitBayCheckPeer "Workbench" $4
+    !insertmacro FitBayCheckPeer "Music" $4
+    !insertmacro FitBayCheckPeer "Prompts" $5
+    !insertmacro FitBayCheckPeer "Toolkit" $6
     ReadRegStr $1 HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
     ${If} $1 != ""
       System::Call 'kernel32::GetFullPathNameW(w "$1\.", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'
@@ -144,6 +135,8 @@
       ${If} $1 != "."
       ${AndIf} $1 != ".."
       ${AndIf} $1 != $4
+      ${AndIf} $1 != $5
+      ${AndIf} $1 != $6
         FindClose $0
         Goto invalidPath
       ${EndIf}
@@ -153,7 +146,7 @@
     validPath:
       Return
     invalidPath:
-      MessageBox MB_OK|MB_ICONEXCLAMATION "首次安装请选择空目录。工作台下只允许已登记的 Music 子目录，安装位置不能与用户数据重叠或经过目录链接。" /SD IDOK
+      MessageBox MB_OK|MB_ICONEXCLAMATION "首次安装请选择空目录。工作台下只允许已登记的 Music、Prompts、Toolkit 组件子目录，安装位置不能与用户数据重叠或经过目录链接。" /SD IDOK
       SetErrorLevel 2
       Quit
   FunctionEnd
