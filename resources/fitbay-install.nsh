@@ -1,5 +1,6 @@
 ﻿!include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!include "Win\COM.nsh"
 
 !if "${APP_ID}" == "io.github.m1597.fitbay.toolkit"
   !define FITBAY_SLOT "Toolkit"
@@ -153,6 +154,11 @@
 
   !macro customInit
     !insertmacro FitBayCurrentUserOnly
+    !if "${FITBAY_SLOT}" != "Workbench"
+      Var /GLOBAL fitbayPreviousDirectory
+      SetRegView 64
+      ReadRegStr $fitbayPreviousDirectory HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
+    !endif
     ; Hold the handle until this installer exits so two products cannot claim one empty folder.
     System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\FitBaySplitInstaller") p.r1 ?e'
     Pop $0
@@ -169,6 +175,31 @@
 !endif
 
 !macro customInstall
+  !if "${FITBAY_SLOT}" != "Workbench"
+    ${If} $fitbayPreviousDirectory != ""
+      FindFirst $6 $7 "$DESKTOP\*.lnk"
+      ${DoWhile} $7 != ""
+        !insertmacro ComHlpr_CreateInProcInstance ${CLSID_ShellLink} ${IID_IShellLink} r0 ""
+        ${If} $0 P<> 0
+          ${IUnknown::QueryInterface} $0 '("${IID_IPersistFile}",.r1)'
+          ${If} $1 P<> 0
+            ${IPersistFile::Load} $1 '("$DESKTOP\$7",0).r2'
+            ${If} $2 = 0
+              ${IShellLink::GetPath} $0 '(.r3,${NSIS_MAX_STRLEN},0,4).r2'
+              ${If} $2 = 0
+              ${AndIf} $3 == "$fitbayPreviousDirectory\${APP_EXECUTABLE_FILENAME}"
+                Delete "$DESKTOP\$7"
+              ${EndIf}
+            ${EndIf}
+            ${IUnknown::Release} $1 ""
+          ${EndIf}
+          ${IUnknown::Release} $0 ""
+        ${EndIf}
+        FindNext $6 $7
+      ${Loop}
+      FindClose $6
+    ${EndIf}
+  !endif
   SetRegView 64
   WriteRegStr HKCU "${FITBAY_REG}" "${FITBAY_SLOT}" "$INSTDIR"
 !macroend

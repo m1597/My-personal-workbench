@@ -10,6 +10,18 @@ $root = Join-Path $env:RUNNER_TEMP 'FitBay suite acceptance'
 $registration = 'HKCU:\Software\FitBay\Installations'
 $exe = @{ Workbench='FitBay'; Music='FitBay Music'; Prompts='FitBay Prompts'; Toolkit='FitBay Toolkit' }
 $components = @('Music','Prompts','Toolkit')
+$desktop = [Environment]::GetFolderPath('DesktopDirectory')
+$shell = New-Object -ComObject WScript.Shell
+$baselineLinks = @(Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' -Force | ForEach-Object FullName)
+function NewDesktopLinks {
+  Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' -Force | Where-Object { $_.FullName -notin $baselineLinks }
+}
+function Verify-Desktop($hostDir, $preserved) {
+  $links = @(NewDesktopLinks | Where-Object { $_.FullName -ne $preserved })
+  if ($links.Count -ne 1 -or $shell.CreateShortcut($links[0].FullName).TargetPath -ne (Join-Path $hostDir 'FitBay.exe')) {
+    throw "Expected only the workbench desktop shortcut, found: $($links.Name -join ', ')"
+  }
+}
 function Run-Setup($file, $flags) {
   $result = Start-Process -FilePath $file -ArgumentList $flags -WindowStyle Hidden -PassThru -Wait
   if ($result.ExitCode) { throw "$file returned $($result.ExitCode) for $flags" }
@@ -49,6 +61,8 @@ $all = '/S /WITHMUSIC /WITHPROMPTS /WITHTOOLKIT'
 Run-Setup $setup "$all /D=$root"
 Verify Workbench $root $version
 foreach ($p in $components) { Verify $p (Join-Path $root $p) $version }
+Verify-Desktop $root
+Write-Host 'PASS fresh installation with all three components creates only the host desktop shortcut'
 Remove-TestProduct Workbench $root
 foreach ($p in $components) { Verify $p (Join-Path $root $p) $version }
 Run-Setup $setup "/S /D=$root"
@@ -65,7 +79,24 @@ foreach ($p in @('Workbench')+$components) {
   Verify $p $dest $Previous
   Set-Content -LiteralPath (Join-Path $dest 'existing-file.txt') -Value $p
 }
+$foreign = $null
+if ([version]$Previous -lt [version]'0.2.2') {
+  $legacy = @(NewDesktopLinks)
+  if ($legacy.Count -ne 4) { throw "Expected four desktop shortcuts from legacy installers" }
+  $musicLink = @($legacy | Where-Object { $shell.CreateShortcut($_.FullName).TargetPath -eq (Join-Path $locations.Music 'FitBay Music.exe') })
+  if ($musicLink.Count -ne 1) { throw 'Missing legacy Music desktop shortcut' }
+  $foreign = $musicLink[0].FullName
+  Copy-Item -LiteralPath $foreign -Destination (Join-Path $desktop 'Renamed legacy Music.lnk')
+  $replacement = $shell.CreateShortcut($foreign)
+  $replacement.TargetPath = Join-Path $env:WINDIR 'notepad.exe'
+  $replacement.Save()
+}
 Run-Setup $setup $all
+Verify-Desktop $oldRoot $foreign
+if ($foreign -and (!(Test-Path -LiteralPath $foreign) -or $shell.CreateShortcut($foreign).TargetPath -ne $replacement.TargetPath)) {
+  throw 'Upgrade removed or replaced the unrelated same-name shortcut'
+}
+Write-Host 'PASS upgrade leaves one FitBay desktop shortcut and preserves unrelated targets'
 foreach ($p in @('Workbench')+$components) {
   Verify $p $locations[$p] $version
   if ((Get-Content -LiteralPath (Join-Path $locations[$p] 'existing-file.txt')) -ne $p) { throw "$p lost its marker" }

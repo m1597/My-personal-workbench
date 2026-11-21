@@ -43,6 +43,21 @@ await writeFile(
 )
 nsis.nsisTemplatesDir = templates
 
+// Old FitBay uninstallers delete the desktop link by name, including on a manual
+// upgrade. Let the new component installer check each link's target instead.
+const installUtil = path.join(templates, 'include', 'installUtil.nsh')
+const uninstallScript = await readFile(installUtil, 'utf8')
+const updateFlag = '  ${if} ${isDeleteAppData}'
+if (uninstallScript.split(updateFlag).length !== 2) throw Error('Unexpected old uninstaller flags')
+await writeFile(
+  installUtil,
+  uninstallScript.replace(
+    updateFlag,
+    '  !ifdef DO_NOT_CREATE_DESKTOP_SHORTCUT\n    StrCpy $0 "$0 --keep-shortcuts"\n  !endif\n' +
+      updateFlag,
+  ),
+)
+
 // Compile owned paths into the uninstaller; there is no editable on-disk delete list.
 async function writeInstallerInclude(output, appOutDir) {
   const quotePath = (value) => value.replaceAll('$', '$$$$')
@@ -126,6 +141,7 @@ for (const product of optionalProduct ? [optionalProduct] : Object.keys(products
       },
       nsis: {
         include,
+        createDesktopShortcut: product === 'workbench',
         packElevateHelper: false,
         shortcutName: shortcut,
         uninstallDisplayName: shortcut,
