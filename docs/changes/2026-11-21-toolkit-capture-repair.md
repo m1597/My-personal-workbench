@@ -19,3 +19,5 @@
 - 复测命令为 `node scripts/check-file-library-controls.mjs`、`node scripts/check-toolkit-trials.mjs --host`、`node scripts/check-toolkit-trials.mjs` 与 `node scripts/check-toolkit-connections.mjs`。共享连接验证使用隔离配置，真实模型服务按用户要求留待单独验证。
 
 OpenSpec 全库严格校验 61 项通过，TypeScript、原型构建及桌面启动入口检查通过。本轮运行的全库 npm check 停在十个本组以外文件的格式检查。未推送、发布或更改用户安装。
+
+最终合入公共窗口归属及图标后的本地构建再次通过独立可执行文件、停靠面板和文件库联动专项，读回的 [Windows 窗口图标](../images/toolkit-capture-repair/window-icon.png)、PE 及临时快捷方式图标与公共单色轮廓一致。
