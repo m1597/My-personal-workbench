@@ -573,7 +573,8 @@ export function componentView({
     },
     quit() {
       clearTimeout(transferTimer)
-      view?.webContents.close()
+      const contents = view?.webContents
+      if (contents && !contents.isDestroyed()) contents.close()
     },
     async open() {
       if (!(await openComponent())) return false

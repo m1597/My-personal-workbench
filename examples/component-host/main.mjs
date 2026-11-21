@@ -329,6 +329,11 @@ const music = componentView({
   music: true,
 })
 let promptService
+function disposePrompts() {
+  const service = promptService
+  promptService = undefined
+  service?.dispose()
+}
 async function findPromptRoot() {
   if (!installation) return path.join(here, '../prompts')
   const appRoot = await installation.find('prompts')
@@ -353,10 +358,7 @@ const prompts = componentView({
     })
     promptService.start()
   },
-  onDispose: () => {
-    promptService?.dispose()
-    promptService = undefined
-  },
+  onDispose: disposePrompts,
 })
 const components = [sample, music, prompts]
 const builtins = builtinWindows({
@@ -420,7 +422,7 @@ else {
     quitting = true
     tray?.destroy()
     tray = undefined
-    promptService?.dispose()
+    disposePrompts()
     closeSourcePipe?.()
     for (const item of components) item.quit()
   })
