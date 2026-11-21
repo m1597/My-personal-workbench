@@ -1,4 +1,4 @@
-import { openInDefaultGrid } from './defaultGrid'
+import { openToolkitPanel, ToolkitIcon } from './ToolkitEntry'
 import { useTranslation } from './preferences'
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import {
@@ -119,21 +119,12 @@ export function WindowMenu() {
           <MenuList aria-label={t('组件菜单', 'Components menu')} id="window-menu">
             {toolkit && (
               <MenuItem
-                onClick={() => {
-                  const api = workspace.api
-                  if (!api) return
-                  const existing = api.getPanel('component-toolkit')
-                  if (existing) existing.api.setActive()
-                  else
-                    openInDefaultGrid(api, {
-                      id: 'component-toolkit',
-                      component: 'toolkit',
-                      title: t('截图与划词', 'Desktop tools'),
-                      minimumWidth: 180,
-                    })
-                }}
+                icon={<ToolkitIcon />}
+                onClick={() =>
+                  workspace.api && openToolkitPanel(workspace.api, t('工具集', 'Toolkit'))
+                }
               >
-                {t('截图与划词工具集', 'Screenshot and selection tools')}
+                {t('工具集', 'Toolkit')}
               </MenuItem>
             )}
             {modules.map((module) => (
@@ -153,7 +144,7 @@ export function WindowMenu() {
                 aria-checked={promptState?.phase === 'ready'}
                 onClick={() => void toggleRunning(window.promptDock)}
               >
-                {t('提示词仓库', 'Prompt library')}
+                {t('文件库', 'File library')}
               </MenuItem>
             )}
             {sample && (

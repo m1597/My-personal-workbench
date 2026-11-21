@@ -33,24 +33,15 @@ try {
   const tabs = page.locator('.dv-tab[data-tab-panel-id]')
   await expect(tabs).toHaveCount(4)
   while (await tabs.count()) await tabs.first().locator('.dv-default-tab-action').click()
-  const names = [
-    '模块 1',
-    '模块 2',
-    '模块 3',
-    '模块 4',
-    '截图与划词工具集',
-    '提示词仓库',
-    'Music',
-    '示例组件',
-  ]
+  const names = ['模块 1', '模块 2', '模块 3', '模块 4', '工具集', '文件库', 'Music', '示例组件']
   const evidence = []
   for (const [i, name] of names.entries()) {
     await page.getByRole('button', { name: '组件', exact: true }).click()
     await page
-      .getByRole(
-        ['Music', '示例组件', '提示词仓库'].includes(name) ? 'menuitemcheckbox' : 'menuitem',
-        { name, exact: true },
-      )
+      .getByRole(['Music', '示例组件', '文件库'].includes(name) ? 'menuitemcheckbox' : 'menuitem', {
+        name,
+        exact: true,
+      })
       .click()
     await expect(tabs).toHaveCount(i + 1)
     const groups = await page.locator('.dv-groupview').evaluateAll((nodes) =>
@@ -62,6 +53,7 @@ try {
             y: b.y,
             w: b.width,
             h: b.height,
+            contentTop: n.querySelector('.dv-content-container').getBoundingClientRect().top,
             tabs: [...n.querySelectorAll('.dv-tab[data-tab-panel-id]')].map(
               (t) => t.dataset.tabPanelId,
             ),
@@ -86,6 +78,10 @@ try {
       'true',
     )
     if (i === 1) expect(Math.abs(groups[0].w - groups[1].w)).toBeLessThan(4)
+    for (const group of groups) {
+      for (const peer of groups.filter((other) => Math.abs(other.y - group.y) < 1))
+        expect(Math.abs(group.contentTop - peer.contentTop)).toBeLessThan(0.05)
+    }
     evidence.push(groups)
     expect(groups.length).toBe(Math.min(i < 2 ? i + 1 : 4, 4))
     if (i >= 2) {

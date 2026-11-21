@@ -1,6 +1,8 @@
-import { Music2, Boxes, Plus } from 'lucide-react'
+import { WorkspaceContext } from './WorkspaceContext'
+import { openToolkitPanel, ToolkitIcon } from './ToolkitEntry'
+import { Folder, Music2, Boxes, Plus } from 'lucide-react'
 import { Button } from '@fluentui/react-components'
-import { useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from './preferences'
 
 declare global {
@@ -14,6 +16,8 @@ declare global {
 
 export function FirstWorkspaceAction() {
   const t = useTranslation()
+  const { api } = useContext(WorkspaceContext)
+  const [toolkit, setToolkit] = useState(false)
   const [installed, setInstalled] = useState<boolean>()
   const [prompts, setPrompts] = useState(false)
   const [sample, setSample] = useState(false)
@@ -27,12 +31,14 @@ export function FirstWorkspaceAction() {
     const refresh = async () => {
       const id = ++request
       try {
-        const [music, example, library] = await Promise.all([
+        const [music, example, library, tools] = await Promise.all([
           window.musicDock?.inventory(),
           window.componentHost?.sampleEnabled ? window.componentHost.inventory() : undefined,
           window.promptDock?.inventory(),
+          window.fitbayToolkit?.available(),
         ])
         if (active && id === request) setPrompts(Boolean(library?.installed))
+        if (active && id === request) setToolkit(Boolean(tools))
         const value = Boolean(music?.installed)
         if (active && id === request) setSample(Boolean(example?.installed))
         if (active && id === request) setInstalled(value)
@@ -90,14 +96,24 @@ export function FirstWorkspaceAction() {
             Music
           </Button>
         )}
+        {toolkit && (
+          <Button
+            className="quick-component"
+            icon={<ToolkitIcon />}
+            disabled={busy}
+            onClick={() => api && openToolkitPanel(api, t('工具集', 'Toolkit'))}
+          >
+            {t('工具集', 'Toolkit')}
+          </Button>
+        )}
         {prompts && (
           <Button
             className="quick-component"
-            icon={<Boxes />}
+            icon={<Folder />}
             disabled={busy}
             onClick={() => void activate('prompts')}
           >
-            {t('提示词仓库', 'Prompt library')}
+            {t('文件库', 'File library')}
           </Button>
         )}
         {sample && (

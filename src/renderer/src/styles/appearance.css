@@ -139,7 +139,12 @@
   display: inline-flex;
   align-items: center;
 }
-.dv-tab[data-tab-panel-id="component-music"] .dv-default-tab-content::before {
+.dv-tab:is(
+    [data-tab-panel-id="component-music"],
+    [data-tab-panel-id="component-toolkit"],
+    [data-tab-panel-id="component-prompts"]
+  )
+  .dv-default-tab-content::before {
   content: "";
   display: inline-block;
   width: 16px;
@@ -147,7 +152,20 @@
   margin-right: var(--space-8);
   flex: 0 0 16px;
   background: currentColor;
-  mask: url("./music-wave.svg") center / contain no-repeat;
+  mask: var(--component-icon, url("./music-wave.svg")) center / contain no-repeat;
+}
+.dv-tab[data-tab-panel-id="component-toolkit"] .dv-default-tab-content::before,
+.host-toolkit-icon {
+  background: url("/toolkit.png") center / contain no-repeat;
+  mask: none;
+}
+.host-toolkit-icon {
+  display: inline-block;
+  height: 1em;
+  width: 1em;
+}
+.dv-tab[data-tab-panel-id="component-prompts"] {
+  --component-icon: url("./host-folder.svg");
 }
 :root[data-workbench-size="small"] {
   --workbench-type-offset: -1px;

@@ -1,5 +1,6 @@
 import type { DockviewApi, SerializedDockview } from 'dockview-react'
 import { minimumPanelSize, modules, retiredPanelIds, fixtureWorkspace } from './moduleRegistry'
+import { readPreferences } from './preferences'
 import { createDefaultLayout } from './workspace'
 
 export const layoutStorageKey = 'workbench.layout'
@@ -158,8 +159,14 @@ function restoreSnapshot(api: DockviewApi, snapshot: SerializedDockview, gap: nu
       Object.assign(panel, minimumPanelSize[id])
   }
   retirePlaceholders(layout)
-  const savedMusic = layout.panels['component-music']
-  if (savedMusic) savedMusic.title = 'Music'
+  const english = readPreferences().language === 'en'
+  for (const [id, title] of Object.entries({
+    'component-music': 'Music',
+    'component-toolkit': english ? 'Toolkit' : '工具集',
+    'component-prompts': english ? 'File library' : '文件库',
+  })) {
+    if (layout.panels[id]) layout.panels[id].title = title
+  }
   applyLayout(api, layout, gap)
   const slot = api.getPanel('component-example')
   if (slot && !window.componentHost?.sampleEnabled) api.removePanel(slot)

@@ -1,6 +1,6 @@
 import { openInDefaultGrid } from './defaultGrid'
 import type { Material } from './material'
-import { useTranslation } from './preferences'
+import { readPreferences, useTranslation } from './preferences'
 import { useEffect, useRef, useState } from 'react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { Button } from '@fluentui/react-components'
@@ -201,7 +201,12 @@ export function useComponentPrototype(
     }
     const offSample = host.sampleEnabled && bind(host, 'component-example', '示例组件')
     const offPrompts =
-      window.promptDock && bind(window.promptDock, 'component-prompts', '提示词仓库')
+      window.promptDock &&
+      bind(
+        window.promptDock,
+        'component-prompts',
+        readPreferences().language === 'en' ? 'File library' : '文件库',
+      )
     const offMusic = window.musicDock && bind(window.musicDock, 'component-music', 'Music')
     let dragging = ''
     let pointer: number | undefined

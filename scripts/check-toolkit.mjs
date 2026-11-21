@@ -285,12 +285,12 @@ try {
     try {
       const shell = await host.firstWindow()
       await shell.getByRole('button', { name: '组件', exact: true }).click()
-      await shell.getByRole('menuitemcheckbox', { name: '提示词仓库' }).click()
+      await shell.getByRole('menuitemcheckbox', { name: '文件库' }).click()
       await expect
         .poll(() => shell.evaluate(async () => (await window.promptDock.status()).phase))
         .toBe('ready')
       await shell.getByRole('button', { name: '组件', exact: true }).click()
-      await shell.getByText('截图与划词工具集', { exact: true }).click()
+      await shell.getByText('工具集', { exact: true }).click()
       const waiting = app.waitForEvent('window', { timeout: 20000 })
       await shell.getByRole('button', { name: '框选屏幕' }).click()
       const overlay = await waiting
