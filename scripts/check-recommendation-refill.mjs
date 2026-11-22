@@ -1,4 +1,4 @@
-import { openDiscovery } from './discovery-fixture.mjs'
+import { openDiscovery, openMusicSurface } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -14,6 +14,7 @@ const output = path.join(root, 'songs')
 await fs.mkdir(output)
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
 const cancellation = process.env.FITBAY_TEST_RECOMMEND_STOP
+const docked = process.argv.includes('--docked')
 const testRetry = process.argv.includes('--retry-failed')
 if (cancellation === 'consent') store.set('taste-consent', '1')
 store.set('lx-bootstrap', 'done')
@@ -48,7 +49,7 @@ const app = await electron.launch({
     path.resolve(
       process.argv.slice(2).find((arg) => !arg.startsWith('--')) ?? 'dist/component-prototype/host',
     ),
-    '--mode=music',
+    docked ? '--mode=workbench' : '--mode=music',
     '--mute-audio',
     '--user-data-dir=' + profile,
     '--workbench=' + path.resolve('out/renderer/index.html'),
@@ -56,7 +57,7 @@ const app = await electron.launch({
   env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
 })
 async function verify() {
-  const page = await app.firstWindow()
+  const page = await openMusicSurface(app, docked)
   await offlineSourceRepository(app)
   await app.evaluate(
     ({ app, BaseWindow, dialog }, { files, code, songs, testRetry }) => {

@@ -1,5 +1,5 @@
 import { selectSongRow } from './song-row-fixture.mjs'
-import { openDiscovery } from './discovery-fixture.mjs'
+import { openDiscovery, openMusicSurface } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -25,22 +25,6 @@ lx.on('request', ({action,info}) => {
 lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
 )
 const docked = process.argv.includes('--docked')
-async function musicPage(app) {
-  const shell = await app.firstWindow()
-  if (!docked) return shell
-  await shell.getByRole('button', { name: '组件', exact: true }).click()
-  const entry = shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true })
-  if ((await entry.getAttribute('aria-checked')) === 'true') await entry.press('Escape')
-  else await entry.click()
-  await expect
-    .poll(() => app.windows().some((p) => p.url().includes('/music/index.html')))
-    .toBe(true)
-  const page = app.windows().find((p) => p.url().includes('/music/index.html'))
-  await expect
-    .poll(() => page.evaluate(async () => (await window.musicWindow.status()).mode))
-    .toBe('docked')
-  return page
-}
 async function launch() {
   const app = await electron.launch({
     args: [
@@ -101,7 +85,7 @@ const choose = (app, file) =>
   }, file)
 let app = await launch()
 try {
-  let page = await musicPage(app)
+  let page = await openMusicSurface(app, docked)
   const button = (name) => page.getByRole('button', { name, exact: true })
   const tab = (name) => page.getByRole('tab', { name, exact: true })
   const result = () =>
@@ -212,7 +196,7 @@ try {
   assert.deepEqual(await fs.readdir(cache), [])
   await app.close()
   app = await launch()
-  page = await musicPage(app)
+  page = await openMusicSurface(app, docked)
   await openDiscovery(page, false)
   await expect(
     page
