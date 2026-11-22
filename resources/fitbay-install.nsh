@@ -73,7 +73,7 @@
           ${If} $0 == "$2\${peer}"
             System::Call 'kernel32::GetFileAttributesW(w r0) i.r0'
             IntOp $0 $0 & 0x410
-            ${If} $0 == 0x10
+            ${If} $0 = 16
               StrCpy ${allowed} "${peer}"
             ${EndIf}
           ${EndIf}
