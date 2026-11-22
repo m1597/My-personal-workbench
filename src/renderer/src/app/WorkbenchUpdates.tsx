@@ -124,6 +124,7 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
                   {
                     downloading: '下载并校验 ' + (row.operation.progress ?? 0) + '%',
                     installing: '正在安装',
+                    restarting: '正在退出工作台，重启后核对安装结果',
                     done: '已完成',
                     failed: '更新失败，可单项重试',
                   }[row.operation.stage]

@@ -90,6 +90,7 @@ test('a restarted host offers retry when a silent update left the original versi
     inventory: async () => [{ id: 'workbench', version: '0.9.0', installable: true }],
     request: async () => Response.json({ ...release, assets: [host] }),
   })
+  assert.equal((await service.snapshot()).rows[0].operation.stage, 'failed')
   await service.check()
   assert.equal((await service.snapshot()).rows[0].operation.stage, 'failed')
 })

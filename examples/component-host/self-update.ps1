@@ -5,7 +5,7 @@ $arguments = '--user-data-dir="' + $env:FITBAY_UPDATE_PROFILE + '"'
 $parentProcess = Get-Process -Id ([int]$env:FITBAY_UPDATE_PARENT) -ErrorAction Stop
 $null = $parentProcess.Handle
 [IO.File]::WriteAllText($env:FITBAY_UPDATE_READY, 'ready')
-if (-not $parentProcess.WaitForExit(90000)) { exit 1 }
+$parentProcess.WaitForExit()
 try {
     $sha = [Security.Cryptography.SHA256]::Create()
     $stream = [IO.File]::OpenRead($installer)

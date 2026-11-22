@@ -506,7 +506,18 @@ else {
       })
       let previousSelfUpdate
       try {
-        previousSelfUpdate = readFileSync(path.join(profile, 'self-update-target'), 'utf8')
+        const marker = path.join(profile, 'self-update-target')
+        const target = readFileSync(marker, 'utf8')
+        const installed = app.getVersion().split('.').map(Number)
+        if (
+          /^\d+\.\d+\.\d+$/.test(target) &&
+          target
+            .split('.')
+            .map((part, i) => Number(part) - installed[i])
+            .find((n) => n !== 0) > 0
+        )
+          previousSelfUpdate = target
+        else await rm(marker, { force: true })
       } catch {
         /* First launch. */
       }
@@ -569,6 +580,7 @@ else {
               throw error
             }
             app.quit()
+            return 'restarting'
           } else {
             try {
               await executeInstaller(file, ['/S', '/currentuser'], { windowsHide: true })

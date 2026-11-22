@@ -108,11 +108,7 @@ export function updateCatalog({
         ...row,
         operation:
           operations.get(row.id) ??
-          (row.id === 'workbench' &&
-          previousSelfUpdate &&
-          result?.update?.version === previousSelfUpdate
-            ? { stage: 'failed' }
-            : undefined),
+          (row.id === 'workbench' && previousSelfUpdate ? { stage: 'failed' } : undefined),
         status: result?.status ?? (supportsUpdate(row.id) ? 'unchecked' : 'unsupported'),
         available: result?.update?.version ?? null,
       }
@@ -179,7 +175,10 @@ export function updateCatalog({
     }
     try {
       await report('downloading', 0)
-      await launch(result.update, row.id, report)
+      if ((await launch(result.update, row.id, report)) === 'restarting') {
+        report('restarting')
+        return
+      }
       const refreshed = await inventory()
       if (refreshed.find((item) => item.id === row.id)?.version === result.update.version)
         results.set(row.id, { installed: result.update.version, status: 'current' })
