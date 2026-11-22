@@ -447,6 +447,7 @@ try {
   await openMusicSettings(page)
   await button('添加文件').click()
   await button('返回').click()
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await button('部分回收').click()
   await button('播放A').click()
   await expect(button('暂停A')).toBeVisible()
