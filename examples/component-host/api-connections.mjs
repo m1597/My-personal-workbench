@@ -5,6 +5,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 export const apiUses = Object.freeze({
+  default: { component: '工作台', purpose: '默认连接' },
   'prompts.model': { component: '提示词库', purpose: '模型' },
   'music.model': { component: 'Music', purpose: '模型与推荐' },
   'toolkit.translation': { component: '工具集', purpose: '翻译' },
@@ -19,11 +20,20 @@ export function openConnections(profile, legacyVault) {
   const db = new DatabaseSync(path.join(profile, 'api-connections.sqlite'))
   db.exec(`PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS connections(id TEXT PRIMARY KEY,endpoint TEXT NOT NULL,model TEXT NOT NULL,secret BLOB,protocol TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS inherited_uses(use TEXT PRIMARY KEY);
+    CREATE TABLE IF NOT EXISTS vision_connections(id TEXT PRIMARY KEY REFERENCES connections(id) ON DELETE CASCADE);
     CREATE TABLE IF NOT EXISTS bindings(use TEXT PRIMARY KEY,connection TEXT NOT NULL REFERENCES connections(id));`)
   const row = (use) =>
     db
       .prepare('SELECT c.* FROM bindings b JOIN connections c ON c.id=b.connection WHERE b.use=?')
       .get(use)
+  const visual = (id) => !!db.prepare('SELECT 1 FROM vision_connections WHERE id=?').get(id)
+  function effective(use) {
+    const direct = row(use)
+    if (direct) return direct
+    const fallback = row('default')
+    return use !== 'toolkit.vision' || (fallback && visual(fallback.id)) ? fallback : null
+  }
   function validateUse(use) {
     if (!Object.hasOwn(apiUses, use)) throw Error('未知配置用途')
   }
@@ -46,6 +56,7 @@ export function openConnections(profile, legacyVault) {
           model: r.model,
           configured: Boolean(r.secret?.length),
           protocol: r.protocol,
+          vision: visual(r.id),
         }
       : null
   }
@@ -59,13 +70,20 @@ export function openConnections(profile, legacyVault) {
     )
       throw Error('连接参数无效')
     return transaction(() => {
-      const old = row(use)
+      const direct = row(use)
+      const old = legacy ? direct : effective(use)
       if (input.expectedId !== undefined && (old?.id ?? null) !== input.expectedId)
         throw Error('连接已由其他窗口更改，请重新选择用途后保存')
-      if (legacy && old) return view(old)
-      if (input.reuse) {
+      if (legacy && (old || db.prepare('SELECT 1 FROM inherited_uses WHERE use=?').get(use)))
+        return view(effective(use))
+      if (input.inherit && use !== 'default') {
+        db.prepare('INSERT OR IGNORE INTO inherited_uses VALUES(?)').run(use)
+        db.prepare('DELETE FROM bindings WHERE use=?').run(use)
+      } else if (input.reuse) {
         if (!db.prepare('SELECT id FROM connections WHERE id=?').get(input.reuse))
           throw Error('连接已不存在')
+        if (use === 'toolkit.vision' && !visual(input.reuse))
+          throw Error('请选择支持视觉输入的连接')
         db.prepare('INSERT OR REPLACE INTO bindings VALUES(?,?)').run(use, input.reuse)
       } else {
         let endpoint
@@ -86,7 +104,7 @@ export function openConnections(profile, legacyVault) {
           throw Error('服务地址不能包含凭据、查询参数或片段')
         const model = input.model?.trim()
         if (!model || model.length > 250) throw Error('请填写模型名称')
-        const id = old && !input.separate ? old.id : randomUUID()
+        const id = direct && !input.separate ? direct.id : randomUUID()
         const protocol = input.protocol ?? old?.protocol ?? 'chat'
         if (!['chat', 'responses', 'claude', 'gemini'].includes(protocol))
           throw Error('模型协议无效')
@@ -104,12 +122,24 @@ export function openConnections(profile, legacyVault) {
         ).run(id, endpoint.href, model, secret, protocol)
         db.prepare('INSERT OR REPLACE INTO bindings VALUES(?,?)').run(use, id)
       }
+      if (use === 'toolkit.vision' && !input.inherit)
+        db.prepare('INSERT OR IGNORE INTO vision_connections VALUES(?)').run(row(use).id)
+      if (use === 'default' && typeof input.vision === 'boolean') {
+        const id = row(use).id
+        if (input.vision) db.prepare('INSERT OR IGNORE INTO vision_connections VALUES(?)').run(id)
+        else db.prepare('DELETE FROM vision_connections WHERE id=?').run(id)
+      }
       db.exec('DELETE FROM connections WHERE id NOT IN (SELECT connection FROM bindings)')
-      return view(row(use))
+      return view(effective(use))
     })
   }
   return {
     read(use) {
+      validateUse(use)
+      const r = effective(use)
+      return r ? { ...view(r), source: row(use) ? 'dedicated' : 'default' } : null
+    },
+    direct(use) {
       validateUse(use)
       return view(row(use))
     },
@@ -130,7 +160,7 @@ export function openConnections(profile, legacyVault) {
     // Main-process consumers only. Public snapshots never contain decrypted keys.
     resolve(use) {
       validateUse(use)
-      const r = row(use)
+      const r = effective(use)
       if (!r?.secret) return null
       try {
         return { ...view(r), key: vault.decryptString(Buffer.from(r.secret)) }

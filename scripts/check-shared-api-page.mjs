@@ -2,6 +2,7 @@ import { _electron as electron, expect } from '@playwright/test'
 import { mkdtemp } from 'node:fs/promises'
 import { randomBytes } from 'node:crypto'
 import path from 'node:path'
+import { MusicStore } from '../components/music/store.mjs'
 import { createServer } from 'node:http'
 const received = []
 let expectedKey
@@ -26,6 +27,10 @@ const server = createServer(async (req, res) => {
 })
 const root = await mkdtemp(path.resolve('tmp/api-settings-')),
   proto = path.resolve('dist/component-prototype')
+const store = new MusicStore(path.join(root, 'fitbay-music'))
+store.set('music-guide-v1', '1')
+store.set('lx-bootstrap', 'done')
+store.db.close()
 const app = await electron.launch({
   args: [
     path.join(proto, 'host'),

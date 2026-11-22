@@ -1,11 +1,14 @@
 import './connectionSettings.css'
 import { useCallback, useEffect, useId, useState } from 'react'
-import { Button, Input, Select } from '@fluentui/react-components'
+import { ChoiceDropdown } from './SharedDropdown'
+import { Button, Input, Checkbox } from '@fluentui/react-components'
 type PublicConnection = {
   id: string
   endpoint: string
   model: string
   owners?: string[]
+  source?: string
+  vision?: boolean
   configured: boolean
   protocol: string
 }
@@ -18,8 +21,16 @@ type Row = {
 }
 type Snapshot = { rows: Row[]; choices: PublicConnection[] }
 type Edit = { expectedId: string | null } & (
-  | { reuse: string }
-  | { endpoint: string; model: string; key: string; protocol: string; separate: boolean }
+  | { inherit: true }
+  | { reuse: string; vision?: boolean }
+  | {
+      endpoint: string
+      model: string
+      key: string
+      protocol: string
+      separate: boolean
+      vision?: boolean
+    }
 )
 declare global {
   interface Window {
@@ -32,15 +43,18 @@ declare global {
 function Editor({
   row,
   choices,
+  defaultId,
   saved,
 }: {
   row: Row
   choices: PublicConnection[]
+  defaultId: string | null
   saved: () => void
 }) {
   const prefix = useId()
   const [mode, select] = useState('edit'),
     [endpoint, address] = useState(row.value?.endpoint ?? ''),
+    [vision, setVision] = useState(row.value?.vision ?? false),
     [model, setModel] = useState(row.value?.model ?? ''),
     [key, setKey] = useState(''),
     [protocol, setProtocol] = useState(row.value?.protocol ?? 'chat'),
@@ -58,8 +72,20 @@ function Editor({
           await api.write(
             row.use,
             mode.startsWith('ref:')
-              ? { expectedId, reuse: mode.slice(4) }
-              : { expectedId, endpoint, model, key, protocol, separate: mode === 'private' },
+              ? {
+                  expectedId,
+                  reuse: mode.slice(4),
+                  vision: row.use === 'default' ? vision : undefined,
+                }
+              : {
+                  expectedId,
+                  endpoint,
+                  model,
+                  key,
+                  protocol,
+                  separate: mode === 'private',
+                  vision: row.use === 'default' ? vision : undefined,
+                },
           )
           setKey('')
           saved()
@@ -76,17 +102,22 @@ function Editor({
       </h3>
       <label htmlFor={prefix + '-mode'}>
         连接
-        <Select id={prefix + '-mode'} value={mode} onChange={(e) => select(e.target.value)}>
-          <option value="edit">{row.value ? '编辑当前连接' : '新建连接'}</option>
-          {row.value && <option value="private">单独配置</option>}
-          {choices
-            .filter((c) => c.id !== row.value?.id)
-            .map((c) => (
-              <option key={c.id} value={'ref:' + c.id}>
-                复用 {c.owners?.join(' / ')} · {c.endpoint} · {c.model}
-              </option>
-            ))}
-        </Select>
+        <ChoiceDropdown
+          id={prefix + '-mode'}
+          aria-label="连接"
+          value={mode}
+          onChange={select}
+          choices={[
+            { value: 'edit', label: row.value ? '编辑当前连接' : '新建连接' },
+            ...(row.value ? [{ value: 'private', label: '单独配置' }] : []),
+            ...choices
+              .filter((c) => c.id !== row.value?.id && (row.use !== 'toolkit.vision' || c.vision))
+              .map((c) => ({
+                value: 'ref:' + c.id,
+                label: '复用 ' + c.owners?.join(' / ') + ' · ' + c.endpoint + ' · ' + c.model,
+              })),
+          ]}
+        />
       </label>
       {!mode.startsWith('ref:') && (
         <>
@@ -101,22 +132,18 @@ function Editor({
           </label>
           <label htmlFor={prefix + '-protocol'}>
             协议
-            <Select
+            <ChoiceDropdown
               id={prefix + '-protocol'}
+              aria-label="协议"
               value={protocol}
-              onChange={(e) => setProtocol(e.target.value)}
-            >
-              {Object.entries({
+              onChange={setProtocol}
+              choices={Object.entries({
                 chat: 'Chat Completions',
                 responses: 'OpenAI Responses',
                 claude: 'Anthropic Messages',
                 gemini: 'Gemini',
-              }).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
-              ))}
-            </Select>
+              }).map(([value, label]) => ({ value, label }))}
+            />
           </label>
           <label htmlFor={prefix + '-model'}>
             模型
@@ -138,6 +165,58 @@ function Editor({
               onChange={(_, d) => setKey(d.value)}
             />
           </label>
+        </>
+      )}
+      {row.use === 'default' && (
+        <Checkbox
+          label="此连接支持视觉输入"
+          checked={vision}
+          onChange={(_, d) => setVision(d.checked === true)}
+        />
+      )}
+      {row.use !== 'default' && row.value && (
+        <>
+          <Button
+            disabled={busy || row.value.source === 'default'}
+            onClick={async () => {
+              if (!row.value) return
+              setBusy(true)
+              try {
+                await window.fitbayConnections?.write(row.use, {
+                  expectedId: row.value.id,
+                  inherit: true,
+                })
+                saved()
+              } catch {
+                status('恢复默认失败，请重试')
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            恢复默认连接
+          </Button>
+          <Button
+            disabled={busy || row.value.source === 'default'}
+            onClick={async () => {
+              if (!row.value) return
+              setBusy(true)
+              try {
+                await window.fitbayConnections?.write('default', {
+                  reuse: row.value.id,
+                  expectedId: defaultId,
+                  vision: row.use === 'toolkit.vision' || row.value?.vision,
+                })
+                saved()
+              } catch {
+                status('设置默认连接失败，请重试')
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            设为默认连接
+          </Button>
         </>
       )}
       <Button type="submit" disabled={busy}>
@@ -191,7 +270,13 @@ export function ConnectionSettings() {
                     {r.purpose}
                   </Button>
                 </td>
-                <td>{r.value?.endpoint ?? '—'}</td>
+                <td>
+                  {r.value?.endpoint ?? '—'}
+                  {r.value && r.use !== 'default' && (
+                    <small> · {r.value.source === 'default' ? '继承默认' : '专用连接'}</small>
+                  )}
+                  {!r.value && r.use === 'toolkit.vision' && <small>需要支持视觉的连接</small>}
+                </td>
                 <td>
                   {r.migrationPending
                     ? '请在 Music 中恢复连接'
@@ -214,6 +299,7 @@ export function ConnectionSettings() {
         <Editor
           key={row.use + JSON.stringify(row.value)}
           row={row}
+          defaultId={data?.rows.find((r) => r.use === 'default')?.value?.id ?? null}
           choices={data?.choices ?? []}
           saved={() => void refresh()}
         />

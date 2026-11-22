@@ -23,7 +23,7 @@
     "lint": "biome lint --error-on-warnings .",
     "build:app": "electron-vite build",
     "test:interaction": "playwright test && playwright test --config playwright.dev.config.ts",
-    "check": "npm run doctor && npm run lint:dropdown && npm run format:check && npm run lint && npm run test:doctor && npm run typecheck && npm run build:app && npm run test:interaction",
+    "check": "npm run doctor && npm run lint:dropdown && npm run format:check && npm run lint && npm run test:doctor && npm run test:platform && npm run typecheck && npm run build:app && npm run test:interaction",
     "test:doctor": "node --test tests/doctor.test.mjs",
     "check:visual": "npm run build && node scripts/visual-check.mjs",
     "dist:win": "npm run build:prototype && node scripts/build-installers.mjs",
@@ -36,7 +36,8 @@
     "check:offline-plugin": "node scripts/build-song-path.mjs && node scripts/check-song-path.mjs",
     "check:lx": "node scripts/check-lx-redirects.mjs && node scripts/check-lx-music.mjs && node scripts/check-online-stream.mjs && node scripts/check-music-online-search.mjs",
     "check:prototype": "node scripts/check-workspace-migration.mjs && node scripts/check-component-prototype.mjs && node scripts/check-builtin-modules.mjs && node scripts/check-dock-transitions.mjs",
-    "lint:dropdown": "eslint src/renderer components --max-warnings 0 --pass-on-unpruned-suppressions"
+    "lint:dropdown": "eslint src/renderer components --max-warnings 0 --pass-on-unpruned-suppressions",
+    "test:platform": "node --test tests/product-updates.test.mjs tests/component-uninstall.test.mjs tests/default-connection.test.mjs"
   },
   "dependencies": {
     "@fluentui/react-components": "9.75.1",

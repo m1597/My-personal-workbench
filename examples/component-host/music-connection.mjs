@@ -64,7 +64,7 @@ export function importMusicConnection(store, connections) {
 }
 
 export function importInstalledMusicConnection(profile, connections) {
-  if (connections.read('music.model')) return
+  if (connections.direct('music.model')) return
   const file = path.join(profile, 'fitbay-music', 'music.sqlite')
   if (!existsSync(file)) return
   const db = new DatabaseSync(file, { readOnly: true })

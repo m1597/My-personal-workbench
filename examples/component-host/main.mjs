@@ -456,7 +456,9 @@ else {
           prompts: !!(await prompts.discover(false)),
           toolkit: !!(await toolkitLauncher(app.isPackaged, profile, installation)),
         }
-        return Object.keys(apiUses).filter((use) => installed[use.split('.')[0]])
+        return Object.keys(apiUses).filter(
+          (use) => use === 'default' || installed[use.split('.')[0]],
+        )
       }
       ipcMain.handle('connections:snapshot', async (event) => {
         if (!isShell(event)) throw Error('DENIED')
