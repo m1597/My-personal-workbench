@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
 import { randomUUID, createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
-import { mkdtemp } from 'node:fs/promises'
 import { _electron, expect } from '@playwright/test'
 
 const [phase, directory, executable] = process.argv.slice(2)
@@ -79,6 +78,8 @@ try {
     args: ['--user-data-dir=' + runtimeProfile],
     env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
   })
+  const opened = await app.evaluate(({ app }) => app.getPath('userData'))
+  assert.equal(path.relative(runtimeProfile, opened), '', 'Music must open the isolated fixture')
   const page = await app.firstWindow()
   await page.waitForFunction(() => !!window.music?.aiCatalogQuery)
   if (phase === 'seed') {
@@ -90,23 +91,58 @@ try {
     })
   }
   if (phase === 'recover') {
-    await app.evaluate(({ dialog }, oldProfile) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [oldProfile] })
-    }, profile)
+    const select = async (directory) =>
+      app.evaluate(({ dialog }, selection) => {
+        dialog.showOpenDialog = async () => ({
+          canceled: !selection,
+          filePaths: selection ? [selection] : [],
+        })
+      }, directory)
     const skip = page.getByRole('button', { name: '跳过', exact: true })
     await skip.waitFor({ timeout: 3000 }).catch(() => {})
     if (await skip.isVisible()) await skip.click()
     await openMusicSettings(page)
     await selectMusicSettings(page, '本地曲库')
     const restore = page.getByRole('button', { name: '从旧资料目录恢复' })
+    await select(null)
+    await restore.click()
+    assert.equal((await page.evaluate(() => window.music.followedArtists())).length, 0)
+    await select(directory)
     await restore.click()
     await expect(
-      page.getByRole('status').filter({ hasText: '新增关注 1 位。已恢复专用模型连接' }),
+      page.getByRole('status').filter({ hasText: '请选择包含 fitbay-music' }),
+    ).toBeVisible()
+    const damaged = await mkdtemp(path.join(directory, 'damaged-'))
+    const library = path.join('fitbay-music', 'music.sqlite')
+    await mkdir(path.join(damaged, 'fitbay-music'))
+    await copyFile(path.join(profile, library), path.join(damaged, library))
+    await copyFile(
+      path.join(profile, 'api-connections.sqlite'),
+      path.join(damaged, 'api-connections.sqlite'),
+    )
+    const db = new DatabaseSync(path.join(damaged, 'api-connections.sqlite'))
+    try {
+      db.prepare('UPDATE connections SET secret=?').run(Buffer.from('invalid-test-blob'))
+    } finally {
+      db.close()
+    }
+    await select(damaged)
+    await restore.click()
+    await expect(
+      page.getByRole('status').filter({ hasText: '新增关注 1 位。连接恢复失败' }),
+    ).toBeVisible()
+    await select(profile)
+    await restore.click()
+    await expect(
+      page.getByRole('status').filter({ hasText: '新增关注 0 位。已恢复专用模型连接' }),
     ).toBeVisible()
     await restore.click()
     await expect(
       page.getByRole('status').filter({ hasText: '新增关注 0 位。已保留当前专用连接' }),
     ).toBeVisible()
+    await page.getByRole('status').filter({ hasText: '新增关注 0 位' }).scrollIntoViewIfNeeded()
+    // Native acrylic is composited outside the renderer screenshot.
+    await page.evaluate(() => delete document.documentElement.dataset.backdrop)
     await page.screenshot({ path: path.join(runtimeProfile, 'restored.png') })
   }
   const artists = await page.evaluate(() => window.music.followedArtists())

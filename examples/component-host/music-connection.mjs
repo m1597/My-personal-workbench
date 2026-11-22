@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
+import { sharedConnectionVault } from './connection-vault.mjs'
 
 export const providers = {
   deepseek: {
@@ -49,10 +50,10 @@ export const protocols = {
 export function importMusicConnection(store, connections) {
   const state = config(store),
     account = state.accounts[state.active]
-  if (!account) return
+  if (!account || (!account.secret && connections.read('music.model')?.source === 'default')) return
   const connection = connections.importLegacy('music.model', {
     endpoint: providers[state.active].url,
-    model: account.model,
+    model: account.model || providers[state.active].model,
     protocol: protocols[state.active],
     encrypted: account.secret ? Buffer.from(account.secret, 'base64') : null,
   })
@@ -75,5 +76,94 @@ export function importInstalledMusicConnection(profile, connections) {
     )
   } finally {
     db.close()
+  }
+}
+
+// The user selects a profile. Read only the two Music-owned settings and keep
+// the destination binding when it has already been configured independently.
+export function recoverMusicProfile(store, profile, legacyVault) {
+  const file = path.join(profile, 'fitbay-music', 'music.sqlite')
+  if (!existsSync(file)) throw Error('请选择包含 fitbay-music 的旧资料目录')
+  const db = new DatabaseSync(file, { readOnly: true })
+  let artists, legacy
+  try {
+    const read = (key) => db.prepare('SELECT value FROM state WHERE key=?').get(key)?.value
+    artists = JSON.parse(read('followed-musicbrainz-artists') || '[]')
+    legacy = config({ get: read })
+    if (
+      !Array.isArray(artists) ||
+      artists.some(
+        (a) =>
+          typeof a?.id !== 'string' ||
+          !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(a.id) ||
+          typeof a.name !== 'string' ||
+          (a.aliases !== undefined &&
+            (!Array.isArray(a.aliases) || a.aliases.some((alias) => typeof alias !== 'string'))) ||
+          (a.detail !== undefined && typeof a.detail !== 'string'),
+      )
+    )
+      throw Error()
+  } catch {
+    throw Error('旧资料中的关注歌手无法读取')
+  } finally {
+    db.close()
+  }
+  const setting = 'followed-musicbrainz-artists'
+  let added = 0
+  store.db.exec('BEGIN IMMEDIATE')
+  try {
+    const current = JSON.parse(store.get(setting) || '[]')
+    const ids = new Set(current.map((a) => a.id))
+    for (const artist of artists) {
+      if (ids.has(artist.id)) continue
+      ids.add(artist.id)
+      current.push(artist)
+      added++
+    }
+    if (added) store.set(setting, JSON.stringify(current))
+    store.db.exec('COMMIT')
+  } catch (error) {
+    store.db.exec('ROLLBACK')
+    throw error
+  }
+  const current = store.connections.read('music.model')
+  if (current && current.source !== 'default' && current.configured)
+    return { added, model: '已保留当前专用连接' }
+  const shared = path.join(profile, 'api-connections.sqlite')
+  try {
+    let record
+    if (existsSync(shared)) {
+      const source = new DatabaseSync(shared, { readOnly: true })
+      try {
+        record = source
+          .prepare(
+            'SELECT endpoint,model,protocol,secret FROM connections JOIN bindings ON connection=id WHERE use=?',
+          )
+          .get('music.model')
+      } finally {
+        source.close()
+      }
+    }
+    const account = legacy.accounts[legacy.active]
+    if (!record && account?.secret)
+      record = {
+        endpoint: providers[legacy.active].url,
+        model: account.model || providers[legacy.active].model,
+        protocol: protocols[legacy.active],
+        secret: Buffer.from(account.secret, 'base64'),
+      }
+    if (!record?.secret?.length) return { added, model: '旧资料中没有配置专用密钥' }
+    const key = sharedConnectionVault(legacyVault).decryptString(Buffer.from(record.secret))
+    store.connections.write('music.model', {
+      expectedId: current?.id ?? null,
+      separate: true,
+      endpoint: record.endpoint,
+      model: record.model,
+      protocol: record.protocol,
+      key,
+    })
+    return { added, model: '已恢复专用模型连接' }
+  } catch {
+    return { added, model: '连接恢复失败，请在音乐设置的模型与推荐中检查连接或重新填写密钥' }
   }
 }

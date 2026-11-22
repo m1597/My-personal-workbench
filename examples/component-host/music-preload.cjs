@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron')
 const names = [
   'connectionSnapshot',
   'writeConnection',
+  'recoverProfile',
   'musicGuide',
   'copyMcpCommand',
   'mcpAgents',

@@ -42,7 +42,7 @@ import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { searchCollection } from './search-collection.mjs'
 import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
-import { importMusicConnection } from './music-connection.mjs'
+import { importMusicConnection, recoverMusicProfile } from './music-connection.mjs'
 import { ipcMain, clipboard, dialog, nativeImage, safeStorage, shell } from 'electron'
 import { MusicStore } from './music/store.mjs'
 import { createHash, randomUUID } from 'node:crypto'
@@ -421,6 +421,21 @@ export function musicService(
       if (choice.canceled || !choice.filePaths.length || epoch !== viewEpoch) return
       if (id) await archiveFavorites([id], choice.filePaths[0])
       else store.set('music-category-root', choice.filePaths[0])
+    } finally {
+      localDialog = false
+    }
+  })
+  bind('recoverProfile', async () => {
+    if (localDialog) throw Error('请先关闭当前目录选择窗口')
+    localDialog = true
+    const epoch = viewEpoch
+    try {
+      const result = await dialog.showOpenDialog({
+        title: '选择旧 FitBay 资料目录',
+        properties: ['openDirectory'],
+      })
+      if (result.canceled || epoch !== viewEpoch) return null
+      return recoverMusicProfile(store, result.filePaths[0], safeStorage)
     } finally {
       localDialog = false
     }

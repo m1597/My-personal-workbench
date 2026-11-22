@@ -34,6 +34,7 @@ export type LibraryToolsAPI = import('./LibraryCleanup').CleanupAPI & {
   previewPlaylist(file: File): Promise<import('./PlaylistImport').ImportPreview>
   recentHistory(cursor?: HistoryRow): Promise<HistoryRow[]>
   setFavorite(ids: string | string[], on: boolean): Promise<number>
+  recoverProfile(): Promise<{ added: number; model: string } | null>
   exportLibrary(): Promise<boolean>
   previewRestore(): Promise<Restore | null>
   applyRestore(token: string): Promise<void>
@@ -156,10 +157,12 @@ export function LibraryTools({ refresh }: { refresh: () => Promise<void> }) {
   const [backup, setBackup] = useState<Restore | null>(null),
     [move, setMove] = useState<Move | null>(null),
     [choices, setChoices] = useState<Record<string, string>>({}),
+    [profileStatus, setProfileStatus] = useState(''),
     [busy, setBusy] = useState(false),
     [status, setStatus] = useState('')
   const action = async (fn: () => Promise<void>) => {
     setStatus('')
+    setProfileStatus('')
     setBusy(true)
     try {
       await fn()
@@ -200,6 +203,25 @@ export function LibraryTools({ refresh }: { refresh: () => Promise<void> }) {
             选择备份
           </Button>
         </div>
+        <p>
+          从同一 Windows 账户的旧 FitBay 资料目录合并关注歌手、找回 Music
+          专用模型。已有专用连接将保留。
+        </p>
+        <Button
+          disabled={busy}
+          onClick={() =>
+            void action(async () => {
+              const result = await window.music.recoverProfile()
+              if (result) {
+                setProfileStatus(`新增关注 ${result.added} 位。${result.model}。`)
+                await refresh()
+              }
+            })
+          }
+        >
+          从旧资料目录恢复
+        </Button>
+        {profileStatus && <p role="status">{profileStatus}</p>}
         {backup && (
           <div>
             <h4>恢复预览</h4>

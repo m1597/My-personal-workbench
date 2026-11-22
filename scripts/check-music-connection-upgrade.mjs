@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import { mkdtemp, mkdir } from 'node:fs/promises'
 import { DatabaseSync } from 'node:sqlite'
+import { importInstalledMusicConnection } from '../examples/component-host/music-connection.mjs'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { _electron, expect } from '@playwright/test'
-import { openConnections } from '../examples/component-host/api-connections.mjs'
+import { apiUses, openConnections } from '../examples/component-host/api-connections.mjs'
 import {
   requestMusicModel,
   configureModel,
@@ -93,6 +94,43 @@ try {
   )
 } finally {
   await app.close()
+}
+// Run the same migration against the platform's default-aware connection store
+// when the Music and platform branches are integrated.
+if (apiUses.default) {
+  const legacyRoot = await mkdtemp(path.resolve('tmp/music-default-legacy-'))
+  await mkdir(path.join(legacyRoot, 'fitbay-music'))
+  const db = new DatabaseSync(path.join(legacyRoot, 'fitbay-music/music.sqlite'))
+  db.exec('CREATE TABLE state(key TEXT PRIMARY KEY, value TEXT)')
+  db.prepare('INSERT INTO state VALUES(?,?)').run(
+    'recommendation-providers',
+    JSON.stringify({
+      active: 'openai',
+      accounts: {
+        openai: { model: 'old-dedicated', secret: Buffer.from('test-slot').toString('base64') },
+      },
+    }),
+  )
+  db.close()
+  const vault = { decryptString: () => key }
+  const globalConnections = openConnections(legacyRoot, vault)
+  try {
+    globalConnections.write('default', {
+      endpoint: 'http://127.0.0.1/v1',
+      model: 'global',
+      key: randomUUID(),
+    })
+    assert.equal(globalConnections.read('music.model').source, 'default')
+    importInstalledMusicConnection(legacyRoot, globalConnections)
+    const dedicated = globalConnections.resolve('music.model')
+    assert.equal(dedicated.model, 'old-dedicated')
+    assert(dedicated.key === key)
+    globalConnections.write('music.model', { expectedId: dedicated.id, inherit: true })
+    importInstalledMusicConnection(legacyRoot, globalConnections)
+    assert.equal(globalConnections.read('music.model').source, 'default')
+  } finally {
+    globalConnections.close()
+  }
 }
 const connections = openConnections(profile)
 const store = { get: () => null, set: () => {}, connections }
