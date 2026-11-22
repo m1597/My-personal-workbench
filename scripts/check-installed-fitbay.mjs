@@ -84,6 +84,7 @@ async function listen(player) {
   await openMusicSettings(player)
   await selectMusicSettings(player, '本地曲库')
   await player.getByRole('button', { name: '添加文件', exact: true }).click()
+  await player.getByRole('button', { name: '返回', exact: true }).click()
   await player.getByRole('tab', { name: '曲库', exact: true }).click()
   await player.getByRole('button', { name: '播放安装测试音频', exact: true }).click()
   await expect
