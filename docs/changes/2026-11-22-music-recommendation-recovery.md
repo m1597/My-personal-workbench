@@ -21,4 +21,4 @@
 
 ## 构建范围
 
-本记录的 CMD 来自 team/music。用户桌面快捷方式指向 workbench 工作树，由集成组更新。安装版覆盖要求同一 Windows 账户与同一隔离 profile 跨版本验证。脚本、阶段和结果在 [安装升级验收](../../openspec/changes/recover-installed-music-profile/tasks.md)。
+除团队 CMD 外，另从桌面 FitBay.cmd 指向的 workbench/scripts/open-workbench.cmd 用 --verify-desktop 启动当前实际构建，从推荐到下载、入库及歌单播放通过，时钟为 0.843 秒。证据为 workbench/tmp/desktop-check-16223-4471/download-play.json。该入口使用隔离资料；新的错误分流和失败项重试在 team/music 及集成候选验收。候选 9c43730 的 Windows 统一检查 45011485936 已通过。安装版覆盖要求同一 Windows 账户与同一隔离 profile 跨版本验证。脚本、阶段和结果在 [安装升级验收](../../openspec/changes/recover-installed-music-profile/tasks.md)。
