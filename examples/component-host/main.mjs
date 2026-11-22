@@ -581,8 +581,7 @@ else {
             ![
               'files',
               'settings',
-              'annotate',
-              'measure',
+              'color',
               'compare',
               'album',
               'compress',

@@ -15,7 +15,10 @@ await writeFile(
 const env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
 const app = await _electron.launch({
   args: ['components/toolkit', '--workbench-profile=' + profile],
-  env,
+  env: {
+    ...env,
+    WORKBENCH_TEST_BACKGROUND: process.env.FITBAY_VISIBLE_CAPTURE === '1' ? '0' : '1',
+  },
 })
 let host
 try {
@@ -60,10 +63,16 @@ try {
     await sink.loadURL(
       'data:text/html,' + encodeURIComponent('<div contenteditable autofocus>paste</div>'),
     )
-    return { x: 100, y: 100 }
+    return {
+      x: 100,
+      y: 100,
+      origin: screen.dipToScreenPoint({ x: d.bounds.x + 135, y: d.bounds.y + 135 }),
+      scale: d.scaleFactor,
+    }
   })
   for (const entry of ['dock', 'home', 'key']) {
     for (let round = 0; round < (entry === 'dock' ? 4 : 3); round++) {
+      await app.evaluate(() => globalThis.colorFixture.showInactive())
       const opening = app.waitForEvent('window', { timeout: 10000 })
       if (entry === 'key')
         execFileSync('python', [
@@ -116,32 +125,83 @@ try {
       const visible = JSON.parse(observed)
       if (round === 0) await writeFile(path.join(profile, entry + '-region.png'), cropShot)
       assert(visible.every((c, i) => c.every((v, j) => Math.abs(v - expected.samples[i][j]) < 8)))
+      if (process.env.FITBAY_VISIBLE_CAPTURE === '1' && entry === 'dock' && round === 0) {
+        execFileSync('python', [
+          '-c',
+          `import ctypes,sys
+from PIL import ImageGrab
+ctypes.windll.user32.SetProcessDPIAware()
+x,y,w,h=map(int,sys.argv[1:5])
+im=ImageGrab.grab((x,y,x+w,y+h),all_screens=True)
+left=im.getpixel((w//5,h//2));right=im.getpixel((4*w//5,h//2))
+assert left[0]>190 and left[1]<70 and right[0]<70 and right[1]>145
+im.save(sys.argv[5])`,
+          String(rect.origin.x),
+          String(rect.origin.y),
+          String(Math.round(170 * rect.scale)),
+          String(Math.round(60 * rect.scale)),
+          path.join(profile, 'visible-region.png'),
+        ])
+      }
       console.log('toolbar ready', entry, round)
+      if (entry === 'dock' && round < 2) {
+        await overlay.getByRole('button', { name: '标注', exact: true }).click()
+        const canvas = overlay.locator('.annotation-canvas')
+        await canvas.waitFor()
+        await overlay.mouse.move(149, 179)
+        await overlay.mouse.down()
+        await overlay.mouse.move(174, 188, { steps: 10 })
+        await overlay.mouse.move(210, 160, { steps: 10 })
+        await overlay.mouse.up()
+        expected.png = await canvas.evaluate((c) => c.toDataURL())
+        if (round === 1) {
+          const output = path.join(profile, 'annotated-save.png')
+          await app.evaluate(({ dialog }, destination) => {
+            const show = dialog.showSaveDialog.bind(dialog)
+            dialog.showSaveDialog = (win, options) =>
+              show(win, {
+                ...options,
+                title: 'FitBay PNG ' + destination,
+                defaultPath: destination,
+              })
+          }, output)
+          const saveClick = overlay.getByRole('button', { name: '保存', exact: true }).click()
+          await new Promise((r) => setTimeout(r, 350))
+          execFileSync(
+            'python',
+            [
+              '-c',
+              `import sys
+from pywinauto import Desktop
+dlg=Desktop(backend='win32').window(title='FitBay PNG '+sys.argv[2],class_name='#32770',visible_only=False)
+dlg.wait('exists',timeout=12)
+button=Desktop(backend='uia').window(handle=dlg.handle).child_window(auto_id='1',control_type='Button')
+button.invoke()
+dlg.wait_not('exists',timeout=10)`,
+              String(app.process().pid),
+              output,
+            ],
+            { timeout: 20000 },
+          )
+          await saveClick
+          await expect.poll(() => overlay.isClosed()).toBe(true)
+          execFileSync('python', [
+            '-c',
+            "from PIL import Image,ImageChops;import sys;assert not ImageChops.difference(Image.open(sys.argv[1]).convert('RGB'),Image.open(sys.argv[2]).convert('RGB')).getbbox()",
+            path.join(profile, 'annotated-paste.png'),
+            output,
+          ])
+          console.log('PASS pencil paste and saved PNG pixel-identical', profile)
+          continue
+        }
+      }
       if (round === 3) {
-        await overlay.getByRole('button', { name: '测距与取色' }).click()
-        await overlay.mouse.click(150, 179)
-        await overlay.mouse.click(190, 179)
-        await expect(overlay.locator('output')).toContainText('Δx')
-        const scale = await overlay.evaluate(
-          () => document.querySelector('.screen>img').naturalWidth / innerWidth,
-        )
-        await expect(overlay.locator('output')).toContainText(String(Math.round(40 * scale)))
-        const hex = await overlay.locator('.swatch + span').textContent()
-        assert.equal(
-          hex,
-          '#' +
-            expected.samples[0]
-              .map((v) => v.toString(16).padStart(2, '0'))
-              .join('')
-              .toUpperCase(),
-        )
-        await overlay.getByRole('button', { name: '返回选区' }).click()
         const result = app.waitForEvent('window')
         await overlay.getByRole('button', { name: '提取文字' }).click()
         const answer = await result
         await expect(answer.locator('body')).toContainText(/FITBAY\s*321/i, { timeout: 20000 })
         await answer.close()
-        console.log('PASS same region color, physical distance and local OCR')
+        console.log('PASS local OCR')
         continue
       }
       if (round === 2)
@@ -170,6 +230,11 @@ try {
           `(async()=>{const im=document.querySelector('img');await im.decode();const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const ctx=c.getContext('2d');ctx.drawImage(im,0,0);return c.toDataURL()})()`,
         )
       })
+      if (entry === 'dock' && round === 0)
+        await writeFile(
+          path.join(profile, 'annotated-paste.png'),
+          Buffer.from(colors.split(',')[1], 'base64'),
+        )
       assert(colors === expected.png, '粘贴后整张 PNG 像素与选区不符')
       assert(
         expected.samples[0][0] > 200 &&
@@ -180,6 +245,58 @@ try {
     }
     console.log('PASS', entry, 'two color-identical pastes and Escape')
   }
+  for (const entry of [dock, home]) {
+    assert.deepEqual(await entry.locator('.tool-row strong').allTextContents(), [
+      '屏幕截图',
+      '划词助手',
+      '屏幕取色',
+    ])
+    await expect(entry.getByText('其他工具', { exact: true })).toHaveCount(0)
+    const pending = app.waitForEvent('window')
+    await entry.getByRole('button', { name: '开始取色' }).click()
+    const picker = await pending
+    await picker.locator('.swatch').waitFor()
+    await picker.mouse.move(290, 175)
+    const expected = await picker.locator('output').textContent()
+    assert.match(expected, /^#[0-9A-F]{6}$/)
+    await picker.mouse.click(290, 175)
+    await expect.poll(() => picker.isClosed()).toBe(true)
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), expected)
+  }
+  await dock.getByRole('button', { name: '设置', exact: true }).click()
+  const section = dock
+    .locator('section')
+    .filter({ has: dock.page().getByRole('heading', { name: '屏幕取色' }) })
+    .last()
+  await section.getByRole('button', { name: '录制快捷键' }).click()
+  await section.getByLabel('全局快捷键').press('Control+Alt+F9')
+  await expect
+    .poll(() => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+F9')))
+    .toBe(true)
+  const pending = app.waitForEvent('window', { timeout: 10000 })
+  execFileSync('python', [
+    '-c',
+    'import ctypes,time;u=ctypes.windll.user32;keys=[17,18,120];[u.keybd_event(k,0,0,0) for k in keys];time.sleep(.05);[u.keybd_event(k,0,2,0) for k in reversed(keys)]',
+  ])
+  const picker = await pending
+  await picker.locator('.swatch').waitFor()
+  await picker.mouse.click(290, 175)
+  await section.getByRole('button', { name: '恢复默认' }).click()
+  await expect
+    .poll(() =>
+      app.evaluate(
+        ({ globalShortcut }) =>
+          globalShortcut.isRegistered('Control+Alt+C') &&
+          !globalShortcut.isRegistered('Control+Alt+F9'),
+      ),
+    )
+    .toBe(true)
+  await dock.getByRole('button', { name: '返回', exact: true }).click()
+  await dock.screenshot({ path: path.join(profile, 'primary-home.png') })
+  console.log(
+    'PASS both primary homes, native color clipboard, dock recorder, OS hotkey, default restore',
+    profile,
+  )
 } finally {
   await host?.close()
   await app.close()

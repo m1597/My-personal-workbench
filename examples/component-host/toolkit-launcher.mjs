@@ -76,7 +76,7 @@ export async function toolkitLauncher(packaged, profile, installation) {
 export async function toolkitShortcutRequest(launch, profile, value) {
   if (
     value !== null &&
-    (!['capture', 'selection'].includes(value?.id) ||
+    (!['capture', 'selection', 'color'].includes(value?.id) ||
       typeof value.key !== 'string' ||
       value.key.length > 100 ||
       typeof value.enabled !== 'boolean')

@@ -1,103 +1,57 @@
 import { api, root, picture, el, button } from './view.js'
 import { makeCanvas } from './tools-view.js'
-export { measureScreen, annotateRegion }
-function measureScreen(s, bounds, onBack) {
-  root.className = 'screen measuring'
-  const surface = picture(s.image),
-    line = document.createElementNS('http://www.w3.org/2000/svg', 'svg'),
-    seg = document.createElementNS(line.namespaceURI, 'line')
-  if (bounds)
-    Object.assign(surface.style, {
-      position: 'absolute',
-      left: bounds.x + 'px',
-      top: bounds.y + 'px',
-      width: bounds.width + 'px',
-      height: bounds.height + 'px',
-    })
-  line.classList.add('ruler-line')
-  line.append(seg)
-  const bar = el('div', '', 'measure-panel'),
-    readout = el('output', '点击起点和终点测距'),
-    color = el('span'),
-    swatch = el('span', '', 'swatch')
-  let start, end, hex
-  const canvas = el('canvas')
-  surface.onload = () => {
-    canvas.width = surface.naturalWidth
-    canvas.height = surface.naturalHeight
-    canvas.getContext('2d', { willReadFrequently: true }).drawImage(surface, 0, 0)
+export { pickScreenColor, annotateRegion }
+function pickScreenColor(s) {
+  root.className = 'screen'
+  const img = picture(s.image),
+    panel = el('div', '', 'measure-panel'),
+    output = el('output', '点击复制颜色 · Esc 取消')
+  const swatch = el('span', '', 'swatch')
+  panel.style.pointerEvents = 'none'
+  panel.append(swatch, output)
+  root.append(img, panel)
+  const canvas = el('canvas'),
+    ctx = canvas.getContext('2d', { willReadFrequently: true })
+  let ready = false
+  img.onload = () => {
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    ctx.drawImage(img, 0, 0)
+    ready = true
   }
-  function update(e) {
-    if (!canvas.width || !surface.complete) return
-    const box = surface.getBoundingClientRect()
-    if (
-      e.clientX < box.left ||
-      e.clientX >= box.right ||
-      e.clientY < box.top ||
-      e.clientY >= box.bottom
+  function sample(e) {
+    if (!ready) return
+    const r = img.getBoundingClientRect()
+    const x = Math.min(
+      canvas.width - 1,
+      Math.max(0, Math.floor(((e.clientX - r.left) * canvas.width) / r.width)),
     )
-      return
-    const x = Math.floor(((e.clientX - box.left) * canvas.width) / box.width)
-    const y = Math.floor(((e.clientY - box.top) * canvas.height) / box.height)
-    const rgb = canvas.getContext('2d').getImageData(x, y, 1, 1).data
-    hex =
+    const y = Math.min(
+      canvas.height - 1,
+      Math.max(0, Math.floor(((e.clientY - r.top) * canvas.height) / r.height)),
+    )
+    const hex =
       '#' +
-      Array.from(rgb)
+      Array.from(ctx.getImageData(x, y, 1, 1).data)
         .slice(0, 3)
-        .map((c) => c.toString(16).padStart(2, '0'))
+        .map((v) => v.toString(16).padStart(2, '0'))
         .join('')
         .toUpperCase()
-    color.textContent = hex
+    output.textContent = hex
     swatch.style.background = hex
-    return [x, y, e.clientX, e.clientY]
+    return hex
   }
-  function ruler(a, b) {
-    for (const [key, v] of Object.entries({ x1: a[2], y1: a[3], x2: b[2], y2: b[3] }))
-      seg.setAttribute(key, v)
-    readout.textContent =
-      'Δx ' +
-      (b[0] - a[0]) +
-      ' · Δy ' +
-      (b[1] - a[1]) +
-      ' · ' +
-      Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(1) +
-      ' px'
+  root.onpointermove = sample
+  root.onclick = async (e) => {
+    const hex = sample(e)
+    if (hex)
+      try {
+        await api.copyMeasuredColor(hex)
+        await api.dismiss()
+      } catch {
+        output.textContent = '复制失败，请再次点选'
+      }
   }
-  root.onpointermove = (e) => {
-    if (bar.contains(e.target) || end) return
-    const p = update(e)
-    if (start && p) ruler(start, p)
-  }
-  root.onpointerdown = (e) => {
-    if (bar.contains(e.target)) return
-    const p = update(e)
-    if (!p) return
-    if (!start || end) {
-      start = p
-      end = null
-      ruler(p, p)
-    } else {
-      end = p
-      ruler(start, end)
-    }
-  }
-  bar.append(
-    readout,
-    swatch,
-    color,
-    button('复制颜色', () => api.copyMeasuredColor(hex)),
-    button('关闭', () => api.dismiss()),
-  )
-  if (onBack)
-    bar.append(
-      button('返回选区', () => {
-        surface.remove()
-        line.remove()
-        bar.remove()
-        onBack()
-      }),
-    )
-  root.append(surface, line, bar)
 }
 async function annotateRegion(rect, bar) {
   if (root.classList.contains('annotating')) return
@@ -120,7 +74,7 @@ async function annotateRegion(rect, bar) {
     mode = el('select'),
     ink = el('input')
   mode.setAttribute('aria-label', '标注形状')
-  mode.add(new Option('画笔', 'pen'))
+  mode.add(new Option('铅笔', 'pen'))
   mode.add(new Option('矩形', 'rect'))
   ink.type = 'color'
   ink.value = '#ff453a'
@@ -174,6 +128,13 @@ async function annotateRegion(rect, bar) {
     controls.remove()
     bar.style.display = 'flex'
   }
+  async function apply() {
+    const data = canvas.toDataURL()
+    await api.applyAnnotation(data)
+    rect.style.backgroundImage = 'url(' + data + ')'
+    rect.style.backgroundSize = '100% 100%'
+    close()
+  }
   controls.append(
     mode,
     ink,
@@ -181,12 +142,14 @@ async function annotateRegion(rect, bar) {
       strokes.pop()
       draw()
     }),
-    button('应用标注', async () => {
-      const data = canvas.toDataURL()
-      await api.applyAnnotation(data)
-      rect.style.backgroundImage = 'url(' + data + ')'
-      rect.style.backgroundSize = '100% 100%'
-      close()
+    button('应用标注', apply),
+    button('复制', async () => {
+      await apply()
+      await api.copy()
+    }),
+    button('保存', async () => {
+      await apply()
+      await api.save()
     }),
     button('取消标注', close),
   )

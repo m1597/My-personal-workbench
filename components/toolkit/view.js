@@ -1,7 +1,7 @@
 import { settingsContents } from './settings-view.js'
 import { el, field, feedback } from './ui-dom.js'
 import { toolkitHome, glyph } from './tools-view.js'
-import { measureScreen, annotateRegion } from './screen-tools.js'
+import { pickScreenColor, annotateRegion } from './screen-tools.js'
 export { api, root, notice, el, button, error, field, picture, settingsContents }
 const api = window.toolkit
 const root = document.querySelector('#app')
@@ -32,21 +32,6 @@ async function screenView(s) {
     ['截图翻译', () => ask('translate')],
     ['向模型提问', () => ask('question')],
     ['标注', () => annotateRegion(rect, bar)],
-    [
-      '测距与取色',
-      async () => {
-        const image = await api.selectionImage(),
-          bounds = rect.getBoundingClientRect()
-        const { onpointerup, onpointermove, onpointerdown } = root
-        root.onpointerup = null
-        bar.hidden = true
-        measureScreen({ image }, bounds, () => {
-          root.className = 'screen'
-          Object.assign(root, { onpointerup, onpointermove, onpointerdown })
-          bar.hidden = false
-        })
-      },
-    ],
     ['取消截图', () => api.dismiss()],
   ]) {
     const action = button(name, () => fn())
@@ -62,7 +47,6 @@ async function screenView(s) {
           向模型提问: 'ask',
           提取文字: 'ocr',
           标注: 'annotate',
-          测距与取色: 'measure',
           取消截图: 'cancel',
         }[name],
       ),
@@ -116,6 +100,12 @@ async function screenView(s) {
       draw()
     }
   }
+  root.onlostpointercapture = root.onpointercancel = () => {
+    if (!start) return
+    start = null
+    rect.hidden = true
+    tip.hidden = false
+  }
   root.onpointerup = async (e) => {
     if (!start) return
     end = point(e)
@@ -135,10 +125,6 @@ async function screenView(s) {
       bar.style.top =
         Math.max(0, b + bar.offsetHeight + 5 <= innerHeight ? b + 4 : y - bar.offsetHeight - 4) +
         'px'
-      if (s.intent === 'annotate') {
-        s.intent = null
-        await annotateRegion(rect, bar)
-      }
     } catch (e) {
       error(e)
       tip.textContent = notice.textContent
@@ -229,9 +215,11 @@ api
     if (s.kind === 'home')
       return toolkitHome(s.settings, { api, root, notice, error, button, settingsContents })
     if (s.kind === 'screen') {
-      if (s.intent === 'measure') measureScreen(s)
+      if (s.intent === 'color') pickScreenColor(s)
       else await screenView(s)
       await root.querySelector('img').decode()
+      // Wait for the decoded desktop image to reach a painted frame before revealing the overlay.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       await api.screenReady()
       return
     }

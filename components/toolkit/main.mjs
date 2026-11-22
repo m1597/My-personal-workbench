@@ -41,6 +41,7 @@ async function startToolkit() {
   const file = path.join(app.getPath('userData'), 'settings.json')
   const defaults = {
     capture: { enabled: true, key: 'Control+Alt+S' },
+    color: { enabled: true, key: 'Control+Alt+C' },
     selection: { enabled: true, key: 'Control+Alt+T' },
     endpoint: 'https://api.openai.com/v1',
     model: '',
@@ -262,21 +263,23 @@ async function startToolkit() {
       [...bound.values()].some((k) => k.toLowerCase() === key.toLowerCase()) ||
       !globalShortcut.register(key, () => {
         const fromHost = hosted
-        void (id === 'capture' ? capture(undefined, fromHost) : select(fromHost)).catch((error) =>
-          fail(error, fromHost),
-        )
+        void (
+          id === 'selection'
+            ? select(fromHost)
+            : capture(id === 'color' ? 'color' : undefined, fromHost)
+        ).catch((error) => fail(error, fromHost))
       })
     )
       throw Error('快捷键已占用，请换一个组合键')
     if (old) globalShortcut.unregister(old)
     bound.set(id, key)
   }
-  for (const id of ['capture', 'selection'])
+  for (const id of ['capture', 'selection', 'color'])
     if (cfg[id]?.enabled)
       try {
         bind(id, cfg[id].key)
       } catch (e) {
-        notice += `${id === 'capture' ? '截图' : '划词'}快捷键：${e.message} `
+        notice += `${id === 'capture' ? '截图' : id === 'color' ? '取色' : '划词'}快捷键：${e.message} `
       }
   function handle(name, kinds, fn) {
     ipcMain.handle(`toolkit:${name}`, (e, v) => {
@@ -295,6 +298,7 @@ async function startToolkit() {
     settings:
       s.kind === 'home'
         ? {
+            color: { ...cfg.color },
             capture: { ...cfg.capture },
             selection: { ...cfg.selection, enabled: bound.has('selection') },
             notice,
@@ -342,12 +346,13 @@ async function startToolkit() {
   })
   handle('toolTarget', ['home'], () => targetTool)
   handle('capture', ['home'], (s, intent) => {
-    if (!cfg.capture.enabled) throw Error('请先启用截图')
-    return capture(['annotate', 'measure'].includes(intent) ? intent : undefined, s.hosted)
+    if (intent === 'color' ? !cfg.color.enabled : !cfg.capture.enabled)
+      throw Error('请先启用该工具')
+    return capture(intent === 'color' ? intent : undefined, s.hosted)
   })
   function setShortcut(v) {
     if (
-      !['capture', 'selection'].includes(v?.id) ||
+      !['capture', 'selection', 'color'].includes(v?.id) ||
       typeof v.enabled !== 'boolean' ||
       typeof v.key !== 'string'
     )
@@ -427,10 +432,16 @@ async function startToolkit() {
   })
   handle('save', ['screen'], async (s) => {
     const image = selected(s)
-    const dest = await dialog.showSaveDialog(s.win, {
-      defaultPath: '截图.png',
-      filters: [{ name: 'PNG', extensions: ['png'] }],
-    })
+    s.win.setAlwaysOnTop(false)
+    let dest
+    try {
+      dest = await dialog.showSaveDialog(s.win, {
+        defaultPath: '截图.png',
+        filters: [{ name: 'PNG', extensions: ['png'] }],
+      })
+    } finally {
+      if (!s.win.isDestroyed()) s.win.setAlwaysOnTop(true, 'screen-saver')
+    }
     if (!dest.canceled) {
       await writeFile(dest.filePath, image.toPNG())
       s.win.close()
@@ -544,7 +555,9 @@ async function startToolkit() {
       try {
         const v = JSON.parse(readFileSync(file, 'utf8'))
         if (v) setShortcut(v)
-        result = { settings: { capture: cfg.capture, selection: cfg.selection, notice } }
+        result = {
+          settings: { color: cfg.color, capture: cfg.capture, selection: cfg.selection, notice },
+        }
       } catch (e) {
         result = { error: e.code ? '快捷键请求不可用' : e.message }
       }
@@ -557,6 +570,14 @@ async function startToolkit() {
       return
     }
     hosted = argv.includes('--fitbay-hosted')
+    if (argv.includes('--toolkit-page=color')) {
+      if (!cfg.color.enabled) {
+        fail(Error('请先启用屏幕取色'))
+        return
+      }
+      void capture('color', hosted).catch(fail)
+      return
+    }
     if (argv.includes('--toolkit-capture')) {
       if (!cfg.capture.enabled) {
         fail(Error('请先在工具集设置中启用截图'))
