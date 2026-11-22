@@ -80,12 +80,24 @@ try {
         callback({ cancel: true })
       },
     )
+    globalThis.albumImportDialogs = []
     const messageBox = dialog.showMessageBox.bind(dialog)
-    dialog.showMessageBox = (...args) =>
-      args[0]?.checkboxLabel === '自动收录以后新增的歌曲'
-        ? Promise.resolve({ response: 0, checkboxChecked: false })
-        : messageBox(...args)
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [library] })
+    dialog.showMessageBox = (...args) => {
+      if (args[0]?.checkboxLabel !== '自动收录以后新增的歌曲') return messageBox(...args)
+      const result = { response: 0, checkboxChecked: false }
+      globalThis.albumImportDialogs.push({ message: args[0].message, result })
+      return Promise.resolve(result)
+    }
+    globalThis.albumImportFolder = library
+    dialog.showOpenDialog = async (options) => {
+      const result = { canceled: false, filePaths: [globalThis.albumImportFolder] }
+      globalThis.albumImportDialogs.push({
+        title: options.title,
+        properties: options.properties,
+        result,
+      })
+      return result
+    }
   }, library)
 
   const externalRequests = []
@@ -238,13 +250,90 @@ try {
     )
     await writeTrack(extra, name, 'Seasons', name, '', 1, 1, Buffer.from(picture, 'base64'))
   }
-  await app.evaluate(({ dialog, BaseWindow }, dir) => {
-    BaseWindow.getAllWindows()[0].setContentSize(1040, 720)
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
-  }, extra)
+  await app.evaluate(
+    ({ BaseWindow }, { dir, slow }) => {
+      BaseWindow.getAllWindows()[0].setContentSize(1040, 720)
+      globalThis.albumImportFolder = dir
+      const threads = process.getBuiltinModule('node:worker_threads')
+      const OriginalWorker = threads.Worker
+      globalThis.secondAlbumWorker = { started: false }
+      threads.Worker = class extends OriginalWorker {
+        constructor(url, options) {
+          const second =
+            options?.workerData?.paths?.includes(dir) &&
+            url.pathname?.endsWith('/library-worker.mjs')
+          if (second && slow) {
+            // Exercise the real scanner, delaying only its startup in this isolated fixture.
+            super('setTimeout(() => import(' + JSON.stringify(url.href) + '), 6500)', {
+              ...options,
+              eval: true,
+            })
+          } else super(url, options)
+          if (!second) return
+          const trace = globalThis.secondAlbumWorker
+          trace.started = true
+          trace.rows = 0
+          trace.failed = 0
+          this.on('message', (msg) => {
+            trace.rows += msg.rows?.length ?? 0
+            trace.failed += msg.failed ?? 0
+          })
+          this.on('error', (err) => {
+            trace.error = { name: err.name, code: err.code, message: err.message }
+          })
+          this.on('exit', (code) => {
+            trace.exit = code
+          })
+          threads.Worker = OriginalWorker
+          process.getBuiltinModule('node:module').syncBuiltinESMExports()
+        }
+      }
+      process.getBuiltinModule('node:module').syncBuiltinESMExports()
+    },
+    { dir: extra, slow: process.env.FITBAY_TEST_SLOW_ALBUM_IMPORT === '1' },
+  )
   await openMusicSettings(page)
+  const started = Date.now()
   await page.getByRole('button', { name: '添加文件夹' }).click()
-  await expect.poll(async () => (await state()).localTracks.length).toBe(8)
+  const importStates = []
+  let atOldDeadline
+  const sample = async () => {
+    const current = await state()
+    const worker = await app.evaluate(() => globalThis.secondAlbumWorker)
+    const result = {
+      job: current.importJob,
+      tracks: current.localTracks.map((t) => t.title),
+      worker,
+    }
+    const elapsedMs = Date.now() - started
+    if (elapsedMs >= 5000 && !atOldDeadline) atOldDeadline = { elapsedMs, result }
+    if (JSON.stringify(result) !== JSON.stringify(importStates.at(-1)?.result))
+      importStates.push({ elapsedMs, result })
+    return result
+  }
+  try {
+    await expect.poll(async () => (await sample()).worker.exit, { timeout: 30000 }).toBeDefined()
+    const trace = await sample()
+    assert.equal(trace.worker.exit, 0, JSON.stringify(trace.worker))
+    assert.deepEqual(trace.job, {
+      started: true,
+      running: false,
+      added: 4,
+      duplicates: 0,
+      failed: 0,
+      cancelled: false,
+    })
+    assert.equal(trace.tracks.length, 8)
+  } finally {
+    const evidence = {
+      dialogs: await app.evaluate(() => globalThis.albumImportDialogs),
+      samples: importStates,
+      atOldDeadline,
+      messages: await page.getByRole('status').allTextContents(),
+    }
+    await writeFile(path.join(root, 'second-import.json'), JSON.stringify(evidence, null, 2))
+    console.log('第二次导入证据', root)
+  }
   const byTitle = new Map((await state()).localTracks.map((t) => [t.title, t.id]))
   const ids = ['Overture', 'Nightfall', 'Low Tide', ...names].map((name) => byTitle.get(name))
   await page.evaluate(async (ids) => {
