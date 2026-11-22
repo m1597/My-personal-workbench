@@ -13,3 +13,9 @@
 npm run build:prototype、桌面启动脚本 --check、两个相关 OpenSpec change 与 workspace-components 的严格校验通过。两套交互回归各 17 项通过；最后修复空格恢复后另从桌面入口和四向专项复验。全仓 npm run check 停在其他交接文档的 Markdown 表格格式。开发目录多人并行构建，集成记录附独立验收时的构建指纹。
 
 指定参考 PNG 可读；录屏未在给定 D:/Desktop 路径找到。采用真实桌面组件顺序和分隔线端点坐标复现。系统通知区（含隐藏图标）的全局人工计数、远程 CI 及新发行包安装不在本次实测结果内。
+
+## 工具集退出联动复验
+
+宿主提交 0907658 随每次停靠启动传递实际宿主 PID。重建后运行 scripts/check-toolkit-shell.mjs，确认宿主退出时纯停靠的工具集进程退出，已打开的独立工具集仍可用。平台复测目录为 tmp/toolkit-shell-uHwWNd。用同一构建重新打开八个组件、测试标签切换和重启，通过记录位于 tmp/default-grid-IzA66J 与 tmp/host-tabs-SgLv4x。单独执行 npm run lint 通过。
+
+本次联测宿主 main.mjs 的 SHA-256 为 A19BED31B5332FA7D12290437204840572EEF78F2CB2BE8CD7527CBF7B46CB0D，工作台 renderer 入口脚本为 B937475DC5F8FE505AC212F0B7C02CBEF4B435EAA6C6554289048806DA31F7F2。工具集验收另见[组件组交接](2026-11-22-toolkit-runtime.md)。
