@@ -107,6 +107,10 @@ if ($LegacyDir -and $Previous -eq '0.2.4') {
   node scripts/check-settings-installation.mjs $oldRoot --candidate --reproduce-old
   if ($LASTEXITCODE) { throw 'Mixed-version update defect was not reproduced' }
 }
+$musicFixture = Join-Path $env:RUNNER_TEMP 'Followed artists and encrypted credential'
+$musicExe = Join-Path $locations.Music 'FitBay Music.exe'
+node scripts/check-music-installed-upgrade.mjs seed $musicFixture $musicExe
+if ($LASTEXITCODE) { throw 'Old Music credential or followed artist fixture failed' }
 node scripts/check-upgrade-data.mjs seed $locations.Music
 if ($LASTEXITCODE) { throw 'Could not seed baseline data' }
 $foreign = $null
@@ -122,6 +126,8 @@ if ([version]$Previous -lt [version]'0.2.2') {
   $replacement.Save()
 }
 Run-Setup $setup $all
+node scripts/check-music-installed-upgrade.mjs verify $musicFixture $musicExe
+if ($LASTEXITCODE) { throw 'Installed Music authentication or followed artist did not survive upgrade' }
 Verify-Desktop $oldRoot $foreign
 node scripts/check-upgrade-data.mjs verify $locations.Music
 if ($LASTEXITCODE) { throw 'Upgrade data verification failed' }
