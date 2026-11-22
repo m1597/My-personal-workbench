@@ -33,6 +33,7 @@ import { useMusicHostState } from './componentPrototype'
 declare global {
   interface Window {
     fitbayToolkit?: {
+      shortcuts(value: unknown): Promise<unknown>
       local: Record<string, (input?: unknown) => Promise<unknown>>
       capture(): Promise<boolean>
       available(): Promise<boolean>

@@ -1,3 +1,4 @@
+import { buildToolkitRecorder } from './build-toolkit-recorder.mjs'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -92,10 +93,16 @@ export async function prepareProduct(product) {
     const app = path.join(stage, 'app')
     await rm(stage, { recursive: true, force: true })
     await cp('components/toolkit', app, { recursive: true })
+    await buildToolkitRecorder(app)
     const tokens = 'src/renderer/src/styles/tokens.css'
     await cp(tokens, path.join(app, 'tokens.css'))
     const html = path.join(app, 'index.html')
-    await writeFile(html, (await readFile(html, 'utf8')).replace('../../' + tokens, 'tokens.css'))
+    await writeFile(
+      html,
+      (await readFile(html, 'utf8'))
+        .replace('../../' + tokens, 'tokens.css')
+        .replace('../../dist/component-prototype/toolkit-recorder/recorder.js', 'recorder.js'),
+    )
     const manifest = path.join(app, 'package.json')
     const metadata = JSON.parse(await readFile(manifest, 'utf8'))
     await writeFile(manifest, JSON.stringify({ ...metadata, version: pkg.version }, null, 2) + '\n')

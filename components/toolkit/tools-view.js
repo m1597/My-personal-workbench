@@ -162,10 +162,12 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
   settingsBox.hidden = true
   root.append(head, notice, surface, settingsBox)
   notice.textContent = s.notice
+  let refreshShortcuts
   async function settingsPage() {
     surface.hidden = true
     settingsBox.hidden = false
     head.hidden = true
+    if (refreshShortcuts) await refreshShortcuts()
     if (!settingsBox.childElementCount) {
       const shell = createSettingsShell({
         title: '工具集设置',
@@ -190,7 +192,8 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       shell.content.append(panels)
       try {
         const values = api.shortcutSettings ? await api.shortcutSettings() : s
-        settingsContents(values, panels, { api, button, notice, error })
+        if (!panels.isConnected) return
+        refreshShortcuts = settingsContents(values, panels, { api, button, notice, error })
         api.onSettingsTarget?.((route) => {
           if (route) {
             shell.select('api')

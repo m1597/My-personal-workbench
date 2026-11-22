@@ -1,3 +1,4 @@
+import { buildToolkitRecorder } from './build-toolkit-recorder.mjs'
 import { build } from 'vite'
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { buildSongPath } from './build-song-path.mjs'
@@ -23,6 +24,7 @@ for (const f of [
   'local-library.mjs',
 ])
   await cp('components/music/' + f, `${root}/host/music/${f}`)
+await buildToolkitRecorder(root + '/toolkit-recorder')
 for (const [source, output] of [
   ['examples/sample-component', 'component'],
   ['components/music', 'music'],

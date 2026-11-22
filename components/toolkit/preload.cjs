@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('toolkit', {
   ...Object.fromEntries(
     commands.map((name) => [name, (value) => ipcRenderer.invoke('toolkit:' + name, value)]),
   ),
+  onMaterial: (callback) => ipcRenderer.on('toolkit:material', (_, m) => callback(m)),
   onToolTarget: (callback) => {
     ipcRenderer.on('toolkit:tool-target', (_, id) => callback(id))
   },

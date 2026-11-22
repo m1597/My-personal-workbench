@@ -212,8 +212,19 @@ window.addEventListener('keydown', (e) => {
 api
   .state()
   .then(async (s) => {
-    if (s.kind === 'home')
+    if (s.kind === 'home') {
+      const apply = (m) => {
+        document.documentElement.style.setProperty('--material-light', String(m.brightness / 100))
+        document.documentElement.style.setProperty(
+          '--material-opacity',
+          String(1 - m.transparency / 100),
+        )
+        document.documentElement.style.setProperty('--material-frost', String(m.frost / 100))
+      }
+      api.onMaterial(apply)
+      apply(s.settings.material)
       return toolkitHome(s.settings, { api, root, notice, error, button, settingsContents })
+    }
     if (s.kind === 'screen') {
       if (s.intent === 'color') pickScreenColor(s)
       else await screenView(s)

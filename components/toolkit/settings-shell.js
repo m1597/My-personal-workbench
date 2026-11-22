@@ -108,6 +108,7 @@ export function createSettingsShell({ title, categories, active, onSelect, onBac
       select(item.id)
       expand(false)
       onSelect(item.id)
+      if (getComputedStyle(toggle).display !== 'none') toggle.focus({ preventScroll: true })
     }
     buttons.set(item.id, action)
     nav.append(action)

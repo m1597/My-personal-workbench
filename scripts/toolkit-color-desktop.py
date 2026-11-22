@@ -1,6 +1,7 @@
 import ctypes
 import subprocess
 import time
+import sys
 from pathlib import Path
 
 import pythoncom
@@ -29,7 +30,7 @@ def run():
     sequence = ctypes.windll.user32.GetClipboardSequenceNumber()
     try:
         proc = subprocess.Popen(
-            ["node", "scripts/check-toolkit-capture-colors.mjs"],
+            ["node", "scripts/check-toolkit-capture-colors.mjs", *sys.argv[1:]],
             cwd=Path(__file__).resolve().parents[1],
         )
         while proc.poll() is None:
@@ -44,7 +45,16 @@ def run():
             if prior and win32gui.IsWindow(prior) and win32gui.GetForegroundWindow() != prior:
                 Dispatch("WScript.Shell").AppActivate(win32process.GetWindowThreadProcessId(prior)[1])
                 time.sleep(0.1)
-                win32gui.SetForegroundWindow(prior)
+                if win32gui.GetForegroundWindow() != prior:
+                    user32 = ctypes.windll.user32
+                    current_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+                    foreground_thread = user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), None)
+                    attached = user32.AttachThreadInput(current_thread, foreground_thread, True)
+                    try:
+                        user32.SetForegroundWindow(prior)
+                    finally:
+                        if attached:
+                            user32.AttachThreadInput(current_thread, foreground_thread, False)
             print("Original focus restored", win32gui.GetForegroundWindow() == prior)
 
 

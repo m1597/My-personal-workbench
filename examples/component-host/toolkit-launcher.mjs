@@ -77,6 +77,7 @@ export async function toolkitLauncher(packaged, profile, installation) {
 export async function toolkitShortcutRequest(launch, profile, value) {
   if (
     value !== null &&
+    value?.id !== 'defaults' &&
     (!['capture', 'selection', 'color'].includes(value?.id) ||
       typeof value.key !== 'string' ||
       value.key.length > 100 ||
@@ -90,7 +91,9 @@ export async function toolkitShortcutRequest(launch, profile, value) {
   await writeFile(
     file,
     JSON.stringify(
-      value === null ? null : { id: value.id, key: value.key, enabled: value.enabled },
+      value === null
+        ? null
+        : { id: value.id, key: value.key, enabled: value.enabled, field: value.field },
     ),
     { flag: 'wx' },
   )

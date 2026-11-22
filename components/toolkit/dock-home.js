@@ -1,16 +1,28 @@
+import { mountRecorder } from './recorder.tsx'
 import { toolkitHome } from './tools-view.js'
 import { feedback } from './ui-dom.js'
 import { settingsContents } from './settings-view.js'
 import catalog from './catalog.json'
 export function mountToolkit(root, bridge) {
+  const ui = feedback()
+  // Acquire the component's native shortcuts and transfer its tray on first dock.
+  void bridge.shortcuts(null).catch((error) => {
+    if (root.isConnected) ui.error(error)
+  })
+  const recorders = []
   toolkitHome(
     { catalog, notice: '' },
     {
       root,
       settingsContents,
-      ...feedback(),
+      ...ui,
       api: {
         ...bridge.local,
+        mountRecorder(node, props) {
+          const recorder = mountRecorder(node, props)
+          recorders.push(recorder)
+          return recorder
+        },
         shortcutSettings: () => bridge.shortcuts(null),
         enable: (v) => bridge.shortcuts(v),
         connections: async () => {
@@ -52,4 +64,8 @@ export function mountToolkit(root, bridge) {
       },
     },
   )
+  return () =>
+    queueMicrotask(() => {
+      for (const recorder of recorders) recorder.dispose()
+    })
 }

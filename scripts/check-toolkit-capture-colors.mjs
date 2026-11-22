@@ -70,7 +70,7 @@ try {
       scale: d.scaleFactor,
     }
   })
-  for (const entry of ['dock', 'home', 'key']) {
+  for (const entry of process.argv.includes('--colors-only') ? [] : ['dock', 'home', 'key']) {
     for (let round = 0; round < (entry === 'dock' ? 4 : 3); round++) {
       await app.evaluate(() => globalThis.colorFixture.showInactive())
       const opening = app.waitForEvent('window', { timeout: 10000 })
@@ -264,15 +264,15 @@ dlg.wait_not('exists',timeout=10)`,
     assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), expected)
   }
   await dock.getByRole('button', { name: '设置', exact: true }).click()
-  const section = dock
-    .locator('section')
-    .filter({ has: dock.page().getByRole('heading', { name: '屏幕取色' }) })
-    .last()
-  await section.getByRole('button', { name: '录制快捷键' }).click()
-  await section.getByLabel('全局快捷键').press('Control+Alt+F9')
+  const section = dock.getByRole('region', { name: '屏幕取色' })
+  const input = section.getByRole('textbox')
+  await input.click()
+  await input.press('Control+Alt+F9')
+  await section.getByRole('button', { name: '保存屏幕取色快捷键' }).click()
   await expect
     .poll(() => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+F9')))
     .toBe(true)
+  await expect(dock.getByRole('status')).toContainText('快捷键已保存')
   const pending = app.waitForEvent('window', { timeout: 10000 })
   execFileSync('python', [
     '-c',
@@ -281,16 +281,15 @@ dlg.wait_not('exists',timeout=10)`,
   const picker = await pending
   await picker.locator('.swatch').waitFor()
   await picker.mouse.click(290, 175)
+  // The user's session or another acceptance profile can own the system default.
+  // Restoring a disabled tool still persists the default without taking their key.
+  await section.getByRole('button', { name: '停用', exact: true }).click()
+  await expect(section.getByRole('button', { name: '启用', exact: true })).toBeVisible()
   await section.getByRole('button', { name: '恢复默认' }).click()
+  await expect(input).toHaveValue('Ctrl+Alt+C')
   await expect
-    .poll(() =>
-      app.evaluate(
-        ({ globalShortcut }) =>
-          globalShortcut.isRegistered('Control+Alt+C') &&
-          !globalShortcut.isRegistered('Control+Alt+F9'),
-      ),
-    )
-    .toBe(true)
+    .poll(() => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+F9')))
+    .toBe(false)
   await dock.getByRole('button', { name: '返回', exact: true }).click()
   await dock.screenshot({ path: path.join(profile, 'primary-home.png') })
   console.log(

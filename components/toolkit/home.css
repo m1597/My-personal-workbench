@@ -250,3 +250,32 @@ body:has(.tools-surface) {
 #app:has(.fitbay-settings-shell) .fitbay-settings-content section {
   margin: 8px;
 }
+
+.tools-surface section,
+.fitbay-settings-content section {
+  background: var(--glass);
+  border-color: var(--stroke);
+}
+.fitbay-settings-content :is(input, select, textarea, button) {
+  background-color: var(--control);
+  border-color: var(--stroke);
+  color: var(--text);
+}
+:host(.toolkit-panel):focus {
+  outline: none;
+}
+.fitbay-settings-shell,
+.fitbay-settings-body,
+.fitbay-settings-content {
+  outline: none;
+}
+
+.settings-shortcut {
+  display: flex;
+  gap: var(--space-8, 8px);
+  align-items: end;
+  flex-wrap: wrap;
+}
+.fitbay-settings-content section > button {
+  justify-self: start;
+}

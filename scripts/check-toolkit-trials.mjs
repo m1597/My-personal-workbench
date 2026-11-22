@@ -92,7 +92,7 @@ for file in ('exe-icon.png','window-icon.png','shortcut-icon.png'):
     '屏幕取色',
   ])
   await B('设置').click()
-  await expect(home.getByRole('heading', { name: '屏幕取色' })).toBeVisible()
+  await expect(home.getByRole('region', { name: '屏幕取色' })).toBeVisible()
   await B('返回').click()
   await expect(B('开始取色')).toBeVisible()
   console.log('PASS current desktop entry, three tools and in-pane settings', folder)

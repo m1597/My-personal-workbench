@@ -13,7 +13,7 @@ import {
   safeStorage,
   screen,
 } from 'electron'
-import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
+import { watch, existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
 import { writeFile, readFile, unlink, lstat } from 'node:fs/promises'
 import path from 'node:path'
 import { release } from 'node:os'
@@ -33,9 +33,17 @@ const shared =
 app.setAppUserModelId('io.github.m1597.fitbay.toolkit')
 app.setPath('userData', path.join(shared, 'toolkit'))
 mkdirSync(app.getPath('userData'), { recursive: true })
+let dispatchIntent
+const pendingIntents = []
 if (!app.requestSingleInstanceLock()) {
   app.exit(0)
-} else void app.whenReady().then(startToolkit)
+} else {
+  app.on('second-instance', (_event, argv) => {
+    if (dispatchIntent) dispatchIntent(argv)
+    else pendingIntents.push(argv)
+  })
+  void app.whenReady().then(startToolkit)
+}
 async function startToolkit() {
   nativeTheme.themeSource = 'dark'
   const file = path.join(app.getPath('userData'), 'settings.json')
@@ -80,6 +88,24 @@ async function startToolkit() {
     renameSync(`${file}.tmp`, file)
     cfg = next
   }
+  function material() {
+    try {
+      const m = JSON.parse(readFileSync(path.join(shared, 'workbench-material.json'), 'utf8'))
+      if (
+        ['transparency', 'brightness', 'frost'].every(
+          (k) => Number.isInteger(m[k]) && m[k] >= 0 && m[k] <= 100,
+        )
+      )
+        return m
+    } catch {}
+    return { transparency: 100, brightness: 100, frost: 100 }
+  }
+  const materialWatcher = watch(shared, { persistent: false }, (_, name) => {
+    if (name === 'workbench-material.json' && home && !home.isDestroyed())
+      home.webContents.send('toolkit:material', material())
+  })
+  materialWatcher.on('error', () => materialWatcher.close())
+  app.once('will-quit', () => materialWatcher.close())
   let hosted = process.argv.includes('--fitbay-hosted')
   const backgroundTest = process.env.WORKBENCH_TEST_BACKGROUND === '1'
   function show(data, options = {}, fromHost = hosted) {
@@ -123,6 +149,7 @@ async function startToolkit() {
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     win.webContents.on('will-navigate', (e) => e.preventDefault())
     win.once('closed', () => {
+      if (win === home) standaloneHome = false
       states.get(id)?.abort.abort()
       states.delete(id)
     })
@@ -255,7 +282,12 @@ async function startToolkit() {
     show({ kind: 'result', text }, {}, fromHost)
   }
   function bind(id, key) {
-    if (typeof key !== 'string' || key.length > 80 || !key.includes('+'))
+    if (
+      typeof key !== 'string' ||
+      key.length > 80 ||
+      (!key.includes('+') &&
+        !/^(F(?:[1-9]|1[0-9]|2[0-4])|MediaPlayPause|MediaNextTrack|MediaPreviousTrack)$/.test(key))
+    )
       throw Error('请填写组合键，例如 Control+Alt+S')
     const old = bound.get(id)
     if (old === key) return
@@ -298,9 +330,10 @@ async function startToolkit() {
     settings:
       s.kind === 'home'
         ? {
+            material: material(),
             color: { ...cfg.color },
             capture: { ...cfg.capture },
-            selection: { ...cfg.selection, enabled: bound.has('selection') },
+            selection: { ...cfg.selection },
             notice,
             catalog,
           }
@@ -351,12 +384,43 @@ async function startToolkit() {
     return capture(intent === 'color' ? intent : undefined, s.hosted)
   })
   function setShortcut(v) {
+    if (v?.id === 'defaults') {
+      const before = new Map(bound),
+        next = { ...cfg }
+      for (const key of bound.values()) globalShortcut.unregister(key)
+      bound.clear()
+      try {
+        for (const id of ['capture', 'selection', 'color']) {
+          next[id] = { ...cfg[id], key: defaults[id].key }
+          if (next[id].enabled) bind(id, next[id].key)
+        }
+        persist(next)
+      } catch (error) {
+        for (const key of bound.values()) globalShortcut.unregister(key)
+        bound.clear()
+        for (const [id, key] of before) bind(id, key)
+        throw error
+      }
+      return
+    }
     if (
       !['capture', 'selection', 'color'].includes(v?.id) ||
       typeof v.enabled !== 'boolean' ||
       typeof v.key !== 'string'
     )
       throw Error('无效设置')
+    if (v.field === 'enabled') v = { ...v, key: cfg[v.id].key }
+    if (v.field === 'key') v = { ...v, enabled: cfg[v.id].enabled }
+    if (
+      !v.key ||
+      Object.keys(defaults).some(
+        (id) =>
+          id !== v.id &&
+          cfg[id]?.key?.replace(/^Ctrl\+/i, 'Control+').toLowerCase() ===
+            v.key.replace(/^Ctrl\+/i, 'Control+').toLowerCase(),
+      )
+    )
+      throw Error('快捷键已占用或为空')
     const previous = bound.get(v.id)
     if (v.enabled) bind(v.id, v.key)
     else if (bound.has(v.id)) {
@@ -421,7 +485,7 @@ async function startToolkit() {
       s.win.close()
     }
   })
-  handle('copyMeasuredColor', ['screen'], (s, hex) => {
+  handle('copyMeasuredColor', ['screen'], (_s, hex) => {
     if (!/^#[0-9A-F]{6}$/.test(hex)) throw Error('请先取色')
     return clipboard.writeText(hex)
   })
@@ -547,7 +611,47 @@ async function startToolkit() {
     s.initial = null
     return value
   })
+  let ownerTimer
+  let standaloneHome = false
+  function watchOwner(argv) {
+    clearInterval(ownerTimer)
+    if (!hosted) return
+    const arg = argv.find((value) => /^--fitbay-owner-pid=[1-9]\d*$/.test(value))
+    if (!arg) return
+    const pid = Number(arg.split('=')[1])
+    ownerTimer = setInterval(() => {
+      try {
+        process.kill(pid, 0)
+      } catch (error) {
+        if (error.code !== 'ESRCH') return
+        clearInterval(ownerTimer)
+        if (!standaloneHome || !home || home.isDestroyed()) {
+          app.quit()
+          return
+        }
+        hosted = false
+        states.get(home.webContents.id).hosted = false
+        home.setSkipTaskbar(false)
+        syncTray()
+      }
+    }, 1000)
+    ownerTimer.unref()
+  }
+  app.on('will-quit', () => clearInterval(ownerTimer))
   function openIntent(argv) {
+    if (argv.includes('--toolkit-migrate-connections')) {
+      void connections.snapshot().catch(() => {})
+      return
+    }
+    hosted = argv.includes('--fitbay-hosted')
+    watchOwner(argv)
+    if (hosted) {
+      for (const state of states.values()) {
+        state.hosted = true
+        state.win.setSkipTaskbar(true)
+      }
+    }
+    syncTray()
     const shortcutJob = argv.find((v) => /^--toolkit-page=shortcuts-[0-9a-f-]{36}$/.test(v))
     if (shortcutJob) {
       const file = path.join(shared, 'toolkit', shortcutJob.slice(15))
@@ -565,11 +669,6 @@ async function startToolkit() {
       renameSync(file + '.tmp', file + '.reply')
       return
     }
-    if (argv.includes('--toolkit-migrate-connections')) {
-      void connections.snapshot().catch(() => {})
-      return
-    }
-    hosted = argv.includes('--fitbay-hosted')
     if (argv.includes('--toolkit-page=color')) {
       if (!cfg.color.enabled) {
         fail(Error('请先启用屏幕取色'))
@@ -598,25 +697,36 @@ async function startToolkit() {
         }
         targetTool = { id: batch, tool: targetTool }
       }
+      if (!hosted) standaloneHome = true
       settings()
       home.webContents.send('toolkit:tool-target', targetTool)
     }
   }
-  app.on('second-instance', (_event, argv) => openIntent(argv))
   app.on('will-quit', () => globalShortcut.unregisterAll())
-  const tray = new Tray(path.join(here, 'toolkit.ico'))
-  tray.setToolTip('工具集')
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: '工具集设置', click: settings },
-      { label: '退出工具集', click: () => app.quit() },
-    ]),
-  )
-  tray.on('click', settings)
+  let tray
+  function syncTray() {
+    if (hosted) {
+      tray?.destroy()
+      tray = undefined
+      return
+    }
+    if (tray) return
+    tray = new Tray(path.join(here, 'toolkit.ico'))
+    tray.setToolTip('工具集')
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: '工具集设置', click: () => settings() },
+        { label: '退出工具集', click: () => app.quit() },
+      ]),
+    )
+    tray.on('click', () => settings())
+  }
   app.on('before-quit', () => {
     connections.close()
-    tray.destroy()
+    tray?.destroy()
   })
   app.on('window-all-closed', () => {})
+  dispatchIntent = openIntent
   openIntent(process.argv)
+  for (const argv of pendingIntents.splice(0)) openIntent(argv)
 }

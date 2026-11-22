@@ -137,78 +137,67 @@ function connectionEditor(parent, { api, button, notice, error }) {
 export function settingsContents(s, target, ctx) {
   const { api, button, notice } = ctx
   notice.textContent = s.notice
+  const defaults = { capture: 'Control+Alt+S', selection: 'Control+Alt+T', color: 'Control+Alt+C' }
+  const refreshers = []
+  const sync = (values) => {
+    for (const apply of refreshers) apply(values)
+  }
+  const refresh = async () =>
+    sync(api.shortcutSettings ? await api.shortcutSettings() : (await api.state()).settings)
   for (const [id, title] of [
     ['capture', '屏幕截图'],
     ['selection', '划词助手'],
     ['color', '屏幕取色'],
   ]) {
-    const box = el('section')
-    box.append(el('h2', title))
-    const key = field(box, '全局快捷键', s[id].key),
-      row = el('div', '', 'row')
-    const set = async (enabled) => {
-      await api.enable({ id, enabled, key: key.value.trim() })
-      s[id].enabled = enabled
-      toggle.textContent = enabled ? '停用' : '启用'
-      notice.textContent = enabled ? '已启用 ' + key.value : '已停用'
-    }
-    const toggle = button(s[id].enabled ? '停用' : '启用', () => set(!s[id].enabled))
-    row.append(toggle)
-    if (id !== 'color') row.append(button('应用快捷键', () => set(s[id].enabled)))
-    if (id === 'color') {
-      key.readOnly = true
-      const record = button('录制快捷键', () => {
-        key.placeholder = '按组合键，Esc 取消'
-        key.value = ''
-        key.focus()
-      })
-      key.onblur = () => {
-        if (!key.value) key.value = s[id].key
-      }
-      key.onkeydown = async (e) => {
-        if (e.key === 'Tab') return
-        e.preventDefault()
-        if (e.key === 'Escape') {
-          key.value = s[id].key
-          key.blur()
-          return
-        }
-        const mods = [
-          e.ctrlKey && 'Control',
-          e.altKey && 'Alt',
-          e.shiftKey && 'Shift',
-          e.metaKey && 'Super',
-        ].filter(Boolean)
-        const k = e.code.replace(/^(Key|Digit)/, '')
-        if (!mods.length || !/^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4]))$/.test(k)) return
-        key.value = [...mods, k].join('+')
+    const box = el('section'),
+      host = el('div')
+    const toggle = button(s[id].enabled ? '停用' : '启用', async () => {
+      const enabled = !s[id].enabled
+      await api.enable({ id, key: s[id].key, enabled, field: 'enabled' })
+      await refresh()
+    })
+    const props = () => ({
+      label: title,
+      defaultValue: defaults[id],
+      saved: s[id].key.replace(/^Control\+/, 'Ctrl+'),
+      change: async (key) => {
+        const accelerator = key.replace(/^Ctrl\+/, 'Control+')
         try {
-          await set(s[id].enabled)
-          s[id].key = key.value
-          key.blur()
-        } catch (e) {
-          ctx.error(e)
-          key.value = s[id].key
+          await api.enable({ id, enabled: s[id].enabled, key: accelerator, field: 'key' })
+          await refresh()
+          notice.textContent = '快捷键已保存'
+          return true
+        } catch (error) {
+          ctx.error(error)
+          return false
         }
-      }
-      row.append(
-        record,
-        button('恢复默认', async () => {
-          const old = key.value
-          key.value = 'Control+Alt+C'
-          try {
-            await set(s[id].enabled)
-            s[id].key = key.value
-          } catch (e) {
-            key.value = old
-            throw e
-          }
-        }),
-      )
-    }
-    if (id === 'selection') box.append(el('p', '在阅读器中选中文字，然后按快捷键。'))
-    box.append(row)
+      },
+    })
+    const mount = api.mountRecorder || window.FitBayRecorder.mountRecorder
+    box.setAttribute('aria-label', title)
+    box.append(host, toggle)
     target.append(box)
+    const recorder = mount(host, {
+      ...props(),
+      defaultValue: defaults[id].replace('Control+', 'Ctrl+'),
+    })
+    const update = () =>
+      recorder.render({ ...props(), defaultValue: defaults[id].replace('Control+', 'Ctrl+') })
+    refreshers.push((values) => {
+      s[id] = values[id]
+      toggle.textContent = s[id].enabled ? '停用' : '启用'
+      update()
+    })
   }
+  const reset = el('section')
+  reset.append(
+    button('全部恢复默认快捷键', async () => {
+      await api.enable({ id: 'defaults' })
+      await refresh()
+      notice.textContent = '已恢复默认快捷键'
+    }),
+  )
+  target.append(reset)
   connectionEditor(target, ctx)
+  return refresh
 }

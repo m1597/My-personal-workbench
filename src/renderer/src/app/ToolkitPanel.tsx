@@ -16,8 +16,11 @@ export function ToolkitPanel() {
     const root = document.createElement('main')
     root.id = 'app'
     shadow.replaceChildren(style, root)
-    mountToolkit(root, bridge)
-    return () => shadow.replaceChildren()
+    const dispose = mountToolkit(root, bridge)
+    return () => {
+      dispose()
+      shadow.replaceChildren()
+    }
   }, [])
   return <section ref={container} className="toolkit-panel" aria-label="工具集" />
 }
