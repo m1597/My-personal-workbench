@@ -50,7 +50,7 @@ try {
   }, root)
   await openMusicSettings(page)
   await page.getByRole('button', { name: '添加文件夹' }).click()
-  await page.getByRole('tab', { name: '曲库' }).click()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await expect(page.locator('.library-row')).toHaveCount(3)
   const button = (name) => page.getByRole('button', { name, exact: true })
   await expect(button('我的音乐')).toHaveCount(0)
