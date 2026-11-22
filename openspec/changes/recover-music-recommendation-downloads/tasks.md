@@ -11,5 +11,4 @@
 - [ ] 2.3 验证桌面入口实际下载、歌单播放及安装版与落雪可对照条件。
 - [x] 2.4 运行 openspec validate --all --strict --no-interactive，62 项通过。
 
-
 开发工作树的 Electron 独立 Music 在隐藏、不可聚焦的窗口运行，命令行静音。脚本 scripts/check-recommendation-latency.mjs 的 FITBAY_TEST_SOURCE_RECOVERY=1 模式使用隔离 profile、受控 HTTPS、真实 Worker、音频解码和落盘。证据 tmp/recommendation-latency-TrXiuX/source-recovery.json 显示传输代码 23 后第二个来源成功、单源重新取址成功、两首并发只读一次启用的备用目录，以及真实保存路径不可写的 storage/ENOENT。完整脚本的 tmp/recommendation-latency-p7ktsm 验证用户终止后文件与网络请求数不再增加。开发构建运行 node scripts/build-component-prototype.mjs。真实第三方来源、桌面 CMD 与安装包对照另由联验记录。
