@@ -1,10 +1,11 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useMusicFeedback } from './musicFeedback'
 import { artistsOf, SongCredits, type ArtistCredit } from './SongCredits'
 import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { ArtistPortrait } from './ArtistPortrait'
 import { guardSearchEnter } from './searchSubmit'
 import { Sparkles } from 'lucide-react'
-import { Button, Dropdown, Option, Input } from '@fluentui/react-components'
+import { Button, Input } from '@fluentui/react-components'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { LibraryCatalogPage, useCatalogNavigation } from './LibraryCatalogPage'
 import type { LocalTrack, PlaylistTrack } from './LibraryPane'
@@ -300,9 +301,7 @@ export function NewsTracks({
     <div className="release-track-picker">
       {editions.length > 1 && (
         <Dropdown
-          inlinePopup
           aria-label={playLocal ? '发行版本' : '动态发行版本'}
-          listbox={{ className: 'component-popup' }}
           value={editions.filter((e) => e.id === selected).map(labelEdition)[0] ?? ''}
           placeholder="选择发行版本"
           selectedOptions={selected ? [selected] : []}
@@ -1056,10 +1055,8 @@ export function AlbumEditions({
           发行版本{' '}
           <Dropdown
             id="album-edition-picker"
-            inlinePopup
             aria-label="发行版本"
             className="edition-select"
-            listbox={{ className: 'component-popup' }}
             placeholder="选择发行版本"
             value={choices.filter((c) => c.id === selected).map(labelEdition)[0] ?? ''}
             selectedOptions={selected ? [selected] : []}

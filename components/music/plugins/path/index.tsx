@@ -1,5 +1,6 @@
+import { Dropdown, Option } from '../../../../src/renderer/src/app/SharedDropdown'
 import { useEffect, useRef, useState } from 'react'
-import { Button, Dropdown, Input, Option } from '@fluentui/react-components'
+import { Button, Input } from '@fluentui/react-components'
 import type { PluginProps } from '../../MusicPlugins'
 import { analyze, transitionQueue, type Features } from './analysis'
 import './path.css'
@@ -68,8 +69,6 @@ export default function SongPath({ tracks, activeId, play }: PluginProps) {
         <Dropdown
           id={`song-path-${label}`}
           aria-label={label}
-          inlinePopup
-          listbox={{ className: 'component-popup' }}
           value={track ? `${track.title} · ${track.artist}` : ''}
           selectedOptions={id ? [id] : []}
           onOptionSelect={(_, d) => {

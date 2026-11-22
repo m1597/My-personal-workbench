@@ -1,5 +1,6 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useEffect, useState } from 'react'
-import { Button, Checkbox, Dropdown, Field, Input, Option } from '@fluentui/react-components'
+import { Button, Checkbox, Field, Input } from '@fluentui/react-components'
 
 type CatalogEntry = { id: string; name: string }
 type Installed = CatalogEntry & {
@@ -80,8 +81,6 @@ export function MusicSourcesSettings() {
       {data?.installed.length ? (
         <Field label="当前音乐源">
           <Dropdown
-            inlinePopup
-            listbox={{ className: 'component-popup' }}
             value={active?.name || '选择已导入的源'}
             selectedOptions={data.active ? [data.active] : []}
             disabled={busy}

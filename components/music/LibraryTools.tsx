@@ -1,8 +1,9 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { songRow } from './songRow'
 import { SongCredits } from './SongCredits'
 import { TrackMenu } from './TrackMenu'
 import { useEffect, useState } from 'react'
-import { Button, Dropdown, Option } from '@fluentui/react-components'
+import { Button } from '@fluentui/react-components'
 import { Play } from 'lucide-react'
 import type { LocalTrack } from './LibraryPane'
 import './library-tools.css'
@@ -271,8 +272,6 @@ export function LibraryTools({ refresh }: { refresh: () => Promise<void> }) {
                 {r.options.length ? (
                   <Dropdown
                     aria-label={'为' + r.title + '选择文件'}
-                    inlinePopup
-                    listbox={{ className: 'component-popup' }}
                     selectedOptions={[choices[r.id] || '']}
                     value={r.options.find((o) => o.id === choices[r.id])?.file ?? '暂不更新'}
                     disabled={busy}

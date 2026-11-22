@@ -23,7 +23,7 @@
     "lint": "biome lint --error-on-warnings .",
     "build:app": "electron-vite build",
     "test:interaction": "playwright test && playwright test --config playwright.dev.config.ts",
-    "check": "npm run doctor && npm run format:check && npm run lint && npm run test:doctor && npm run typecheck && npm run build:app && npm run test:interaction",
+    "check": "npm run doctor && npm run lint:dropdown && npm run format:check && npm run lint && npm run test:doctor && npm run typecheck && npm run build:app && npm run test:interaction",
     "test:doctor": "node --test tests/doctor.test.mjs",
     "check:visual": "npm run build && node scripts/visual-check.mjs",
     "dist:win": "npm run build:prototype && node scripts/build-installers.mjs",
@@ -35,7 +35,8 @@
     "check:public-plugins": "node scripts/check-wave-rules-plugins.mjs && node scripts/check-music-tags.mjs --ui",
     "check:offline-plugin": "node scripts/build-song-path.mjs && node scripts/check-song-path.mjs",
     "check:lx": "node scripts/check-lx-redirects.mjs && node scripts/check-lx-music.mjs && node scripts/check-online-stream.mjs && node scripts/check-music-online-search.mjs",
-    "check:prototype": "node scripts/check-workspace-migration.mjs && node scripts/check-component-prototype.mjs && node scripts/check-builtin-modules.mjs && node scripts/check-dock-transitions.mjs"
+    "check:prototype": "node scripts/check-workspace-migration.mjs && node scripts/check-component-prototype.mjs && node scripts/check-builtin-modules.mjs && node scripts/check-dock-transitions.mjs",
+    "lint:dropdown": "eslint src/renderer components --max-warnings 0 --pass-on-unpruned-suppressions"
   },
   "dependencies": {
     "@fluentui/react-components": "9.75.1",
@@ -49,6 +50,9 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@babel/core": "7.29.13",
+    "@babel/eslint-parser": "7.29.13",
+    "@babel/plugin-syntax-typescript": "7.29.7",
     "@biomejs/biome": "2.6.6",
     "@playwright/test": "1.65.0",
     "@types/node": "24.19.2",
@@ -58,6 +62,7 @@
     "electron": "45.2.3",
     "electron-builder": "26.18.0",
     "electron-vite": "6.0.0",
+    "eslint": "9.39.5",
     "koffi": "3.3.7",
     "typescript": "7.0.2",
     "vite": "8.3.6"

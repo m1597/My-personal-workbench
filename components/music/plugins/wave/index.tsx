@@ -1,5 +1,6 @@
+import { Dropdown, Option } from '../../../../src/renderer/src/app/SharedDropdown'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Dropdown, Input, Option } from '@fluentui/react-components'
+import { Button, Input } from '@fluentui/react-components'
 import type { LocalTrack } from '../../LibraryPane'
 import './wave.css'
 
@@ -57,8 +58,6 @@ export default function Waveform({ tracks, activeId, play, audio }: Props) {
         <>
           <Dropdown
             aria-label="分析歌曲"
-            inlinePopup
-            listbox={{ className: 'component-popup' }}
             value={track.title + ' · ' + track.artist}
             selectedOptions={[track.id]}
             onOptionSelect={(_, d) => setPicked(d.optionValue)}

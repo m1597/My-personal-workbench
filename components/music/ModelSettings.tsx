@@ -1,5 +1,6 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useState } from 'react'
-import { Button, Input, Dropdown, Option, Checkbox } from '@fluentui/react-components'
+import { Button, Input, Checkbox } from '@fluentui/react-components'
 export type ModelInfo = {
   active: string
   providers: { id: string; label: string; model: string; hasKey: boolean }[]
@@ -37,8 +38,6 @@ export function ModelSettings({
     >
       <label htmlFor="model-provider">服务商</label>
       <Dropdown
-        inlinePopup
-        listbox={{ className: 'component-popup' }}
         id="model-provider"
         data-guide-anchor="model"
         value={chosen.label}

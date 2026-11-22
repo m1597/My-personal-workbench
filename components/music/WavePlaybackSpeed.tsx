@@ -1,4 +1,5 @@
-import { Button, Dropdown, Option } from '@fluentui/react-components'
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
+import { Button } from '@fluentui/react-components'
 import { useEffect, useState } from 'react'
 
 const speeds = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
@@ -23,8 +24,6 @@ export function WavePlaybackSpeed({ audio }: { audio: HTMLAudioElement | null })
       <Dropdown
         id="wave-speed"
         aria-label="试听倍速"
-        inlinePopup
-        listbox={{ className: 'component-popup' }}
         value={speed + '×'}
         selectedOptions={[String(speed)]}
         disabled={!audio}

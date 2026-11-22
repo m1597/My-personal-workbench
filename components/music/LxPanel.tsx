@@ -1,9 +1,10 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useMusicFeedback } from './musicFeedback'
 import { PublicPlaylists } from './PublicPlaylists'
 import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { SongCredits } from './SongCredits'
 import { useEffect, useRef, useState } from 'react'
-import { Button, Dropdown, Option, Tab, TabList } from '@fluentui/react-components'
+import { Button, Tab, TabList } from '@fluentui/react-components'
 import { DiscoveryInput } from './DiscoveryInput'
 import { guardSearchEnter } from './searchSubmit'
 import { X } from 'lucide-react'
@@ -411,8 +412,6 @@ export function DownloadPane({
                 <label htmlFor="lx-quality">
                   下载音质{' '}
                   <Dropdown
-                    inlinePopup
-                    listbox={{ className: 'component-popup' }}
                     id="lx-quality"
                     size="small"
                     value={quality}

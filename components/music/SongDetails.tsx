@@ -1,3 +1,4 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useMusicFeedback } from './musicFeedback'
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -8,8 +9,6 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
-  Dropdown,
-  Option,
   Tab,
   TabList,
 } from '@fluentui/react-components'
@@ -212,7 +211,6 @@ function Details({
       {song && song.works.length > 1 && (
         <Dropdown
           aria-label="选择作品"
-          inlinePopup
           placeholder="选择作品"
           value={song.works.find((w) => w.id === workId)?.title ?? ''}
           selectedOptions={workId ? [workId] : []}
@@ -260,7 +258,6 @@ function Details({
                       <Dropdown
                         aria-label="加入歌单"
                         size="small"
-                        inlinePopup
                         value="加入歌单"
                         disabled={!!busy}
                         selectedOptions={[]}

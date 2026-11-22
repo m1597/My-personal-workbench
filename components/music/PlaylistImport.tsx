@@ -1,3 +1,4 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useMusicFeedback } from './musicFeedback'
 import { useRef, useState, type DragEvent } from 'react'
 import {
@@ -8,10 +9,8 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
-  Dropdown,
   Field,
   Input,
-  Option,
 } from '@fluentui/react-components'
 import { FileInput } from 'lucide-react'
 import type { LocalTrack } from './LibraryPane'
@@ -185,9 +184,7 @@ export function PlaylistImportDialog({
                   </span>
                   {row.group ? (
                     <Dropdown
-                      inlinePopup
                       aria-label={'选择第 ' + (index + 1) + ' 条的曲目'}
-                      listbox={{ className: 'component-popup' }}
                       value={preview.choices[picks[index]]?.file || '匹配不唯一，选择曲目或跳过'}
                       selectedOptions={[picks[index] || '']}
                       onOptionSelect={(_, d) =>

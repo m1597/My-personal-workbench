@@ -1,5 +1,6 @@
+import { Dropdown, Option } from '../../../../src/renderer/src/app/SharedDropdown'
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Dropdown, Input, Option } from '@fluentui/react-components'
+import { Button, Input } from '@fluentui/react-components'
 import type { LocalTrack } from '../../LibraryPane'
 import './rules.css'
 
@@ -36,8 +37,6 @@ function Choice<K extends string>({
       <Dropdown
         id={id}
         size="small"
-        inlinePopup
-        listbox={{ className: 'component-popup' }}
         value={options[selected]}
         selectedOptions={[selected]}
         onOptionSelect={(_, data) => {
@@ -137,8 +136,6 @@ export default function SmartPlaylists({
       {saved.length > 0 && (
         <Dropdown
           aria-label="已保存规则"
-          inlinePopup
-          listbox={{ className: 'component-popup' }}
           selectedOptions={rule.id ? [rule.id] : []}
           value={saved.find((r) => r.id === rule.id)?.name ?? '新规则'}
           disabled={busy}

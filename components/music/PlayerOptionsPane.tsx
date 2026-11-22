@@ -1,7 +1,8 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import '../../examples/component-host/lyric-groups.css'
 import { useEffect, useEffectEvent, useState } from 'react'
 import type { RefObject } from 'react'
-import { Checkbox, Dropdown, Field, Option } from '@fluentui/react-components'
+import { Checkbox, Field } from '@fluentui/react-components'
 import type { MusicPreferences, PlayerOptions } from './MusicSettings'
 
 async function outputs() {
@@ -100,8 +101,6 @@ export function PlayerOptionsPane({
   const field = (label: string, key: keyof PlayerOptions, items: [string, string][]) => (
     <Field label={label}>
       <Dropdown
-        inlinePopup
-        listbox={{ className: 'component-popup' }}
         value={items.find(([id]) => id === prefs[key])?.[1] ?? '设备已断开，使用系统默认'}
         selectedOptions={[prefs[key]]}
         onOptionSelect={(_, d) => {

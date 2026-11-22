@@ -1,9 +1,10 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useMusicFeedback } from './musicFeedback'
 import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { SongCredits } from './SongCredits'
 import { DiscoveryInput } from './DiscoveryInput'
 import { BackButton } from './BackButton'
-import { Button, Checkbox, Dropdown, Option, Tab, TabList } from '@fluentui/react-components'
+import { Button, Checkbox, Tab, TabList } from '@fluentui/react-components'
 import { useEffect, useRef, useState } from 'react'
 import type { Playlist } from './PlaylistSortMenu'
 import { guardSearchEnter } from './searchSubmit'
@@ -285,8 +286,6 @@ export function PublicPlaylists({
             </Button>
             {importControl(list, loading)}
             <Dropdown
-              inlinePopup
-              listbox={{ className: 'component-popup' }}
               aria-label="加入自己的歌单"
               placeholder="加入自己的歌单"
               selectedOptions={[]}
@@ -387,8 +386,6 @@ export function PublicPlaylists({
           </TabList>
           <div className="public-actions">
             <Dropdown
-              inlinePopup
-              listbox={{ className: 'component-popup' }}
               aria-label="歌单风格"
               selectedOptions={[tag]}
               value={tags.find((t) => t.id === tag)?.name || '全部风格'}

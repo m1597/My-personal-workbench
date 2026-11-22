@@ -425,7 +425,13 @@
 .update-page header {
   padding-bottom: 12px;
 }
-.update-row {
+.update-row,
+.settings-content > [id^="setting-"],
+.settings-content > .component-inventory,
+.settings-content > .api-connections > form,
+.settings-content > .api-connections > div,
+.settings-content > .settings-material {
+  box-sizing: border-box;
   padding: 16px;
   background: var(--control);
   border: 1px solid var(--stroke);

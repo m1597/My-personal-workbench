@@ -1,0 +1,32 @@
+{
+  "components/prompts/FileBrowser.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "components/prompts/PromptConnections.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "components/prompts/component.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "components/toolkit/screen-tools.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "components/toolkit/settings-view.js": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "components/toolkit/tools-view.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  }
+}

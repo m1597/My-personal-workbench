@@ -23,7 +23,7 @@ jobs:
           $npmVersion = (Get-Content package.json | ConvertFrom-Json).packageManager
           npx --yes --package=$npmVersion npm ci
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run unified checks
+      - name: Check shared dropdowns and run unified checks
         shell: pwsh
         run: |
           $npmVersion = (Get-Content package.json | ConvertFrom-Json).packageManager

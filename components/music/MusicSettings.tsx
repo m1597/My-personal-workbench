@@ -1,9 +1,10 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { SettingsShell } from '../../src/renderer/src/app/ComponentSettings'
 import { ConnectionSettings } from '../../src/renderer/src/app/ConnectionSettings'
 import { ShortcutRecorder } from '../../src/renderer/src/app/ShortcutRecorder'
 import { MusicMcpSettings } from './MusicMcpSettings'
 import { useEffect, useState } from 'react'
-import { Button, Checkbox, Dropdown, Field, Option } from '@fluentui/react-components'
+import { Button, Checkbox, Field } from '@fluentui/react-components'
 import { ModelSettings, type ModelInfo } from './ModelSettings'
 import { LibraryCleanup } from './LibraryCleanup'
 import { LibraryTools } from './LibraryTools'
@@ -236,8 +237,6 @@ export function MusicSettings({
     return (
       <Field label={label}>
         <Dropdown
-          inlinePopup
-          listbox={{ className: 'component-popup' }}
           value={options[value]}
           selectedOptions={[value]}
           onOptionSelect={(_, d) => {
@@ -343,8 +342,6 @@ export function MusicSettings({
             })}
             <Field label="下载音质">
               <Dropdown
-                inlinePopup
-                listbox={{ className: 'component-popup' }}
                 value={prefs.quality}
                 selectedOptions={[prefs.quality]}
                 onOptionSelect={(_, d) => {

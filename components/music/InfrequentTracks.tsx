@@ -1,3 +1,4 @@
+import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { songRow } from './songRow'
 import { SongCredits } from './SongCredits'
 import { TrackMenu } from './TrackMenu'
@@ -11,8 +12,6 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
-  Dropdown,
-  Option,
 } from '@fluentui/react-components'
 import { Play, Pause } from 'lucide-react'
 import type { LocalTrack } from './LibraryPane'
@@ -82,12 +81,10 @@ export function InfrequentTracks({ rows, days, changeDays, active, playing, play
           未收听时间
           <Dropdown
             id="infrequent-days"
-            inlinePopup
             aria-label="未收听时间"
             size="small"
             value={days + ' 天'}
             selectedOptions={[String(days)]}
-            listbox={{ className: 'component-popup' }}
             onOptionSelect={(_, d) => {
               if (d.optionValue) {
                 changeDays(Number(d.optionValue))

@@ -1,4 +1,5 @@
-import { Dropdown, Field, Option } from '@fluentui/react-components'
+import { Dropdown, Option } from './SharedDropdown'
+import { Field } from '@fluentui/react-components'
 
 export function WorkbenchChoice<T extends string>({
   label,
@@ -16,8 +17,6 @@ export function WorkbenchChoice<T extends string>({
   return (
     <Field label={label}>
       <Dropdown
-        inlinePopup
-        listbox={{ className: 'component-popup workbench-options' }}
         value={text(value)}
         selectedOptions={[value]}
         onOptionSelect={(_, data) => {
