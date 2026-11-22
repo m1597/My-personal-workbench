@@ -1,3 +1,4 @@
+import { ShortcutRecorder } from '../../src/renderer/src/app/ShortcutRecorder'
 import { BackButton } from '../music/BackButton'
 import { SettingsGear, SettingsShell } from '../../src/renderer/src/app/ComponentSettings'
 import { WindowNewRegular } from '@fluentui/react-icons'
@@ -17,6 +18,7 @@ type State = {
   paletteRoot: string
   root: string
   defaultRoot: string
+  shortcutEnabled: boolean
   shortcut: string
   registrationError: string
 }
@@ -36,7 +38,7 @@ declare global {
       state(): Promise<State>
       choose(remember: boolean): Promise<void>
       default(): Promise<void>
-      shortcut(value: string): Promise<void>
+      shortcut(value: string, enabled?: boolean): Promise<State>
       organize(root: string, name: string): Promise<string>
       saveOrganized(root: string, text: string): Promise<string>
       catalogue(query: string): Promise<Card[]>
@@ -53,6 +55,7 @@ declare global {
   }
 }
 configureBackdrop()
+const defaultShortcut = 'Control+Alt+Shift+P'
 const api = window.promptLibrary
 const message = (e: unknown) => String(e).replace(/^.*Error: /, '')
 function Palette() {
@@ -175,10 +178,10 @@ function Library() {
     [directoryIssue, setDirectoryIssue] = useState(''),
     [fileIssue, setFileIssue] = useState(''),
     [notice, say] = useState(''),
-    [hot, setHot] = useState(''),
     [label, setLabel] = useState(''),
     [kind, setKind] = useState<'text' | 'image'>('text'),
     [tick, refresh] = useState(0),
+    [shortcutReset, setShortcutReset] = useState(0),
     [dock, setDock] = useState(false),
     [settings, setSettings] = useState(false),
     [category, setCategory] = useState('directory'),
@@ -199,6 +202,37 @@ function Library() {
   const dirty = !!doc && draft !== doc.text
   const live = useRef({ name, doc, draft, root: fileRoot })
   live.current = { name, doc, draft, root: fileRoot }
+  const settingsPage = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const content = settingsPage.current?.querySelector('.fitbay-settings-content')
+    if (!settings || !content) return
+    function focusControl() {
+      const selector =
+        category === 'shortcut'
+          ? 'input[type=checkbox]'
+          : 'button:not(:disabled), input:not(:disabled), select:not(:disabled)'
+      const control = content?.querySelector<HTMLElement>(selector)
+      control?.focus()
+      return !!control
+    }
+    if (focusControl()) return
+    const observer = new MutationObserver(() => {
+      if (focusControl()) observer.disconnect()
+    })
+    observer.observe(content, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [settings, category])
+  async function changeShortcut(key: string, enabled?: boolean) {
+    try {
+      await api.shortcut(key, enabled)
+      setState(await api.state())
+      say('快捷键已保存')
+      return true
+    } catch (e) {
+      say(message(e))
+      return false
+    }
+  }
   const update = () => refresh((n) => n + 1)
   const attempt = async (fn: () => Promise<unknown>) => {
     try {
@@ -242,7 +276,6 @@ function Library() {
       const s = await api.state()
       if (!valid) return
       setState(s)
-      setHot((previous) => previous || s.shortcut)
     })
     return () => {
       valid = false
@@ -379,7 +412,7 @@ function Library() {
   return (
     <ComponentTheme surface={dock ? 'embedded' : 'window'}>
       {settings && (
-        <main className="library prompt-settings">
+        <main ref={settingsPage} className="library prompt-settings">
           <SettingsShell
             title="提示词库设置"
             categories={[
@@ -415,26 +448,39 @@ function Library() {
                     设置调用目录
                   </button>
                 </div>
-                <label>
-                  快捷键
-                  <input value={hot} onChange={(e) => setHot(e.target.value)} />
-                </label>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void attempt(async () => {
-                      await api.shortcut(hot)
-                      update()
-                      say('快捷键已保存')
-                    })
-                  }
-                >
-                  应用快捷键
-                </button>
+                {state && (
+                  <>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={state.shortcutEnabled}
+                        onChange={(e) => void changeShortcut(state.shortcut, e.target.checked)}
+                      />
+                      启用全局快捷键
+                    </label>
+                    <ShortcutRecorder
+                      key={shortcutReset}
+                      label="调用提示词"
+                      saved={state.shortcut}
+                      defaultValue={defaultShortcut}
+                      change={(key) => changeShortcut(key.replace(/^Ctrl\+/, 'Control+'))}
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (await changeShortcut(defaultShortcut)) setShortcutReset((v) => v + 1)
+                      }}
+                    >
+                      恢复组件全部快捷键
+                    </button>
+                  </>
+                )}
               </>
             )}
             {category === 'api' && <PromptConnectionSettings />}
-            {category !== 'api' && <small role="status">{notice}</small>}
+            {category !== 'api' && (
+              <small role="status">{notice || state?.registrationError}</small>
+            )}
           </SettingsShell>
         </main>
       )}

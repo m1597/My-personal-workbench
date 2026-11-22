@@ -36,7 +36,13 @@ export async function promptLibrary(profile, changed) {
   }
   const file = path.join(profile, 'prompt-library', 'catalogue-preferences.json')
   await mkdir(path.dirname(file), { recursive: true })
-  let prefs = { defaultRoot: '', shortcut: 'Control+Alt+Shift+P', favorites: [], paletteRoot: '' }
+  let prefs = {
+    shortcutEnabled: true,
+    defaultRoot: '',
+    shortcut: 'Control+Alt+Shift+P',
+    favorites: [],
+    paletteRoot: '',
+  }
   let preferenceError = ''
   try {
     const stored = JSON.parse(await readFile(file, 'utf8'))
@@ -49,6 +55,7 @@ export async function promptLibrary(profile, changed) {
     prefs = {
       defaultRoot: stored.defaultRoot,
       shortcut: stored.shortcut,
+      shortcutEnabled: stored.shortcutEnabled !== false,
       favorites: Array.isArray(stored.favorites)
         ? stored.favorites.filter((p) => typeof p === 'string' && path.isAbsolute(p))
         : [],
@@ -174,8 +181,11 @@ export async function promptLibrary(profile, changed) {
   }
   monitor()
   function preference(key, value) {
+    return preferences({ [key]: value })
+  }
+  function preferences(changes) {
     const work = pending.then(async () => {
-      const next = { ...prefs, [key]: value }
+      const next = { ...prefs, ...changes }
       await atomicWrite(file, JSON.stringify(next))
       preferenceError = ''
       prefs = next
@@ -251,7 +261,7 @@ export async function promptLibrary(profile, changed) {
       monitor()
       refresh()
     },
-    shortcut: (value) => preference('shortcut', value),
+    shortcut: (shortcut, shortcutEnabled) => preferences({ shortcut, shortcutEnabled }),
     files: () => files(root),
     async catalogue(query = '') {
       if (typeof query !== 'string' || query.length > 4096) throw Error('搜索文字过长')

@@ -88,14 +88,34 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     show(panel)
     panel.webContents.send('prompt:focus')
   }
-  function register(value) {
+  function validateKey(value) {
+    if (value === '') return
+    if (typeof value !== 'string' || value.length > 100) throw Error('无效快捷键')
+    const parts = value.split('+')
+    const key = parts.pop()
     if (
-      typeof value !== 'string' ||
-      !/^(?:(?:Control|Alt|Shift|Super|CommandOrControl)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space)$/i.test(
-        value,
-      )
+      parts.some(
+        (part) => !['Control', 'Ctrl', 'CommandOrControl', 'Alt', 'Shift', 'Super'].includes(part),
+      ) ||
+      new Set(parts).size !== parts.length
     )
-      throw Error('请输入带修饰键的快捷键，例如 Control+Alt+P')
+      throw Error('无效修饰键')
+    if (/^(?:F(?:[1-9]|1\d|2[0-4])|MediaPlayPause|MediaNextTrack|MediaPreviousTrack)$/.test(key))
+      return
+    if (
+      !parts.length ||
+      !/^(?:[A-Z0-9]|Space|Up|Down|Left|Right|Home|End|PageUp|PageDown|Insert|Delete)$/.test(key)
+    )
+      throw Error('请选择组合键或功能键')
+  }
+  function register(value) {
+    if (!value) {
+      if (active) globalShortcut.unregister(active)
+      active = ''
+      registrationError = ''
+      return
+    }
+    validateKey(value)
     if (active === value) return
     if (!globalShortcut.register(value, () => void summon().catch(console.error)))
       throw Error('快捷键已被占用，请换一个组合')
@@ -112,7 +132,7 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
       }
     }
     try {
-      register(library.state().shortcut)
+      if (library.state().shortcutEnabled) register(library.state().shortcut)
     } catch (e) {
       registrationError = e.message
     }
@@ -261,17 +281,25 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     if (!result.canceled) await library.select(result.filePaths[0], remember)
   })
   handle('default', 'editor', () => library.select(library.state().defaultRoot, false))
-  handle('shortcut', 'editor', async (value) => {
-    const old = active
-    register(value)
-    try {
-      await library.shortcut(value)
-    } catch (e) {
-      globalShortcut.unregister(value)
-      active = ''
-      if (old) register(old)
-      throw e
-    }
+  let shortcutWrite = Promise.resolve()
+  handle('shortcut', 'editor', (value, enabled) => {
+    const work = shortcutWrite.then(async () => {
+      if (disposed) throw Error('提示词库已关闭')
+      const nextEnabled = enabled === undefined ? library.state().shortcutEnabled : enabled
+      validateKey(value)
+      if (typeof nextEnabled !== 'boolean') throw Error('启停状态无效')
+      const old = active
+      register(nextEnabled ? value : '')
+      try {
+        await library.shortcut(value, nextEnabled)
+      } catch (e) {
+        if (!disposed) register(old)
+        throw e
+      }
+      return library.state()
+    })
+    shortcutWrite = work.catch(() => {})
+    return work
   })
   handle('batch', 'editor', async (tool, items) => {
     if (!['rename', 'resize'].includes(tool)) throw Error('未知批量工具')
