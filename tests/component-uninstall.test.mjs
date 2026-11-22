@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, realpath, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
 import test from 'node:test'
@@ -11,7 +11,7 @@ for (const [id, slot] of Object.entries({
   toolkit: 'Toolkit',
 })) {
   test('registered uninstall preserves ' + slot + ' location and unrelated files', async (t) => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'fitbay uninstall '))
+    const directory = await mkdtemp(path.join(await realpath(tmpdir()), 'fitbay uninstall '))
     t.after(() => rm(directory, { recursive: true, force: true }))
     const root = path.join(directory, 'resources', 'app')
     const file = path.join(directory, 'Uninstall FitBay ' + slot + '.exe')
