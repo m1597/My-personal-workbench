@@ -1,7 +1,9 @@
-.music-settings .fui-Checkbox:has(#music-keys-app:focus, #music-keys-global:focus),
-.music-settings:focus {
+.music-settings .fui-Checkbox:has(#music-keys-app:focus, #music-keys-global:focus) {
   outline: 2px solid var(--colorBrandStroke1);
   outline-offset: -2px;
+}
+.music-settings:focus {
+  outline: none;
 }
 .music-settings {
   width: 100%;
