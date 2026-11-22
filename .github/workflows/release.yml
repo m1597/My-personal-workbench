@@ -73,6 +73,12 @@ jobs:
           $installer = Join-Path $baseline "FitBay-Prompts-Setup-$previous-x64.exe"
           $process = Start-Process $installer -ArgumentList '/S /currentuser' -Wait -PassThru -WindowStyle Hidden
           if ($process.ExitCode) { throw 'Could not restore previous Prompts for batch upgrade' }
+          # The previous public host has no batch UI. Keep the candidate host code and
+          # seed its installed version marker so its own real installer is also offered.
+          $hostMetadata = Join-Path $root 'resources/app/package.json'
+          $hostPackage = Get-Content -Raw -LiteralPath $hostMetadata | ConvertFrom-Json
+          $hostPackage.version = $previous
+          [IO.File]::WriteAllText($hostMetadata, ($hostPackage | ConvertTo-Json -Depth 100))
           node scripts/check-settings-installation.mjs $root --candidate --batch $previous
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-upgrade-data.mjs verify (Join-Path $root 'Music')

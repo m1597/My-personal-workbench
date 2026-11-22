@@ -140,6 +140,30 @@ try {
       assert.equal(downloads.get(assetName(product)), product === 'Prompts' ? 2 : 1)
     }
     assert.equal(downloads.size, products.length)
+    const hostFile = path.join(root, 'resources/app/package.json')
+    assert.equal(JSON.parse(await readFile(hostFile, 'utf8')).version, previous)
+    await batch.click()
+    const exited = app.waitForEvent('close', { timeout: 150000 })
+    await confirmation.getByRole('button', { name: /确认更新全部|Confirm/i }).click()
+    await exited
+    app = undefined
+    await expect
+      .poll(
+        async () => {
+          try {
+            return JSON.parse(await readFile(hostFile, 'utf8')).version
+          } catch {
+            return undefined
+          }
+        },
+        { timeout: 240000 },
+      )
+      .toBe(version)
+    assert.equal(downloads.get(assetName('Workbench')), 1)
+    for (const product of products) await verifyDisk(product, version)
+    console.log(
+      'PASS existing host leaves failed batch pending, then upgrades silently using its verified installer',
+    )
     console.log(
       'PASS batch cancel, single confirmation, digest failure isolation and single-product retry',
     )
