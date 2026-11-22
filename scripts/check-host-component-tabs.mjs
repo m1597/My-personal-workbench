@@ -153,7 +153,7 @@ try {
   function near(a, b) {
     assert(Math.abs(a - b) < 0.05)
   }
-  for (const [state, groups] of Object.entries(records)) {
+  for (const groups of Object.values(records)) {
     const music = groups.flatMap((g) => g.tabs).find((t) => t.id === 'component-music')
     for (const g of groups) {
       near(g.bar.h, 38)

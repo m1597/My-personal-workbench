@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
 
-type Size = { panel: string; axis: 'width' | 'height'; fraction: number }
-type Entry = { panels: string[]; sizes: Size[] }
+type Size = { group: string; axis: 'width' | 'height'; fraction: number }
+type Entry = { groups: string[]; sizes: Size[] }
 const key = 'workbench.edgeCollapse.v1'
 function readHistory(): Entry[] {
   try {
@@ -10,13 +10,13 @@ function readHistory(): Entry[] {
     return Array.isArray(value)
       ? value.filter(
           (item) =>
-            Array.isArray(item?.panels) &&
-            item.panels.every((p) => typeof p === 'string') &&
+            Array.isArray(item?.groups) &&
+            item.groups.every((p) => typeof p === 'string') &&
             Array.isArray(item.sizes) &&
             item.sizes.every(
               (s) =>
                 s &&
-                typeof s.panel === 'string' &&
+                typeof s.group === 'string' &&
                 ['width', 'height'].includes(s.axis) &&
                 Number.isFinite(s.fraction),
             ),
@@ -40,11 +40,13 @@ export function useEdgeCollapse(api?: DockviewApi) {
     if (!api) return
     let cancelDrag: (() => void) | undefined
     function start(event: PointerEvent) {
-      const sash = event.target instanceof Element && event.target.closest('.dv-sash.dv-enabled')
-      const split = sash && sash.parentElement?.parentElement
+      const sash =
+        event.target instanceof Element ? event.target.closest('.dv-sash.dv-enabled') : null
+      const handles = sash?.parentElement
+      const split = handles?.parentElement
       if (!sash || !split || event.button !== 0 || !api) return
       const views = split.querySelectorAll(':scope > .dv-view-container > .dv-view')
-      const index = Array.from(sash.parentElement!.children).indexOf(sash)
+      const index = Array.from(handles.children).indexOf(sash)
       if (!views[index] || !views[index + 1]) return
       const box = split.getBoundingClientRect()
       const handle = sash.getBoundingClientRect()
@@ -54,7 +56,8 @@ export function useEdgeCollapse(api?: DockviewApi) {
       // Dockview distributes each sash gap across its siblings before painting their DOM bounds.
       const sizes = Array.from(split.querySelectorAll<HTMLElement>('.dv-sash-container')).flatMap(
         (sashes) => {
-          const parent = sashes.parentElement!
+          const parent = sashes.parentElement
+          if (!parent) return []
           const bar = sashes.querySelector('.dv-sash.dv-enabled')?.getBoundingClientRect()
           if (!bar) return []
           const axis: 'width' | 'height' = bar.height > bar.width ? 'width' : 'height'
@@ -67,9 +70,9 @@ export function useEdgeCollapse(api?: DockviewApi) {
               children.reduce((sum, child) => sum + child.getBoundingClientRect()[axis], 0)) /
             children.length
           return children.flatMap((child) => {
-            const panel = visible.find((g) => child.contains(g.element))?.panels[0]?.id
-            return panel
-              ? [{ panel, axis, fraction: (child.getBoundingClientRect()[axis] + gap) / api[axis] }]
+            const group = visible.find((g) => child.contains(g.element))?.id
+            return group
+              ? [{ group, axis, fraction: (child.getBoundingClientRect()[axis] + gap) / api[axis] }]
               : []
           })
         },
@@ -92,17 +95,18 @@ export function useEdgeCollapse(api?: DockviewApi) {
           return
         const hidden = visible.filter((group) => side.some((view) => view.contains(group.element)))
         if (!hidden.length || hidden.length === visible.length) return
-        hidden.forEach((group) => group.api.setVisible(false))
-        const panels = hidden.flatMap((g) => g.panels.map((p) => p.id))
+        for (const group of hidden) group.api.setVisible(false)
+        const groups = hidden.map((g) => g.id)
         setHistory((items) => [
-          ...items.filter((item) => !item.panels.some((id) => panels.includes(id))),
-          { panels, sizes },
+          ...items.filter((item) => !item.groups.some((id) => groups.includes(id))),
+          { groups, sizes },
         ])
       }
-      cancelDrag = () => {
+      const cleanup = () => {
         window.removeEventListener('pointerup', end)
-        window.removeEventListener('pointercancel', cancelDrag!)
+        window.removeEventListener('pointercancel', cleanup)
       }
+      cancelDrag = cleanup
       window.addEventListener('pointerup', end)
       window.addEventListener('pointercancel', cancelDrag)
     }
@@ -113,16 +117,19 @@ export function useEdgeCollapse(api?: DockviewApi) {
     }
   }, [api])
   return history.flatMap((item) => {
-    const panels = item.panels.flatMap((id) => api?.getPanel(id) ?? [])
-    if (!api || !panels.some((p) => !p.group.api.isVisible)) return []
+    const groups = item.groups.flatMap((id) => api?.getGroup(id) ?? [])
+    if (!api || !groups.some((g) => !g.api.isVisible)) return []
     return [
       {
-        panels: item.panels,
-        names: panels.map((p) => p.title).join('、'),
+        id: item.groups.join('|'),
+        panels: groups.flatMap((g) => g.panels.map((p) => p.id)),
+        names: groups
+          .flatMap((g) => (g.panels.length ? g.panels.map((p) => p.title) : ['快速开始']))
+          .join('、'),
         restore() {
-          for (const group of new Set(panels.map((p) => p.group))) group.api.setVisible(true)
-          for (const { panel, axis, fraction } of item.sizes)
-            api.getPanel(panel)?.group.api.setSize({ [axis]: api[axis] * fraction })
+          for (const group of groups) group.api.setVisible(true)
+          for (const { group, axis, fraction } of item.sizes)
+            api.getGroup(group)?.api.setSize({ [axis]: api[axis] * fraction })
           setHistory((items) => items.filter((i) => i !== item))
         },
       },

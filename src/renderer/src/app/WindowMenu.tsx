@@ -327,8 +327,8 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
         </MenuTrigger>
         <MenuPopover className="component-popup workbench-menu">
           <MenuList>
-            {collapsed.map((entry, index) => (
-              <MenuItem key={index} onClick={entry.restore}>
+            {collapsed.map((entry) => (
+              <MenuItem key={entry.id} onClick={entry.restore}>
                 {t('恢复分屏', 'Restore split')} · {entry.names}
               </MenuItem>
             ))}
