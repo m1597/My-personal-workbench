@@ -58,7 +58,7 @@ export async function registeredProduct(id) {
   const name = names[id]
   try {
     const directory = installDirectory(name)
-    return productAt(directory, id)
+    return productAt(directory, id, true)
   } catch {
     return undefined
   }
@@ -81,5 +81,5 @@ export async function installedProducts(applicationRoot) {
     }
     return registeredProduct(id)
   }
-  return { product, find }
+  return { product, find, registered: registeredProduct }
 }

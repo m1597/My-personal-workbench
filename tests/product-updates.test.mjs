@@ -4,7 +4,12 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { selectUpdate, saveInstaller } from '../examples/component-host/product-updates.mjs'
+import {
+  selectUpdate,
+  saveInstaller,
+  products,
+  updateCatalog,
+} from '../examples/component-host/product-updates.mjs'
 
 const name = 'FitBay-Music-Setup-0.10.0-x64.exe'
 const data = Buffer.from('installer fixture')
@@ -38,4 +43,37 @@ test('rejects damaged installer and cleans partial file before retry', async () 
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('batch keeps the host alive after a component failure and retries only that component', async () => {
+  const versions = new Map(Object.keys(products).map((id) => [id, '0.9.0']))
+  const launches = []
+  let fail = true
+  const assets = Object.values(products).map((label) => ({
+    ...asset,
+    name: name.replace('Music', label),
+    browser_download_url: asset.browser_download_url.replace('Music', label),
+  }))
+  const service = updateCatalog({
+    inventory: async () =>
+      Array.from(versions, ([id, version]) => ({ id, version, installable: true })),
+    request: async () => Response.json({ ...release, assets }),
+    launch: async (update, id, report) => {
+      launches.push(id)
+      report('installing')
+      if (id === 'prompts' && fail) throw Error()
+      versions.set(id, update.version)
+    },
+  })
+  await service.check()
+  await service.installAll()
+  assert.deepEqual(launches, ['music', 'prompts', 'toolkit'])
+  assert.equal(
+    (await service.snapshot()).rows.find((row) => row.id === 'prompts').operation.stage,
+    'failed',
+  )
+  fail = false
+  await service.install('prompts')
+  await service.installAll()
+  assert.deepEqual(launches, ['music', 'prompts', 'toolkit', 'prompts', 'workbench'])
 })

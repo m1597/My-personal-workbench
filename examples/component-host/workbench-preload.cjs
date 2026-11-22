@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('fitbayConnections', {
 })
 contextBridge.exposeInMainWorld('fitbayComponentSetup', {
   list: () => ipcRenderer.invoke('component-setup:list'),
+  uninstall: (id) => ipcRenderer.invoke('component-setup:uninstall', id),
   install: (id) => ipcRenderer.invoke('component-setup:install', id),
 })
 let updatePageListener
@@ -15,6 +16,7 @@ ipcRenderer.on('updates:open', () => {
 })
 contextBridge.exposeInMainWorld('fitbayUpdates', {
   snapshot: () => ipcRenderer.invoke('updates:snapshot'),
+  installAll: () => ipcRenderer.invoke('updates:installAll'),
   check: (id) => ipcRenderer.invoke('updates:check', id),
   install: (id) => ipcRenderer.invoke('updates:install', id),
   onOpen: (callback) => {

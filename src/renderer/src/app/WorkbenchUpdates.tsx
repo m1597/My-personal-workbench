@@ -12,6 +12,7 @@ export type UpdateState = {
     version: string
     available: string | null
     status: Status
+    operation?: { stage: string; progress?: number }
     installable: boolean
   }[]
 }
@@ -20,6 +21,7 @@ declare global {
     fitbayUpdates?: {
       snapshot(): Promise<UpdateState>
       check(id?: string): Promise<UpdateState>
+      installAll(): Promise<void>
       install(id: string): Promise<void>
       onOpen(fn: () => void): () => void
       onState(fn: (state: UpdateState) => void): () => void
@@ -29,6 +31,7 @@ declare global {
 export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
   const t = useTranslation()
   const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState(false)
   const [error, setError] = useState('')
   const api = window.fitbayUpdates
   async function run(action: () => Promise<unknown>) {
@@ -61,7 +64,33 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
         <Button disabled={busy || !api} onClick={() => api && void run(() => api.check())}>
           {t('检查全部更新', 'Check all updates')}
         </Button>
+        {state?.rows.some((r) => r.installable && r.status === 'available') && (
+          <Button disabled={busy} onClick={() => setConfirm(true)}>
+            {t('更新全部', 'Update all')}
+          </Button>
+        )}
       </header>
+      {confirm && (
+        <div role="group" aria-label="确认批量更新">
+          <p>
+            确认更新{' '}
+            {state?.rows
+              .filter((r) => r.installable && r.status === 'available')
+              .map((r) => r.name)
+              .join('、')}
+            ？工作台最后更新。
+          </p>
+          <Button
+            onClick={() => {
+              setConfirm(false)
+              if (api) void run(() => api.installAll())
+            }}
+          >
+            确认更新全部
+          </Button>
+          <Button onClick={() => setConfirm(false)}>取消</Button>
+        </div>
+      )}
 
       {!api && (
         <p>{t('当前启动方式未连接更新服务', 'Update service unavailable in this launch mode')}</p>
@@ -77,6 +106,7 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
                 available: null,
                 status: 'unsupported' as const,
                 installable: false,
+                operation: undefined,
               },
             ]
           : [])
@@ -88,6 +118,18 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
               {t('已安装版本', 'Installed version')} {row.version} · {labels[row.status]}
               {row.available && ' · ' + t('可用版本', 'Available version') + ' ' + row.available}
             </p>
+            {row.operation && (
+              <p role="status">
+                {
+                  {
+                    downloading: '下载并校验 ' + (row.operation.progress ?? 0) + '%',
+                    installing: '正在安装',
+                    done: '已完成',
+                    failed: '更新失败，可单项重试',
+                  }[row.operation.stage]
+                }
+              </p>
+            )}
           </div>
           <div className="update-actions">
             {api && row.status !== 'unsupported' && (
@@ -97,7 +139,10 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
             )}
             {row.status === 'available' && api && row.installable && (
               <Button disabled={busy} onClick={() => void run(() => api.install(row.id))}>
-                {t('更新', 'Update')} {row.name}
+                {row.operation?.stage === 'failed'
+                  ? t('重试更新', 'Retry update')
+                  : t('更新', 'Update')}{' '}
+                {row.name}
               </Button>
             )}
           </div>

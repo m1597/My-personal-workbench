@@ -1,11 +1,12 @@
 import { execFile } from 'node:child_process'
-import { readFile, rm } from 'node:fs/promises'
+import { readFile, realpath, rm, rmdir } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { latestRelease, releaseInstaller, saveInstaller } from './product-updates.mjs'
+import { latestRelease, releaseInstaller, saveInstaller, products } from './product-updates.mjs'
 
-const components = ['music', 'prompts', 'toolkit']
-export function componentInstallation(installation, temp, request) {
+const components = Object.keys(products).filter((id) => id !== 'workbench')
+export const executeInstaller = promisify(execFile)
+export function componentInstallation(installation, temp, request, execute = executeInstaller) {
   const states = new Map()
   let active
   async function version(id) {
@@ -18,13 +19,17 @@ export function componentInstallation(installation, temp, request) {
       components.map(async (id) => {
         const installed = await version(id)
         const state = states.get(id)
-        if (active === id || (state?.repair && installed !== state.target))
+        if (
+          active === id ||
+          (installed && state?.stage === 'uninstalling') ||
+          (state?.repair && installed !== state.target)
+        )
           return { id, ...state, busy: !!active }
         return {
           id,
           ...(installed
             ? { status: 'installed', version: installed }
-            : state || { status: 'missing' }),
+            : (state?.stage !== 'uninstalling' && state) || { status: 'missing' }),
           busy: !!active,
         }
       }),
@@ -50,7 +55,7 @@ export function componentInstallation(installation, temp, request) {
       file = await saveInstaller(asset, temp, request, (progress) => set(stage, { progress }))
       stage = 'installing'
       set(stage)
-      await promisify(execFile)(file, ['/S', '/currentuser'], { windowsHide: true })
+      await execute(file, ['/S', '/currentuser'], { windowsHide: true })
       if ((await version(id)) !== asset.version) throw Error('Installation not detected')
     } catch {
       set('failed', { stage, target, repair: retryInstall || stage === 'installing' })
@@ -63,5 +68,47 @@ export function componentInstallation(installation, temp, request) {
       }
     }
   }
-  return { list, install }
+  async function uninstall(id) {
+    if (installation?.product !== 'workbench' || !components.includes(id) || active)
+      throw Error('Unavailable')
+    active = id
+    states.set(id, { status: 'uninstalling' })
+    try {
+      const root = await installation.find(id)
+      const registered = await installation.registered(id)
+      if (!root || !registered || path.relative(root, registered))
+        throw Error('Missing registered installation')
+      const directory = path.resolve(root, '../..')
+      const file = path.join(directory, 'Uninstall FitBay ' + products[id] + '.exe')
+      if (path.relative(file, await realpath(file))) throw Error('Invalid uninstaller')
+      await execute(
+        path.join(process.env.SystemRoot, 'System32', 'reg.exe'),
+        [
+          'add',
+          String.raw`HKCU\Software\FitBay\PreviousInstallations`,
+          '/v',
+          products[id],
+          '/t',
+          'REG_SZ',
+          '/d',
+          directory,
+          '/f',
+          '/reg:64',
+        ],
+        { windowsHide: true },
+      )
+      await execute(file, ['/S', '/currentuser', '_?=' + directory], { windowsHide: true })
+      if (await version(id)) throw Error('Uninstall failed')
+      await rm(file, { force: true })
+      await rmdir(directory).catch((error) => {
+        if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error
+      })
+      states.delete(id)
+    } catch {
+      states.set(id, { status: 'failed', stage: 'uninstalling' })
+    } finally {
+      active = undefined
+    }
+  }
+  return { list, install, uninstall }
 }

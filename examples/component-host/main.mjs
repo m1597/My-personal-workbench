@@ -5,9 +5,9 @@ import {
   toolkitLauncher,
   installedToolkitRoot,
 } from './toolkit-launcher.mjs'
-import { componentInstallation } from './component-installation.mjs'
+import { componentInstallation, executeInstaller } from './component-installation.mjs'
 import { installMusic } from './music-installer.mjs'
-import { updateCatalog, saveInstaller, productUpdater } from './product-updates.mjs'
+import { updateCatalog, saveInstaller, productUpdater, supportsUpdate } from './product-updates.mjs'
 import { installedProducts, registeredProduct } from './installed-products.mjs'
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
@@ -29,7 +29,7 @@ import {
   nativeImage,
 } from 'electron'
 import { readFileSync, writeFileSync, renameSync } from 'node:fs'
-import { access, realpath } from 'node:fs/promises'
+import { access, realpath, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { componentView } from './component-view.mjs'
@@ -485,9 +485,23 @@ else {
         if (!isShell(event)) throw Error('DENIED')
         return componentSetup.list()
       })
+      let modifyingProducts = false
+      async function modifyProducts(action) {
+        if (modifyingProducts) throw Error('已有安装操作正在进行')
+        modifyingProducts = true
+        try {
+          return await action()
+        } finally {
+          modifyingProducts = false
+        }
+      }
       ipcMain.handle('component-setup:install', (event, id) => {
         if (!isShell(event)) throw Error('DENIED')
-        return componentSetup.install(id)
+        return modifyProducts(() => componentSetup.install(id))
+      })
+      ipcMain.handle('component-setup:uninstall', async (event, id) => {
+        if (!isShell(event)) throw Error('DENIED')
+        return modifyProducts(() => componentSetup.uninstall(id))
       })
       const catalog = updateCatalog({
         request: (...args) => net.fetch(...args),
@@ -518,22 +532,45 @@ else {
           return rows
         },
         changed: (state) => shell?.webContents.send('updates:state', state),
-        launch: async (update) => {
-          const file = await saveInstaller(update, app.getPath('temp'), (...args) =>
-            net.fetch(...args),
+        launch: async (update, id, report) => {
+          const file = await saveInstaller(
+            update,
+            app.getPath('temp'),
+            (...args) => net.fetch(...args),
+            (percent) => void report('downloading', percent),
           )
-          if (await systemShell.openPath(file)) throw Error('Installer launch failed')
-          app.quit()
+          await report('installing')
+          if (id === 'workbench') {
+            if (await systemShell.openPath(file)) throw Error('Installer launch failed')
+            app.quit()
+          } else {
+            try {
+              await executeInstaller(file, ['/S', '/currentuser'], { windowsHide: true })
+              const root = await installation.find(id)
+              if (
+                !root ||
+                JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version !==
+                  update.version
+              )
+                throw Error('Installation not detected')
+            } finally {
+              await rm(path.dirname(file), { recursive: true, force: true, maxRetries: 3 })
+            }
+          }
         },
       })
-      for (const method of ['snapshot', 'check', 'install']) {
+      for (const method of ['snapshot', 'check', 'install', 'installAll']) {
         ipcMain.handle('updates:' + method, (event, id) => {
-          if (
-            !isShell(event) ||
-            (id !== undefined && !['workbench', 'music', 'sample'].includes(id))
-          )
-            throw Error('DENIED')
-          return catalog[method](id)
+          const valid =
+            method === 'install'
+              ? supportsUpdate(id)
+              : method === 'check'
+                ? id === undefined || supportsUpdate(id)
+                : id === undefined
+          if (!isShell(event) || !valid) throw Error('DENIED')
+          return ['install', 'installAll'].includes(method)
+            ? modifyProducts(() => catalog[method](id))
+            : catalog[method](id)
         })
       }
       if (await findWorkbenchFile()) {

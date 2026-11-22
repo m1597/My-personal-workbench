@@ -6,7 +6,13 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 const repo = 'm1597/My-personal-workbench'
-const products = { music: 'Music', workbench: 'Workbench', prompts: 'Prompts', toolkit: 'Toolkit' }
+export const products = Object.freeze({
+  music: 'Music',
+  prompts: 'Prompts',
+  toolkit: 'Toolkit',
+  workbench: 'Workbench',
+})
+export const supportsUpdate = (id) => typeof id === 'string' && Object.hasOwn(products, id)
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 
 export function selectUpdate(release, product, installed) {
@@ -33,7 +39,7 @@ export function releaseInstaller(release, product) {
     !versionPattern.test(version) ||
     release.draft ||
     release.prerelease ||
-    !Object.hasOwn(products, product)
+    !supportsUpdate(product)
   )
     return
   const name = `FitBay-${products[product]}-Setup-${version}-x64.exe`
@@ -80,6 +86,7 @@ export async function saveInstaller(update, temp, request = fetch, progress = ()
 // Renderer callers supply a product id. Download URLs and hashes stay in the main process.
 export function updateCatalog({ inventory, launch, request = fetch, changed = () => {} }) {
   const results = new Map()
+  const operations = new Map()
   let lastChecked = null
   let pending = Promise.resolve()
   function serialize(action) {
@@ -87,17 +94,21 @@ export function updateCatalog({ inventory, launch, request = fetch, changed = ()
     pending = next.catch(() => {})
     return next
   }
-  async function snapshot() {
-    const rows = (await inventory()).map((row) => {
+  function state(entries) {
+    const rows = entries.map((row) => {
       const saved = results.get(row.id)
       const result = saved?.installed === row.version ? saved : undefined
       return {
         ...row,
-        status: result?.status ?? (products[row.id] ? 'unchecked' : 'unsupported'),
+        operation: operations.get(row.id),
+        status: result?.status ?? (supportsUpdate(row.id) ? 'unchecked' : 'unsupported'),
         available: result?.update?.version ?? null,
       }
     })
     return { rows, lastChecked }
+  }
+  async function snapshot() {
+    return state(await inventory())
   }
   function check(id) {
     return serialize(async () => {
@@ -125,6 +136,7 @@ export function updateCatalog({ inventory, launch, request = fetch, changed = ()
               .split('.')
               .map((part, i) => Number(part) - Number(row.version.split('.')[i]))
               .find((n) => n !== 0) > 0
+          operations.delete(row.id)
           results.set(row.id, {
             installed: row.version,
             update,
@@ -138,16 +150,47 @@ export function updateCatalog({ inventory, launch, request = fetch, changed = ()
       return state
     })
   }
+  async function runUpdate(row) {
+    const result = results.get(row.id)
+    if (!row.installable || !result?.update || result.installed !== row.version)
+      throw Error('Update unavailable')
+    const entries = await inventory()
+    function report(stage, progress) {
+      const previous = operations.get(row.id)
+      if (previous?.stage === stage && previous.progress === progress) return
+      operations.set(row.id, { stage, progress })
+      changed(state(entries))
+    }
+    try {
+      await report('downloading', 0)
+      await launch(result.update, row.id, report)
+      report('done')
+      changed(await snapshot())
+    } catch {
+      report('failed')
+    }
+  }
   function install(id) {
     return serialize(async () => {
-      const row = (await inventory()).find((item) => item.id === id)
-      const result = results.get(id)
-      if (!row?.installable || !result?.update || result.installed !== row.version)
-        throw Error('Update unavailable')
-      await launch(result.update)
+      const row = (await inventory()).find((r) => r.id === id)
+      if (!row || !supportsUpdate(id)) throw Error('Update unavailable')
+      await runUpdate(row)
     })
   }
-  return { snapshot, check, install }
+  function installAll() {
+    return serialize(async () => {
+      const { rows } = await snapshot()
+      for (const row of rows
+        .filter((r) => r.installable && r.status === 'available')
+        .sort((a, b) => Number(a.id === 'workbench') - Number(b.id === 'workbench'))) {
+        // Keep the workbench available for per-component retries.
+        if (row.id === 'workbench' && [...operations.values()].some((op) => op.stage === 'failed'))
+          break
+        await runUpdate(row)
+      }
+    })
+  }
+  return { snapshot, check, install, installAll }
 }
 
 export function productUpdater({ installation, app, dialog, shell, english }) {
@@ -165,7 +208,7 @@ export function productUpdater({ installation, app, dialog, shell, english }) {
       if (!response.ok && response.status !== 404) throw Error('Release check failed')
       const release = response.ok ? await response.json() : {}
       let found = false
-      for (const product of ['workbench', 'music']) {
+      for (const product of Object.keys(products)) {
         const root = await installation.find(product)
         if (!root) continue
         const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
