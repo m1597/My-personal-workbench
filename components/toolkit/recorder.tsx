@@ -1,3 +1,6 @@
+import { createElement, type ComponentType } from 'react'
+import popupStyles from '../../src/renderer/src/styles/componentTheme.css?inline'
+import { ChoiceDropdown } from '../../src/renderer/src/app/SharedDropdown'
 import { createRoot } from 'react-dom/client'
 
 import { FluentProvider, createDOMRenderer, RendererProvider } from '@fluentui/react-components'
@@ -16,8 +19,11 @@ function styleDocument(parent: Node) {
   }
   return target
 }
-type Props = Parameters<typeof ShortcutRecorder>[0]
-export function mountRecorder(node: HTMLElement, props: Props) {
+function mountControl<Props extends object>(
+  node: HTMLElement,
+  Control: ComponentType<Props>,
+  props: Props,
+) {
   const root = createRoot(node)
   const target = styleDocument(node.getRootNode())
   const renderer = renderers.get(target) || createDOMRenderer(target)
@@ -30,10 +36,23 @@ export function mountRecorder(node: HTMLElement, props: Props) {
           theme={fluentTheme()}
           style={{ background: 'transparent' }}
         >
-          <ShortcutRecorder {...next} />
+          {createElement(Control, next)}
         </FluentProvider>
       </RendererProvider>,
     )
   render(props)
   return { render, dispose: () => root.unmount() }
+}
+
+export const mountRecorder = (node: HTMLElement, props: Parameters<typeof ShortcutRecorder>[0]) =>
+  mountControl(node, ShortcutRecorder, props)
+export function mountChoice(node: HTMLElement, props: Parameters<typeof ChoiceDropdown>[0]) {
+  const scope = node.getRootNode() as Document | ShadowRoot
+  if (!scope.querySelector('style[data-toolkit-popup]')) {
+    const style = document.createElement('style')
+    style.dataset.toolkitPopup = ''
+    style.textContent = '@scope (fitbay-toolkit-choice) {' + popupStyles + '}'
+    ;(scope instanceof Document ? scope.head : scope).append(style)
+  }
+  return mountControl(node, ChoiceDropdown, props)
 }

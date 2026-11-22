@@ -279,3 +279,20 @@ body:has(.tools-surface) {
 .fitbay-settings-content section > button {
   justify-self: start;
 }
+
+fitbay-toolkit-choice {
+  display: block;
+  min-width: 0;
+}
+fitbay-toolkit-choice .fui-Dropdown {
+  min-width: 0;
+  width: 100%;
+}
+fitbay-toolkit-choice .fui-Dropdown__button {
+  min-width: 0;
+  width: 100%;
+  text-align: start;
+}
+fitbay-toolkit-choice .fui-Option {
+  overflow-wrap: anywhere;
+}

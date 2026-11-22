@@ -1,4 +1,5 @@
 import { api, root, picture, el, button } from './view.js'
+import { choice } from './ui-dom.js'
 import { makeCanvas } from './tools-view.js'
 export { pickScreenColor, annotateRegion }
 function pickScreenColor(s, rect) {
@@ -80,11 +81,11 @@ async function annotateRegion(rect, bar) {
   })
   bar.style.display = 'none'
   const controls = el('div', '', 'annotation-controls bar row'),
-    mode = el('select'),
+    mode = choice('标注形状', [
+      ['pen', '铅笔'],
+      ['rect', '矩形'],
+    ]),
     ink = el('input')
-  mode.setAttribute('aria-label', '标注形状')
-  mode.add(new Option('铅笔', 'pen'))
-  mode.add(new Option('矩形', 'rect'))
   ink.type = 'color'
   ink.value = '#ff453a'
   ink.setAttribute('aria-label', '标注颜色')

@@ -37,3 +37,47 @@ export function feedback() {
   }
   return { button, error, notice }
 }
+
+// The control is mounted only after its actual document or pane shadow root is known.
+class ToolkitChoice extends HTMLElement {
+  connectedCallback() {
+    this.refresh()
+  }
+  disconnectedCallback() {
+    const previous = this.control
+    this.control = undefined
+    if (previous) queueMicrotask(() => previous.dispose())
+  }
+  refresh() {
+    if (!this.isConnected) return
+    const props = {
+      'aria-label': this.label,
+      value: this.value,
+      choices: this.choices,
+      disabled: this.disabled,
+      onChange: (value) => {
+        this.set({ value })
+        this.dispatchEvent(new Event('input', { bubbles: true }))
+        this.dispatchEvent(new Event('change', { bubbles: true }))
+      },
+    }
+    if (this.control) this.control.render(props)
+    else this.control = this.mount(this, props)
+  }
+  set(next) {
+    Object.assign(this, next)
+    this.refresh()
+  }
+}
+if (!customElements.get('fitbay-toolkit-choice'))
+  customElements.define('fitbay-toolkit-choice', ToolkitChoice)
+export function choice(label, options, mount = window.FitBayRecorder?.mountChoice) {
+  const node = document.createElement('fitbay-toolkit-choice')
+  node.set({
+    label,
+    mount,
+    choices: options.map(([value, label]) => ({ value, label })),
+    value: options[0]?.[0] || '',
+  })
+  return node
+}

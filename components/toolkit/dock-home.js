@@ -1,4 +1,4 @@
-import { mountRecorder } from './recorder.tsx'
+import { mountRecorder, mountChoice } from './recorder.tsx'
 import { toolkitHome } from './tools-view.js'
 import { feedback } from './ui-dom.js'
 import { settingsContents } from './settings-view.js'
@@ -18,6 +18,7 @@ export function mountToolkit(root, bridge) {
       ...ui,
       api: {
         ...bridge.local,
+        mountChoice,
         mountRecorder(node, props) {
           const recorder = mountRecorder(node, props)
           recorders.push(recorder)
@@ -34,14 +35,14 @@ export function mountToolkit(root, bridge) {
               name: v.owners.join(' / ') + ' — ' + v.model,
               hasKey: v.configured,
             }
-          const find = (route) =>
-            describe(
-              choices.find(
-                (c) => c.id === rows.find((r) => r.use === 'toolkit.' + route)?.value?.id,
-              ),
-            )
+          const find = (use) => {
+            const binding = rows.find((r) => r.use === use)?.value
+            if (!binding) return null
+            return { ...describe(choices.find((c) => c.id === binding.id)), ...binding }
+          }
           return {
-            routes: { translation: find('translation'), vision: find('vision') },
+            defaultConnection: find('default'),
+            routes: { translation: find('toolkit.translation'), vision: find('toolkit.vision') },
             connections: choices.map(describe),
             migrationPending: [],
           }
@@ -49,9 +50,11 @@ export function mountToolkit(root, bridge) {
         configure: (v) =>
           window.fitbayConnections.write(
             'toolkit.' + v.route,
-            ['private', 'edit'].includes(v.connection)
-              ? { ...v, separate: v.connection === 'private' }
-              : { reuse: v.connection, expectedId: v.expectedId },
+            v.connection === 'inherit'
+              ? { inherit: true, expectedId: v.expectedId }
+              : ['private', 'edit'].includes(v.connection)
+                ? { ...v, separate: v.connection === 'private' }
+                : { reuse: v.connection, expectedId: v.expectedId },
           ),
         onConnectionChange: (fn) => {
           const timer = setInterval(() => {

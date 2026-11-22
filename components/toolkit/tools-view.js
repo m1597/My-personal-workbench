@@ -1,5 +1,5 @@
 import { createBackButton, createSettingsGear, createSettingsShell } from './settings-shell.js'
-import { el, field } from './ui-dom.js'
+import { el, field, choice } from './ui-dom.js'
 export { toolkitHome, glyph, makeCanvas }
 /* Local toolkit pages use opaque file IDs returned by the native picker. */
 const glyphs = {
@@ -169,6 +169,7 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     head.hidden = true
     if (refreshShortcuts) await refreshShortcuts()
     if (!settingsBox.childElementCount) {
+      let activeCategory = 'keys'
       const shell = createSettingsShell({
         title: '工具集设置',
         categories: [
@@ -185,6 +186,7 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       })
       const panels = el('div')
       function showCategory(id) {
+        activeCategory = id
         for (const box of panels.children)
           box.hidden = (id === 'api') !== box.classList.contains('connections')
       }
@@ -201,8 +203,8 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
           }
         })
         const route = await api.settingsTarget?.()
-        shell.select(route ? 'api' : 'keys')
-        showCategory(route ? 'api' : 'keys')
+        shell.select(route ? 'api' : activeCategory)
+        showCategory(route ? 'api' : activeCategory)
       } catch (e) {
         settingsBox.replaceChildren()
         settingsBox.hidden = true
@@ -372,11 +374,13 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       const stem = (name) => name.replace(/\.[^.]+$/, '').toLowerCase()
       for (const image of active === 'pairs' ? imgs : []) {
         const label = el('label', image.name + ' 的提示词'),
-          select = el('select')
-        select.add(new Option('请选择提示词', ''))
-        for (const t of texts) select.add(new Option(t.name, t.id))
+          select = choice(
+            image.name + ' 的提示词',
+            [['', '请选择提示词'], ...texts.map((t) => [t.id, t.name])],
+            api.mountChoice,
+          )
         const exact = texts.filter((t) => stem(t.name) === stem(image.name))
-        if (exact.length === 1) select.value = exact[0].id
+        if (exact.length === 1) select.set({ value: exact[0].id })
         label.append(select)
         panel.append(label)
         matches.set(image.id, select)

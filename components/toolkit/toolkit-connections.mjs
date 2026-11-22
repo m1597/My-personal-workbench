@@ -74,10 +74,13 @@ export function toolkitConnections({
         .filter((b) => b.value)
       function describe(value) {
         if (!value) return null
-        const owners = bindings.filter((b) => b.value.id === value.id)
+        const owners = bindings.filter(
+          (b) => b.value.id === value.id && b.value.source !== 'default',
+        )
         return {
           id: value.id,
-          expectedId: value.expectedId,
+          source: value.source,
+          vision: value.vision,
           endpoint: value.endpoint,
           model: value.model,
           protocol: value.protocol,
@@ -90,6 +93,7 @@ export function toolkitConnections({
         }
       }
       return {
+        defaultConnection: uses.default ? describe(db.read('default')) : null,
         migrationPending: [...pendingLegacy],
         routes: Object.fromEntries(routes.map((route) => [route, describe(db.read(use(route)))])),
         connections: db.choices().map(describe),
@@ -99,7 +103,9 @@ export function toolkitConnections({
       const id = use(value?.route),
         db = await open()
       if (typeof value.connection !== 'string') throw Error('请选择连接')
-      if (value.connection !== 'private' && value.connection !== 'edit') {
+      if (value.connection === 'inherit') {
+        db.write(id, { inherit: true, expectedId: value.expectedId })
+      } else if (value.connection !== 'private' && value.connection !== 'edit') {
         db.write(id, { reuse: value.connection, expectedId: value.expectedId })
       } else {
         if (

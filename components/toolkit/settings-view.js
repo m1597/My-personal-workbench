@@ -1,32 +1,35 @@
-import { el, field } from './ui-dom.js'
+import { el, field, choice } from './ui-dom.js'
 // Only public connection summaries enter this window. A typed key is write-only.
 function connectionEditor(parent, { api, button, notice, error }) {
   const section = el('section', '', 'connections')
   section.append(el('h2', 'API 与模型'))
   const purposeLabel = el('label', '用途')
-  const purpose = el('select')
-  for (const [id, title] of [
-    ['translation', '翻译与文字问答'],
-    ['vision', '视觉问答'],
-  ])
-    purpose.add(new Option(title, id))
+  const purpose = choice(
+    '用途',
+    [
+      ['translation', '翻译与文字问答'],
+      ['vision', '视觉问答'],
+    ],
+    api.mountChoice,
+  )
   purposeLabel.append(purpose)
   const connectionLabel = el('label', '连接')
-  const connection = el('select')
-  connection.setAttribute('aria-label', '连接')
+  const connection = choice('连接', [], api.mountChoice)
   connectionLabel.append(connection)
   section.append(purposeLabel, connectionLabel)
   const fields = el('div', '', 'connection-fields')
   section.append(fields)
   const protocolLabel = el('label', '协议')
-  const protocol = el('select')
-  for (const [id, title] of [
-    ['chat', 'Chat Completions'],
-    ['responses', 'Responses'],
-    ['claude', 'Claude Messages'],
-    ['gemini', 'Gemini generateContent'],
-  ])
-    protocol.add(new Option(title, id))
+  const protocol = choice(
+    '协议',
+    [
+      ['chat', 'Chat Completions'],
+      ['responses', 'Responses'],
+      ['claude', 'Claude Messages'],
+      ['gemini', 'Gemini generateContent'],
+    ],
+    api.mountChoice,
+  )
   protocolLabel.append(protocol)
   fields.append(protocolLabel)
   const address = field(fields, '服务地址', '')
@@ -64,9 +67,16 @@ function connectionEditor(parent, { api, button, notice, error }) {
     const bound = snapshot.routes[purpose.value]
     editingId = bound?.id ?? null
     const own = id === 'private' || id === 'edit'
-    const current = own ? bound : ref
-    protocol.value = current?.protocol || 'chat'
-    protocol.disabled = !own
+    const fallback = snapshot.defaultConnection
+    const current =
+      id === 'inherit'
+        ? purpose.value === 'vision' && !fallback?.vision
+          ? null
+          : fallback
+        : own
+          ? bound
+          : ref
+    protocol.set({ value: current?.protocol || 'chat', disabled: !own })
     address.value = current?.endpoint || ''
     model.value = current?.model || ''
     key.value = ''
@@ -75,23 +85,38 @@ function connectionEditor(parent, { api, button, notice, error }) {
     model.readOnly = !own
     key.disabled = !own
     status.textContent =
-      id === 'edit'
-        ? '保存将更新所有复用此连接的用途。'
-        : own
-          ? '单独配置仅用于当前用途。'
-          : '使用所选连接的服务和凭据。'
+      id === 'inherit'
+        ? current
+          ? '来源：工作台默认连接。'
+          : purpose.value === 'vision'
+            ? '没有可继承的图像连接。可单独配置视觉模型。'
+            : '工作台尚未设置默认连接。'
+        : id === 'edit'
+          ? '保存将更新所有复用此连接的用途。'
+          : own
+            ? '单独配置仅用于当前用途。'
+            : '使用所选连接的服务和凭据。'
+    if (!bound && own && purpose.value === 'vision' && fallback && !fallback.vision)
+      status.textContent = '工作台默认连接未启用图像。可单独配置视觉模型。'
     if (snapshot.migrationPending.includes(purpose.value))
       status.textContent = '原连接未能迁移。请重新填写此用途的连接，原配置已保留。'
     save.disabled = false
   }
   function render() {
-    connection.replaceChildren(new Option('单独配置', 'private'))
+    const choices = [
+      { label: '继承工作台默认连接', value: 'inherit' },
+      { label: '单独配置', value: 'private' },
+    ]
     const bound = snapshot.routes[purpose.value]
-    if (bound && !bound.private) connection.add(new Option('编辑当前共享连接', 'edit'))
-    for (const c of snapshot.connections)
-      if (c.id !== bound?.id || !bound.private) connection.add(new Option('复用 · ' + c.name, c.id))
-    connection.value = bound?.private || !bound ? 'private' : bound.id
-    if (!connection.value) connection.value = 'private'
+    if (bound && bound.source !== 'default' && !bound.private)
+      choices.push({ label: '编辑当前共享连接', value: 'edit' })
+    for (const c of snapshot.connections) {
+      if (c.id !== bound?.id || !bound.private || bound.source === 'default')
+        choices.push({ label: '复用 · ' + c.name, value: c.id })
+    }
+    const value =
+      bound?.source === 'default' ? 'inherit' : !bound || bound.private ? 'private' : bound.id
+    connection.set({ choices, value })
     renderFields(connection.value)
   }
   async function refresh() {
@@ -119,7 +144,7 @@ function connectionEditor(parent, { api, button, notice, error }) {
   }
   async function focusRoute(route) {
     if (!['translation', 'vision'].includes(route)) return
-    purpose.value = route
+    purpose.set({ value: route })
     dirty = false
     await refresh()
     render()
