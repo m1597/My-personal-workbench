@@ -177,7 +177,7 @@ try {
   console.log('PASS native capture and pin')
   overlay = await region()
   waiting = app.waitForEvent('window')
-  await overlay.getByText('截图翻译').click()
+  await overlay.getByText('翻译', { exact: true }).click()
   let result = await waiting
   await expect(result.getByText('测试接口回答 1')).toBeVisible({ timeout: 25000 })
   assert.equal(requests[0].model, 'test')
@@ -259,7 +259,7 @@ try {
       await expect(selected.getByText('测试接口回答 5')).toBeVisible()
       assert.equal(typeof requests[4].messages[0].content, 'string')
       await selected.screenshot({ path: path.join(folder, 'pdf-selection.png') })
-      await selected.getByText('解释', { exact: true }).click()
+      await selected.getByText('问 AI', { exact: true }).click()
       await expect(selected.getByText('测试接口回答 6')).toBeVisible()
       assert.match(requests.at(-1).messages[0].content, /解释/)
       assert.equal(requests.at(-1).model, 'test')
@@ -273,29 +273,38 @@ try {
       assert.equal(requests.length, before)
       await message.close()
       console.log('PASS Chrome PDF, OS shortcut, extracted text, translation and empty selection')
+      for (const question of ['这段文字是什么意思？', '再举一个例子']) {
+        await selected.getByLabel('问题').fill(question)
+        await selected.getByRole('button', { name: '追问', exact: true }).click()
+        await expect(selected.getByRole('heading', { name: question, exact: true })).toBeVisible()
+      }
+      assert.equal(requests.at(-1).messages.length, 5)
+      assert(requests.at(-1).messages.every((message) => typeof message.content === 'string'))
     } finally {
       await browser.close()
     }
   }
   overlay = await region()
   waiting = app.waitForEvent('window')
-  await overlay.getByText('向模型提问').click()
+  await overlay.getByText('问 AI', { exact: true }).click()
   const visual = await waiting
   await visual.getByLabel('问题').fill('图中的数字是什么？')
-  await visual.getByText('自由提问').click()
+  await visual.getByText('问 AI', { exact: true }).click()
   await expect(visual.getByText(/^测试接口回答/)).toBeVisible()
-  assert.equal(requests.at(-1).messages[0].content[0].text, '图中的数字是什么？')
+  await expect.poll(() => requests.at(-1).messages[0].content[0].text).toBe('图中的数字是什么？')
   assert.equal(requests.at(-1).messages[0].content[1].type, 'image_url')
   await visual.close()
   if (process.argv.includes('--host')) {
     const host = await _electron.launch({
       args: [
         path.resolve('dist/component-prototype/host'),
+  await expect(visual.getByText(/^测试接口回答/)).toBeVisible()
         '--mode=workbench',
         '--user-data-dir=' + profile,
         '--workbench=' + path.resolve('out/renderer/index.html'),
       ],
       env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
+  console.log('PASS default visual explanation and explicit free question with original screenshot')
     })
     try {
       const shell = await host.firstWindow()

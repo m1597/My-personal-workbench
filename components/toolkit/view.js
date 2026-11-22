@@ -29,8 +29,8 @@ async function screenView(s) {
     ['保存', api.save],
     ['贴图置顶', api.pin],
     ['提取文字', api.extractText],
-    ['截图翻译', () => ask('translate')],
-    ['向模型提问', () => ask('question')],
+    ['翻译', () => ask('translate')],
+    ['问 AI', () => ask('explain')],
     ['标注', () => annotateRegion(rect, bar)],
     [
       '选区取色',
@@ -52,8 +52,8 @@ async function screenView(s) {
           复制: 'copy',
           保存: 'save',
           贴图置顶: 'pin',
-          截图翻译: 'translate',
-          向模型提问: 'ask',
+          翻译: 'translate',
+          '问 AI': 'ask',
           提取文字: 'ocr',
           标注: 'annotate',
           选区取色: 'color',
@@ -194,8 +194,7 @@ async function result(s) {
   }
   row.append(
     button('翻译', () => run('translate')),
-    button('解释', () => run('explain')),
-    button('自由提问', () => run('question')),
+    button('问 AI', () => run(prompt.value.trim() ? 'question' : 'explain')),
   )
   try {
     for (const a of await api.actions())

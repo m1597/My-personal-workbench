@@ -65,7 +65,7 @@ try {
   await expect.poll(() => overlay.isClosed()).toBe(true)
   overlay = await region()
   const resultReady = app.waitForEvent('window')
-  await overlay.getByText('截图翻译').click()
+  await overlay.getByText('翻译', { exact: true }).click()
   const result = await resultReady
   await result.getByText('打开 API 设置').click()
   await expect(home.getByRole('combobox', { name: '用途' })).toHaveText('翻译与文字问答')
