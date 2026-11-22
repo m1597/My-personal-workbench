@@ -63,6 +63,9 @@ try {
   assert.equal((await facade.resolve('translation')).model, 'only-toolkit')
   await select(page, '用途', '视觉问答')
   await expect(page.getByLabel('模型名')).toHaveValue('')
+  await page.getByRole('combobox', { name: '连接', exact: true }).click()
+  await expect(page.getByRole('option', { name: /复用.*shared-text/ })).toHaveCount(0)
+  await page.getByRole('combobox', { name: '连接', exact: true }).press('Escape')
   db.write('default', {
     expectedId: db.read('default').id,
     endpoint: 'http://localhost:9132/v1',

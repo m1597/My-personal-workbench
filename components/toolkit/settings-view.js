@@ -111,6 +111,7 @@ function connectionEditor(parent, { api, button, notice, error }) {
     if (bound && bound.source !== 'default' && !bound.private)
       choices.push({ label: '编辑当前共享连接', value: 'edit' })
     for (const c of snapshot.connections) {
+      if (purpose.value === 'vision' && !c.vision && c.id !== bound?.id) continue
       if (c.id !== bound?.id || !bound.private || bound.source === 'default')
         choices.push({ label: '复用 · ' + c.name, value: c.id })
     }

@@ -117,12 +117,8 @@ try {
   await home.getByLabel('模型名').fill('from-toolkit')
   await home.getByText('保存 API 配置').click()
   await expect(form.getByLabel('模型', { exact: true })).toHaveValue('from-toolkit')
-  await home.getByRole('combobox', { name: '用途' }).click()
-  await home.getByRole('option', { name: '视觉问答', exact: true }).click()
   await home.getByRole('combobox', { name: '连接', exact: true }).click()
-  await home
-    .getByRole('option', { name: '复用 · 工具集 · 翻译 — from-toolkit', exact: true })
-    .click()
+  await home.getByRole('option', { name: /复用 · 工具集 · 视觉模型 — legacy-text/ }).click()
   await home.getByText('保存 API 配置').click()
   await expect(home.getByRole('status')).toContainText('已保存')
   await expect
@@ -133,6 +129,8 @@ try {
       }),
     )
     .toBe(true)
+  await home.getByRole('combobox', { name: '用途' }).click()
+  await home.getByRole('option', { name: '视觉问答', exact: true }).click()
   await home.getByRole('combobox', { name: '连接', exact: true }).click()
   await home.getByRole('option', { name: '单独配置', exact: true }).click()
   await home.getByLabel('模型名').fill('vision-only')
