@@ -16,6 +16,7 @@ import {
   Check,
   Eye,
   EyeOff,
+  X,
   Plus,
   PanelsTopLeft,
   AudioLines,
@@ -47,12 +48,14 @@ function ComponentMenuRow({
   status,
   checked,
   open,
+  close,
   action,
 }: {
   name: string
   icon: ReactElement
   status: string
   checked?: boolean
+  close: () => void
   open: () => void
   action: {
     label: string
@@ -61,6 +64,7 @@ function ComponentMenuRow({
     run: () => void
   }
 }) {
+  const t = useTranslation()
   return (
     <MenuSplitGroup className="component-menu-row">
       <MenuItem
@@ -81,6 +85,13 @@ function ComponentMenuRow({
         disabled={action.disabled}
         icon={action.icon}
         onClick={action.run}
+      />
+      <MenuItem
+        aria-label={t('关闭', 'Close ') + name}
+        title={t('关闭', 'Close ') + name}
+        disabled={!checked}
+        icon={<X size={16} />}
+        onClick={close}
       />
     </MenuSplitGroup>
   )
@@ -151,14 +162,13 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
     window.addEventListener('fitbay-layout-name', sync)
     return () => window.removeEventListener('fitbay-layout-name', sync)
   }, [inspect])
-  async function toggleRunning(host: Window['componentHost']) {
+  async function openComponent(host: Window['componentHost'], id: string) {
     if (!host) return
     try {
-      const state = await host.status()
-      if (state.phase === 'ready' || state.phase === 'attaching') {
-        await host.stop()
-        setMusicError('')
-      } else setMusicError((await host.open()).error ?? '')
+      if (workspace.api?.hasMaximizedGroup()) workspace.api.exitMaximizedGroup()
+      const entry = collapsed.find((item) => item.panels.includes(id))
+      if (entry) entry.restore()
+      setMusicError((await host.show(false)).error ?? '')
     } catch (error) {
       setMusicError(String(error))
     }
@@ -225,7 +235,10 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
                 icon={<AudioLines size={16} />}
                 status={status(running, hidden)}
                 checked={running}
-                open={() => void toggleRunning(window.musicDock)}
+                open={() => void openComponent(window.musicDock, 'component-music')}
+                close={() =>
+                  void window.musicDock?.stop().catch((error) => setMusicError(String(error)))
+                }
                 action={{
                   label: visibilityLabel,
                   icon: hidden ? <EyeOff size={16} /> : <Eye size={16} />,
@@ -240,6 +253,9 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
                 icon={<ToolkitIcon />}
                 status={status(toolkitOpen, toolkitHidden)}
                 checked={toolkitOpen}
+                close={() => {
+                  if (toolkitPanel) workspace.api?.removePanel(toolkitPanel)
+                }}
                 open={() =>
                   workspace.api && openToolkitPanel(workspace.api, t('工具集', 'Toolkit'))
                 }
@@ -272,7 +288,10 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
                 icon={<Folder size={16} />}
                 status={status(promptRunning, promptHidden)}
                 checked={promptRunning}
-                open={() => void toggleRunning(window.promptDock)}
+                open={() => void openComponent(window.promptDock, 'component-prompts')}
+                close={() =>
+                  void window.promptDock?.stop().catch((error) => setMusicError(String(error)))
+                }
                 action={{
                   label: promptHidden
                     ? t('显示提示词库', 'Show prompt library')
@@ -289,7 +308,10 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
                 icon={<Boxes size={16} />}
                 status={status(sampleRunning, sampleHidden)}
                 checked={sampleRunning}
-                open={() => void toggleRunning(window.componentHost)}
+                open={() => void openComponent(window.componentHost, 'component-example')}
+                close={() =>
+                  void window.componentHost?.stop().catch((error) => setMusicError(String(error)))
+                }
                 action={{
                   label: sampleVisibilityLabel,
                   icon: sampleHidden ? <EyeOff size={16} /> : <Eye size={16} />,

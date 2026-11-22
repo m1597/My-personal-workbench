@@ -7,6 +7,7 @@ type PanelOptions = Pick<
 
 // Only ordinary opens use this placement. Explicit drop targets belong to Dockview.
 export function openInDefaultGrid(api: DockviewApi, options: PanelOptions) {
+  if (api.hasMaximizedGroup()) api.exitMaximizedGroup()
   const existing = api.getPanel(options.id)
   if (existing) {
     existing.api.setActive()

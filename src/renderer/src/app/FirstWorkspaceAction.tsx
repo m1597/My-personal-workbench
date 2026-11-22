@@ -1,3 +1,4 @@
+import type { DockviewApi } from 'dockview-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { openToolkitPanel, ToolkitIcon } from './ToolkitEntry'
 import { Folder, Music2, Boxes, Plus } from 'lucide-react'
@@ -12,6 +13,26 @@ declare global {
       installMusic(): Promise<'cancelled' | 'mismatch' | 'finished' | 'failed'>
     }
   }
+}
+
+// A hosted component may acknowledge the open before its docking slot is mounted.
+function maximizeQuickStart(api: DockviewApi, id: string) {
+  const maximize = () => {
+    const panel = api.getPanel(id)
+    if (!panel) return false
+    panel.group.api.setVisible(true)
+    panel.api.setActive()
+    api.maximizeGroup(panel)
+    return true
+  }
+  if (maximize()) return
+  const listener = api.onDidAddPanel((panel) => {
+    if (panel.id !== id) return
+    clearTimeout(timeout)
+    listener.dispose()
+    queueMicrotask(maximize)
+  })
+  const timeout = setTimeout(() => listener.dispose(), 5000)
 }
 
 export function FirstWorkspaceAction() {
@@ -67,8 +88,10 @@ export function FirstWorkspaceAction() {
             ? await window.promptDock?.show(false)
             : which === 'music'
               ? await window.musicDock?.show(false)
-              : await window.componentHost?.open()
+              : await window.componentHost?.show(false)
         if (!result?.ok) setProblem('open')
+        else if (api)
+          maximizeQuickStart(api, 'component-' + (which === 'sample' ? 'example' : which))
       } else {
         setInstalled(false)
         const result = await bridge.installMusic()
@@ -101,7 +124,9 @@ export function FirstWorkspaceAction() {
             className="quick-component"
             icon={<ToolkitIcon />}
             disabled={busy}
-            onClick={() => api && openToolkitPanel(api, t('工具集', 'Toolkit'))}
+            onClick={() => {
+              if (api) api.maximizeGroup(openToolkitPanel(api, t('工具集', 'Toolkit')))
+            }}
           >
             {t('工具集', 'Toolkit')}
           </Button>

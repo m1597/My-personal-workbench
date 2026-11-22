@@ -572,7 +572,7 @@ input:disabled {
 }
 .component-menu-row.fui-MenuSplitGroup {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
 }
 .component-menu-columns {
   display: grid;
@@ -588,7 +588,7 @@ input:disabled {
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
 }
-.component-menu-row > :last-child {
+.component-menu-row > :not(:first-child) {
   justify-content: center;
 }
 .workbench-dialog.fui-DialogSurface {
