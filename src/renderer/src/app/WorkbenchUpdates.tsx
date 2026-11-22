@@ -71,7 +71,7 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
         )}
       </header>
       {confirm && (
-        <div role="group" aria-label="确认批量更新">
+        <fieldset aria-label="确认批量更新">
           <p>
             确认更新{' '}
             {state?.rows
@@ -89,7 +89,7 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
             确认更新全部
           </Button>
           <Button onClick={() => setConfirm(false)}>取消</Button>
-        </div>
+        </fieldset>
       )}
 
       {!api && (
