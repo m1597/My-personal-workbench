@@ -102,6 +102,10 @@ jobs:
           if ($links.Count -ne 1 -or $links[0] -ne (Join-Path $root 'FitBay.exe')) { throw "Unexpected FitBay desktop links after batch: $links" }
           node scripts/check-installed-component-material.mjs $root
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/check-prompt-visual-package.mjs $root
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/check-installed-toolkit-renderer.mjs $root
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Copy-Item "docs/releases/v$version.md" dist/installers/RELEASE-NOTES.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

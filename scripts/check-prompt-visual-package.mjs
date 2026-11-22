@@ -7,7 +7,10 @@ import { prepareProduct } from './prepare-package.mjs'
 await mkdir('tmp', { recursive: true })
 const scratch = await mkdtemp(path.resolve('tmp/staged-visual-'))
 for (const product of ['prompts', 'workbench']) {
-  const { app } = await prepareProduct(product)
+  const root = process.argv[2]
+  const app = root
+    ? path.join(root, product === 'prompts' ? 'Prompts' : '', 'resources/app')
+    : (await prepareProduct(product)).app
   const host = path.join(app, 'host')
   for (const file of ['LICENSE', 'LICENSE-MIT', 'NOTICE', 'THIRD_PARTY_NOTICES.md']) {
     await access(path.join(host, 'archify', file))
