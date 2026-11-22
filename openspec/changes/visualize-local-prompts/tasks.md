@@ -19,3 +19,5 @@
 复用 [Archify 工作流编译器](https://github.com/tt-a1i/archify) 本机 3.2.0 版本及其所需模块。Apache-2.0、历史 MIT 和第三方声明随包保留，移除可选品牌标志数据。独立 HTML 内嵌软件声明。编译过程使用包内 JavaScript 和 JSON，不需要安装 skill 或额外 npm 包。
 
 编辑器的专用 preload 提供 `visual(root,name,generate)`。仅显式生成时解析有效的 `prompts.model` 并请求模型；结构在本地校验后缓存于 profile 的 `prompt-library/visuals-v1`。缓存按路径区分，以原文修订号判定是否可用。无缓存读取返回空视图，过期返回 `stale: true`；模型错误、无效引用或并发修改均可重新生成。`exportVisual(root,name)` 读取当前有效版本，系统对话框取消返回 false，成功返回 true。
+
+本组功能提交 `d59f28e`。两个暂存产品的渲染入口复验通过，记录为 `tmp/staged-visual-Dpp0Bf`。类型检查与两个 OpenSpec 严格校验通过。全仓 `npm run check` 在六份已有 `docs/changes` 文档的格式检查停止，完整日志见 `tmp/visual-check.log`。桌面 FitBay.cmd 当前指向 `D:/Desktop/Projects/FitBay/workbench/scripts/open-workbench.cmd`；由集成负责人将本提交纳入该构建。本组未执行发行、远程 CI 或安装器验收。
