@@ -48,13 +48,6 @@ jobs:
             $hash = (Get-FileHash -LiteralPath (Join-Path $baseline $name)).Hash.ToLowerInvariant()
             if ("$hash  $name" -notin (Get-Content (Join-Path $baseline 'SHA256SUMS.txt'))) { throw "Baseline hash mismatch: $name" }
           }
-          ./scripts/check-suite-installation.ps1 -BaselineDir $baseline -Previous $previous
-          $root = Join-Path $env:RUNNER_TEMP 'Host only'
-          ./scripts/check-host-only.ps1 -Installer "dist/installers/FitBay-Workbench-Setup-$version-x64.exe" -Root $root
-          node scripts/check-settings-installation.mjs $root --candidate --remove
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          node scripts/check-upgrade-data.mjs verify-removed
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $legacyComponents = Join-Path $env:RUNNER_TEMP 'fitbay-components-021'
           gh release download v0.2.1 --repo $env:GITHUB_REPOSITORY --dir $legacyComponents --pattern 'FitBay-Toolkit-Setup-*.exe' --pattern 'FitBay-Prompts-Setup-*.exe' --pattern 'SHA256SUMS.txt'
           if ($LASTEXITCODE) { throw 'Could not download mixed-version baseline' }
@@ -62,6 +55,13 @@ jobs:
             $hash = (Get-FileHash -LiteralPath (Join-Path $legacyComponents $name)).Hash.ToLowerInvariant()
             if ("$hash  $name" -notin (Get-Content (Join-Path $legacyComponents 'SHA256SUMS.txt'))) { throw "Legacy hash mismatch: $name" }
           }
+          ./scripts/check-suite-installation.ps1 -BaselineDir $baseline -Previous $previous -LegacyDir $legacyComponents
+          $root = Join-Path $env:RUNNER_TEMP 'Host only'
+          ./scripts/check-host-only.ps1 -Installer "dist/installers/FitBay-Workbench-Setup-$version-x64.exe" -Root $root
+          node scripts/check-settings-installation.mjs $root --candidate --remove
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/check-upgrade-data.mjs verify-removed
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $registry = 'HKCU:\Software\FitBay\Installations'
           foreach ($product in 'Music','Prompts','Toolkit') {
             if ((Get-ItemProperty $registry).$product) { throw "Uninstall left $product registered" }

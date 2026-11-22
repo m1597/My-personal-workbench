@@ -1,5 +1,5 @@
 # Run only in a disposable GitHub-hosted Windows runner.
-param([Parameter(Mandatory)][string]$BaselineDir, [Parameter(Mandatory)][string]$Previous)
+param([Parameter(Mandatory)][string]$BaselineDir, [Parameter(Mandatory)][string]$Previous, [string]$LegacyDir)
 $ErrorActionPreference = 'Stop'
 if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') {
   throw 'This acceptance test installs real products and requires a fresh Windows runner.'
@@ -92,8 +92,15 @@ $locations = @{Workbench=$oldRoot}
 foreach ($p in $components) { $locations[$p] = Join-Path $env:RUNNER_TEMP "Existing standalone $p" }
 foreach ($p in @('Workbench')+$components) {
   $dest = $locations[$p]
-  Run-Setup (Join-Path $BaselineDir "FitBay-$p-Setup-$Previous-x64.exe") "/S /currentuser /D=$dest"
-  Verify $p $dest $Previous
+  $oldVersion = $Previous
+  $source = $BaselineDir
+  if ($LegacyDir -and $p -in 'Prompts','Toolkit') {
+    $oldVersion = '0.2.1'
+    $source = $LegacyDir
+  }
+  Run-Setup (Join-Path $source "FitBay-$p-Setup-$oldVersion-x64.exe") "/S /currentuser /D=$dest"
+  Verify $p $dest $oldVersion
+  Write-Host "Verified real baseline $p $oldVersion at $dest"
   Set-Content -LiteralPath (Join-Path $dest 'existing-file.txt') -Value $p
 }
 node scripts/check-upgrade-data.mjs seed $locations.Music
