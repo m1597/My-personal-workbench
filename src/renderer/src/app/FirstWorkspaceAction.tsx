@@ -113,7 +113,7 @@ export function FirstWorkspaceAction() {
             disabled={busy}
             onClick={() => void activate('prompts')}
           >
-            {t('文件库', 'File library')}
+            {t('提示词库', 'Prompt library')}
           </Button>
         )}
         {sample && (

@@ -20,6 +20,22 @@ export function ShortcutRecorder({
   useEffect(() => {
     setValue(saved)
   }, [saved])
+  const [busy, setBusy] = useState(false)
+  async function persist(key: string, failure: string) {
+    if (busy) return
+    setBusy(true)
+    setRecording(false)
+    try {
+      if (await change(key)) {
+        setValue(key)
+        setHint('')
+      } else setHint(failure)
+    } catch {
+      setHint(failure)
+    } finally {
+      setBusy(false)
+    }
+  }
   function begin() {
     setHint('')
     setRecording(true)
@@ -29,12 +45,13 @@ export function ShortcutRecorder({
       className="settings-shortcut"
       onSubmit={async (e) => {
         e.preventDefault()
-        setHint((await change(value)) ? '' : '保存失败，请重试')
+        await persist(value, '保存失败，请重试')
       }}
     >
       <Field label={label} hint={hint || undefined}>
         <Input
           value={recording ? '' : value}
+          disabled={busy}
           readOnly
           placeholder={recording ? '请按组合键' : '点击录制'}
           onFocus={begin}
@@ -73,7 +90,7 @@ export function ShortcutRecorder({
       <Button
         type="submit"
         size="small"
-        disabled={value === saved}
+        disabled={busy || value === saved}
         aria-label={'保存' + label + '快捷键'}
       >
         保存
@@ -81,14 +98,8 @@ export function ShortcutRecorder({
       <Button
         size="small"
         type="button"
-        disabled={value === defaultValue && saved === defaultValue}
-        onClick={async () => {
-          setRecording(false)
-          if (await change(defaultValue)) {
-            setValue(defaultValue)
-            setHint('')
-          } else setHint('恢复失败，请重试')
-        }}
+        disabled={busy || (value === defaultValue && saved === defaultValue)}
+        onClick={() => void persist(defaultValue, '恢复失败，请重试')}
       >
         恢复默认
       </Button>

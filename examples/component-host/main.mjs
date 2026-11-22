@@ -347,6 +347,7 @@ async function findPromptRoot() {
 const prompts = componentView({
   ...shared,
   prompts: true,
+  language,
   componentRoot: findPromptRoot,
   keepRunning: () => false,
   setKeepRunning: () => {},
@@ -462,6 +463,10 @@ else {
           rows: (await installedUses()).map((use) => ({
             use,
             ...apiUses[use],
+            component:
+              use === 'prompts.model' && language === 'en'
+                ? 'Prompt library'
+                : apiUses[use].component,
             migrationPending:
               use === 'music.model' && musicMigrationPending && !connections.read(use),
             value: connections.read(use),
@@ -492,7 +497,7 @@ else {
             ['workbench', 'FitBay'],
             ['music', 'Music'],
             ['sample', '示例组件'],
-            ['prompts', '文件库'],
+            ['prompts', language === 'en' ? 'Prompt library' : '提示词库'],
             ['toolkit', '工具集'],
           ]) {
             const root =

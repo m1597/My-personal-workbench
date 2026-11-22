@@ -1,3 +1,4 @@
+import type { useEdgeCollapse } from './useEdgeCollapse'
 import { openToolkitPanel, ToolkitIcon } from './ToolkitEntry'
 import { useTranslation } from './preferences'
 import { useCallback, useContext, useEffect, useRef, useState, type ReactElement } from 'react'
@@ -20,7 +21,6 @@ import {
   AudioLines,
   Folder,
   Boxes,
-  X,
 } from 'lucide-react'
 import { WorkspaceContext } from './WorkspaceContext'
 import { modules } from './moduleRegistry'
@@ -53,7 +53,12 @@ function ComponentMenuRow({
   status: string
   checked?: boolean
   open: () => void
-  action: { label: string; icon: ReactElement; disabled: boolean; run: () => void }
+  action: {
+    label: string
+    icon: ReactElement
+    disabled: boolean
+    run: () => void
+  }
 }) {
   return (
     <MenuSplitGroup className="component-menu-row">
@@ -79,21 +84,38 @@ function ComponentMenuRow({
     </MenuSplitGroup>
   )
 }
-export function WindowMenu() {
+export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdgeCollapse> }) {
   const t = useTranslation()
   const music = useMusicHostState()
   const [hasPrompts, setPrompts] = useState(false)
   const promptState = useMusicHostState(window.promptDock)
   const sampleState = useMusicHostState(window.componentHost)
+  const workspace = useContext(WorkspaceContext)
+  function obscured(id: string) {
+    const panel = workspace.api?.getPanel(id)
+    return panel && (!panel.group.api.isVisible || panel.group.activePanel !== panel)
+  }
+  function toggleEye(id: string, toggle?: () => unknown) {
+    const panel = workspace.api?.getPanel(id)
+    if (panel && obscured(id)) {
+      const entry = collapsed.find((item) => item.panels.includes(id))
+      if (entry) entry.restore()
+      else panel.group.api.setVisible(true)
+      panel.api.setActive()
+    } else void toggle?.()
+  }
   const sampleRunning = sampleState?.phase === 'ready' || sampleState?.phase === 'attaching'
-  const sampleHidden = sampleState?.presentation === 'background'
+  const sampleHidden =
+    sampleState?.presentation === 'background' ||
+    Boolean(sampleState?.mode === 'docked' && obscured('component-example'))
   const sampleVisibilityLabel = sampleHidden
     ? t('显示示例组件', 'Show sample')
     : t('隐藏示例组件', 'Hide sample')
   const running = music?.phase === 'ready' || music?.phase === 'attaching'
-  const hidden = music?.presentation === 'background'
+  const hidden =
+    music?.presentation === 'background' ||
+    Boolean(music?.mode === 'docked' && obscured('component-music'))
   const visibilityLabel = hidden ? t('显示 Music', 'Show Music') : t('隐藏 Music', 'Hide Music')
-  const workspace = useContext(WorkspaceContext)
   const [musicError, setMusicError] = useState('')
   const [layoutsOpen, setLayoutsOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -140,9 +162,27 @@ export function WindowMenu() {
       setMusicError(String(error))
     }
   }
-  const toolkitOpen = workspace.visible.includes('component-toolkit')
+  const toolkitPanel = workspace.api?.getPanel('component-toolkit')
+  const [, refreshVisibility] = useState(0)
+  useEffect(() => {
+    if (!toolkitPanel) return
+    const refresh = () => refreshVisibility((version) => version + 1)
+    const panelChange = toolkitPanel.api.onDidVisibilityChange(refresh)
+    const groupChange = toolkitPanel.group.api.onDidVisibilityChange(refresh)
+    return () => {
+      panelChange.dispose()
+      groupChange.dispose()
+    }
+  }, [toolkitPanel, toolkitPanel?.group])
+  const toolkitOpen = Boolean(toolkitPanel)
+  const toolkitHidden = Boolean(
+    toolkitPanel &&
+      (!toolkitPanel.group.api.isVisible || toolkitPanel.group.activePanel !== toolkitPanel),
+  )
   const promptRunning = promptState?.phase === 'ready' || promptState?.phase === 'attaching'
-  const promptHidden = promptState?.presentation === 'background'
+  const promptHidden =
+    promptState?.presentation === 'background' ||
+    Boolean(promptState?.mode === 'docked' && obscured('component-prompts'))
   function status(open: boolean, background: boolean) {
     return open
       ? background
@@ -189,7 +229,7 @@ export function WindowMenu() {
                   label: visibilityLabel,
                   icon: hidden ? <EyeOff size={16} /> : <Eye size={16} />,
                   disabled: music?.phase !== 'ready',
-                  run: () => void window.musicDock?.toggleVisibility(),
+                  run: () => toggleEye('component-music', window.musicDock?.toggleVisibility),
                 }}
               />
             )}
@@ -197,32 +237,48 @@ export function WindowMenu() {
               <ComponentMenuRow
                 name={t('工具集', 'Toolkit')}
                 icon={<ToolkitIcon />}
-                status={toolkitOpen ? t('已打开', 'Open') : t('未打开', 'Not open')}
+                status={status(toolkitOpen, toolkitHidden)}
+                checked={toolkitOpen}
                 open={() =>
                   workspace.api && openToolkitPanel(workspace.api, t('工具集', 'Toolkit'))
                 }
                 action={{
-                  label: t('关闭工具集', 'Close toolkit'),
-                  icon: <X size={16} />,
+                  label: toolkitHidden
+                    ? t('显示工具集', 'Show toolkit')
+                    : t('隐藏工具集', 'Hide toolkit'),
+                  icon: toolkitHidden ? <EyeOff size={16} /> : <Eye size={16} />,
                   disabled: !toolkitOpen,
-                  run: () => workspace.api?.getPanel('component-toolkit')?.api.close(),
+                  run: () => {
+                    if (!toolkitPanel) return
+                    const group = toolkitPanel.group
+                    if (toolkitHidden) {
+                      const entry = collapsed.find((item) => item.panels.includes(toolkitPanel.id))
+                      if (entry) entry.restore()
+                      else group.api.setVisible(true)
+                      toolkitPanel.api.setActive()
+                    } else {
+                      const sibling = group.panels.find((panel) => panel !== toolkitPanel)
+                      if (sibling) sibling.api.setActive()
+                      else group.api.setVisible(false)
+                    }
+                  },
                 }}
               />
             )}
             {hasPrompts && (
               <ComponentMenuRow
-                name={t('文件库', 'File library')}
+                name={t('提示词库', 'Prompt library')}
                 icon={<Folder size={16} />}
                 status={status(promptRunning, promptHidden)}
                 checked={promptRunning}
                 open={() => void toggleRunning(window.promptDock)}
                 action={{
                   label: promptHidden
-                    ? t('显示文件库', 'Show file library')
-                    : t('隐藏文件库', 'Hide file library'),
+                    ? t('显示提示词库', 'Show prompt library')
+                    : t('隐藏提示词库', 'Hide prompt library'),
                   icon: promptHidden ? <EyeOff size={16} /> : <Eye size={16} />,
                   disabled: promptState?.phase !== 'ready',
-                  run: () => void window.promptDock?.toggleVisibility(),
+                  run: () => toggleEye('component-prompts', window.promptDock?.toggleVisibility),
                 }}
               />
             )}
@@ -237,7 +293,7 @@ export function WindowMenu() {
                   label: sampleVisibilityLabel,
                   icon: sampleHidden ? <EyeOff size={16} /> : <Eye size={16} />,
                   disabled: sampleState?.phase !== 'ready',
-                  run: () => void window.componentHost?.toggleVisibility(),
+                  run: () => toggleEye('component-example', window.componentHost?.toggleVisibility),
                 }}
               />
             )}
@@ -271,6 +327,11 @@ export function WindowMenu() {
         </MenuTrigger>
         <MenuPopover className="component-popup workbench-menu">
           <MenuList>
+            {collapsed.map((entry, index) => (
+              <MenuItem key={index} onClick={entry.restore}>
+                {t('恢复分屏', 'Restore split')} · {entry.names}
+              </MenuItem>
+            ))}
             {panels.length === 2 && (
               <>
                 <MenuItem onClick={() => arrange('right')}>

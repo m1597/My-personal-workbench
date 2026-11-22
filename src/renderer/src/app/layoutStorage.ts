@@ -77,7 +77,7 @@ function validLayout(value: unknown): value is SerializedDockview {
       typeof node.size !== 'number' ||
       !Number.isFinite(node.size) ||
       node.size < 0 ||
-      node.visible === false
+      (node.visible !== undefined && typeof node.visible !== 'boolean')
     )
       return false
     if (node.type === 'branch')
@@ -163,7 +163,7 @@ function restoreSnapshot(api: DockviewApi, snapshot: SerializedDockview, gap: nu
   for (const [id, title] of Object.entries({
     'component-music': 'Music',
     'component-toolkit': english ? 'Toolkit' : '工具集',
-    'component-prompts': english ? 'File library' : '文件库',
+    'component-prompts': english ? 'Prompt library' : '提示词库',
   })) {
     if (layout.panels[id]) layout.panels[id].title = title
   }
