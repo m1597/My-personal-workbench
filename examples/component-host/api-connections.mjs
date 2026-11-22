@@ -4,6 +4,26 @@ import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
+export function connectionEndpoint(value) {
+  let endpoint
+  try {
+    endpoint = new URL(value)
+  } catch {
+    throw Error('服务地址无效')
+  }
+  if (
+    endpoint.protocol !== 'https:' &&
+    !(
+      endpoint.protocol === 'http:' &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname)
+    )
+  )
+    throw Error('请使用 HTTPS 或本地服务地址')
+  if (endpoint.password || endpoint.username || endpoint.search || endpoint.hash)
+    throw Error('服务地址不能包含凭据、查询参数或片段')
+  return endpoint
+}
+
 export const apiUses = Object.freeze({
   default: { component: '工作台', purpose: '默认连接' },
   'prompts.model': { component: '提示词库', purpose: '模型' },
@@ -86,22 +106,7 @@ export function openConnections(profile, legacyVault) {
           throw Error('请选择支持视觉输入的连接')
         db.prepare('INSERT OR REPLACE INTO bindings VALUES(?,?)').run(use, input.reuse)
       } else {
-        let endpoint
-        try {
-          endpoint = new URL(input.endpoint)
-        } catch {
-          throw Error('服务地址无效')
-        }
-        if (
-          endpoint.protocol !== 'https:' &&
-          !(
-            endpoint.protocol === 'http:' &&
-            ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname)
-          )
-        )
-          throw Error('请使用 HTTPS 或本地服务地址')
-        if (endpoint.password || endpoint.username || endpoint.search || endpoint.hash)
-          throw Error('服务地址不能包含凭据、查询参数或片段')
+        const endpoint = connectionEndpoint(input.endpoint)
         const model = input.model?.trim()
         if (!model || model.length > 250) throw Error('请填写模型名称')
         const id = direct && !input.separate ? direct.id : randomUUID()

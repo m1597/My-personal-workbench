@@ -1,5 +1,5 @@
 import { validateSuggestions } from './music/offline-source.mjs'
-import { providers, protocols, setting, config } from './music-connection.mjs'
+import { providers, protocols, setting, config, legacyRoute } from './music-connection.mjs'
 export function modelInfo(store) {
   const { active: legacy, accounts } = config(store)
   const shared = store.connections?.read('music.model')
@@ -31,15 +31,17 @@ export function configureModel(store, vault, id, model, key, forget = false) {
   const state = config(store)
   model = model.trim()
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)) throw Error('请输入有效的模型 ID')
+  const route = legacyRoute(id, state.accounts[id])
   const secret = state.accounts[id]?.secret
   if (store.connections) {
     const shared = store.connections.read('music.model')
-    const sameAccount = shared?.protocol === protocols[id]
+    const switchingLegacyAccount = id !== state.active && Boolean(secret)
+    const sameAccount = shared?.protocol === route.protocol && !switchingLegacyAccount
     store.connections.write('music.model', {
       expectedId: shared?.id ?? null,
       separate: !sameAccount,
-      endpoint: sameAccount ? shared.endpoint : providers[id].url,
-      protocol: protocols[id],
+      endpoint: sameAccount ? shared.endpoint : route.endpoint,
+      protocol: route.protocol,
       model,
       key:
         key.trim() ||
@@ -49,10 +51,15 @@ export function configureModel(store, vault, id, model, key, forget = false) {
       clearKey: forget,
     })
     // The shared binding now owns this credential. Never revive a rotated legacy copy.
-    state.accounts[id] = { model }
+    state.accounts[id] = {
+      model,
+      endpoint: sameAccount ? shared.endpoint : route.endpoint,
+      protocol: route.protocol,
+    }
   } else {
     if (key.trim() && !vault.isEncryptionAvailable()) throw Error('系统凭据保护不可用')
     state.accounts[id] = {
+      ...route,
       model,
       secret: key.trim()
         ? vault.encryptString(key.trim()).toString('base64')
@@ -83,11 +90,10 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
   const resolved = store.connections?.resolve('music.model')
   const shared = resolved ?? store.connections?.read('music.model')
   const legacy = shared ? null : config(store)
-  const active = shared
-    ? { chat: 'deepseek', responses: 'openai', claude: 'claude', gemini: 'gemini' }[shared.protocol]
-    : legacy.active
-  const p = providers[active],
-    account = shared ?? legacy.accounts[active]
+  const account = shared ?? legacy.accounts[legacy.active]
+  const route = shared ?? legacyRoute(legacy.active, account)
+  const active = Object.keys(protocols).find((id) => protocols[id] === route.protocol)
+  const p = providers[active]
   let key = resolved?.key
   if (!key && !shared && account?.secret) {
     try {
@@ -98,21 +104,19 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
   }
   if (!key) throw Error('请先在模型设置中填写 API Key')
   const input = JSON.stringify(payload)
-  const model = account.model,
+  const model = route.model,
     headers = { 'Content-Type': 'application/json' }
-  let url = shared?.endpoint ?? p.url,
+  let url = route.endpoint,
     body
-  if (shared) {
-    const suffix = {
-      deepseek: '/chat/completions',
-      openai: '/responses',
-      claude: '/messages',
-      gemini: '/models',
-    }[active]
-    url = url.replace(/\/+$/, '')
-    if (!url.endsWith(suffix)) url += suffix
-    if (active === 'gemini') url += '/'
-  }
+  const suffix = {
+    deepseek: '/chat/completions',
+    openai: '/responses',
+    claude: '/messages',
+    gemini: '/models',
+  }[active]
+  url = url.replace(/\/+$/, '')
+  if (!url.endsWith(suffix)) url += suffix
+  if (active === 'gemini') url += '/'
   if (active === 'claude') {
     headers['x-api-key'] = key
     headers['anthropic-version'] = '2023-06-01'

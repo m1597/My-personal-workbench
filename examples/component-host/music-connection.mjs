@@ -1,3 +1,4 @@
+import { connectionEndpoint } from './api-connections.mjs'
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
@@ -47,14 +48,38 @@ export const protocols = {
   claude: 'claude',
   gemini: 'gemini',
 }
+export function legacyRoute(provider, account = {}) {
+  const preset = providers[provider]
+  // Older preset accounts omitted the URL. A stored custom URL belongs to
+  // this account's ciphertext and must never be replaced by a preset address.
+  const endpoint = Object.hasOwn(account, 'endpoint')
+    ? account.endpoint
+    : Object.hasOwn(account, 'url')
+      ? account.url
+      : preset.url
+  if (
+    typeof endpoint !== 'string' ||
+    !endpoint.trim() ||
+    (Object.hasOwn(account, 'endpoint') &&
+      Object.hasOwn(account, 'url') &&
+      account.endpoint !== account.url)
+  )
+    throw Error('旧模型连接的地址无法确认')
+  const protocol = account.protocol ?? protocols[provider]
+  if (!Object.values(protocols).includes(protocol)) throw Error('旧模型协议无法确认')
+  return {
+    endpoint: connectionEndpoint(endpoint).href,
+    model: account.model || preset.model,
+    protocol,
+  }
+}
+
 export function importMusicConnection(store, connections) {
   const state = config(store),
     account = state.accounts[state.active]
   if (!account || (!account.secret && connections.read('music.model')?.source === 'default')) return
   const connection = connections.importLegacy('music.model', {
-    endpoint: providers[state.active].url,
-    model: account.model || providers[state.active].model,
-    protocol: protocols[state.active],
+    ...legacyRoute(state.active, account),
     encrypted: account.secret ? Buffer.from(account.secret, 'base64') : null,
   })
   if (store.set && account.secret) {
@@ -147,13 +172,12 @@ export function recoverMusicProfile(store, profile, legacyVault) {
     const account = legacy.accounts[legacy.active]
     if (!record && account?.secret)
       record = {
-        endpoint: providers[legacy.active].url,
-        model: account.model || providers[legacy.active].model,
-        protocol: protocols[legacy.active],
+        ...legacyRoute(legacy.active, account),
         secret: Buffer.from(account.secret, 'base64'),
       }
     if (!record?.secret?.length) return { added, model: '旧资料中没有配置专用密钥' }
     const key = sharedConnectionVault(legacyVault).decryptString(Buffer.from(record.secret))
+    if (typeof key !== 'string' || !key.trim()) throw Error('旧连接凭据为空')
     store.connections.write('music.model', {
       expectedId: current?.id ?? null,
       separate: true,
