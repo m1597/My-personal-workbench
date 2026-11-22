@@ -107,8 +107,9 @@ async function writeInstallerInclude(output, appOutDir) {
     lines.push(`RMDir "${target}"`, `${skip}:`)
   }
   await directory('')
-  // biome-ignore lint/suspicious/noTemplateCurlyInString: NSIS expands this symbol.
-  checkVacantFile('$INSTDIR\\${UNINSTALL_FILENAME}')
+  // The installer template defines UNINSTALL_FILENAME after the destination validator.
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: NSIS expands this product name.
+  checkVacantFile('$INSTDIR\\Uninstall FitBay ${FITBAY_SLOT}.exe')
   lines.push(
     '!macroend',
     ...checks,
