@@ -37,6 +37,7 @@ import {
 } from './music-preferences.mjs'
 import { lstat, readFile, realpath } from 'node:fs/promises'
 import { openAudio, pathKey, regularFile } from './music/local-files.mjs'
+import { serviceErrorMessage } from './music-download-diagnosis.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { searchCollection } from './search-collection.mjs'
@@ -121,7 +122,7 @@ export function musicService(
         // File system and SQLite errors may contain local paths.
         if (e.name === 'AbortError')
           throw Error(name.startsWith('lx') ? '操作已取消' : '生成已取消')
-        if (e.code) throw Error('存储操作失败，请检查空间和目录权限后重试')
+        if (e.code) throw Error(serviceErrorMessage(e))
         throw e
       }
     })
@@ -942,7 +943,11 @@ export function musicService(
         signal.throwIfAborted()
         const catalog = lx.synchronizeSources(signal)
         catalogSync = catalog.finish
+        let recovery
+        const refreshSources = () =>
+          (recovery ??= lx.refreshRecommendationSources(signal, catalogSync))
         await catalog.ready
+        if (!store.get('lx-source') && !signal.aborted) await refreshSources()
         signal.throwIfAborted()
         if (!store.get('lx-source'))
           throw Error('目录和已导入的音乐源均不可用，请在设置中检查音乐源')
@@ -994,6 +999,7 @@ export function musicService(
         let keepPartial = false
         const sourceHealth = {
           catalogSync,
+          refreshSources,
           lyricTasks: [],
           unreachable: 0,
           queries: new Map(),
@@ -1168,7 +1174,7 @@ export function musicService(
             const saved = savedRows.all(batch)
             const active = reservations.all(batch)
             const represented = [...saved, ...active]
-            if (represented.length >= targetCount || sourceHealth.unreachable >= 3) return
+            if (represented.length >= targetCount) return
             if (refilling) {
               await refilling
               continue
@@ -1192,7 +1198,7 @@ export function musicService(
               if (!reserves.has(row)) freshSelected = true
               return entry.id
             }
-            if (exhausted && !broadened && active.length) return
+            if (sourceHealth.unreachable >= 3 || (exhausted && !broadened && active.length)) return
             // All idle workers share a single refill, while other workers keep their recordings.
             refilling ??= refill(represented, saved.length, work)
               .catch((error) => {
@@ -1212,11 +1218,7 @@ export function musicService(
           keepPartial ? '已保留直接相关的歌曲' : '已达到目标首数',
         )
       } catch (error) {
-        if (!signal.aborted)
-          update(
-            'blocked',
-            error.code ? '存储操作失败，请检查空间和目录权限后重试' : String(error.message),
-          )
+        if (!signal.aborted) update('blocked', serviceErrorMessage(error))
         else recordCancellation()
       } finally {
         signal.removeEventListener('abort', recordCancellation)

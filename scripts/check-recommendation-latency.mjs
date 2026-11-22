@@ -15,6 +15,7 @@ await fs.mkdir(output)
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
 store.set('music-recommend-dir', output)
 store.set('music-media-keys', 'off')
+store.set('music-guide-v1', 1)
 store.db.close()
 const sources = [
   [
@@ -23,7 +24,7 @@ const sources = [
     if(action==='lyric')return '';
     const [name,singer]=info.keyword.split(' ');
     if(name.startsWith('故障'))throw Error('检索暂不可用');
-    if(name.startsWith('缺歌'))return [];
+    if(name.startsWith('缺歌') || name.startsWith('目录恢复'))return [];
     if(name==='慢歌')return new Promise(()=>{});
     if(name==='后页歌曲' && info.page===1)return {items:[{id:name,name,singer:'丙',allowPermanentSave:false}],hasMore:true};
     if(name==='后页歌曲')return [{id:'许可版本',name,singer:'丙',allowPermanentSave:true}];
@@ -33,6 +34,7 @@ const sources = [
     '无响应源',
     `if(action==='search' && info.keyword.startsWith('故障'))throw Error('检索暂不可用');
     if(action==='lyric')return '';
+    if(action==='search' && info.keyword.startsWith('目录恢复'))return [];
     if(action==='search' && info.keyword.startsWith('单源恢复'))return [];
     if(action==='search' && info.keyword.startsWith('超时换源'))return [{id:'超时换源',name:'超时换源',singer:'甲',allowPermanentSave:true}];
     if(action==='musicUrl' && info.musicInfo.name==='超时换源')return 'https://1.1.1.1/recording/'+encodeURIComponent('超时换源')+'?alternative=1';
@@ -93,6 +95,8 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     '补选二',
     '超时换源',
     '单源恢复',
+    '目录恢复甲',
+    '目录恢复乙',
   ].entries()) {
     recordings[name] = path.join(root, name + '.wav')
     await writeFixtureRecording(recordings[name], 718 + index * 151)
@@ -100,7 +104,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   const mockRequests = async () => {
     await offlineSourceRepository(app)
     return app.evaluate(
-      ({ app, BaseWindow }, { audio, recordings }) => {
+      ({ app, BaseWindow }, { audio, recordings, backupCode }) => {
         if (
           !app.commandLine.hasSwitch('mute-audio') ||
           BaseWindow.getAllWindows().some((w) => w.isFocusable())
@@ -132,6 +136,27 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
         }
         process.getBuiltinModule('node:module').syncBuiltinESMExports()
         https.request = (url, options, receive) => {
+          if (
+            url.origin === 'https://1.1.1.1' &&
+            ['/manifest', '/backup.js'].includes(url.pathname)
+          ) {
+            const { Readable } = process.getBuiltinModule('node:stream')
+            const req = new EventEmitter()
+            const manifest = url.pathname === '/manifest'
+            if (manifest) globalThis.manifests = (globalThis.manifests ?? 0) + 1
+            const body = manifest
+              ? JSON.stringify({ sources: [{ url: '/backup.js' }] })
+              : backupCode
+            req.end = () =>
+              receive(
+                Object.assign(Readable.from([Buffer.from(body)]), {
+                  statusCode: 200,
+                  headers: {},
+                  setTimeout() {},
+                }),
+              )
+            return req
+          }
           if (url.origin !== 'https://1.1.1.1' || !url.pathname.startsWith('/recording'))
             throw Error('夹具意外请求')
           const song = decodeURIComponent(url.pathname.split('/')[2] ?? '')
@@ -149,7 +174,14 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
                 headers: {},
                 setTimeout() {},
               })
-              req.end = () => receive(stream)
+              req.end = () => {
+                receive(stream)
+                if (song === '超时换源')
+                  setTimeout(
+                    () => stream.destroy(new DOMException('audio timeout', 'TimeoutError')),
+                    50,
+                  )
+              }
               options.signal.addEventListener(
                 'abort',
                 () => stream.destroy(Error('fixture transfer deadline')),
@@ -216,7 +248,20 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
           })
         }
       },
-      { audio: path.resolve('tests/fixtures/local-music/tone.mp3'), recordings },
+      {
+        audio: path.resolve('tests/fixtures/local-music/tone.mp3'),
+        recordings,
+        backupCode: `// @name 刷新后可用的备用源
+lx.on('request',({action,info})=>{
+  if(action==='search'){
+    const [name,singer]=info.keyword.split(' ')
+    return name.startsWith('目录恢复')?[{id:name,name,singer,allowPermanentSave:true}]:[]
+  }
+  if(action==='musicUrl')return 'https://1.1.1.1/recording/'+encodeURIComponent(info.musicInfo.name)
+  return ''
+})
+lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+      },
     )
   }
   await mockRequests()
@@ -401,7 +446,31 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
   assert.equal(finalCalls.filter((call) => call === 'model').length, 2)
   await new Promise((resolve) => setTimeout(resolve, 800))
   assert.deepEqual(await app.evaluate(() => globalThis.calls), finalCalls)
-  console.log(JSON.stringify({ firstMs, stopped, single }))
+  await page.evaluate(() => window.music.setPlaybackRepository('https://1.1.1.1/manifest', true))
+  await app.evaluate(() => {
+    globalThis.holdRefill = false
+    globalThis.songs = [
+      ['目录恢复甲', '甲'],
+      ['目录恢复乙', '乙'],
+    ]
+  })
+  await page.getByLabel('推荐首数').fill('2')
+  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+  await expect(progress).toContainText('已入库 2/2，已达到目标首数', { timeout: 20000 })
+  assert.equal(await app.evaluate(() => globalThis.manifests), 1)
+  console.log(
+    JSON.stringify({
+      root,
+      firstMs,
+      stopped,
+      single,
+      confirmed: {
+        timeoutCode: new DOMException('audio timeout', 'TimeoutError').code,
+        recoveredTracks: (await snapshot()).titles,
+        configuredCatalogReads: 1,
+      },
+    }),
+  )
 } finally {
   await app.close()
 }

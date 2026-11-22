@@ -13,7 +13,7 @@ import {
   namesRequestedArtist,
 } from './music-discovery.mjs'
 import { CatalogUnavailable, platformSearch } from './lx-platform-search.mjs'
-import { describeFailure } from './music-download-diagnosis.mjs'
+import { describeFailure, isStorageError } from './music-download-diagnosis.mjs'
 export { inspectSource } from './lx-source-catalog.mjs'
 import { publishDaily } from './music-recording-identity.mjs'
 import { saveLyrics, downloadLrc } from './music-lyrics.mjs'
@@ -33,6 +33,9 @@ import { chooseQuality, getMusicPreferences } from './music-preferences.mjs'
 import { publish } from './music/store.mjs'
 
 class SourceDownloadError extends Error {}
+class AddressError extends SourceDownloadError {
+  kind = 'address'
+}
 class TransferError extends SourceDownloadError {}
 class TransferDeadline extends TransferError {}
 class InvalidAudio extends SourceDownloadError {
@@ -143,7 +146,8 @@ function failureKind(error) {
   if (error instanceof CatalogUnavailable) return 'network'
   if (error instanceof SourceDownloadError) return 'download'
   if (error instanceof SourceRequestError) return 'source-request'
-  return error.code ? 'storage' : 'other'
+  if (isStorageError(error)) return 'storage'
+  return error.name === 'TimeoutError' ? 'network' : 'other'
 }
 function permission(source, row) {
   const rights = [row.allowPermanentSave, row.permanentDownload, row.meta?.allowPermanentSave]
@@ -481,7 +485,8 @@ export async function saveRecording(
       })
     } catch (error) {
       signal.throwIfAborted()
-      if (deadline.aborted) throw new TransferDeadline('完整录音未能在传输时限内下载')
+      if (deadline.aborted || error.name === 'TimeoutError')
+        throw new TransferDeadline('完整录音未能在传输时限内下载')
       if (
         ['ECONNRESET', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE', 'ABORT_ERR'].includes(error.code)
       )
@@ -845,6 +850,13 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     return bank
   }
   const repositories = () => playbackRepositories(getStore(), catalog())
+  function refreshRecommendationSources(signal, catalogSync) {
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(60000)])
+    return Promise.allSettled([
+      catalogSync ? catalogSync() : catalog().synchronize(deadline),
+      repositories().refresh(deadline),
+    ])
+  }
   let playbackRefresh
   function refreshPlayback(scope) {
     if (playbackRefresh?.scope === scope) return playbackRefresh.work
@@ -1478,12 +1490,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       )
     } catch (error) {
       signal.throwIfAborted()
-      if (addressDeadline.aborted) {
-        if (dailyId) throw new RecordingError('network', '音乐源取址超时')
-        throw new SourceDownloadError('音乐源取址超时')
-      }
-      if (!(error instanceof SourceRequestError)) throw error
-      throw new SourceDownloadError(
+      if (addressDeadline.aborted || error.name === 'TimeoutError')
+        throw new AddressError('音乐源取址超时')
+      throw new AddressError(
         src.name +
           '（' +
           src.platform +
@@ -1494,7 +1503,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       )
     }
     if (typeof url !== 'string' || !url || url.length > 16384)
-      throw new SourceDownloadError('音乐源未返回可用地址')
+      throw new AddressError('音乐源未返回可用地址')
     return url
   }
   async function fetchRecording(
@@ -1581,7 +1590,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       } catch (e) {
         task.status = signal.aborted ? '已取消' : '下载失败'
         // Storage errors can contain absolute paths.
-        task.detail = e.code ? '请检查存储目录' : String(e.message).slice(0, 200)
+        task.detail = isStorageError(e) ? '请检查存储目录' : String(e.message).slice(0, 200)
         throw e
       } finally {
         reservations.delete(identity)
@@ -1835,8 +1844,18 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     running.set(id, task)
     const signal = batchSignal ? AbortSignal.any([batchSignal, task.signal]) : task.signal
     const failures = []
+    let refresh
+    const refreshSources = () => {
+      refresh ??= health?.refreshSources?.() ?? refreshRecommendationSources(signal)
+      return refresh
+    }
     try {
-      const activeSource = await currentSource(signal, true)
+      let activeSource = await currentSource(signal, true)
+      if (!activeSource && !selected) {
+        await refreshSources()
+        signal.throwIfAborted()
+        activeSource = await currentSource(signal, true)
+      }
       if (!activeSource) throw new RecordingError('source', '尚未导入音乐源')
       const prefs = getMusicPreferences(store)
       const cache = new Map()
@@ -2103,7 +2122,6 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         return candidate
       }
       let sources = saved ? [saved.src] : installed
-      const checkedSources = health?.catalogSync
       // Prefer an independent active script while repository-managed candidates are being verified.
       const initialSources = sources
       const deferredDeep = []
@@ -2129,8 +2147,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             return
           } catch (error) {
             signal.throwIfAborted()
-            if (error.code || (!prefs.recommendDir && error.message.includes('推荐下载目录')))
-              throw error
+            if (isStorageError(error)) throw error
             if (
               health &&
               ['network', 'source-request'].includes(failureKind(error)) &&
@@ -2149,11 +2166,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
               expand.push(src)
           }
         }
-        if (!expandedCatalog && checkedSources && !saved) {
+        if (!expandedCatalog && !saved && !choicesForItem.size) {
           expandedCatalog = true
-          await checkedSources()
+          await refreshSources()
           signal.throwIfAborted()
           const current = await currentSource(signal, true)
+          attemptSources = bank.configuration()
           const discovered = current
             ? bank
                 .discoverySources(current)
@@ -2181,7 +2199,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           return
         } catch (error) {
           signal.throwIfAborted()
-          if (error.code) throw error
+          if (isStorageError(error)) throw error
           failures.push({ src: deferredTransfer.src, error })
         }
       }
@@ -2207,7 +2225,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             kinds: signal.aborted ? ['cancelled'] : (error.kinds ?? [failureKind(error)]),
             message: signal.aborted
               ? '操作已取消'
-              : error.code
+              : isStorageError(error) && error.code
                 ? '本地存储失败（' + error.code + '）'
                 : String(error.message).slice(0, 320),
           }
@@ -2464,10 +2482,16 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
       return pool
     },
+    refreshRecommendationSources,
     async batch(batch, signal, sourceHealth, reserveNext) {
       const epoch = generation
       const controller = new AbortController()
       const work = AbortSignal.any([signal, controller.signal])
+      let refresh
+      sourceHealth.refreshSources ??= () => {
+        refresh ??= refreshRecommendationSources(work, sourceHealth.catalogSync)
+        return refresh
+      }
       let fatal
       const initialWorkers =
         catalog().independentManual() && catalog().independentCount() === 1 ? 5 : 3
@@ -2495,10 +2519,6 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
                 activeWorkers++
                 workers.push(worker())
               }
-              const issue = getStore()
-                .db.prepare('SELECT diagnosis,summary FROM recommended_items WHERE item=?')
-                .get(id)
-              if (['source', 'storage'].includes(issue?.diagnosis)) throw Error(issue.summary)
             }
           }
         } catch (error) {
