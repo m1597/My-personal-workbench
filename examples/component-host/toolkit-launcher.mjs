@@ -54,6 +54,7 @@ export async function toolkitLauncher(packaged, profile, installation) {
         [
           ...args,
           '--fitbay-hosted',
+          '--fitbay-owner-pid=' + process.pid,
           '--workbench-profile=' + profile,
           ...(capture ? ['--toolkit-capture'] : []),
           ...(page ? ['--toolkit-page=' + page] : []),
