@@ -198,7 +198,7 @@ declare global {
         ): Promise<void>
         setMusicOutput(volume: number, muted: boolean): Promise<void>
         setShortcutEnabled(scope: 'app' | 'global', enabled: boolean): Promise<void>
-        resetMusicShortcuts(scope: 'app' | 'global'): Promise<void>
+        resetMusicShortcuts(scope: 'app' | 'global' | 'all'): Promise<void>
         setMusicShortcut(
           action: TransportAction,
           key: string,

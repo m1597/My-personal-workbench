@@ -1,9 +1,9 @@
 import { SettingsShell } from '../../src/renderer/src/app/ComponentSettings'
 import { ConnectionSettings } from '../../src/renderer/src/app/ConnectionSettings'
-import { recordShortcut } from './recordShortcut'
+import { ShortcutRecorder } from '../../src/renderer/src/app/ShortcutRecorder'
 import { MusicMcpSettings } from './MusicMcpSettings'
 import { useEffect, useState } from 'react'
-import { Button, Checkbox, Dropdown, Field, Input, Option } from '@fluentui/react-components'
+import { Button, Checkbox, Dropdown, Field, Option } from '@fluentui/react-components'
 import { ModelSettings, type ModelInfo } from './ModelSettings'
 import { LibraryCleanup } from './LibraryCleanup'
 import { LibraryTools } from './LibraryTools'
@@ -164,82 +164,6 @@ const actions = {
   volumeDown: '降低音量',
 } as const
 const qualities = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires']
-
-function ShortcutField({
-  action,
-  saved,
-  local = false,
-  change,
-}: {
-  action: TransportAction
-  saved: string
-  local?: boolean
-  change(key: string): Promise<boolean>
-}) {
-  const [value, setValue] = useState(saved)
-  const [recording, setRecording] = useState(false)
-  const [hint, setHint] = useState('')
-  function begin() {
-    setHint('')
-    setRecording(true)
-  }
-  return (
-    <form
-      className="settings-shortcut"
-      onSubmit={async (e) => {
-        e.preventDefault()
-        await change(value)
-      }}
-    >
-      <Field label={(local ? '应用内' : '') + actions[action]} hint={hint || undefined}>
-        <Input
-          value={recording ? '' : value}
-          readOnly
-          placeholder={recording ? '请按组合键' : '点击录制'}
-          onFocus={begin}
-          onClick={begin}
-          onBlur={() => setRecording(false)}
-          onKeyDown={(e) => {
-            if (e.key === 'Tab') return
-            if (!recording && e.key === 'Enter') {
-              e.preventDefault()
-              begin()
-              return
-            }
-            if (!recording) return
-            e.preventDefault()
-            e.stopPropagation()
-            if (e.repeat || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
-            if (e.key === 'Escape') {
-              setRecording(false)
-              setHint('')
-              return
-            }
-            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
-            const clear =
-              e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey
-            const key = clear ? '' : recordShortcut(e.nativeEvent, local)
-            if (key === undefined) {
-              setHint('请按修饰键与字母、数字或导航键的组合，或直接按功能键')
-              return
-            }
-            setValue(key)
-            setHint('')
-            setRecording(false)
-          }}
-        />
-      </Field>
-      <Button
-        type="submit"
-        size="small"
-        disabled={value === saved}
-        aria-label={'保存' + (local ? '应用内' : '') + actions[action] + '快捷键'}
-      >
-        保存
-      </Button>
-    </form>
-  )
-}
 
 export function MusicSettings({
   plugins,
@@ -576,10 +500,19 @@ export function MusicSettings({
             {Object.entries(actions).map(([id]) => {
               const action = id as TransportAction
               return (
-                <ShortcutField
+                <ShortcutRecorder
                   local
                   key={action + prefs.appShortcuts[action]}
-                  action={action}
+                  label={'应用内' + actions[action]}
+                  defaultValue={
+                    {
+                      toggle: 'Space',
+                      previous: 'Left',
+                      next: 'Right',
+                      volumeUp: 'Up',
+                      volumeDown: 'Down',
+                    }[action]
+                  }
                   saved={prefs.appShortcuts[action]}
                   change={(key) => update(() => window.music.setMusicShortcut(action, key, 'app'))}
                 />
@@ -608,9 +541,18 @@ export function MusicSettings({
             {Object.entries(actions).map(([id]) => {
               const action = id as TransportAction
               return (
-                <ShortcutField
+                <ShortcutRecorder
                   key={action + prefs.shortcuts[action]}
-                  action={action}
+                  label={actions[action]}
+                  defaultValue={
+                    {
+                      toggle: 'MediaPlayPause',
+                      previous: 'Ctrl+Alt+Left',
+                      next: 'Ctrl+Alt+Right',
+                      volumeUp: 'Ctrl+Alt+Up',
+                      volumeDown: 'Ctrl+Alt+Down',
+                    }[action]
+                  }
                   saved={prefs.shortcuts[action]}
                   change={(key) => update(() => window.music.setMusicShortcut(action, key))}
                 />
@@ -618,6 +560,9 @@ export function MusicSettings({
             })}
             <Button onClick={() => void update(() => window.music.resetMusicShortcuts('global'))}>
               恢复全局默认快捷键
+            </Button>
+            <Button onClick={() => void update(() => window.music.resetMusicShortcuts('all'))}>
+              恢复全部 Music 默认快捷键
             </Button>
             {prefs.shortcutFailures.length > 0 && (
               <span role="alert">
