@@ -63,10 +63,27 @@ await writeFile(
 async function writeInstallerInclude(output, appOutDir) {
   const quotePath = (value) => value.replaceAll('$', '$$$$')
   const lines = ['!macro customRemoveFiles', 'SetOutPath "$TEMP"']
+  const checks = ['!macro FitBayCheckReinstallFiles']
+  function checkVacantFile(target) {
+    checks.push(
+      `System::Call 'kernel32::GetFileAttributesW(w "${target}") i.r0'`,
+      'IntCmp $0 -1 +2',
+      'Goto invalidPath',
+    )
+  }
   let sequence = 0
   async function directory(relative) {
     const skip = `skipOwnedDirectory${sequence++}`
     const target = relative ? `$INSTDIR\\${quotePath(relative)}` : '$INSTDIR'
+    if (relative) {
+      checks.push(
+        `System::Call 'kernel32::GetFileAttributesW(w "${target}") i.r0'`,
+        'IntCmp $0 -1 +4',
+        'IntOp $0 $0 & 0x410',
+        'IntCmp $0 0x10 +2',
+        'Goto invalidPath',
+      )
+    }
     lines.push(
       `System::Call 'kernel32::GetFileAttributesW(w "${target}") i.r0'`,
       'IntOp $0 $0 & 0x400',
@@ -75,7 +92,10 @@ async function writeInstallerInclude(output, appOutDir) {
     for (const entry of await readdir(path.join(appOutDir, relative), { withFileTypes: true })) {
       const child = path.join(relative, entry.name)
       if (entry.isDirectory()) await directory(child)
-      else lines.push(`Delete "$INSTDIR\\${quotePath(child)}"`)
+      else {
+        checkVacantFile(`$INSTDIR\\${quotePath(child)}`)
+        lines.push(`Delete "$INSTDIR\\${quotePath(child)}"`)
+      }
     }
     if (!relative) lines.push(`Delete "$INSTDIR\\\${UNINSTALL_FILENAME}"`)
     lines.push(`RMDir "${target}"`, `${skip}:`)
@@ -84,7 +104,14 @@ async function writeInstallerInclude(output, appOutDir) {
     lines.push('Delete "$INSTDIR\\resources\\app\\music-offline-setup.exe"')
   }
   await directory('')
-  lines.push('!macroend', `!include "${quotePath(path.resolve('resources/fitbay-install.nsh'))}"`)
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: NSIS expands this symbol.
+  checkVacantFile('$INSTDIR\\${UNINSTALL_FILENAME}')
+  lines.push(
+    '!macroend',
+    ...checks,
+    '!macroend',
+    `!include "${quotePath(path.resolve('resources/fitbay-install.nsh'))}"`,
+  )
   await writeFile(output, `\ufeff${lines.join('\r\n')}\r\n`)
 }
 

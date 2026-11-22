@@ -1,4 +1,4 @@
-﻿!include "LogicLib.nsh"
+!include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "Win\COM.nsh"
 
@@ -13,6 +13,8 @@
 !endif
 !define /ifndef FITBAY_REG "Software\FitBay\Installations"
 
+!define FITBAY_HISTORY "Software\FitBay\PreviousInstallations"
+
 !macro FitBayDefaultDir
   !ifndef BUILD_UNINSTALLER
     !if "${FITBAY_SLOT}" != "Workbench"
@@ -20,6 +22,11 @@
       ReadRegStr $0 HKCU "${FITBAY_REG}" "Workbench"
       ${If} $0 != ""
         StrCpy $INSTDIR "$0\${FITBAY_SLOT}"
+      ${EndIf}
+      ReadRegStr $0 HKCU "${FITBAY_HISTORY}" "${FITBAY_SLOT}"
+      ${If} $0 != ""
+      ${AndIf} ${FileExists} "$0\."
+        StrCpy $INSTDIR "$0"
       ${EndIf}
     !endif
   !endif
@@ -130,6 +137,14 @@
       !insertmacro rejectOverlap "$1"
     ${EndIf}
 
+    !if "${FITBAY_SLOT}" != "Workbench"
+      ReadRegStr $1 HKCU "${FITBAY_HISTORY}" "${FITBAY_SLOT}"
+      ${If} $1 == $INSTDIR
+        !insertmacro FitBayCheckReinstallFiles
+        Goto validPath
+      ${EndIf}
+    !endif
+
     ; Use FindFirst so that hidden files and empty subdirectories count as contents too.
     FindFirst $0 $1 "$2\*"
     ${DoWhile} $1 != ""
@@ -211,6 +226,9 @@
     GetFullPathName $0 "$0\."
     GetFullPathName $1 "$INSTDIR\."
     ${If} $0 == $1
+      !if "${FITBAY_SLOT}" != "Workbench"
+        WriteRegStr HKCU "${FITBAY_HISTORY}" "${FITBAY_SLOT}" "$1"
+      !endif
       DeleteRegValue HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
     ${EndIf}
   ${EndIf}

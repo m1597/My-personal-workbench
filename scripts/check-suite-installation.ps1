@@ -124,3 +124,20 @@ foreach ($p in @('Workbench')+$components) {
 }
 Write-Host "PASS $Previous to ${version}: four existing directories and markers preserved"
 foreach ($p in $components + @('Workbench')) { Remove-TestProduct $p $locations[$p] }
+$history = 'HKCU:\Software\FitBay\PreviousInstallations'
+foreach ($p in $components) {
+  $dest = $locations[$p]
+  if ((Get-ItemPropertyValue $history $p) -ne $dest) { throw "Missing uninstall history for $p" }
+  $installer = (Resolve-Path "dist/installers/FitBay-$p-Setup-$version-x64.exe").Path
+  $collision = Join-Path $dest ($exe[$p]+'.exe')
+  Set-Content -LiteralPath $collision -Value 'foreign content'
+  $failed = Start-Process $installer -ArgumentList '/S /currentuser' -Wait -PassThru -WindowStyle Hidden
+  if ($failed.ExitCode -ne 2 -or (Get-Content -LiteralPath $collision) -ne 'foreign content') { throw "$p overwrote a foreign file or accepted its path" }
+  Remove-Item -LiteralPath $collision
+  Run-Setup $installer '/S /currentuser'
+  Verify $p $dest $version
+  if ((Get-Content -LiteralPath (Join-Path $dest 'existing-file.txt')) -ne $p) { throw "$p reinstall lost user file" }
+  Remove-TestProduct $p $dest
+  Remove-ItemProperty -LiteralPath $history -Name $p
+}
+Write-Host 'PASS independent reinstall recognizes each original nonempty directory, preserves user files and refuses payload collisions'

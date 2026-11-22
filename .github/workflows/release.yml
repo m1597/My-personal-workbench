@@ -51,7 +51,20 @@ jobs:
           ./scripts/check-suite-installation.ps1 -BaselineDir $baseline -Previous $previous
           $root = Join-Path $env:RUNNER_TEMP 'Host only'
           ./scripts/check-host-only.ps1 -Installer "dist/installers/FitBay-Workbench-Setup-$version-x64.exe" -Root $root
-          node scripts/check-settings-installation.mjs $root --candidate
+          node scripts/check-settings-installation.mjs $root --candidate --remove
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/check-upgrade-data.mjs verify-removed
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $registry = 'HKCU:\Software\FitBay\Installations'
+          foreach ($product in 'Music','Prompts','Toolkit') {
+            if ((Get-ItemProperty $registry).$product) { throw "Uninstall left $product registered" }
+            $installer = Join-Path $baseline "FitBay-$product-Setup-$previous-x64.exe"
+            $process = Start-Process $installer -ArgumentList '/S /currentuser' -Wait -PassThru -WindowStyle Hidden
+            if ($process.ExitCode -or (Get-ItemPropertyValue $registry $product) -ne (Join-Path $root $product)) { throw "Could not restore baseline $product" }
+          }
+          node scripts/check-settings-installation.mjs $root --candidate --batch $previous
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/check-upgrade-data.mjs verify (Join-Path $root 'Music')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-installed-component-material.mjs $root
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
