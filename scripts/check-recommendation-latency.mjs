@@ -61,7 +61,7 @@ const launch = () =>
     env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
   })
 let app = await launch()
-try {
+async function verify() {
   let page = await app.firstWindow()
   await page.waitForSelector('.music-shell')
   for (const [name, body] of sources) {
@@ -267,6 +267,77 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}
   await mockRequests()
   await page.evaluate(() => window.music.configureModel('deepseek', 'fixture', 'fixture', false))
   await openDiscovery(page, true)
+  async function checkTransferFallback() {
+    const progress = page.locator('.music-batch-status [role="status"]')
+    for (const song of ['超时换源', '单源恢复']) {
+      await app.evaluate((_, song) => {
+        globalThis.testDeadline = true
+        globalThis.songs = [[song, '甲']]
+      }, song)
+      await page.getByLabel('推荐首数').fill('1')
+      await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+      await expect(page.locator('.music-list li strong')).toHaveText([song], { timeout: 11000 })
+      await expect(progress).toContainText('已入库 1/1，已达到目标首数')
+    }
+    assert.deepEqual(await app.evaluate(() => globalThis.timedTransfers), [
+      ['超时换源', false],
+      ['超时换源', true],
+      ['单源恢复', false],
+      ['单源恢复', false],
+    ])
+  }
+  async function checkConfiguredRepository() {
+    const progress = page.locator('.music-batch-status [role="status"]')
+    await page.evaluate(() => window.music.setPlaybackRepository('https://1.1.1.1/manifest', true))
+    await app.evaluate(() => {
+      globalThis.holdRefill = false
+      globalThis.songs = [
+        ['目录恢复甲', '甲'],
+        ['目录恢复乙', '乙'],
+      ]
+    })
+    await page.getByLabel('推荐首数').fill('2')
+    await page.getByRole('button', { name: '生成推荐', exact: true }).click()
+    await expect(progress).toContainText('已入库 2/2，已达到目标首数', { timeout: 20000 })
+    assert.equal(await app.evaluate(() => globalThis.manifests), 1)
+  }
+  if (process.env.FITBAY_TEST_SOURCE_RECOVERY === '1') {
+    await page.evaluate(async () => {
+      const { installed } = await window.music.lxSources()
+      await window.music.lxSelectSource(installed.find((source) => source.name === '健康源').id)
+    })
+    await checkTransferFallback()
+    await checkConfiguredRepository()
+    const evidence = {
+      timeoutCode: new DOMException('audio timeout', 'TimeoutError').code,
+      transfers: await app.evaluate(() => globalThis.timedTransfers),
+      repositoryReads: await app.evaluate(() => globalThis.manifests),
+      recoveredTitles: await page.locator('.music-list li strong').allTextContents(),
+    }
+    const fixture = new MusicStore(path.join(profile, 'fitbay-music'))
+    try {
+      // A file in place of the target directory forces an actual local filesystem error.
+      fixture.set('music-recommend-dir', recordings['目录恢复乙'])
+      const batch = fixture.saveSuggestions(
+        '存储错误',
+        [{ title: '写入失败', artist: '甲', reason: '测试' }],
+        '待处理',
+      )
+      const { id } = fixture.db.prepare('SELECT id FROM items WHERE batch=?').get(batch)
+      await page.evaluate((id) => window.music.prepareRecommendation(id), id)
+      const result = fixture.db
+        .prepare('SELECT diagnosis,error FROM recommended_items WHERE item=?')
+        .get(id)
+      assert.equal(result.diagnosis, 'storage')
+      assert.match(result.error, /本地存储失败/)
+      evidence.storage = { diagnosis: result.diagnosis, detail: result.error }
+    } finally {
+      fixture.db.close()
+    }
+    await fs.writeFile(path.join(root, 'source-recovery.json'), JSON.stringify(evidence, null, 2))
+    console.log(JSON.stringify({ root, ...evidence }))
+    return
+  }
   await page.getByLabel('推荐首数').fill('2')
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('测试两首音乐')
   // Offscreen capture cannot composite the Windows acrylic surface.
@@ -415,23 +486,10 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}
   const skipped = await app.evaluate(() =>
     globalThis.searches.filter(([, keyword]) => keyword.startsWith('故障丁')),
   )
-  assert.deepEqual(skipped, [])
-  for (const song of ['超时换源', '单源恢复']) {
-    await app.evaluate((_, song) => {
-      globalThis.testDeadline = true
-      globalThis.songs = [[song, '甲']]
-    }, song)
-    await page.getByLabel('推荐首数').fill('1')
-    await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-    await expect(page.locator('.music-list li strong')).toHaveText([song], { timeout: 11000 })
-    await expect(progress).toContainText('已入库 1/1，已达到目标首数')
-  }
-  assert.deepEqual(await app.evaluate(() => globalThis.timedTransfers), [
-    ['超时换源', false],
-    ['超时换源', true],
-    ['单源恢复', false],
-    ['单源恢复', false],
-  ])
+  // A source must fail on two distinct songs before it is suspended. A concurrent
+  // fourth song can already have started one source when the second failure settles.
+  assert.ok(skipped.length < sources.length, JSON.stringify(skipped))
+  await checkTransferFallback()
   await app.evaluate(() => {
     globalThis.calls = []
     globalThis.songs = [['取消等待', '甲']]
@@ -446,18 +504,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}
   assert.equal(finalCalls.filter((call) => call === 'model').length, 2)
   await new Promise((resolve) => setTimeout(resolve, 800))
   assert.deepEqual(await app.evaluate(() => globalThis.calls), finalCalls)
-  await page.evaluate(() => window.music.setPlaybackRepository('https://1.1.1.1/manifest', true))
-  await app.evaluate(() => {
-    globalThis.holdRefill = false
-    globalThis.songs = [
-      ['目录恢复甲', '甲'],
-      ['目录恢复乙', '乙'],
-    ]
-  })
-  await page.getByLabel('推荐首数').fill('2')
-  await page.getByRole('button', { name: '生成推荐', exact: true }).click()
-  await expect(progress).toContainText('已入库 2/2，已达到目标首数', { timeout: 20000 })
-  assert.equal(await app.evaluate(() => globalThis.manifests), 1)
+  await checkConfiguredRepository()
   console.log(
     JSON.stringify({
       root,
@@ -471,6 +518,9 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}
       },
     }),
   )
+}
+try {
+  await verify()
 } finally {
   await app.close()
 }

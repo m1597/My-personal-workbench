@@ -2093,8 +2093,13 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       function backOff(key, message) {
         const previous = health.cooldown.get(key)
         if (previous?.until > Date.now()) return
-        const delay = Math.min(120000, (previous?.delay ?? 15000) * 2)
-        health.cooldown.set(key, { until: Date.now() + delay, delay, message })
+        // A catalog can reject one recording while still serving the rest of the batch.
+        if (!previous || previous.item === id) {
+          health.cooldown.set(key, { item: id, until: 0, message })
+          return
+        }
+        const delay = Math.min(120000, (previous.delay ?? 15000) * 2)
+        health.cooldown.set(key, { item: id, until: Date.now() + delay, delay, message })
       }
       const probe = async (src, probeSignal) => {
         probeSignal.throwIfAborted()
@@ -2103,7 +2108,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           [keyFor(src), catalogKey(src)]
             .map((key) => health.cooldown.get(key))
             .find((entry) => entry?.until > Date.now())
-        if (suspended)
+        if (suspended && !recoveredCatalog)
           throw new RecordingError('network', '同批暂时跳过此来源：' + suspended.message)
         if (health && src.permanentSave === false)
           throw new RecordingError('denied', explanations.denied)
@@ -2123,9 +2128,20 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
       let sources = saved ? [saved.src] : installed
       // Prefer an independent active script while repository-managed candidates are being verified.
-      const initialSources = sources
+      const triedSources = new Set(sources.map(keyFor))
       const deferredDeep = []
-      let expandedCatalog = false
+      let checkedInstalled = !independent
+      let recoveredCatalog = false
+      async function newSources() {
+        signal.throwIfAborted()
+        const current = await currentSource(signal, true)
+        attemptSources = bank.configuration()
+        const next = current
+          ? bank.discoverySources(current).filter((src) => !triedSources.has(keyFor(src)))
+          : []
+        for (const src of next) triedSources.add(keyFor(src))
+        return next
+      }
       const timedOutUrls = new Set()
       let deferredTransfer
       while (sources.length) {
@@ -2166,30 +2182,26 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
               expand.push(src)
           }
         }
-        if (!expandedCatalog && !saved && !choicesForItem.size) {
-          expandedCatalog = true
-          await refreshSources()
-          signal.throwIfAborted()
-          const current = await currentSource(signal, true)
-          attemptSources = bank.configuration()
-          const discovered = current
-            ? bank
-                .discoverySources(current)
-                .filter(
-                  (src) =>
-                    !initialSources.some(
-                      (first) => first.code === src.code && first.platform === src.platform,
-                    ),
-                )
-            : []
-          if (discovered.length) {
-            deferredDeep.push(...expand)
-            sources = discovered
-            continue
-          }
+        deferredDeep.push(...expand)
+        if (!checkedInstalled && !saved) {
+          checkedInstalled = true
+          await health.catalogSync()
+          sources = await newSources()
+          if (sources.length) continue
         }
-        sources = [...deferredDeep.splice(0), ...expand]
-        phase = 'deep'
+        sources = deferredDeep.splice(0)
+        if (sources.length) {
+          phase = 'deep'
+          continue
+        }
+        if (!recoveredCatalog && !saved && !choicesForItem.size) {
+          recoveredCatalog = true
+          await refreshSources()
+          sources = await newSources()
+          // A refreshed source on the same public platform needs a new catalog lookup.
+          cache.clear()
+          phase = health ? 'shallow' : 'full'
+        }
       }
       if (deferredTransfer) {
         try {
