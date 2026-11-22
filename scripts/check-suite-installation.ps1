@@ -128,6 +128,8 @@ if ([version]$Previous -lt [version]'0.2.2') {
 Run-Setup $setup $all
 node scripts/check-music-installed-upgrade.mjs verify $musicFixture $musicExe
 if ($LASTEXITCODE) { throw 'Installed Music authentication or followed artist did not survive upgrade' }
+node scripts/check-music-installed-upgrade.mjs recover $musicFixture $musicExe
+if ($LASTEXITCODE) { throw 'Music cross-profile recovery failed' }
 Verify-Desktop $oldRoot $foreign
 node scripts/check-upgrade-data.mjs verify $locations.Music
 if ($LASTEXITCODE) { throw 'Upgrade data verification failed' }
