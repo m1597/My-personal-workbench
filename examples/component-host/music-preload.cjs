@@ -34,6 +34,7 @@ const names = [
   'setMusicQuality',
   'setListeningPreference',
   'answerShortage',
+  'retryFailedRecommendations',
   'setMusicOutput',
   'setPlayerOption',
   'setShortcutEnabled',

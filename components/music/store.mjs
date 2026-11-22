@@ -354,6 +354,12 @@ export class MusicStore {
           batch.message = descriptions.join(' · ')
         }
       }
+      batch.retryableCount =
+        batch.targetCount &&
+        !['running', 'awaiting'].includes(batch.state) &&
+        this.recommendationSlots(batch.id) > 0
+          ? this.retryableRecommendations(batch.id).length
+          : 0
       batch.details = batch.targetCount
         ? diagnostics
             .all(batch.id)
@@ -488,6 +494,27 @@ export class MusicStore {
   }
   generate(preference, summary) {
     return this.saveSuggestions(preference, offlineSuggestions(preference, summary), '待匹配')
+  }
+  retryableRecommendations(batch) {
+    return this.db
+      .prepare(`SELECT i.id FROM items i JOIN recommended_items r ON r.item=i.id
+      WHERE i.batch=? AND i.status='待重试' AND r.local IS NULL
+      AND r.diagnosis NOT IN ('','duplicate','cancelled','ignored')
+      AND NOT EXISTS (SELECT 1 FROM dismissed_items d WHERE d.item=i.id)
+      ORDER BY i.rowid`)
+      .all(batch)
+  }
+  recommendationSlots(batch) {
+    return (
+      this.db
+        .prepare(`SELECT run.targetCount - (
+      SELECT COUNT(*) FROM items i JOIN recommended_items r ON r.item=i.id
+      LEFT JOIN local_tracks t ON t.id=r.local WHERE i.batch=run.batch
+      AND ((i.status='已入库' AND t.available=1) OR i.status IN ('待处理','正在匹配','正在校验','正在保存'))
+      ) AS remaining FROM recommendation_runs run JOIN batches b ON b.id=run.batch
+      WHERE run.batch=? AND b.day=?`)
+        .get(batch, day())?.remaining ?? 0
+    )
   }
   saveSuggestions(preference, rows, status, existingBatch, targetCount) {
     const feedback = this.feedbackIds()

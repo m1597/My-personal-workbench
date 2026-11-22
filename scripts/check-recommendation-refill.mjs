@@ -14,6 +14,7 @@ const output = path.join(root, 'songs')
 await fs.mkdir(output)
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
 const cancellation = process.env.FITBAY_TEST_RECOMMEND_STOP
+const testRetry = process.argv.includes('--retry-failed')
 if (cancellation === 'consent') store.set('taste-consent', '1')
 store.set('lx-bootstrap', 'done')
 store.set('music-recommend-dir', output)
@@ -44,7 +45,9 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}
 )
 const app = await electron.launch({
   args: [
-    path.resolve(process.argv[2] ?? 'dist/component-prototype/host'),
+    path.resolve(
+      process.argv.slice(2).find((arg) => !arg.startsWith('--')) ?? 'dist/component-prototype/host',
+    ),
     '--mode=music',
     '--mute-audio',
     '--user-data-dir=' + profile,
@@ -52,11 +55,11 @@ const app = await electron.launch({
   ],
   env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
 })
-try {
+async function verify() {
   const page = await app.firstWindow()
   await offlineSourceRepository(app)
   await app.evaluate(
-    ({ app, BaseWindow, dialog }, { files, code, songs }) => {
+    ({ app, BaseWindow, dialog }, { files, code, songs, testRetry }) => {
       if (
         !app.commandLine.hasSwitch('mute-audio') ||
         BaseWindow.getAllWindows().some((w) => w.isFocusable())
@@ -114,7 +117,15 @@ try {
                 setTimeout() {},
               }),
             )
-          if (title === songs[4]) {
+          if (title === songs[4] && testRetry && !globalThis.retryRestored) {
+            receive(
+              Object.assign(process.getBuiltinModule('node:stream').Readable.from([]), {
+                statusCode: 503,
+                headers: {},
+                setTimeout() {},
+              }),
+            )
+          } else if (title === songs[4] && !testRetry) {
             globalThis.finishFifth = deliver
             options.signal.addEventListener(
               'abort',
@@ -140,7 +151,8 @@ try {
           JSON.parse(options.body).messages.at(-1).content,
         )
         globalThis.counts.push(count)
-        const titles = catalog
+        if (testRetry && globalThis.counts.length > 1) throw Error('当前没有更多候选')
+        const titles = (testRetry ? songs : catalog)
           .filter((title) => !excluded.some((s) => s.title === title))
           .slice(0, count)
         await new Promise((r) => setTimeout(r, 1200))
@@ -172,6 +184,7 @@ try {
       },
       code,
       songs,
+      testRetry,
     },
   )
   await page.evaluate(async () => {
@@ -224,6 +237,47 @@ try {
     return state
   }
   const progress = page.locator('.music-batch-status [role="status"]')
+  if (testRetry) {
+    const retry = page.getByRole('button', { name: '仅重试失败歌曲（1）' })
+    await expect(progress).toContainText('已入库 4/5', { timeout: 45000 })
+    await expect(retry).toBeEnabled({ timeout: 45000 })
+    const previous = await capture('01-retry-partial')
+    await page.locator('.music-failure-details summary').click()
+    await expect(page.locator('.music-failure-details')).toContainText(songs[4])
+    await retry.click()
+    await expect(progress).toContainText('失败歌曲重试已结束', { timeout: 45000 })
+    await expect(retry).toBeEnabled()
+    const stillFailed = await capture('02-retry-unavailable')
+    assert.deepEqual(stillFailed.songs, previous.songs)
+    const before = await app.evaluate(() => {
+      globalThis.retryRestored = true
+      return { transfers: globalThis.transfers.length, models: globalThis.counts.length }
+    })
+    await retry.evaluate((button) => {
+      button.click()
+      button.click()
+    })
+    await expect(progress).toContainText('已入库 5/5', { timeout: 45000 })
+    await expect(retry).toHaveCount(0)
+    const after = await capture('03-retry-restored')
+    assert.equal(after.id, previous.id)
+    for (const row of previous.songs)
+      assert.deepEqual(
+        after.songs.find(([id]) => id === row[0]),
+        row,
+      )
+    const retried = await app.evaluate(
+      (_, offset) => ({
+        titles: [...new Set(globalThis.transfers.slice(offset).map((r) => r.title))],
+        models: globalThis.counts.length,
+      }),
+      before.transfers,
+    )
+    assert.deepEqual(retried, { titles: [songs[4]], models: before.models })
+    await fs.writeFile(path.join(root, 'retry.json'), JSON.stringify({ events, retried }, null, 2))
+    console.log('PASS 原批次仅重试失败歌曲，成功记录、模型调用次数保持不变', root)
+    return
+  }
   await expect
     .poll(() => app.evaluate(() => typeof globalThis.finishFifth), { timeout: 30000 })
     .toBe('function')
@@ -445,6 +499,9 @@ try {
     await fs.writeFile(path.join(root, 'timing.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }
+}
+try {
+  await verify()
 } finally {
   await app.close()
 }

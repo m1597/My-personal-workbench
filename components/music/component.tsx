@@ -86,6 +86,7 @@ type Batch = {
   state: 'running' | 'awaiting' | 'partial' | 'completed' | 'cancelled' | 'blocked' | null
   message: string | null
   details: string | null
+  retryableCount: number
 }
 type Track = {
   id: string
@@ -192,6 +193,7 @@ declare global {
         setMusicQuality(quality: string): Promise<void>
         setListeningPreference(key: string, value: string): Promise<void>
         answerShortage(batch: string, expand: boolean): Promise<void>
+        retryFailedRecommendations(batch: string): Promise<void>
         setPlayerOption(
           key: keyof import('./MusicSettings').PlayerOptions,
           value: string,
@@ -582,6 +584,7 @@ function Music() {
     }
   }, [tab])
   const [generating, setGenerating] = useState(false)
+  const retryingRecommendations = useRef(false)
   const batch = state?.batches[0]
   const running = batch?.state === 'running' || batch?.state === 'awaiting'
   const working =
@@ -1841,6 +1844,25 @@ function Music() {
                               : batch.message && `，${batch.message}`}
                         </p>
                         {running && <StopRecommendation refresh={refresh} />}
+                        {batch.retryableCount > 0 && (
+                          <Button
+                            size="small"
+                            disabled={generating}
+                            onClick={() => {
+                              if (retryingRecommendations.current) return
+                              retryingRecommendations.current = true
+                              setGenerating(true)
+                              void act(() => host.retryFailedRecommendations(batch.id)).finally(
+                                () => {
+                                  retryingRecommendations.current = false
+                                  setGenerating(false)
+                                },
+                              )
+                            }}
+                          >
+                            仅重试失败歌曲（{batch.retryableCount}）
+                          </Button>
+                        )}
                         {batch.state === 'awaiting' && (
                           <>
                             <Button

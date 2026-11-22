@@ -1232,6 +1232,50 @@ export function musicService(
       return batch
     })
   })
+  bind('retryFailedRecommendations', (batch) =>
+    generateTask(async (signal) => {
+      if (text(batch) !== store.get('latest-daily-run')) throw Error('推荐批次已过期')
+      const candidates = store.retryableRecommendations(batch)
+      if (!candidates.length || store.recommendationSlots(batch) <= 0) return
+      const update = (state, message) =>
+        store.db
+          .prepare('UPDATE recommendation_runs SET state=?,message=? WHERE batch=?')
+          .run(state, message, batch)
+      update('running', '正在重试失败歌曲')
+      let index = 0
+      try {
+        await lx.batch(
+          batch,
+          signal,
+          {
+            unreachable: 0,
+            lyricTasks: [],
+            queries: new Map(),
+            cooldown: new Map(),
+            catalogRecordings: new Map(),
+          },
+          () => {
+            signal.throwIfAborted()
+            if (index >= candidates.length || store.recommendationSlots(batch) <= 0) return
+            const { id } = candidates[index++]
+            store.status(id, '待处理')
+            return id
+          },
+        )
+        signal.throwIfAborted()
+        const remaining = store.recommendationSlots(batch)
+        update(
+          remaining > 0 ? 'partial' : 'completed',
+          remaining > 0 ? '失败歌曲重试已结束' : '已达到目标首数',
+        )
+      } catch (error) {
+        update(
+          signal.aborted ? 'cancelled' : 'blocked',
+          signal.aborted ? '已终止重试' : error.message,
+        )
+      }
+    }),
+  )
   bind('stopGeneration', async () => {
     pending?.abort(new DOMException('手动终止', 'AbortError'))
     await generationFinished?.catch(() => {})
