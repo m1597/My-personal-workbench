@@ -83,6 +83,13 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-upgrade-data.mjs verify (Join-Path $root 'Music')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $desktop = [Environment]::GetFolderPath('DesktopDirectory')
+          $folder = (New-Object -ComObject Shell.Application).NameSpace($desktop)
+          $links = @(Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' | ForEach-Object {
+            $target = $folder.ParseName($_.Name).ExtendedProperty('System.Link.TargetParsingPath')
+            if ($target -and $target.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { $target }
+          })
+          if ($links.Count -ne 1 -or $links[0] -ne (Join-Path $root 'FitBay.exe')) { throw "Unexpected FitBay desktop links after batch: $links" }
           node scripts/check-installed-component-material.mjs $root
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Copy-Item "docs/releases/v$version.md" dist/installers/RELEASE-NOTES.md
