@@ -29,8 +29,8 @@ def run():
     original = pythoncom.OleGetClipboard()
     sequence = ctypes.windll.user32.GetClipboardSequenceNumber()
     try:
-        pdf = "--pdf" in sys.argv[1:]
-        entry = "scripts/check-toolkit.mjs" if pdf else "scripts/check-toolkit-capture-colors.mjs"
+        assistant_test = any(flag in sys.argv[1:] for flag in ("--pdf", "--absent"))
+        entry = "scripts/check-toolkit.mjs" if assistant_test else "scripts/check-toolkit-capture-colors.mjs"
         proc = subprocess.Popen(
             ["node", entry, *sys.argv[1:]],
             cwd=Path(__file__).resolve().parents[1],

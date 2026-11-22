@@ -6,7 +6,9 @@ import path from 'node:path'
 import { _electron, expect } from '@playwright/test'
 import { openConnections } from '../examples/component-host/api-connections.mjs'
 
-const source = process.argv[2] || 'C:/Program Files/Git/mingw64/share/doc/gnutls/pkcs11-vision.png'
+const source =
+  process.argv.slice(2).find((arg) => !arg.startsWith('--')) ||
+  'C:/Program Files/Git/mingw64/share/doc/gnutls/pkcs11-vision.png'
 const png = await readFile(source)
 const folder = await mkdtemp(path.resolve('tmp/toolkit-diagram-'))
 const profile = path.join(folder, 'profile')
@@ -59,23 +61,31 @@ const env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
 let app, host
 const b = (p, n) => p.getByRole('button', { name: n, exact: true })
 try {
-  app = await _electron.launch({
-    args: ['components/toolkit', '--workbench-profile=' + profile],
-    env,
-  })
-  host = await _electron.launch({
-    args: [
-      'dist/component-prototype/host',
-      '--mode=workbench',
-      '--workbench=' + path.resolve('out/renderer/index.html'),
-      '--user-data-dir=' + profile,
-    ],
-    env,
-  })
-  const shell = await host.firstWindow()
-  await b(shell, '组件').click()
-  await shell.locator('#window-menu').getByText('工具集', { exact: true }).click()
-  const dock = shell.locator('.toolkit-panel')
+  const profileArg = '--workbench-profile=' + profile
+  let panel
+  if (process.argv.includes('--packaged')) {
+    app = await _electron.launch({
+      executablePath: path.resolve('.cache/fitbay-build/toolkit/win-unpacked/FitBay Toolkit.exe'),
+      args: [profileArg],
+      env,
+    })
+    panel = await app.firstWindow()
+  } else {
+    app = await _electron.launch({ args: ['components/toolkit', profileArg], env })
+    host = await _electron.launch({
+      args: [
+        'dist/component-prototype/host',
+        '--mode=workbench',
+        '--workbench=' + path.resolve('out/renderer/index.html'),
+        '--user-data-dir=' + profile,
+      ],
+      env,
+    })
+    const shell = await host.firstWindow()
+    await b(shell, '组件').click()
+    await shell.locator('#window-menu').getByText('工具集', { exact: true }).click()
+    panel = shell.locator('.toolkit-panel')
+  }
   await app.evaluate(async ({ BrowserWindow, screen }, data) => {
     const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     const win = new BrowserWindow({
@@ -108,7 +118,7 @@ try {
     })
     await new Promise((r) => setTimeout(r, 350))
     const next = app.waitForEvent('window')
-    await b(dock, '框选屏幕').click()
+    await b(panel, '框选屏幕').click()
     const overlay = await next
     await overlay.locator('.screen img').waitFor()
     await app.evaluate(() => globalThis.graphWindow.hide())

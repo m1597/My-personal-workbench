@@ -366,7 +366,40 @@ if (process.argv.includes('--absent')) {
     await home.getByText('框选屏幕', { exact: true }).click()
     const overlay = await waiting
     await expect(overlay.locator('.screen')).toBeVisible()
-    assert.deepEqual(await overlay.evaluate(() => window.toolkit.actions()), [])
+    const actions = () => overlay.evaluate(() => window.toolkit.actions())
+    if ((await actions()).length) {
+      // A second installed product on the developer's machine must keep its real registry entry.
+      // Redirect only the test process's HKCU reads to an existing read-only subkey.
+      assert((await actions()).some((a) => a.displayName === '解释推导'))
+      await standalone.evaluate(({ app }) => {
+        const req = process
+          .getBuiltinModule('node:module')
+          .createRequire(app.getAppPath() + '/package.json')
+        const dll = req('koffi').load('advapi32.dll')
+        const open = dll.func(
+          'int32_t RegOpenKeyExW(intptr_t,str16,uint32_t,uint32_t,_Out_ intptr_t *)',
+        )
+        const redirect = dll.func('int32_t RegOverridePredefKey(intptr_t,intptr_t)')
+        const close = dll.func('int32_t RegCloseKey(intptr_t)')
+        const hkcu = -2147483647,
+          out = [0]
+        if (open(hkcu, 'Software\\FitBay\\Installations', 0, 0x20019, out) !== 0)
+          throw Error('Cannot open isolated read-only registry root')
+        if (redirect(hkcu, out[0]) !== 0) {
+          close(out[0])
+          throw Error('Cannot isolate installation lookup')
+        }
+        globalThis.restoreTestRegistry = () => {
+          redirect(hkcu, 0)
+          close(out[0])
+        }
+      })
+    }
+    try {
+      assert.deepEqual(await actions(), [])
+    } finally {
+      await standalone.evaluate(() => globalThis.restoreTestRegistry?.())
+    }
     await overlay.mouse.move(12, 12)
     await overlay.mouse.down()
     await overlay.mouse.move(130, 90)
