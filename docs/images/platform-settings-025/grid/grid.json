@@ -1,0 +1,296 @@
+[
+  [
+    {
+      "x": 12,
+      "y": 44,
+      "w": 1473,
+      "h": 914,
+      "contentTop": 82,
+      "tabs": [
+        "module-1"
+      ]
+    }
+  ],
+  [
+    {
+      "x": 12,
+      "y": 44,
+      "w": 732,
+      "h": 914,
+      "contentTop": 82,
+      "tabs": [
+        "module-1"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 44,
+      "w": 733,
+      "h": 914,
+      "contentTop": 82,
+      "tabs": [
+        "module-2"
+      ]
+    }
+  ],
+  [
+    {
+      "x": 12,
+      "y": 44,
+      "w": 732,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-1"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 44,
+      "w": 733,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-2"
+      ]
+    },
+    {
+      "x": 12,
+      "y": 505,
+      "w": 732,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-3"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 505,
+      "w": 733,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": []
+    }
+  ],
+  [
+    {
+      "x": 12,
+      "y": 44,
+      "w": 732,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-1"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 44,
+      "w": 733,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-2"
+      ]
+    },
+    {
+      "x": 12,
+      "y": 505,
+      "w": 732,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-3"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 505,
+      "w": 733,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-4"
+      ]
+    }
+  ],
+  [
+    {
+      "x": 12,
+      "y": 44,
+      "w": 732,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-1",
+        "component-toolkit"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 44,
+      "w": 733,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-2"
+      ]
+    },
+    {
+      "x": 12,
+      "y": 505,
+      "w": 732,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-3"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 505,
+      "w": 733,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-4"
+      ]
+    }
+  ],
+  [
+    {
+      "x": 12,
+      "y": 44,
+      "w": 732,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-1",
+        "component-toolkit"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 44,
+      "w": 733,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-2",
+        "component-prompts"
+      ]
+    },
+    {
+      "x": 12,
+      "y": 505,
+      "w": 732,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-3"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 505,
+      "w": 733,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-4"
+      ]
+    }
+  ],
+  [
+    {
+      "x": 12,
+      "y": 44,
+      "w": 732,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-1",
+        "component-toolkit"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 44,
+      "w": 733,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-2",
+        "component-prompts"
+      ]
+    },
+    {
+      "x": 12,
+      "y": 505,
+      "w": 732,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-3",
+        "component-music"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 505,
+      "w": 733,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-4"
+      ]
+    }
+  ],
+  [
+    {
+      "x": 12,
+      "y": 44,
+      "w": 732,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-1",
+        "component-toolkit"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 44,
+      "w": 733,
+      "h": 453,
+      "contentTop": 82,
+      "tabs": [
+        "module-2",
+        "component-prompts"
+      ]
+    },
+    {
+      "x": 12,
+      "y": 505,
+      "w": 732,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-3",
+        "component-music"
+      ]
+    },
+    {
+      "x": 752,
+      "y": 505,
+      "w": 733,
+      "h": 453,
+      "contentTop": 543,
+      "tabs": [
+        "module-4",
+        "component-example"
+      ]
+    }
+  ]
+]

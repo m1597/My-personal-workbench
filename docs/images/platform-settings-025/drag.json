@@ -1,0 +1,96 @@
+[
+  {
+    "stage": "two",
+    "axis": "width",
+    "end": false,
+    "gapBefore": 0,
+    "gapAfter": 0,
+    "sizes": [
+      0,
+      1473
+    ],
+    "sessions": [
+      {
+        "id": 4,
+        "component": "music",
+        "visible": false,
+        "focused": false
+      }
+    ]
+  },
+  {
+    "stage": "four-right",
+    "axis": "width",
+    "end": true,
+    "gapBefore": 0,
+    "gapAfter": 0,
+    "sizes": [
+      1473,
+      0
+    ],
+    "sessions": [
+      {
+        "id": 4,
+        "component": "music",
+        "visible": true,
+        "focused": false
+      },
+      {
+        "id": 5,
+        "component": "prompts",
+        "visible": true,
+        "focused": false
+      }
+    ]
+  },
+  {
+    "stage": "four-bottom",
+    "axis": "height",
+    "end": true,
+    "gapBefore": 0,
+    "gapAfter": 0,
+    "sizes": [
+      914,
+      0
+    ],
+    "sessions": [
+      {
+        "id": 4,
+        "component": "music",
+        "visible": true,
+        "focused": false
+      },
+      {
+        "id": 5,
+        "component": "prompts",
+        "visible": false,
+        "focused": false
+      }
+    ]
+  },
+  {
+    "stage": "narrow-top",
+    "axis": "height",
+    "end": false,
+    "gapBefore": 0,
+    "gapAfter": 0,
+    "sizes": [
+      0,
+      592
+    ],
+    "sessions": [
+      {
+        "id": 4,
+        "component": "music",
+        "visible": false,
+        "focused": false
+      },
+      {
+        "id": 5,
+        "component": "prompts",
+        "visible": true,
+        "focused": false
+      }
+    ]
+  }
+]

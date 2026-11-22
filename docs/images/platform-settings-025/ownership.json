@@ -1,0 +1,37 @@
+{
+  "baseline": [
+    {
+      "id": "Appid: D:\\Desktop\\Projects\\Personal workbench development\\node_modules\\electron\\dist\\electron.exe",
+      "count": 1
+    }
+  ],
+  "hostExe": "D:/FitBay/FitBay.exe",
+  "kitExe": "D:/FitBay/Toolkit/FitBay Toolkit.exe",
+  "host": [
+    {
+      "id": "Appid: D:\\Desktop\\Projects\\Personal workbench development\\node_modules\\electron\\dist\\electron.exe",
+      "count": 1
+    },
+    {
+      "id": "Appid: io.github.m1597.fitbay.workbench",
+      "count": 1
+    }
+  ],
+  "hosted": {
+    "tray": [
+      1,
+      0
+    ],
+    "buttons": [
+      {
+        "id": "Appid: D:\\Desktop\\Projects\\Personal workbench development\\node_modules\\electron\\dist\\electron.exe",
+        "count": 1
+      },
+      {
+        "id": "Appid: io.github.m1597.fitbay.workbench",
+        "count": 1
+      }
+    ]
+  },
+  "helperExitedWithHost": true
+}

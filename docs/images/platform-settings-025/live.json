@@ -1,0 +1,45 @@
+{
+  "rows": [
+    {
+      "id": "workbench",
+      "name": "FitBay",
+      "version": "0.1.0",
+      "installable": false,
+      "status": "available",
+      "available": "0.2.4"
+    },
+    {
+      "id": "music",
+      "name": "Music",
+      "version": "0.1.0",
+      "installable": false,
+      "status": "available",
+      "available": "0.2.4"
+    },
+    {
+      "id": "sample",
+      "name": "示例组件",
+      "version": "0.1.0",
+      "installable": false,
+      "status": "unsupported",
+      "available": null
+    },
+    {
+      "id": "prompts",
+      "name": "提示词库",
+      "version": "0.1.0",
+      "installable": false,
+      "status": "available",
+      "available": "0.2.4"
+    },
+    {
+      "id": "toolkit",
+      "name": "工具集",
+      "version": "0.1.0",
+      "installable": false,
+      "status": "available",
+      "available": "0.2.4"
+    }
+  ],
+  "lastChecked": "2026-11-22T09:57:17.309Z"
+}

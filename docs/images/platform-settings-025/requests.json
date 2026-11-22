@@ -1,0 +1,38 @@
+[
+  {
+    "index": 0,
+    "path": "/v1/chat/completions",
+    "model": "route-0",
+    "matched": true
+  },
+  {
+    "index": 1,
+    "path": "/v1/chat/completions",
+    "model": "route-1",
+    "matched": true
+  },
+  {
+    "index": 0,
+    "path": "/v1/chat/completions",
+    "model": "route-0",
+    "matched": true
+  },
+  {
+    "index": 1,
+    "path": "/v1/chat/completions",
+    "model": "route-1",
+    "matched": true
+  },
+  {
+    "index": 0,
+    "path": "/v1/chat/completions",
+    "model": "route-0",
+    "matched": true
+  },
+  {
+    "index": 1,
+    "path": "/v1/chat/completions",
+    "model": "route-1",
+    "matched": true
+  }
+]
