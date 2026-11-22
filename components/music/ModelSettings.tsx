@@ -2,6 +2,7 @@ import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useState } from 'react'
 import { Button, Input, Checkbox } from '@fluentui/react-components'
 export type ModelInfo = {
+  source?: 'dedicated' | 'default'
   active: string
   providers: { id: string; label: string; model: string; hasKey: boolean }[]
 }
@@ -36,6 +37,7 @@ export function ModelSettings({
         }
       }}
     >
+      {info.source && <span>{info.source === 'default' ? '继承默认' : '专用连接'}</span>}
       <label htmlFor="model-provider">服务商</label>
       <Dropdown
         id="model-provider"

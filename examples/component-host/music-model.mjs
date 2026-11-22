@@ -8,6 +8,7 @@ export function modelInfo(store) {
     : legacy
   return {
     active,
+    source: shared?.source,
     providers: Object.entries(providers).map(([id, p]) => ({
       id,
       label: p.label,
