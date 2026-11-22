@@ -502,62 +502,64 @@ export function WorkbenchSettings({
                         key={revision}
                         onInstalled={() => refresh((n) => n + 1)}
                       />
-                      <div className="component-inventory">
-                        <h3>{t('Music 运行设置', 'Music runtime settings')}</h3>
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            setComponentError('')
-                            refresh(revision + 1)
-                          }}
-                        >
-                          {t('刷新', 'Refresh')}
-                        </Button>
-                      </div>
-                      <p>
-                        {inventory?.installed
-                          ? [
-                              inventory.version,
-                              music?.phase === 'ready'
-                                ? music.presentation === 'background'
-                                  ? t('后台运行', 'Running in background')
-                                  : music.mode === 'standalone'
-                                    ? t('独立窗口运行中', 'Running independently')
-                                    : t('工作台内运行中', 'Running in workspace')
-                                : t('未运行', 'Stopped'),
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')
-                          : !window.musicDock || inventory
-                            ? t('未安装', 'Not installed')
-                            : t('正在检测…', 'Checking…')}
-                      </p>
-                      {entries[2].slice(0, 2).map((label, i) => (
-                        <div key={label} id={'setting-2-' + i}>
+                      <section className="settings-runtime-card">
+                        <div className="component-inventory">
+                          <h3>{t('Music 运行设置', 'Music runtime settings')}</h3>
                           <Button
-                            disabled={!inventory?.installed}
-                            onClick={() => void showMusic(i === 1)}
+                            size="small"
+                            onClick={() => {
+                              setComponentError('')
+                              refresh(revision + 1)
+                            }}
                           >
-                            {label}
+                            {t('刷新', 'Refresh')}
                           </Button>
                         </div>
-                      ))}
-                      {inventory?.installed && (
-                        <div id="setting-2-2">
-                          <Switch
-                            label={keepLabel}
-                            aria-label={entries[2][2]}
-                            checked={music?.keepRunning ?? false}
-                            onChange={(_, data) =>
-                              void window.musicDock
-                                ?.keepRunning(data.checked)
-                                .catch((error) => setComponentError(String(error)))
-                            }
-                          />
-                        </div>
-                      )}
+                        <p>
+                          {inventory?.installed
+                            ? [
+                                inventory.version,
+                                music?.phase === 'ready'
+                                  ? music.presentation === 'background'
+                                    ? t('后台运行', 'Running in background')
+                                    : music.mode === 'standalone'
+                                      ? t('独立窗口运行中', 'Running independently')
+                                      : t('工作台内运行中', 'Running in workspace')
+                                  : t('未运行', 'Stopped'),
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')
+                            : !window.musicDock || inventory
+                              ? t('未安装', 'Not installed')
+                              : t('正在检测…', 'Checking…')}
+                        </p>
+                        {entries[2].slice(0, 2).map((label, i) => (
+                          <div key={label} id={'setting-2-' + i}>
+                            <Button
+                              disabled={!inventory?.installed}
+                              onClick={() => void showMusic(i === 1)}
+                            >
+                              {label}
+                            </Button>
+                          </div>
+                        ))}
+                        {inventory?.installed && (
+                          <div id="setting-2-2">
+                            <Switch
+                              label={keepLabel}
+                              aria-label={entries[2][2]}
+                              checked={music?.keepRunning ?? false}
+                              onChange={(_, data) =>
+                                void window.musicDock
+                                  ?.keepRunning(data.checked)
+                                  .catch((error) => setComponentError(String(error)))
+                              }
+                            />
+                          </div>
+                        )}
+                      </section>
                       {sampleInfo?.installed && (
-                        <>
+                        <section className="settings-runtime-card">
                           <h3>{t('示例组件', 'Sample component')}</h3>
                           <div id="setting-2-3">
                             <Switch
@@ -594,7 +596,7 @@ export function WorkbenchSettings({
                               {sampleShowLabel}
                             </Button>
                           </div>
-                        </>
+                        </section>
                       )}
                       {componentError && <p role="alert">{componentError}</p>}
                     </>

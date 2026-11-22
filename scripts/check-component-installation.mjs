@@ -5,7 +5,9 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { prepareProduct } from './prepare-package.mjs'
 const root = await mkdtemp(path.resolve('tmp/component-setup-'))
-const runtime = path.resolve('.cache/fitbay-build/workbench/win-unpacked')
+const runtime = path.resolve(
+  process.env.FITBAY_TEST_RUNTIME || '.cache/fitbay-build/workbench/win-unpacked',
+)
 // Optional read-only source for an installed executable and its matching runtime files.
 const installed = process.env.FITBAY_TEST_INSTALLED_RUNTIME
 async function copyRuntime(source, dest) {
@@ -176,6 +178,7 @@ try {
       await row.getByRole('button', { name: '重试 工具集' }).click()
     }
     await expect(row).toContainText('已安装 0.2.0')
+    await expect(row).toContainText('此位置未登记，无法卸载')
     await expect(row.getByRole('button')).toHaveCount(0)
   }
   await expect(page.getByRole('button', { name: '在工作台显示 Music', exact: true })).toBeEnabled()

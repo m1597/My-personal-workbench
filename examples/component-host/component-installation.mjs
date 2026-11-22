@@ -17,7 +17,9 @@ export function componentInstallation(installation, temp, request, execute = exe
     if (installation?.product !== 'workbench') return []
     return Promise.all(
       components.map(async (id) => {
-        const installed = await version(id)
+        const root = await installation.find(id)
+        const installed =
+          root && JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')).version
         const state = states.get(id)
         if (
           active === id ||
@@ -25,10 +27,15 @@ export function componentInstallation(installation, temp, request, execute = exe
           (state?.repair && installed !== state.target)
         )
           return { id, ...state, busy: !!active }
+        const registered = installed && (await installation.registered?.(id))
         return {
           id,
           ...(installed
-            ? { status: 'installed', version: installed }
+            ? {
+                status: 'installed',
+                version: installed,
+                canUninstall: !!registered && !path.relative(root, registered),
+              }
             : (state?.stage !== 'uninstalling' && state) || { status: 'missing' }),
           busy: !!active,
         }

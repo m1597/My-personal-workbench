@@ -356,8 +356,14 @@
 .settings-content .settings-material {
   margin-top: 6px;
 }
+.settings-runtime-card {
+  display: grid;
+  gap: 12px;
+}
 .component-inventory {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   justify-content: space-between;
   align-items: center;
 }
@@ -428,6 +434,7 @@
 .update-row,
 .settings-content > [id^="setting-"],
 .settings-content > .component-inventory,
+.settings-content > .settings-runtime-card,
 .settings-content > .api-connections > form,
 .settings-content > .api-connections > div,
 .settings-content > .settings-material {

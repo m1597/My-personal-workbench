@@ -14,6 +14,7 @@ type Row = {
     | 'failed'
     | 'uninstalling'
   stage?: string
+  canUninstall?: boolean
   busy: boolean
   progress?: number
   version?: string
@@ -98,15 +99,27 @@ export function ComponentInstallSettings({ onInstalled }: { onInstalled: () => v
               : row.status === 'downloading'
                 ? row.progress + '%'
                 : row.status === 'failed'
-                  ? row.stage === 'downloading'
-                    ? t('（下载或 SHA-256 校验失败）', '(download or SHA-256 verification failed)')
-                    : row.stage === 'checking'
-                      ? t('（无法获取正式发行包）', '(release unavailable)')
-                      : t('（安装程序或安装后检测失败）', '(installer or detection failed)')
+                  ? row.stage === 'uninstalling'
+                    ? t(
+                        '（请核对安装登记并重试）',
+                        '(check the installation registration and retry)',
+                      )
+                    : row.stage === 'downloading'
+                      ? t(
+                          '（下载或 SHA-256 校验失败）',
+                          '(download or SHA-256 verification failed)',
+                        )
+                      : row.stage === 'checking'
+                        ? t('（无法获取正式发行包）', '(release unavailable)')
+                        : t('（安装程序或安装后检测失败）', '(installer or detection failed)')
                   : ''}
           </span>
-          {row.status === 'installed' ||
-          (row.stage === 'uninstalling' && row.status === 'failed') ? (
+          {row.status === 'installed' && row.canUninstall === false ? (
+            <span>
+              {t('此位置未登记，无法卸载', 'Uninstall unavailable at this unregistered location')}
+            </span>
+          ) : row.status === 'installed' ||
+            (row.stage === 'uninstalling' && row.status === 'failed') ? (
             <div>
               {confirm === row.id ? (
                 <>
