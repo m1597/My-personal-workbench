@@ -57,7 +57,6 @@ function pickScreenColor(s, rect) {
     if (hex)
       try {
         await api.copyMeasuredColor(hex)
-        await api.dismiss()
       } catch {
         output.textContent = '复制失败，请再次点选'
       }

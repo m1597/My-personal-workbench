@@ -310,9 +310,33 @@ dlg.wait_not('exists',timeout=10)`,
     await picker.mouse.move(290, 175)
     const expected = await picker.locator('output').textContent()
     assert.match(expected, /^#[0-9A-F]{6}$/)
+    const ready = app.waitForEvent('window')
     await picker.mouse.click(290, 175)
+    const result = await ready
+    await expect(result.getByText(expected, { exact: true })).toBeVisible()
     await expect.poll(() => picker.isClosed()).toBe(true)
     assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), expected)
+    const rgb =
+      'rgb(' +
+      expected
+        .slice(1)
+        .match(/../g)
+        .map((c) => parseInt(c, 16))
+        .join(', ') +
+      ')'
+    await result.getByRole('button', { name: '复制 RGB' }).click()
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), rgb)
+    await result.getByRole('button', { name: '复制 HEX' }).click()
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), expected)
+    await result.screenshot({ path: path.join(profile, 'color-result.png') })
+    const repick = app.waitForEvent('window')
+    await result.getByRole('button', { name: '重新取色' }).click()
+    const other = await repick
+    await other.locator('.swatch').waitFor()
+    await other.keyboard.press('Escape').catch((e) => {
+      if (!other.isClosed()) throw e
+    })
+    await expect.poll(() => other.isClosed()).toBe(true)
   }
   await dock.getByRole('button', { name: '设置', exact: true }).click()
   const section = dock.getByRole('region', { name: '屏幕取色' })
@@ -331,7 +355,11 @@ dlg.wait_not('exists',timeout=10)`,
   ])
   const picker = await pending
   await picker.locator('.swatch').waitFor()
+  const resultReady = app.waitForEvent('window')
   await picker.mouse.click(290, 175)
+  const result = await resultReady
+  await expect(result.getByRole('button', { name: '重新取色' })).toBeVisible()
+  await result.close()
   // The user's session or another acceptance profile can own the system default.
   // Restoring a disabled tool still persists the default without taking their key.
   await section.getByRole('button', { name: '停用', exact: true }).click()

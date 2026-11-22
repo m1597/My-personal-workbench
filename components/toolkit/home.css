@@ -296,3 +296,10 @@ fitbay-toolkit-choice .fui-Dropdown__button {
 fitbay-toolkit-choice .fui-Option {
   overflow-wrap: anywhere;
 }
+
+.picked-color {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke);
+}

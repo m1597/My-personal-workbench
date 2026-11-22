@@ -255,6 +255,30 @@ api
       )
   })
   .catch((e) => {
+    if (s.kind === 'color-result') {
+      const rgb =
+        'rgb(' +
+        s.hex
+          .slice(1)
+          .match(/../g)
+          .map((c) => parseInt(c, 16))
+          .join(', ') +
+        ')'
+      const swatch = el('div', '', 'picked-color')
+      swatch.style.backgroundColor = s.hex
+      const values = el('div')
+      values.append(el('strong', s.hex), el('p', rgb))
+      const sample = el('div', '', 'row')
+      sample.append(swatch, values)
+      const actions = el('div', '', 'row')
+      actions.append(
+        button('复制 HEX', () => api.copyColorResult('hex')),
+        button('复制 RGB', () => api.copyColorResult('rgb')),
+        button('重新取色', () => api.repick()),
+      )
+      root.append(el('h1', '取色结果'), sample, actions, notice)
+      return
+    }
     root.append(notice)
     error(e)
   })

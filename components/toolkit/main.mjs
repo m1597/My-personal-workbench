@@ -117,7 +117,7 @@ async function startToolkit() {
       show: false,
       backgroundColor: '#202a35',
       ...(Number(release().split('.')[2]) >= 22621 &&
-      ['home', 'result', 'message'].includes(data.kind)
+      ['home', 'result', 'message', 'color-result'].includes(data.kind)
         ? { backgroundColor: '#00000000', backgroundMaterial: 'acrylic' }
         : {}),
       autoHideMenuBar: true,
@@ -321,11 +321,12 @@ async function startToolkit() {
       return fn(s, v)
     })
   }
-  const kinds = ['home', 'screen', 'result', 'pin', 'message']
+  const kinds = ['color-result', 'home', 'screen', 'result', 'pin', 'message']
   handle('state', kinds, (s) => ({
     kind: s.kind,
     intent: s.intent,
     text: s.text,
+    hex: s.hex,
     image: (s.full || s.image)?.toDataURL(),
     settings:
       s.kind === 'home'
@@ -485,9 +486,32 @@ async function startToolkit() {
       s.win.close()
     }
   })
-  handle('copyMeasuredColor', ['screen'], (_s, hex) => {
+  handle('copyMeasuredColor', ['screen'], (s, hex) => {
     if (!/^#[0-9A-F]{6}$/.test(hex)) throw Error('请先取色')
-    return clipboard.writeText(hex)
+    clipboard.writeText(hex)
+    show(
+      { kind: 'color-result', hex },
+      { title: 'FitBay 取色结果', width: 365, height: 245 },
+      s.hosted,
+    )
+    s.win.close()
+  })
+  handle('copyColorResult', ['color-result'], (s, format) => {
+    const channels = s.hex
+      .slice(1)
+      .match(/../g)
+      .map((c) => parseInt(c, 16))
+    clipboard.writeText(format === 'rgb' ? 'rgb(' + channels.join(', ') + ')' : s.hex)
+  })
+  handle('repick', ['color-result'], async (s) => {
+    s.win.hide()
+    try {
+      await capture('color', s.hosted)
+      s.win.close()
+    } catch (error) {
+      if (!s.win.isDestroyed()) s.win.show()
+      throw error
+    }
   })
   handle('copy', ['screen'], async (s) => {
     const png = new Blob([selected(s).toPNG()], { type: 'image/png' })

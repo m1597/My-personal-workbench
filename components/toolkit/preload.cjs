@@ -9,6 +9,8 @@ const commands = [
   'applyAnnotation',
   'extractText',
   'copyMeasuredColor',
+  'copyColorResult',
+  'repick',
   'chooseFiles',
   'readImage',
   'readText',
