@@ -55,10 +55,17 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-upgrade-data.mjs verify-removed
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $legacyComponents = Join-Path $env:RUNNER_TEMP 'fitbay-components-021'
+          gh release download v0.2.1 --repo $env:GITHUB_REPOSITORY --dir $legacyComponents --pattern 'FitBay-Toolkit-Setup-*.exe' --pattern 'FitBay-Prompts-Setup-*.exe' --pattern 'SHA256SUMS.txt'
+          if ($LASTEXITCODE) { throw 'Could not download mixed-version baseline' }
+          foreach ($name in 'FitBay-Toolkit-Setup-0.2.1-x64.exe','FitBay-Prompts-Setup-0.2.1-x64.exe') {
+            $hash = (Get-FileHash -LiteralPath (Join-Path $legacyComponents $name)).Hash.ToLowerInvariant()
+            if ("$hash  $name" -notin (Get-Content (Join-Path $legacyComponents 'SHA256SUMS.txt'))) { throw "Legacy hash mismatch: $name" }
+          }
           $registry = 'HKCU:\Software\FitBay\Installations'
           foreach ($product in 'Music','Prompts','Toolkit') {
             if ((Get-ItemProperty $registry).$product) { throw "Uninstall left $product registered" }
-            $installer = Join-Path $baseline "FitBay-$product-Setup-$previous-x64.exe"
+            $installer = if ($product -eq 'Toolkit') { Join-Path $legacyComponents 'FitBay-Toolkit-Setup-0.2.1-x64.exe' } else { Join-Path $baseline "FitBay-$product-Setup-$previous-x64.exe" }
             $process = Start-Process $installer -ArgumentList '/S /currentuser' -Wait -PassThru -WindowStyle Hidden
             if ($process.ExitCode -or (Get-ItemPropertyValue $registry $product) -ne (Join-Path $root $product)) { throw "Could not restore baseline $product" }
           }
@@ -73,7 +80,7 @@ jobs:
           # The old installer requires an empty destination. Remove only the empty
           # resources folder that contained the acceptance fixture.
           [IO.Directory]::Delete((Split-Path -Parent $retained))
-          $installer = Join-Path $baseline "FitBay-Prompts-Setup-$previous-x64.exe"
+          $installer = Join-Path $legacyComponents 'FitBay-Prompts-Setup-0.2.1-x64.exe'
           $process = Start-Process $installer -ArgumentList '/S /currentuser' -Wait -PassThru -WindowStyle Hidden
           if ($process.ExitCode) { throw 'Could not restore previous Prompts for batch upgrade' }
           # The previous public host has no batch UI. Keep the candidate host code and

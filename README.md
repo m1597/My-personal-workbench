@@ -1,12 +1,10 @@
 # FitBay
 
-**[下载 FitBay 工作台](https://github.com/m1597/My-personal-workbench/releases/download/v0.2.4/FitBay-Workbench-Setup-0.2.4-x64.exe)**
+**[仅安装 FitBay 工作台](https://github.com/m1597/My-personal-workbench/releases/download/v0.2.4/FitBay-Workbench-Setup-0.2.4-x64.exe)** · **[下载整合离线安装包](https://github.com/m1597/My-personal-workbench/releases/download/v0.2.4/FitBay-Offline-Setup-0.2.4-x64.exe)**
 
-只安装工作台后，可以从右上角齿轮进入「组件管理」，直接安装 Music、提示词库和工具集。工作台会显示下载进度、校验正式发行包并在安装完成后刷新组件状态；发生错误时可以单项重试。
+仅工作台安装包适合在线使用。安装后打开右上角设置，在「组件管理」中按需下载安装 Music、提示词库和工具集。整合离线安装包内含工作台和这三个组件的完整安装程序，工作台必装，其余三项按需勾选。
 
-Windows 安装版在启动约 10 秒后检查 GitHub 正式发行版，运行期间每 5 分钟检查一次。右键 FitBay 托盘图标可立即「检查更新」。工作台和 Music 分别比较版本，用户确认后下载对应安装包，校验 GitHub 提供的 SHA-256，再启动安装向导。请沿用原安装位置。
-
-发布者更新 package.json 和锁文件中的版本后，在包含发布工作流的提交上推送对应标签（例如 `v0.2.0`）。GitHub Actions 在 Windows 构建三个安装包并发布 Release，已安装更新功能的客户端随后会收到提示。此前安装的版本需要手动升级一次。[下载正式发行版](https://github.com/m1597/My-personal-workbench/releases)
+首次安装只选一次 FitBay 根目录，组件分别放在 Music、Prompts 和 Toolkit 子目录。以后单独补装会识别工作台位置，已有组件覆盖升级沿用登记目录。桌面只创建工作台快捷方式。[正式发行版与 SHA-256 清单](https://github.com/m1597/My-personal-workbench/releases/latest)
 
 本地优先的个人创作工作台。目前实现真实组件的拖拽、停靠、分组、缩放、关闭重开、最大化与布局恢复。
 
@@ -74,9 +72,7 @@ SQLite 和媒体播放当前用于第一方Music组件。Git 只备份已提交�
 
 ## Windows 安装包
 
-`npm run dist:win` 在 `dist/installers/` 生成 Windows x64 安装器和 SHA-256 清单。双击 `FitBay-Setup-0.1.0-x64.exe`，选择一次 FitBay 安装目录，默认只装工作台。勾选 Music 后，工作台安装在所选目录，Music 自动安装在其中的 Music 子目录。此入口内含完整安装包，可以单文件离线使用。
-
-只用工作台可运行 `FitBay-Workbench-Setup-0.1.0-x64.exe`。只用曲库或以后补装 Music 可运行 `FitBay-Music-Setup-0.1.0-x64.exe`。首次补装会从已安装工作台的登记位置预填 Music 子目录。两者共存时，可从「FitBay Music」直接启动，也可在工作台的「组件 → Music」打开音乐组件，拖出标签可分离。
+运行 `npm run dist:win` 后，`dist/installers/` 内有五个 Windows x64 安装程序。文件名中的 Workbench 表示仅工作台，Offline 表示整合离线安装包，Music、Prompts、Toolkit 各对应一个可独立补装的组件。随包的 `SHA256SUMS.txt` 列出每个文件的摘要。
 
 在「Music → 设置 → 插件」单独下载安装波形与片段试听、歌曲标签与封面整理或智能歌单。安装后点「打开」，以后可从「扩展」进入。歌曲过渡插件在同一页选择本地安装包。卸载保留标记和规则。[公开插件与校验值](https://github.com/m1597/fitbay-plugins/releases/tag/music-v1.0.0)
 
