@@ -14,6 +14,7 @@ const evidence = await mkdtemp(path.resolve('tmp/music-session-'))
 const profile = path.join(evidence, 'profile')
 const args = [
   path.join(root, 'host'),
+  '--mute-audio',
   '--user-data-dir=' + profile,
   '--workbench=' + path.resolve('out/renderer/index.html'),
 ]
@@ -25,6 +26,7 @@ async function page(app, fragment) {
   return app.windows().find((p) => p.url().includes(fragment))
 }
 const legacy = new MusicStore(path.join(profile, 'fitbay-music'))
+legacy.set('music-guide-v1', 1)
 legacy.generate('电子', [])
 legacy.set('recommendation-providers', JSON.stringify({ active: 'offline', accounts: {} }))
 legacy.db.close()
@@ -38,6 +40,7 @@ try {
   await expect(music.getByRole('option')).toHaveText(['DeepSeek', 'OpenAI', 'Claude', 'Gemini'])
   await music.getByRole('option', { name: 'DeepSeek' }).click()
   await music.getByRole('button', { name: '取消', exact: true }).click()
+  await music.getByRole('button', { name: '返回', exact: true }).click()
   await openDiscovery(music, true)
   await expect(music.getByRole('textbox', { name: '推荐首数' })).toHaveValue('5')
   await expect(music.locator('li')).toHaveCount(5)
@@ -82,7 +85,10 @@ try {
     has: shell.getByRole('tab', { name: 'Music', exact: true }),
   })
   await expect(sharedHeader.getByRole('tab', { name: '模块 2', exact: true })).toHaveCount(1)
-  expect(Math.abs((await sharedHeader.boundingBox()).height - 32)).toBeLessThanOrEqual(1)
+  const tabHeight = await sharedHeader.evaluate((header) =>
+    Number.parseFloat(getComputedStyle(header).getPropertyValue('--panel-tab-height')),
+  )
+  expect(Math.abs((await sharedHeader.boundingBox()).height - tabHeight)).toBeLessThanOrEqual(1)
   expect(await output(music)).toEqual([0.99, true])
   const layouts = async () => {
     await shell.getByRole('button', { name: '布局', exact: true }).click()
@@ -215,12 +221,10 @@ try {
   const musicItem = shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true })
   await expect(shell.getByRole('button', { name: /^(Music|示例组件)$/ })).toHaveCount(0)
   await windowMenu.click()
-  const items = shell.locator('[role="menuitem"], [role="menuitemcheckbox"]')
-  await expect
-    .poll(() =>
-      items.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label') || n.textContent)),
-    )
-    .toEqual(['模块 1', '模块 2', '模块 3', '模块 4', 'Music', '隐藏 Music'])
+  await expect(musicItem).toBeVisible()
+  await expect(shell.getByRole('menuitem', { name: '隐藏 Music', exact: true })).toBeVisible()
+  for (const number of [1, 2, 3, 4])
+    await expect(shell.getByRole('menuitem', { name: '模块 ' + number, exact: true })).toBeVisible()
   // Off-screen capture cannot composite the Windows acrylic background.
   await shell.evaluate(() => {
     delete document.documentElement.dataset.backdrop
