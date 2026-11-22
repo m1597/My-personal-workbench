@@ -30,6 +30,7 @@ import { verifyAudio, AudioDecodeError } from './lx-audio-check.mjs'
 import { pathKey, openAudio } from './music/local-files.mjs'
 import { albumTags } from './music/albums.mjs'
 import { chooseQuality, getMusicPreferences } from './music-preferences.mjs'
+import { wantsDouyinChart } from './recommendation-weight.mjs'
 import { publish } from './music/store.mjs'
 
 class SourceDownloadError extends Error {}
@@ -1803,7 +1804,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
   async function prepare(id, selected, batchSignal, constraints, health) {
     const store = getStore()
     const recommendation = store.db
-      .prepare('SELECT local FROM recommended_items WHERE item=?')
+      .prepare('SELECT local,matchConstraints FROM recommended_items WHERE item=?')
       .get(id)
     if (!recommendation) throw Error('无效推荐记录')
     if (running.has(id) || store.db.prepare('SELECT 1 FROM dismissed_items WHERE item=?').get(id))
@@ -1814,9 +1815,20 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         'SELECT b.preference,r.batch AS targeted FROM batches b LEFT JOIN recommendation_runs r ON r.batch=b.id WHERE b.id=?',
       )
       .get(item.batch)
-    constraints ??= {
-      ...recordingConstraints(batch?.preference, getMusicPreferences(store)),
-      artist: namesRequestedArtist(batch?.preference, item.artist) ? item.artist : '',
+    if (recommendation.matchConstraints) constraints = JSON.parse(recommendation.matchConstraints)
+    else {
+      // Older runs retained the request text but not the resolved chart or model artist.
+      constraints = constraints
+        ? { ...constraints }
+        : {
+            ...recordingConstraints(batch?.preference, getMusicPreferences(store)),
+            artist: namesRequestedArtist(batch?.preference, item.artist) ? item.artist : '',
+            ...(batch?.targeted && wantsDouyinChart(batch.preference) ? { exactChart: true } : {}),
+          }
+      if (batch?.targeted)
+        store.db
+          .prepare('UPDATE recommended_items SET matchConstraints=? WHERE item=?')
+          .run(JSON.stringify(constraints), id)
     }
     function hasLocalCopy(recording) {
       if (recommendation.local) return false

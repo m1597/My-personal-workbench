@@ -1,6 +1,7 @@
 import { openDiscovery, openMusicSurface } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import fs from 'node:fs/promises'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
@@ -16,6 +17,11 @@ const store = new MusicStore(path.join(profile, 'fitbay-music'))
 const cancellation = process.env.FITBAY_TEST_RECOMMEND_STOP
 const docked = process.argv.includes('--docked')
 const testRetry = process.argv.includes('--retry-failed')
+const testChart = testRetry && process.argv.includes('--chart')
+if (testChart) {
+  store.set('music-pref-requestWeight', '100')
+  store.set('music-pref-edition', 'live')
+}
 if (cancellation === 'consent') store.set('taste-consent', '1')
 store.set('lx-bootstrap', 'done')
 store.set('music-recommend-dir', output)
@@ -29,6 +35,10 @@ for (const [i, song] of songs.entries()) {
   files[song] = path.join(root, song + '.wav')
   await writeFixtureRecording(files[song], 630 + i * 175)
 }
+if (testChart) {
+  files['归途 (Live)'] = path.join(root, 'live.wav')
+  await writeFixtureRecording(files['归途 (Live)'], 1901)
+}
 const code = path.join(root, 'source.js')
 const preview = '海风'
 files[preview] = path.join(root, preview + '.wav')
@@ -40,6 +50,7 @@ lx.on('request', ({action,info}) => {
   if(action === 'musicUrl') return 'https://1.1.1.1/audio/' + encodeURIComponent(info.musicInfo.name)
   if(action !== 'search') return ''
   const name = info.keyword.split(' ')[0]
+  ${testChart ? "if(name==='归途') return [name+' (Live)',name].map(title=>({id:title,name:title,singer:'青禾',allowPermanentSave:true}))" : ''}
   return [{id:name,name,singer:'青禾',picUrl:name==='晨风'?'https://p1.music.126.net/fixture.png':undefined,allowPermanentSave:!name.startsWith('限听')}]
 })
 lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
@@ -60,7 +71,7 @@ async function verify() {
   const page = await openMusicSurface(app, docked)
   await offlineSourceRepository(app)
   await app.evaluate(
-    ({ app, BaseWindow, dialog }, { files, code, songs, testRetry }) => {
+    ({ app, BaseWindow, dialog }, { files, code, songs, testRetry, testChart }) => {
       if (
         !app.commandLine.hasSwitch('mute-audio') ||
         BaseWindow.getAllWindows().some((w) => w.isFocusable())
@@ -148,6 +159,15 @@ async function verify() {
       ]
       globalThis.counts = []
       globalThis.fetch = async (_url, options) => {
+        if (testChart && new URL(_url).hostname === 'aweme.snssdk.com')
+          return Response.json({
+            status_code: 0,
+            release_date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
+            music_list: songs.map((title, i) => ({
+              music_info: { title, author: '青禾' },
+              heat: 99 - i,
+            })),
+          })
         const { count, excluded = [] } = JSON.parse(
           JSON.parse(options.body).messages.at(-1).content,
         )
@@ -186,6 +206,7 @@ async function verify() {
       code,
       songs,
       testRetry,
+      testChart,
     },
   )
   await page.evaluate(async () => {
@@ -194,7 +215,9 @@ async function verify() {
   })
   await openDiscovery(page, true)
   await page.getByLabel('推荐首数').fill('5')
-  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('只听青禾本人的作品')
+  await page
+    .getByLabel('想让 AI 推荐什么？（选填）')
+    .fill(testChart ? '抖音热榜，只听青禾本人的作品' : '只听青禾本人的作品')
   await page.evaluate(() => {
     delete document.documentElement.dataset.backdrop
     const started = performance.now()
@@ -250,6 +273,26 @@ async function verify() {
     await expect(retry).toBeEnabled()
     const stillFailed = await capture('02-retry-unavailable')
     assert.deepEqual(stillFailed.songs, previous.songs)
+    if (testChart) {
+      const db = new DatabaseSync(path.join(profile, 'fitbay-music', 'music.sqlite'))
+      try {
+        const { id, matchConstraints } = db
+          .prepare(`SELECT i.id,r.matchConstraints FROM items i
+          JOIN recommended_items r ON r.item=i.id WHERE i.batch=? AND i.title=?`)
+          .get(previous.id, songs[4])
+        const constraints = JSON.parse(matchConstraints)
+        assert.equal(constraints.exactChart, true)
+        assert.equal(constraints.editionPreference, 'any')
+        assert.equal(constraints.artist, '青禾')
+        // A pre-migration batch only has its original text. It must still reject the live substitute.
+        db.prepare('UPDATE recommended_items SET matchConstraints=NULL WHERE item=?').run(id)
+      } finally {
+        db.close()
+      }
+      assert.ok(
+        !(await app.evaluate(() => globalThis.transfers.some((r) => r.title.endsWith('(Live)')))),
+      )
+    }
     const before = await app.evaluate(() => {
       globalThis.retryRestored = true
       return { transfers: globalThis.transfers.length, models: globalThis.counts.length }

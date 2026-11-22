@@ -152,6 +152,9 @@ export class LocalLibrary {
         this.db.exec(`ALTER TABLE local_tracks ADD COLUMN albumArtist TEXT;
           ALTER TABLE local_tracks ADD COLUMN discNumber INTEGER;
           ALTER TABLE local_tracks ADD COLUMN trackNumber INTEGER;`)
+      const recommendationColumns = this.db.prepare('PRAGMA table_info(recommended_items)').all()
+      if (!recommendationColumns.some((c) => c.name === 'matchConstraints'))
+        this.db.exec('ALTER TABLE recommended_items ADD COLUMN matchConstraints TEXT')
       if (
         !this.db
           .prepare('PRAGMA table_info(recommended_items)')
