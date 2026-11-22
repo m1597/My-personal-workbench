@@ -6,11 +6,14 @@
 
 首源传输超时（DOMException，code 23）后，下一来源完成同一录音；两首同时需要重新读取已配置的音源目录时只读取一次。真实保存路径故障单独显示 ENOENT。见 tmp/recommendation-latency-sEGjT1/source-recovery.json。此次受控故障测试用于复现错误分类和恢复，不能用作公网耗时比较。
 
+最终团队构建的受控五首批次中，首首 1.824 秒可播，第五首 5.432 秒入库；已保存四首时切页播放，回到原批次继续补足五首。见 tmp/refill-five-MjxZZe/timing.json。此处含固定模型响应和等待传输的测试步骤。
+
 ## 当前音源的桌面实测
 
 在私有 Windows 桌面使用隔离资料，复制已启用音源的定义。测试模型只在本机回环响应，推荐指定录音；搜索、地址解析、音频传输及播放使用真实服务。通过组件工作树的 scripts/open-workbench.cmd --verify-desktop 启动工作台，从「组件 → Music → 找歌 → AI 推荐」生成，再从「歌单 → 歌曲推荐 → 播放全部」启动本地播放器。
 
 - 工作台 CMD 和已安装的独立 Music 0.2.4 都从 fish_music 下载了綾下蒔間Ayaka《Here [cover JUNNA]》。平台为网易云，录音 ID 为 2697554394，音质为 320k。两个文件均为 10,536,045 字节。静音播放时，工作台记录到 0.863 秒，安装版记录到 0.853 秒。证据在 tmp/desktop-check-14551-6311/download-play.json 与 tmp/desktop-check-0-1928046482/download-play.json。
+- 从本地 0.2.5 候选安装器提取原始运行载荷，用其 FitBay Music.exe 复测同一推荐。该载荷的 lx-music.mjs 与 eaccc02 修复后的工作树哈希一致，下载文件仍为 10,536,045 字节，歌单静音播放到 0.875 秒。安装器 SHA-256 为 CB6777E53810F79C22D46BD198569855C06330DE3F9FECA919878CB824577830，证据见 tmp/desktop-check-0-492007100/download-play.json。
 - 用独立资料启动洛雪桌面版，使用同一音源、平台及音质。缓存录音标识为 wy_2697554394_320k。洛雪在 3.984 秒进入播放，媒体时长 263.33 秒。见 tmp/lx-compare-LVcoTF/evidence.json。此次对照核对录音、来源及可播性，两边计时时点不同。
 - 实网首个样本《Monkeys Spinning Monkeys》未取得许可明确的永久保存结果。该结果与上述成功下载分开记录，见 tmp/desktop-check-12909-6583。
 - 复测脚本为 scripts/check-cmd-recommendation-live.mjs。传入本工作树 tmp 下新建的 CMD 验收 profile 和已配置音源的曲库 SQLite 路径。独立安装版可通过 FITBAY_TEST_MUSIC_EXE 指定绝对路径。脚本不输出密钥、脚本内容或播放地址。
