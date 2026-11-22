@@ -13,7 +13,7 @@
 !endif
 !define /ifndef FITBAY_REG "Software\FitBay\Installations"
 
-!define FITBAY_HISTORY "Software\FitBay\PreviousInstallations"
+!define /ifndef FITBAY_HISTORY "Software\FitBay\PreviousInstallations"
 
 !macro FitBayDefaultDir
   !ifndef BUILD_UNINSTALLER
@@ -67,6 +67,18 @@
   !macro FitBayCheckPeer peer allowed
     !if "${FITBAY_SLOT}" != "${peer}"
       ReadRegStr $1 HKCU "${FITBAY_REG}" "${peer}"
+      !if "${FITBAY_SLOT}" == "Workbench"
+        ${If} $1 == ""
+          ReadRegStr $0 HKCU "${FITBAY_HISTORY}" "${peer}"
+          ${If} $0 == "$2\${peer}"
+            System::Call 'kernel32::GetFileAttributesW(w r0) i.r0'
+            IntOp $0 $0 & 0x410
+            ${If} $0 == 0x10
+              StrCpy ${allowed} "${peer}"
+            ${EndIf}
+          ${EndIf}
+        ${EndIf}
+      !endif
       ${If} $1 != ""
         System::Call 'kernel32::GetFullPathNameW(w "$1\.", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'
         ${If} $0 == 0

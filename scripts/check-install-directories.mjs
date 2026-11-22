@@ -29,6 +29,9 @@ InstallDir "${tmp}\\default"
 OutFile "${tmp}\\${product}.exe"
 !define APP_ID "io.github.m1597.fitbay.${product}"
 !define FITBAY_REG "${key}"
+!define FITBAY_HISTORY "${key}\\PreviousInstallations"
+!define APP_EXECUTABLE_FILENAME "${file}"
+${product === 'music' ? 'Var fitbayPreviousDirectory' : ''}
 !define UNINSTALL_FILENAME "unused-test-uninstaller.exe"
 !include "${owned}"
 Section
@@ -88,6 +91,11 @@ try {
   run('workbench', root)
   run('music', musicDir, { remove: true })
   await access(path.join(root, 'FitBay.exe'))
+  assert.equal(await readFile(path.join(musicDir, '我的文件.txt'), 'utf8'), 'keep')
+  run('workbench', root, { remove: true })
+  run('workbench', root)
+  run('music', undefined)
+  assert.equal(await readFile(log, 'utf16le'), musicDir)
   assert.equal(await readFile(path.join(musicDir, '我的文件.txt'), 'utf8'), 'keep')
   console.log('PASS 自选根目录、旧登记规范化、Music 自动补装、冲突保护与双向卸载保留。')
 } finally {
