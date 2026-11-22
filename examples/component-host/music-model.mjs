@@ -30,25 +30,35 @@ export function configureModel(store, vault, id, model, key, forget = false) {
   const state = config(store)
   model = model.trim()
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)) throw Error('请输入有效的模型 ID')
-  let secret = forget ? '' : state.accounts[id]?.secret || ''
-  if (key.trim()) {
-    if (!vault.isEncryptionAvailable()) throw Error('系统凭据保护不可用')
-    secret = vault.encryptString(key.trim()).toString('base64')
-  }
-  state.accounts[id] = { model, secret }
+  const secret = state.accounts[id]?.secret
   if (store.connections) {
     const shared = store.connections.read('music.model')
     const sameAccount = shared?.protocol === protocols[id]
     store.connections.write('music.model', {
+      expectedId: shared?.id ?? null,
       separate: !sameAccount,
       endpoint: sameAccount ? shared.endpoint : providers[id].url,
       protocol: protocols[id],
       model,
       key:
         key.trim() ||
-        (!sameAccount && secret ? vault.decryptString(Buffer.from(secret, 'base64')) : ''),
+        (!forget && !sameAccount && secret
+          ? vault.decryptString(Buffer.from(secret, 'base64'))
+          : ''),
       clearKey: forget,
     })
+    // The shared binding now owns this credential. Never revive a rotated legacy copy.
+    state.accounts[id] = { model }
+  } else {
+    if (key.trim() && !vault.isEncryptionAvailable()) throw Error('系统凭据保护不可用')
+    state.accounts[id] = {
+      model,
+      secret: key.trim()
+        ? vault.encryptString(key.trim()).toString('base64')
+        : forget
+          ? ''
+          : secret || '',
+    }
   }
   state.active = id
   store.set(setting, JSON.stringify(state))
@@ -69,9 +79,9 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
             ? profileInstructions
             : recommendationInstructions +
               ' 生成和补推时按 requestWeight 与 tasteWeight 的百分比权衡本次输入和已授权口味，权重为零的因素不参与。每首歌曲另附 requestFit 和 tasteFit 两个 0 到 100 的整数，分别独立衡量对本次输入、已提供口味的吻合度；缺乏对应信息填 50。理由说明具体依据。若给出 douyinChart，只有其中的同名同署名录音可作为已核验的热门作品；按权重兼顾口味及榜单名次，100%要求时仅从榜单选择。榜单缺失时不得声称已上榜。按 recording 的版本、翻唱、伴奏偏好处理。scope=direct 时只给直接相关的候选；可信直接候选已经用尽时返回 directExhausted:true，songs 可以为空。scope=related 才允许靠近主题的相邻风格，并在 reason 解释联系。'
-  const legacy = config(store)
-  const shared = store.connections?.read('music.model')
-  const resolved = shared ? store.connections.resolve('music.model') : null
+  const resolved = store.connections?.resolve('music.model')
+  const shared = resolved ?? store.connections?.read('music.model')
+  const legacy = shared ? null : config(store)
   const active = shared
     ? { chat: 'deepseek', responses: 'openai', claude: 'claude', gemini: 'gemini' }[shared.protocol]
     : legacy.active
@@ -134,7 +144,9 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
               { role: 'user', content: input },
             ],
             response_format: { type: 'json_object' },
-            thinking: { type: 'disabled' },
+            ...(new URL(url).origin === new URL(providers.deepseek.url).origin
+              ? { thinking: { type: 'disabled' } }
+              : {}),
             max_tokens: 4096,
           }
   }
@@ -159,7 +171,8 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
           404: '请检查模型 ID',
           429: '额度或速率受限，请稍后再试',
         }[res.status] || '请稍后重试'
-      throw new ServiceError(p.label + ' 返回 ' + res.status + '，' + hint)
+      const label = new URL(url).origin === new URL(p.url).origin ? p.label : '模型服务'
+      throw new ServiceError(label + ' 返回 ' + res.status + '，' + hint)
     }
     const chunks = []
     let size = 0
