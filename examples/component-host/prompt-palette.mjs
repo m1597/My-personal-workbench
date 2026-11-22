@@ -1,3 +1,4 @@
+import { promptVisuals } from './prompt-visuals.mjs'
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
 import path from 'node:path'
@@ -7,7 +8,7 @@ import { mkdir, unlink } from 'node:fs/promises'
 import { atomicWrite } from './prompt-actions.mjs'
 import { toolkitLauncher } from './toolkit-launcher.mjs'
 import { watch } from 'node:fs'
-import { openConnections, apiUses } from './api-connections.mjs'
+import { openConnections } from './api-connections.mjs'
 import { BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, safeStorage } from 'electron'
 import { promptLibrary } from './prompt-library.mjs'
 
@@ -177,21 +178,19 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
       const own = store.read('prompts.model')
       const text = store.read('toolkit.translation'),
         image = store.read('toolkit.vision')
-      const bindings = Object.entries(apiUses).map(([use, label]) => ({
-        id: store.read(use)?.id,
-        name: [label.component, label.purpose].join(' · '),
-      }))
-      const owners = (id) => bindings.filter((b) => b.id === id).map((b) => b.name)
-      const reused = !!own && owners(own.id).length > 1
+      const reused =
+        own?.source === 'dedicated' &&
+        store.choices().some((c) => c.id === own.id && c.owners.length > 1)
       return {
         own,
+        globalDefault: store.read('default'),
         reused,
         text,
         image,
         choices: store
           .choices()
           .filter((c) => c.id !== own?.id || reused)
-          .map((c) => ({ ...c, owners: owners(c.id).join(' / ') })),
+          .map((c) => ({ ...c, owners: c.owners.join(' / ') })),
       }
     } catch {
       throw Error('连接设置暂不可用')
@@ -200,7 +199,12 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
   handle('save-connection', 'editor', (value) => {
     try {
       const store = settingsStore()
-      if (value?.mode === 'reuse' && typeof value.connectionId === 'string') {
+      if (
+        value?.mode === 'inherit' &&
+        (value.expectedId === null || typeof value.expectedId === 'string')
+      )
+        store.write('prompts.model', { inherit: true, expectedId: value.expectedId })
+      else if (value?.mode === 'reuse' && typeof value.connectionId === 'string') {
         store.write('prompts.model', { reuse: value.connectionId })
       } else if (
         value?.mode === 'own' &&
@@ -226,6 +230,34 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     ...library.state(),
     registrationError: registrationError || library.state().preferenceError,
   }))
+  const visuals = promptVisuals(profile, library, async (instruction, text) => {
+    const connection = settingsStore().resolve('prompts.model')
+    if (!connection) throw Error('请先配置 API 与模型')
+    const { complete } = await import('./prompt-model.mjs')
+    return complete(
+      connection,
+      connection.key,
+      [{ role: 'user', content: instruction + '\n原文如下\n' + text }],
+      new AbortController().signal,
+    )
+  })
+  handle('visual', 'editor', (root, name, generate) => visuals(root, name, generate === true))
+  handle('autoVisual', 'editor', library.autoVisual)
+  handle('importText', 'editor', library.importText)
+  handle('exportVisual', 'editor', async (root, name) => {
+    const { html } = await visuals(root, name, false)
+    if (!html) throw Error('请先生成当前版本的可视化')
+    const choice = await dialog.showSaveDialog({
+      defaultPath: path.parse(name).name + '.html',
+      filters: [{ name: 'HTML', extensions: ['html'] }],
+    })
+    if (choice.canceled) return false
+    if (path.extname(choice.filePath).toLowerCase() !== '.html') throw Error('请选择 HTML 文件')
+    const check = () => library.assertWritableFolder(path.dirname(choice.filePath))
+    await check()
+    await atomicWrite(choice.filePath, html, check)
+    return true
+  })
   handle('organize', 'editor', async (root, name) => {
     const connection = settingsStore().resolve('prompts.model')
     if (!connection) throw Error('请先配置 API 与模型')

@@ -1,3 +1,4 @@
+import { ChoiceDropdown } from '../../src/renderer/src/app/SharedDropdown'
 import { useEffect, useRef, useState } from 'react'
 
 export type Entry = {
@@ -296,25 +297,27 @@ export function FileBrowser({
             value={query}
             onChange={(e) => search(e.target.value)}
           />
-          <select
+          <ChoiceDropdown
             aria-label="搜索范围"
             value={all ? 'all' : 'current'}
-            onChange={(e) => setAll(e.target.value === 'all')}
-          >
-            <option value="current">当前目录</option>
-            <option value="all">所有常用位置</option>
-          </select>
-          <select
+            choices={[
+              { value: 'all', label: '所有常用位置' },
+              { value: 'current', label: '当前目录' },
+            ]}
+            onChange={(v) => setAll(v === 'all')}
+          />
+          <ChoiceDropdown
             aria-label="目录视图"
             value={view}
-            onChange={(e) => {
-              localStorage.setItem(viewKey, e.target.value)
-              setView(e.target.value)
+            choices={[
+              { value: 'list', label: '列表' },
+              { value: 'grid', label: '缩略图' },
+            ]}
+            onChange={(v) => {
+              localStorage.setItem(viewKey, v)
+              setView(v)
             }}
-          >
-            <option value="list">列表</option>
-            <option value="grid">缩略图</option>
-          </select>
+          />
         </div>
         {selected.length > 0 && (
           <div className="tools">

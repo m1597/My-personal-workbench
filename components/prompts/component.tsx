@@ -1,7 +1,8 @@
+import { PromptVisual, type VisualData } from './PromptVisual'
+import { ChoiceDropdown } from '../../src/renderer/src/app/SharedDropdown'
 import { ShortcutRecorder } from '../../src/renderer/src/app/ShortcutRecorder'
 import { BackButton } from '../music/BackButton'
 import { SettingsGear, SettingsShell } from '../../src/renderer/src/app/ComponentSettings'
-import { WindowNewRegular } from '@fluentui/react-icons'
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
@@ -18,6 +19,7 @@ type State = {
   paletteRoot: string
   root: string
   defaultRoot: string
+  autoVisual: boolean
   shortcutEnabled: boolean
   shortcut: string
   registrationError: string
@@ -25,6 +27,14 @@ type State = {
 declare global {
   interface Window {
     promptLibrary: {
+      visual(
+        root: string,
+        name: string,
+        generate: boolean,
+      ): Promise<{ html: string; stale: boolean; svg?: string; data?: VisualData }>
+      exportVisual(root: string, name: string): Promise<boolean>
+      importText(root: string, name: string, text: string): Promise<string>
+      autoVisual(value: boolean): Promise<void>
       identity(root: string, name: string): Promise<string>
       locate(root: string, name: string, identity: string): Promise<Entry | null>
       batch(tool: 'rename' | 'resize', items: { root: string; name: string }[]): Promise<void>
@@ -168,7 +178,11 @@ function Library() {
     [cards, setCards] = useState<Card[]>([]),
     [filter, setFilter] = useState(''),
     [purpose, setPurpose] = useState(''),
+    [visualVersion, setVisualVersion] = useState(0),
     [organized, setOrganized] = useState(''),
+    [importing, setImporting] = useState(false),
+    [importName, setImportName] = useState('提示词.md'),
+    [importBody, setImportBody] = useState(''),
     [raw, setRaw] = useState(false),
     [values, setValues] = useState<Record<string, string>>({}),
     [doc, setDoc] = useState<Doc>(),
@@ -202,7 +216,9 @@ function Library() {
   const dirty = !!doc && draft !== doc.text
   const live = useRef({ name, doc, draft, root: fileRoot })
   live.current = { name, doc, draft, root: fileRoot }
+  const [settingsSelection, refocusSettings] = useState(0)
   const settingsPage = useRef<HTMLElement>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: choosing the active category again also returns focus to its first control.
   useEffect(() => {
     const content = settingsPage.current?.querySelector('.fitbay-settings-content')
     if (!settings || !content) return
@@ -221,7 +237,7 @@ function Library() {
     })
     observer.observe(content, { childList: true, subtree: true })
     return () => observer.disconnect()
-  }, [settings, category])
+  }, [settings, category, settingsSelection])
   async function changeShortcut(key: string, enabled?: boolean) {
     try {
       await api.shortcut(key, enabled)
@@ -399,6 +415,43 @@ function Library() {
         ?.replace(/\.(md|txt)$/i, '') || '',
     )
   }
+  async function showVisual() {
+    setRaw(false)
+    if (!fileRoot || dirty) return
+    try {
+      await api.visual(fileRoot, name, true)
+      if (live.current.root === fileRoot && live.current.name === name)
+        setVisualVersion((v) => v + 1)
+    } catch (e) {
+      const error = message(e)
+      say(error)
+      if (error.includes('配置 API')) {
+        setCategory('api')
+        setSettings(true)
+      }
+    }
+  }
+  async function importOne(filename: string, body: string) {
+    const root = state?.root
+    if (!root) throw Error('请先选择提示词目录')
+    if (!discard()) return
+    const name = await api.importText(root, filename, body)
+    update()
+    reset({ root, name, label: name, type: 'text' })
+    setImporting(false)
+    setImportBody('')
+    if (state.autoVisual) {
+      try {
+        await api.visual(root, name, true)
+        update()
+        setVisualVersion((v) => v + 1)
+      } catch (e) {
+        const warning = name + ' 已导入，可视化未生成 · ' + message(e)
+        say(warning)
+        return warning
+      }
+    }
+  }
   async function folder(mode: 'temp' | 'remember' | 'default') {
     if ((mode !== 'remember' || !state?.root) && !discard()) return
     const previous = state?.root
@@ -421,11 +474,38 @@ function Library() {
               { id: 'api', name: 'API 与模型' },
             ]}
             active={category}
-            onSelect={setCategory}
+            onSelect={(id) => {
+              setCategory(id)
+              refocusSettings((value) => value + 1)
+            }}
             onBack={() => setSettings(false)}
           >
             {category === 'directory' && (
               <>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={state?.autoVisual || false}
+                    onChange={(e) =>
+                      void attempt(async () => {
+                        await api.autoVisual(e.target.checked)
+                        update()
+                      })
+                    }
+                  />
+                  导入后自动生成可视化
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void attempt(async () => {
+                      const r = await window.sampleHost.transfer(dock ? 'detach' : 'attach')
+                      if (!r.ok) throw Error(r.error || '工作台不可用')
+                    })
+                  }
+                >
+                  {dock ? '独立打开' : '加入工作台'}
+                </button>
                 <p>默认目录 · {state?.defaultRoot || '尚未设置'}</p>{' '}
                 <button type="button" onClick={() => void attempt(() => folder('remember'))}>
                   设置默认目录
@@ -484,25 +564,36 @@ function Library() {
           </SettingsShell>
         </main>
       )}
-      <main hidden={settings} className="library">
+      <main
+        hidden={settings}
+        className="library"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault()
+          const files = Array.from(e.dataTransfer.files)
+          void attempt(async () => {
+            const issues: string[] = []
+            for (const f of files) {
+              try {
+                if (!/\.(md|txt)$/i.test(f.name) || f.size > 4 * 1024 * 1024)
+                  throw Error('请选择 4 MiB 以内的 TXT 或 Markdown')
+                const warning = await importOne(
+                  f.name,
+                  new TextDecoder('utf-8', { fatal: true }).decode(await f.arrayBuffer()),
+                )
+                if (warning) issues.push(warning)
+              } catch (error) {
+                issues.push(f.name + ' · ' + message(error))
+              }
+            }
+            if (issues.length) say(issues.join('；'))
+          })
+        }}
+      >
         <header>
           <h1>提示词库</h1>
           <div className="tools">
             <SettingsGear label="提示词库设置" onClick={() => setSettings(true)} />
-            <button
-              type="button"
-              className="fitbay-settings-action"
-              title={dock ? '独立打开' : '加入工作台'}
-              aria-label={dock ? '独立打开' : '加入工作台'}
-              onClick={() =>
-                void attempt(async () => {
-                  const r = await window.sampleHost.transfer(dock ? 'detach' : 'attach')
-                  if (!r.ok) say(r.error || '工作台不可用')
-                })
-              }
-            >
-              <WindowNewRegular fontSize={18} />
-            </button>
           </div>
         </header>
         <div className="tools">
@@ -521,6 +612,30 @@ function Library() {
             返回默认目录
           </button>
         </div>
+        <button type="button" disabled={!state?.root} onClick={() => setImporting(!importing)}>
+          粘贴导入
+        </button>
+        {importing && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void attempt(() => importOne(importName, importBody))
+            }}
+          >
+            <label>
+              文件名
+              <input value={importName} onChange={(e) => setImportName(e.target.value)} />
+            </label>
+            <textarea
+              aria-label="粘贴原文"
+              value={importBody}
+              onChange={(e) => setImportBody(e.target.value)}
+            />
+            <button type="submit" disabled={!importBody.trim()}>
+              导入
+            </button>
+          </form>
+        )}
         <small title={state?.root}>{state?.root || '请选择文件夹'}</small>
         <section className="split">
           <nav aria-label="提示词">
@@ -625,45 +740,73 @@ function Library() {
                     if (discard()) reset()
                   }}
                 />
-                <button type="button" onClick={() => setRaw(!raw)}>
-                  {raw ? '结构化预览' : '查看原文'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void attempt(async () => {
-                      if (!(await window.promptConnections.snapshot()).own?.configured) {
-                        setCategory('api')
-                        setSettings(true)
-                        return
-                      }
-                      const text = await api.organize(fileRoot, name)
-                      if (live.current.root === fileRoot && live.current.name === name)
-                        setOrganized(text)
-                    })
-                  }
-                >
-                  AI 整理
-                </button>
-                {organized && (
-                  <section aria-label="整理预览">
-                    <MarkdownPreview text={organized} />
+                <div className="tools">
+                  <button
+                    type="button"
+                    aria-pressed={!raw}
+                    disabled={dirty}
+                    onClick={() => void showVisual()}
+                  >
+                    可视化
+                  </button>
+                  <button type="button" aria-pressed={raw} onClick={() => setRaw(true)}>
+                    原文
+                  </button>
+                </div>
+                {!raw && !editMode && doc && (
+                  <PromptVisual
+                    key={JSON.stringify([fileRoot, name, doc.revision, visualVersion])}
+                    root={fileRoot}
+                    name={name}
+                    revision={doc.revision}
+                    text={doc.text}
+                    configure={() => {
+                      setCategory('api')
+                      setSettings(true)
+                    }}
+                  />
+                )}
+                {raw && (
+                  <details>
+                    <summary>整理原文</summary>
                     <button
                       type="button"
                       onClick={() =>
                         void attempt(async () => {
-                          const saved = await api.saveOrganized(fileRoot, organized)
-                          setOrganized('')
-                          say('已保存 ' + saved)
+                          if (!(await window.promptConnections.snapshot()).own?.configured) {
+                            setCategory('api')
+                            setSettings(true)
+                            return
+                          }
+                          const text = await api.organize(fileRoot, name)
+                          if (live.current.root === fileRoot && live.current.name === name)
+                            setOrganized(text)
                         })
                       }
                     >
-                      确认保存副本
+                      AI 整理
                     </button>
-                    <button type="button" onClick={() => setOrganized('')}>
-                      取消整理
-                    </button>
-                  </section>
+                    {organized && (
+                      <section aria-label="整理预览">
+                        <MarkdownPreview text={organized} />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void attempt(async () => {
+                              const saved = await api.saveOrganized(fileRoot, organized)
+                              setOrganized('')
+                              say('已保存 ' + saved)
+                            })
+                          }
+                        >
+                          确认保存副本
+                        </button>
+                        <button type="button" onClick={() => setOrganized('')}>
+                          取消整理
+                        </button>
+                      </section>
+                    )}
+                  </details>
                 )}
                 {variables.map((key) => (
                   <label key={key}>
@@ -742,23 +885,27 @@ function Library() {
                     value={draft}
                     onChange={(e) => changeDraft(e.target.value)}
                   />
-                ) : !raw && /\.md$/i.test(name) ? (
-                  <MarkdownPreview text={draft} />
-                ) : (
+                ) : raw ? (
                   <pre>{draft}</pre>
-                )}
+                ) : null}
                 <details open={pinOpen} onToggle={(event) => setPinOpen(event.currentTarget.open)}>
                   <summary>固定为工具集动作</summary>
                   <label>
                     显示名
                     <input value={label} onChange={(e) => setLabel(e.target.value)} />
                   </label>
-                  <label>
+                  <label htmlFor="prompt-input">
                     输入类型
-                    <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-                      <option value="text">文本</option>
-                      <option value="image">图片</option>
-                    </select>
+                    <ChoiceDropdown
+                      id="prompt-input"
+                      aria-label="输入类型"
+                      value={kind}
+                      choices={[
+                        { value: 'text', label: '文本' },
+                        { value: 'image', label: '图片' },
+                      ]}
+                      onChange={(v) => setKind(v as typeof kind)}
+                    />
                   </label>
                   {pinOpen && <ActionConnection kind={kind} />}
                   <button

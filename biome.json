@@ -9,6 +9,7 @@
     "includes": [
       "**",
       "!package-lock.json",
+      "!!examples/component-host/archify",
       "!docs/images",
       "!!.agents/skills/impeccable",
       "!!.agents/skills/diagnosing-bugs",

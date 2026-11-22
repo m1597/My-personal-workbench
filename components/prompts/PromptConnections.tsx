@@ -1,6 +1,8 @@
+import { ChoiceDropdown } from '../../src/renderer/src/app/SharedDropdown'
 import { useCallback, useEffect, useState } from 'react'
 
 type Connection = {
+  source?: 'default' | 'dedicated'
   id: string
   endpoint: string
   model: string
@@ -9,12 +11,14 @@ type Connection = {
 }
 type Snapshot = {
   own: Connection | null
+  globalDefault: Connection | null
   reused: boolean
   choices: (Connection & { owners: string })[]
   text: Connection | null
   image: Connection | null
 }
 type Edit =
+  | { mode: 'inherit'; expectedId: string | null }
   | { mode: 'own'; endpoint: string; key?: string; model: string; protocol: string }
   | { mode: 'reuse'; connectionId: string }
 declare global {
@@ -76,6 +80,7 @@ export function ActionConnection({ kind }: { kind: 'image' | 'text' }) {
             ? '正在读取连接…'
             : binding
               ? [
+                  binding.source === 'default' ? '全局默认' : '专用连接',
                   binding.endpoint,
                   binding.model,
                   binding.configured ? '已设置密钥' : '未设置密钥',
@@ -90,8 +95,8 @@ export function PromptConnectionSettings() {
   const { state, failed, refresh } = useConnections()
   const [notice, say] = useState('')
   return (
-    <section aria-label="文件库连接">
-      <h2>文件库连接</h2>
+    <section aria-label="提示词库连接">
+      <h2>提示词库连接</h2>
       {failed ? (
         <Retry refresh={refresh} />
       ) : state ? (
@@ -118,18 +123,23 @@ function ConnectionForm({
   say: (message: string) => void
 }) {
   const { own, choices } = state
-  const [source, setSource] = useState(state.reused ? own?.id || '' : '')
+  const [source, setSource] = useState(
+    !own || own.source === 'default' ? 'inherit' : state.reused ? own.id : '',
+  )
   const [endpoint, setEndpoint] = useState(own?.endpoint || '')
   const [model, setModel] = useState(own?.model || ''),
     [key, setKey] = useState(''),
     [busy, setBusy] = useState(false)
   const [protocol, setProtocol] = useState(own?.protocol || 'chat')
-  const connection = choices.find((c) => c.id === source)
+  const connection =
+    source === 'inherit' ? state.globalDefault : choices.find((c) => c.id === source)
   async function save() {
     setBusy(true)
     say('')
     try {
-      if (source) await window.promptConnections.save({ mode: 'reuse', connectionId: source })
+      if (source === 'inherit')
+        await window.promptConnections.save({ mode: 'inherit', expectedId: own?.id || null })
+      else if (source) await window.promptConnections.save({ mode: 'reuse', connectionId: source })
       else
         await window.promptConnections.save({
           mode: 'own',
@@ -158,24 +168,24 @@ function ConnectionForm({
         {own ? (own.configured ? '已设置密钥' : '已选模型，未设置密钥') : '尚未配置'} ·
         本地浏览、编辑、搜索和插入可直接使用。
       </p>
-      <label>
+      <label htmlFor="prompt-source">
         连接来源
-        <select
+        <ChoiceDropdown
+          id="prompt-source"
+          aria-label="连接来源"
           disabled={busy}
           value={source}
-          onChange={(e) => {
-            setSource(e.target.value)
+          choices={[
+            { value: 'inherit', label: '全局默认' },
+            { value: '', label: '单独配置' },
+            ...choices.map((c) => ({ value: c.id, label: '复用 · ' + c.owners + ' · ' + c.model })),
+          ]}
+          onChange={(v) => {
+            setSource(v)
             setKey('')
             say('')
           }}
-        >
-          <option value="">单独配置</option>
-          {choices.map((c) => (
-            <option value={c.id} key={c.id}>
-              复用 · {c.owners} · {c.model} · {c.endpoint}
-            </option>
-          ))}
-        </select>
+        />
       </label>
       <label>
         服务地址
@@ -206,18 +216,21 @@ function ConnectionForm({
           onChange={(e) => setKey(e.target.value)}
         />
       </label>
-      <label>
+      <label htmlFor="prompt-protocol">
         协议
-        <select
+        <ChoiceDropdown
+          id="prompt-protocol"
+          aria-label="协议"
           disabled={busy || !!source}
-          value={source ? connection?.protocol : protocol}
-          onChange={(e) => setProtocol(e.target.value)}
-        >
-          <option value="chat">Chat Completions</option>
-          <option value="responses">Responses</option>
-          <option value="claude">Anthropic Messages</option>
-          <option value="gemini">Gemini</option>
-        </select>
+          value={(source ? connection?.protocol : protocol) || 'chat'}
+          onChange={setProtocol}
+          choices={[
+            { value: 'chat', label: 'Chat Completions' },
+            { value: 'responses', label: 'Responses' },
+            { value: 'claude', label: 'Anthropic Messages' },
+            { value: 'gemini', label: 'Gemini' },
+          ]}
+        />
       </label>
       <label>
         适用模型
@@ -229,7 +242,7 @@ function ConnectionForm({
           onChange={(e) => setModel(e.target.value)}
         />
       </label>
-      <button type="submit" disabled={busy || (!!source && !connection)}>
+      <button type="submit" disabled={busy || (!!source && source !== 'inherit' && !connection)}>
         保存连接
       </button>
     </form>

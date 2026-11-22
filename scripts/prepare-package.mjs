@@ -26,6 +26,7 @@ const commonHostFiles = [
   'file-browser.mjs',
   'prompt-library.mjs',
   'prompt-model.mjs',
+  'prompt-visuals.mjs',
   'prompt-palette.mjs',
   'prompt-preload.cjs',
   'music-thumbnails.mjs',
@@ -149,6 +150,9 @@ export async function prepareProduct(product) {
     await mkdir(path.join(app, 'scripts'))
     await cp('scripts/music-source-mcp.mjs', path.join(app, 'scripts/music-source-mcp.mjs'))
   } else {
+    await cp(path.join(prototype, 'host/archify'), path.join(app, 'host/archify'), {
+      recursive: true,
+    })
     for (const f of commonHostFiles)
       await cp(path.join(prototype, 'host', f), path.join(app, 'host', f))
     if (product === 'prompts')

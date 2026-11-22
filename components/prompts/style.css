@@ -363,3 +363,26 @@ select option {
   color: inherit;
   margin: 0;
 }
+
+.visual-reader {
+  overflow: auto;
+  max-height: 60vh;
+  background: var(--solid-surface);
+  padding: 12px;
+  border-radius: 8px;
+}
+.visual-reader fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.visual-reader svg {
+  display: block;
+  width: 100%;
+  min-width: 580px;
+  max-height: 420px;
+}
+.visual-reader button {
+  margin: 4px;
+}

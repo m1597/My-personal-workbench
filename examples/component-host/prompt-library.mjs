@@ -37,6 +37,7 @@ export async function promptLibrary(profile, changed) {
   const file = path.join(profile, 'prompt-library', 'catalogue-preferences.json')
   await mkdir(path.dirname(file), { recursive: true })
   let prefs = {
+    autoVisual: false,
     shortcutEnabled: true,
     defaultRoot: '',
     shortcut: 'Control+Alt+Shift+P',
@@ -55,6 +56,7 @@ export async function promptLibrary(profile, changed) {
     prefs = {
       defaultRoot: stored.defaultRoot,
       shortcut: stored.shortcut,
+      autoVisual: stored.autoVisual === true,
       shortcutEnabled: stored.shortcutEnabled !== false,
       favorites: Array.isArray(stored.favorites)
         ? stored.favorites.filter((p) => typeof p === 'string' && path.isAbsolute(p))
@@ -223,6 +225,7 @@ export async function promptLibrary(profile, changed) {
   }
   return {
     ...browser,
+    assertWritableFolder,
     async browse(folder, ...args) {
       const seq = ++browseSequence
       const listing = await browser.browse(folder, ...args)
@@ -262,6 +265,43 @@ export async function promptLibrary(profile, changed) {
       refresh()
     },
     shortcut: (shortcut, shortcutEnabled) => preferences({ shortcut, shortcutEnabled }),
+    autoVisual(value) {
+      if (typeof value !== 'boolean') throw Error('设置无效')
+      return preference('autoVisual', value)
+    },
+    async importText(expected, name, text) {
+      if (!root || expected !== root) throw Error('请先选择提示词目录')
+      if (
+        typeof name !== 'string' ||
+        name.length > 160 ||
+        !promptExtension.test(name) ||
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows rejects control characters in file names.
+        /[<>:"/\\|?*\x00-\x1f]/.test(name) ||
+        /^(con|prn|aux|nul|com\d|lpt\d)\./i.test(name)
+      )
+        throw Error('请选择 TXT 或 Markdown 文件')
+      if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text) > 4 * 1024 * 1024)
+        throw Error('仅支持 4 MiB 以内的非空文本')
+      const folder = await checkedDiskPath(expected, '')
+      await assertWritableFolder(folder)
+      const base = path.parse(name)
+      for (let i = 0; i < 1000; i++) {
+        const target =
+          base.name +
+          (name.toLowerCase() === 'skill.md' ? '（导入）' : '') +
+          (i ? ' (' + i + ')' : '') +
+          base.ext
+        try {
+          await writeFile(path.join(folder, target), text, { flag: 'wx' })
+        } catch (e) {
+          if (e.code === 'EEXIST') continue
+          throw e
+        }
+        refresh()
+        return target
+      }
+      throw Error('同名文件过多，请更改名称')
+    },
     files: () => files(root),
     async catalogue(query = '') {
       if (typeof query !== 'string' || query.length > 4096) throw Error('搜索文字过长')
