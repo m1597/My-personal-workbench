@@ -84,6 +84,14 @@ try {
   const b = (name) => page.getByRole('button', { name, exact: true })
   await expect(page.getByLabel('有可用更新')).toBeVisible({ timeout: 20000 })
   await b('工作台设置').click()
+  await b('API 与模型').click()
+  await expect(page.locator('.api-connections select')).toHaveCount(0)
+  for (const label of ['协议', '连接']) {
+    await page.getByRole('combobox', { name: label, exact: true }).click()
+    await expect(page.getByRole('listbox')).toBeVisible()
+    await page.screenshot({ path: path.join(root, 'api-' + label + '.png') })
+    await page.keyboard.press('Escape')
+  }
   await page.getByRole('searchbox').fill('应用内快捷键')
   const target = page.getByRole('button', { name: /Music › .*应用内快捷键/ })
   await expect(target).toBeVisible()

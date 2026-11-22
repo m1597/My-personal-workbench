@@ -56,12 +56,26 @@ try {
   await expect(empty).toBeVisible()
   const menu = shell.getByRole('button', { name: '组件', exact: true })
   await menu.click()
-  const items = shell.locator('[role="menuitem"], [role="menuitemcheckbox"]')
-  await expect
-    .poll(() =>
-      items.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label') || n.textContent)),
-    )
-    .toEqual(['Music', '隐藏 Music'])
+  const menuList = shell.locator('#window-menu')
+  const expected = await shell.evaluate(async () => {
+    const names = ['Music']
+    if (await window.fitbayToolkit?.available()) names.push('工具集')
+    if ((await window.promptDock?.inventory())?.installed) names.push('提示词库')
+    return names
+  })
+  await expect(menuList.getByRole('menuitemcheckbox')).toHaveCount(expected.length)
+  for (const name of expected) {
+    const row = menuList
+      .locator('.component-menu-row')
+      .filter({ has: shell.getByRole('menuitemcheckbox', { name, exact: true }) })
+    await expect(
+      row.getByRole('menuitem', {
+        name: '隐藏' + (name === 'Music' ? ' ' : '') + name,
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(row.getByRole('menuitem', { name: '关闭' + name, exact: true })).toBeVisible()
+  }
   await shell.screenshot({ path: path.join(profile, 'window-menu.png') })
   await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
   await expect(shell.getByRole('tab', { name: 'Music', exact: true })).toBeVisible()

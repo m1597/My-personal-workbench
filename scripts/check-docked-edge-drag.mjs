@@ -133,8 +133,8 @@ try {
     await expect(groups).toHaveCount(count)
     await frame(stage + '-drag')
     await page.mouse.move(
-      horizontal ? (end ? split.right - 45 : split.left + 45) : split.x,
-      horizontal ? split.y : end ? split.bottom - 45 : split.top + 45,
+      horizontal ? (end ? split.right - 45 : split.left + 16) : split.x,
+      horizontal ? split.y : end ? split.bottom - 45 : split.top + 16,
       { steps: 15 },
     )
     await expect.poll(() => groups.count()).toBeLessThan(count)

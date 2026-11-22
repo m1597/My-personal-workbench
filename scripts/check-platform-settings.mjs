@@ -19,6 +19,7 @@ try {
   const button = (name) => page.getByRole('button', { name, exact: true })
   await button('工作台设置').click()
   await button('API 与模型').click()
+  await expect(page.locator('.api-connections select')).toHaveCount(0)
   for (const label of ['协议', '连接']) {
     await page.getByRole('combobox', { name: label, exact: true }).click()
     const options = page.getByRole('listbox')
