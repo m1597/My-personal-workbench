@@ -78,14 +78,17 @@ export function useEdgeCollapse(api?: DockviewApi) {
         },
       )
       cancelDrag?.()
-      function end(up: PointerEvent) {
+      // A native component can sit directly beside the sash. Keep subsequent pointer events in the host.
+      sash.setPointerCapture(event.pointerId)
+      const threshold = Math.min(64, span * 0.14)
+      function collapse(up: PointerEvent) {
         if (up.pointerId !== event.pointerId) return
-        cancelDrag?.()
         const pos = horizontal ? up.clientX - box.left : up.clientY - box.top
         const side =
-          pos <= 12
+          pos <= threshold && (horizontal ? up.clientX < event.clientX : up.clientY < event.clientY)
             ? [...views].slice(0, index + 1)
-            : pos >= span - 12
+            : pos >= span - threshold &&
+                (horizontal ? up.clientX > event.clientX : up.clientY > event.clientY)
               ? [...views].slice(index + 1)
               : []
         if (
@@ -95,6 +98,7 @@ export function useEdgeCollapse(api?: DockviewApi) {
           return
         const hidden = visible.filter((group) => side.some((view) => view.contains(group.element)))
         if (!hidden.length || hidden.length === visible.length) return
+        cleanup()
         for (const group of hidden) group.api.setVisible(false)
         const groups = hidden.map((g) => g.id)
         setHistory((items) => [
@@ -102,11 +106,18 @@ export function useEdgeCollapse(api?: DockviewApi) {
           { groups, sizes },
         ])
       }
+      function end(up: PointerEvent) {
+        if (up.pointerId !== event.pointerId) return
+        collapse(up)
+        cleanup()
+      }
       const cleanup = () => {
+        window.removeEventListener('pointermove', collapse, true)
         window.removeEventListener('pointerup', end)
         window.removeEventListener('pointercancel', cleanup)
       }
       cancelDrag = cleanup
+      window.addEventListener('pointermove', collapse, true)
       window.addEventListener('pointerup', end)
       window.addEventListener('pointercancel', cancelDrag)
     }
