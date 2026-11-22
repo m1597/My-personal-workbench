@@ -1,13 +1,15 @@
 import { _electron as electron, expect } from '@playwright/test'
-import { mkdtemp, writeFile, readFile } from 'node:fs/promises'
+import { mkdtemp, writeFile, readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { recording } from '../components/music/offline-source.mjs'
 import { MusicStore } from '../components/music/store.mjs'
-const root = await mkdtemp(path.resolve('tmp/tray-'))
+const root = await mkdtemp(path.join(await realpath('tmp'), 'tray-'))
 const profile = path.join(root, 'profile'),
   file = path.join(root, '后台.wav')
 await writeFile(file, recording('fitbay-tone-1'))
 const store = new MusicStore(path.join(profile, 'fitbay-music'))
+store.set('music-guide-v1', '1')
+store.set('lx-bootstrap', 'done')
 store.library.upsert({ file, title: '后台', artist: 'FitBay', album: '', duration: 20 })
 store.db.close()
 const host = path.resolve('dist/component-prototype/host')
