@@ -46,3 +46,17 @@
 平台提交 52a318d、67c06cf。独立复测使用桌面开发版 0.1.0，工作台渲染产物 index-DEkb0Wy5.js 的 SHA-256 为 DC6B70F76F80ECFC9A5872C89D8460D6E5DEF5F49238BBF817F2BE2020A59254。沿用上次失败顺序打开提示词库、工具集、Music，中央竖分隔线拖至最右。布局菜单现显示「恢复分屏 · 工具集、快速开始」。点击后右下快速开始与其按钮恢复，四格逐一比对，宽高与起点完全相同。独立 profile 的桌面启动脚本再测，工具集眼睛隐藏、显示，以及收起后用眼睛恢复提示词库均通过。更新页在两种窗宽均有四张卡片，实测视口 1175 和 535，横向溢出均为 0。[修复后同屏](../images/integration-desktop-1122/right-fixed.png) · [逐格尺寸](../images/integration-desktop-1122/right-fixed.json) · [宽窗](../images/integration-desktop-1122/update-wide-fixed.png) · [窄窗](../images/integration-desktop-1122/update-narrow-fixed.png)
 
 提示词库专项 f6c9a5c 的证据按其报告中的组件构建摘要归档。已覆盖工作台设置搜索、独立和停靠入口、分类选中与内容控件焦点、快捷键录制、取消、冲突、重启和旧格式数据迁移。本轮未重复执行这些用例。当前桌面 prompts/component.js 摘要见前文，与该专项报告所列摘要不同。唯一剩余的提示词库快捷键专项，是功能已启用且默认组合可注册时，分别从单项恢复、组件全部恢复成功注册默认组合并释放原键。本机预检 Ctrl+Alt+Shift+P 未能注册，新建的隔离 Windows 桌面也返回 1409（已注册）；本轮未更改占用者，两个成功分支均保留待验。远程 CI、发行包实装与人工前台体验按各自交付范围保留未验。[合并的专项证据](2026-11-22-prompt-integration.md)
+
+## 工具集与宿主联合复验 · 04d4b81 交接
+
+桌面开发版 0.1.0，宿主实现 0907658、工具集实现 8971c1f。独立复测前后，宿主 main.mjs 与工作台 index-BawQcUGm.js 的 SHA-256 均与平台交接吻合，分别为 A19BED31B5332FA7D12290437204840572EEF78F2CB2BE8CD7527CBF7B46CB0D 和 B937475DC5F8FE505AC212F0B7C02CBEF4B435EAA6C6554289048806DA31F7F2。以下结果来自本组新增的临时 profile。[平台交接](2026-11-22-host-desktop-delivery.md)
+
+| 操作与预期 | 实际 |
+| --- | --- |
+| 停靠启动 → 打开独立工具集 → 回到停靠 → 再开独立工具集。宿主应始终持有一个托盘实例，独立模式由工具集另持一个。 | 在两个进程内分别读取存活的原生 Tray 并调用 getBounds。宿主＋工具集实测为 1＋0、1＋1、1＋0、1＋1。 |
+| 从真实工作台组件菜单进入工具集设置，读取系统进程命令行，退出工作台。 | 辅助进程 39164 的启动参数同时匹配实际宿主 PID 29820 和本次隔离 profile。宿主退出后该辅助 PID 消失。首次探针使用启动器 PID，修正为 Electron 主进程 PID 后从头复验。[进程记录](../images/integration-desktop-1122/toolkit-owner.json) |
+| 宿主退出时保留已经独立打开的工具集，继续操作。 | 独立工具集仍有一个托盘实例，从存活主页实际点开设置成功。另一个纯停靠辅助进程已退出。[退出后独立设置](../images/integration-desktop-1122/toolkit-after-host.png) |
+| 独立窗口显示时，从工作台分别调节透明度、亮度到两端。再打开停靠设置、切换 API 分类并返回。 | 独立工具集实时读回两端材质值；320 像素宽填入长地址无横向溢出。停靠首页透明，设置壳、布局和内容容器无整区轮廓，返回后可见框选入口。[停靠设置](../images/integration-desktop-1122/toolkit-docked-settings.png) |
+| 运行 check-default-component-grid.mjs 和 check-host-component-tabs.mjs | 八面板测试布局和混合标签切换、重启恢复均通过。八面板包含四个测试模块。 |
+
+本次通知区域结果覆盖测试进程持有的原生实例。Explorer 任务栏沿用上次实读；Windows 通知区域含折叠项的人工计数、新发行包、远程 CI 仍待验。本次没有重跑截图、取色与提示词库专项。
