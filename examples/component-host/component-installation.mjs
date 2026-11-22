@@ -97,7 +97,10 @@ export function componentInstallation(installation, temp, request, execute = exe
         ],
         { windowsHide: true },
       )
-      await execute(file, ['/S', '/currentuser', '_?=' + directory], { windowsHide: true })
+      await execute(file, ['/S', '/currentuser', '_?=' + directory], {
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+      })
       if (await version(id)) throw Error('Uninstall failed')
       await rm(file, { force: true })
       await rmdir(directory).catch((error) => {

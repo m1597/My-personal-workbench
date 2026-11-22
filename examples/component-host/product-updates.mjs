@@ -136,7 +136,11 @@ export function updateCatalog({ inventory, launch, request = fetch, changed = ()
               .split('.')
               .map((part, i) => Number(part) - Number(row.version.split('.')[i]))
               .find((n) => n !== 0) > 0
-          operations.delete(row.id)
+          if (
+            operations.get(row.id)?.stage !== 'failed' ||
+            results.get(row.id)?.installed !== row.version
+          )
+            operations.delete(row.id)
           results.set(row.id, {
             installed: row.version,
             update,

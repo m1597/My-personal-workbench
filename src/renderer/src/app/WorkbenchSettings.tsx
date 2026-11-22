@@ -54,6 +54,7 @@ export function WorkbenchSettings({
       navigate()
     }
   }, [setOpen])
+  const [revision, refresh] = useState(0)
   // biome-ignore lint/correctness/useExhaustiveDependencies: Rescan installed products whenever settings opens or closes.
   useEffect(() => {
     let active = true
@@ -66,7 +67,7 @@ export function WorkbenchSettings({
     return () => {
       active = false
     }
-  }, [open])
+  }, [open, revision])
   const [failed, setFailed] = useState(false)
   const [category, setCategory] = useState(0)
   const [query, setQuery] = useState('')
@@ -78,7 +79,6 @@ export function WorkbenchSettings({
   const [sampleInfo, setSampleInfo] = useState<ComponentInventory>()
   const sampleState = useMusicHostState(window.componentHost)
   const [componentError, setComponentError] = useState('')
-  const [revision, refresh] = useState(0)
   const gear = useRef<HTMLButtonElement>(null)
   const search = useRef<HTMLInputElement>(null)
   const [target, setTarget] = useState('')

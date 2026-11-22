@@ -68,6 +68,7 @@ test('batch keeps the host alive after a component failure and retries only that
   await service.check()
   await service.installAll()
   assert.deepEqual(launches, ['music', 'prompts', 'toolkit'])
+  await service.check()
   assert.equal(
     (await service.snapshot()).rows.find((row) => row.id === 'prompts').operation.stage,
     'failed',
