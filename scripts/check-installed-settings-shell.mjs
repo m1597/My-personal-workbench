@@ -32,8 +32,8 @@ async function check(docked) {
       await shell.screenshot({ path: path.join(evidence, 'component-menu.png') })
       await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
       for (const [name, role] of [
-        ['工具集', 'menuitem'],
-        ['文件库', 'menuitemcheckbox'],
+        ['工具集', 'menuitemcheckbox'],
+        ['提示词库', 'menuitemcheckbox'],
       ]) {
         await shell.getByRole('button', { name: '组件', exact: true }).click()
         await shell.getByRole(role, { name, exact: true }).click()
