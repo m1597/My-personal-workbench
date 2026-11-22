@@ -70,6 +70,9 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           if ((Get-Content -LiteralPath $retained) -ne 'legacy note') { throw 'Previous uninstaller lost the note' }
           Remove-Item -LiteralPath $retained
+          # The old installer requires an empty destination. Remove only the empty
+          # resources folder that contained the acceptance fixture.
+          [IO.Directory]::Delete((Split-Path -Parent $retained))
           $installer = Join-Path $baseline "FitBay-Prompts-Setup-$previous-x64.exe"
           $process = Start-Process $installer -ArgumentList '/S /currentuser' -Wait -PassThru -WindowStyle Hidden
           if ($process.ExitCode) { throw 'Could not restore previous Prompts for batch upgrade' }
