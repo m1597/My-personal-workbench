@@ -32,6 +32,15 @@ async function screenView(s) {
     ['截图翻译', () => ask('translate')],
     ['向模型提问', () => ask('question')],
     ['标注', () => annotateRegion(rect, bar)],
+    [
+      '选区取色',
+      async () => {
+        const image = await api.selectionImage()
+        bar.hidden = true
+        bar.style.display = 'none'
+        pickScreenColor({ image }, rect)
+      },
+    ],
     ['取消截图', () => api.dismiss()],
   ]) {
     const action = button(name, () => fn())
@@ -47,6 +56,7 @@ async function screenView(s) {
           向模型提问: 'ask',
           提取文字: 'ocr',
           标注: 'annotate',
+          选区取色: 'color',
           取消截图: 'cancel',
         }[name],
       ),

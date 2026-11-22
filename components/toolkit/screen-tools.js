@@ -1,7 +1,7 @@
 import { api, root, picture, el, button } from './view.js'
 import { makeCanvas } from './tools-view.js'
 export { pickScreenColor, annotateRegion }
-function pickScreenColor(s) {
+function pickScreenColor(s, rect) {
   root.className = 'screen'
   const img = picture(s.image),
     panel = el('div', '', 'measure-panel'),
@@ -9,7 +9,12 @@ function pickScreenColor(s) {
   const swatch = el('span', '', 'swatch')
   panel.style.pointerEvents = 'none'
   panel.append(swatch, output)
-  root.append(img, panel)
+  if (!rect) root.append(img)
+  else {
+    root.onpointerdown = root.onpointerup = null
+    root.onlostpointercapture = root.onpointercancel = null
+  }
+  root.append(panel)
   const canvas = el('canvas'),
     ctx = canvas.getContext('2d', { willReadFrequently: true })
   let ready = false
@@ -21,7 +26,11 @@ function pickScreenColor(s) {
   }
   function sample(e) {
     if (!ready) return
-    const r = img.getBoundingClientRect()
+    const r = (rect || img).getBoundingClientRect()
+    if (e.clientX < r.left || e.clientX >= r.right || e.clientY < r.top || e.clientY >= r.bottom) {
+      output.textContent = '请在选区内点击取色 · Esc 取消'
+      return
+    }
     const x = Math.min(
       canvas.width - 1,
       Math.max(0, Math.floor(((e.clientX - r.left) * canvas.width) / r.width)),

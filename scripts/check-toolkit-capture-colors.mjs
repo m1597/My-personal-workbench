@@ -245,6 +245,57 @@ dlg.wait_not('exists',timeout=10)`,
     }
     console.log('PASS', entry, 'two color-identical pastes and Escape')
   }
+  for (const cancel of [false, true]) {
+    const opening = app.waitForEvent('window')
+    await dock.getByRole('button', { name: '框选屏幕' }).click()
+    const picker = await opening
+    await picker.locator('.screen img').waitFor()
+    await picker.mouse.move(130, 130)
+    await picker.mouse.down()
+    await picker.mouse.move(310, 210)
+    await picker.mouse.up()
+    const expected = await picker.evaluate(async () => {
+      const img = new Image()
+      img.src = await window.toolkit.selectionImage()
+      await img.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      const rect = document.querySelector('.rect').getBoundingClientRect()
+      const pixel = ctx.getImageData(
+        Math.floor(((281 - rect.x) / rect.width) * canvas.width),
+        Math.floor(((178 - rect.y) / rect.height) * canvas.height),
+        1,
+        1,
+      ).data
+      return (
+        '#' +
+        Array.from(pixel)
+          .slice(0, 3)
+          .map((n) => n.toString(16).padStart(2, '0'))
+          .join('')
+          .toUpperCase()
+      )
+    })
+    const previous = await app.evaluate(({ clipboard }) => clipboard.readText())
+    await picker.getByRole('button', { name: '选区取色' }).click()
+    await picker.locator('.swatch').waitFor()
+    await picker.mouse.move(281, 178)
+    await expect(picker.locator('output')).toHaveText(expected)
+    if (cancel)
+      await picker.keyboard.press('Escape').catch((e) => {
+        if (!picker.isClosed()) throw e
+      })
+    else await picker.mouse.click(281, 178)
+    await expect.poll(() => picker.isClosed()).toBe(true)
+    assert.equal(
+      await app.evaluate(({ clipboard }) => clipboard.readText()),
+      cancel ? previous : expected,
+    )
+  }
+  console.log('PASS selected image color, native clipboard and Esc')
   for (const entry of [dock, home]) {
     assert.deepEqual(await entry.locator('.tool-row strong').allTextContents(), [
       '屏幕截图',
