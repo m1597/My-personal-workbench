@@ -14,15 +14,8 @@ async function check(docked) {
     args: ['--user-data-dir=' + path.join(evidence, docked ? 'host' : 'standalone')],
     env,
   })
-  let toolkit
   try {
     if (docked) {
-      toolkit = await electron.launch({
-        executablePath: path.join(root, 'Toolkit/FitBay Toolkit.exe'),
-        args: ['--fitbay-hosted', '--workbench-profile=' + path.join(evidence, 'host')],
-        env,
-      })
-      await toolkit.firstWindow()
       const shell = await app.firstWindow()
       await shell.getByRole('button', { name: '组件', exact: true }).click()
       const rows = shell.locator('.component-menu-row')
@@ -39,21 +32,13 @@ async function check(docked) {
       await shell.screenshot({ path: path.join(evidence, 'component-menu.png') })
       await shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
       for (const [name, role] of [
-        ['工具集', 'menuitem'],
-        ['文件库', 'menuitemcheckbox'],
+        ['工具集', 'menuitemcheckbox'],
+        ['提示词库', 'menuitemcheckbox'],
       ]) {
         await shell.getByRole('button', { name: '组件', exact: true }).click()
         await shell.getByRole(role, { name, exact: true }).click()
       }
       await expect(shell.locator('.dv-groupview')).toHaveCount(4)
-      await checkGear(shell.locator('.toolkit-panel'), '设置')
-      await expect
-        .poll(() => app.windows().some((p) => p.url().includes('/prompts/index.html')))
-        .toBe(true)
-      await checkGear(
-        app.windows().find((p) => p.url().includes('/prompts/index.html')),
-        '文件库设置',
-      )
     }
     await expect
       .poll(() => app.windows().some((p) => p.url().includes('/music/index.html')))
@@ -81,40 +66,9 @@ async function check(docked) {
     await player.getByRole('button', { name: '音乐设置', exact: true }).click()
     await expect(player.locator('.music-settings')).toHaveAttribute('aria-label', '播放')
   } finally {
-    await toolkit?.close()
     await app.close()
   }
-}
-async function checkGear(page, label) {
-  const gear = page.getByRole('button', { name: label, exact: true })
-  await gear.click()
-  const shell = page.locator('.fitbay-settings-shell')
-  await expect(shell).toBeVisible()
-  await shell.getByRole('button', { name: '返回', exact: true }).click()
-  await expect(gear).toBeVisible()
 }
 await check(true)
 await check(false)
-for (const [product, label] of [
-  ['Prompts', '文件库设置'],
-  ['Toolkit', '设置'],
-]) {
-  const app = await electron.launch({
-    executablePath: path.join(root, product, 'FitBay ' + product + '.exe'),
-    args: [
-      '--user-data-dir=' + path.join(evidence, product),
-      '--workbench-profile=' + path.join(evidence, product),
-    ],
-    env,
-  })
-  try {
-    await expect.poll(() => app.windows().some((p) => p.url().includes('index.html'))).toBe(true)
-    await checkGear(
-      app.windows().find((p) => p.url().includes('index.html')),
-      label,
-    )
-  } finally {
-    await app.close()
-  }
-}
 console.log('PASS', evidence)

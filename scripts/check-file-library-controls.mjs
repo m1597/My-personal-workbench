@@ -67,7 +67,7 @@ try {
     const toggle = button(ui, '设置分类')
     if (await toggle.isVisible()) await toggle.click()
     await button(ui, '全局快捷键').click()
-    await expect(ui.getByRole('textbox', { name: '快捷键' })).toBeVisible()
+    await expect(ui.getByRole('textbox', { name: '调用提示词' })).toBeVisible()
     await ui.screenshot({ path: path.join(dir, mode + '-settings.png') })
     await button(ui, '返回').click()
     await expect(ui.getByText('已选 2 项')).toBeVisible()

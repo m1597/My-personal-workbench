@@ -3,8 +3,11 @@
   height: 100%;
   overflow: auto;
   container-type: inline-size;
-  color: var(--text);
+  color: #edf4fa;
   color-scheme: dark;
   background: transparent;
-  font: var(--font-size-body) / var(--line-height-ui) var(--font-ui);
+  font:
+    14px / 1.5 "HarmonyOS Sans SC",
+    "Microsoft YaHei UI",
+    sans-serif;
 }

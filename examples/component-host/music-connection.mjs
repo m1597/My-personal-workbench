@@ -26,9 +26,19 @@ export const providers = {
 }
 export const setting = 'recommendation-providers'
 export function config(store) {
-  const value = JSON.parse(store.get(setting) || '{"active":"deepseek","accounts":{}}')
-  if (!Object.hasOwn(providers, value.active)) value.active = 'deepseek'
-  return value
+  let value
+  try {
+    value = JSON.parse(store.get(setting) || 'null')
+  } catch {
+    // A damaged optional model setting must not prevent opening the local library.
+  }
+  return {
+    active:
+      typeof value?.active === 'string' && Object.hasOwn(providers, value.active)
+        ? value.active
+        : 'deepseek',
+    accounts: value?.accounts && typeof value.accounts === 'object' ? value.accounts : {},
+  }
 }
 export const protocols = {
   deepseek: 'chat',
@@ -40,12 +50,17 @@ export function importMusicConnection(store, connections) {
   const state = config(store),
     account = state.accounts[state.active]
   if (!account) return
-  return connections.importLegacy('music.model', {
+  const connection = connections.importLegacy('music.model', {
     endpoint: providers[state.active].url,
     model: account.model,
     protocol: protocols[state.active],
     encrypted: account.secret ? Buffer.from(account.secret, 'base64') : null,
   })
+  if (store.set && account.secret) {
+    delete account.secret
+    store.set(setting, JSON.stringify(state))
+  }
+  return connection
 }
 
 export function importInstalledMusicConnection(profile, connections) {

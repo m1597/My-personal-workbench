@@ -1,3 +1,7 @@
+body:has(.tools-surface) {
+  background: var(--workbench-material);
+  color: var(--text);
+}
 .home-title,
 .tools-heading,
 .tool-row,
@@ -30,7 +34,7 @@
 }
 .primary-tools {
   padding: 0 12px;
-  background: var(--glass);
+  background: var(--panel-surface);
   border-color: var(--stroke);
   border-radius: 12px;
   gap: 0;
@@ -40,7 +44,7 @@
   min-height: 74px;
 }
 .tool-row + .tool-row {
-  border-top: 1px solid var(--stroke);
+  border-top: 1px solid #535c6d;
 }
 .tool-text {
   flex: 1;
@@ -53,16 +57,16 @@
 }
 .tool-text small,
 .tool-item small {
-  color: var(--text-secondary);
+  color: #c4cad6;
 }
 .tool-row > button {
   padding: 7px 12px;
   white-space: nowrap;
 }
 .tool-row:first-child > button {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent-border);
+  background: #72bcfa;
+  color: #10273c;
+  border-color: #88caff;
 }
 .badge {
   width: 42px;
@@ -70,12 +74,13 @@
   display: grid;
   place-items: center;
   border-radius: 10px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: #34536b;
+  color: #8ad4ff;
   flex-shrink: 0;
 }
-.tool-row:first-child > button:hover {
-  background: var(--accent-hover);
+.badge.selection {
+  background: #434e72;
+  color: #b3baff;
 }
 .tool-glyph {
   width: 20px;
@@ -110,7 +115,7 @@
 }
 .tool-item svg {
   grid-row: span 2;
-  color: var(--icon-muted);
+  color: #9ec8e5;
 }
 .tool-item small {
   font-size: 12px;
@@ -143,7 +148,7 @@
 .compare-view {
   display: grid;
   place-items: center;
-  background: var(--base);
+  background: #17212d;
   height: clamp(140px, 40vh, 480px);
 }
 .compare-view img {
@@ -161,7 +166,7 @@
   padding: 7px;
 }
 .screen .bar button:has(.tool-glyph):hover {
-  background: var(--hover);
+  background: #4b6278;
 }
 .screen .bar button svg {
   display: block;
@@ -189,7 +194,7 @@
 .measure-panel {
   left: 12px;
   bottom: 12px;
-  background: var(--solid-surface);
+  background: #283544ed;
   padding: 8px;
   border-radius: 8px;
   flex-wrap: wrap;
@@ -244,4 +249,33 @@
 }
 #app:has(.fitbay-settings-shell) .fitbay-settings-content section {
   margin: 8px;
+}
+
+.tools-surface section,
+.fitbay-settings-content section {
+  background: var(--glass);
+  border-color: var(--stroke);
+}
+.fitbay-settings-content :is(input, select, textarea, button) {
+  background-color: var(--control);
+  border-color: var(--stroke);
+  color: var(--text);
+}
+:host(.toolkit-panel):focus {
+  outline: none;
+}
+.fitbay-settings-shell,
+.fitbay-settings-body,
+.fitbay-settings-content {
+  outline: none;
+}
+
+.settings-shortcut {
+  display: flex;
+  gap: var(--space-8, 8px);
+  align-items: end;
+  flex-wrap: wrap;
+}
+.fitbay-settings-content section > button {
+  justify-self: start;
 }

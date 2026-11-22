@@ -1,0 +1,863 @@
+{
+  "music": [
+    {
+      "bar": {
+        "x": 12,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 12,
+        "y": 44,
+        "h": 914,
+        "b": 958
+      },
+      "content": {
+        "x": 12,
+        "y": 82,
+        "h": 876,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-music",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 33,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 115.25,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%3e%3ctitle%3eMusic%3c/title%3e%3cpath%20d='M2%2010v4m4-7v10m4-14v18m4-13v11m4-14v14m4-9v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.098)",
+          "line": "rgb(128, 186, 255) 0px -2px 0px 0px inset"
+        }
+      ]
+    }
+  ],
+  "split": [
+    {
+      "bar": {
+        "x": 12,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 12,
+        "y": 44,
+        "h": 914,
+        "b": 958
+      },
+      "content": {
+        "x": 12,
+        "y": 82,
+        "h": 876,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-music",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 33,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 115.25,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%3e%3ctitle%3eMusic%3c/title%3e%3cpath%20d='M2%2010v4m4-7v10m4-14v18m4-13v11m4-14v14m4-9v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 752,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 752,
+        "y": 44,
+        "h": 914,
+        "b": 958
+      },
+      "content": {
+        "x": 752,
+        "y": 82,
+        "h": 876,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-toolkit",
+          "active": true,
+          "tab": {
+            "x": 757,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 773,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 860,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3e%3ctitle%3eToolkit%3c/title%3e%3cpath%20d='M16%2012v4M16%206V4a2%202%200%200%200-2-2h-4a2%202%200%200%200-2%202v2M17%206a2%202%200%200%201%201.414.586l3%203A2%202%200%200%201%2022%2011v8a2%202%200%200%201-2%202H4a2%202%200%200%201-2-2v-8a2%202%200%200%201%20.586-1.414l3-3A2%202%200%200%201%207%206zM2%2014h20M8%2012v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.098)",
+          "line": "rgb(128, 186, 255) 0px -2px 0px 0px inset"
+        }
+      ]
+    }
+  ],
+  "four": [
+    {
+      "bar": {
+        "x": 12,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 12,
+        "y": 44,
+        "h": 453,
+        "b": 497
+      },
+      "content": {
+        "x": 12,
+        "y": 82,
+        "h": 415,
+        "b": 497
+      },
+      "tabs": [
+        {
+          "id": "component-music",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 33,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 115.25,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%3e%3ctitle%3eMusic%3c/title%3e%3cpath%20d='M2%2010v4m4-7v10m4-14v18m4-13v11m4-14v14m4-9v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ],
+      "nativeTop": 82
+    },
+    {
+      "bar": {
+        "x": 12,
+        "y": 505,
+        "h": 38,
+        "b": 543
+      },
+      "group": {
+        "x": 12,
+        "y": 505,
+        "h": 453,
+        "b": 958
+      },
+      "content": {
+        "x": 12,
+        "y": 543,
+        "h": 415,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-prompts",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 509,
+            "h": 33.333335876464844,
+            "b": 542.3333358764648
+          },
+          "label": {
+            "x": 33,
+            "y": 515.6666870117188,
+            "h": 20,
+            "b": 535.6666870117188
+          },
+          "close": {
+            "x": 133,
+            "y": 517.6666870117188,
+            "h": 16,
+            "b": 533.6666870117188
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linejoin='round'%3e%3ctitle%3ePrompt%20library%3c/title%3e%3cpath%20d='M3%205h6l2%203h10v12H3z'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ],
+      "nativeTop": 543
+    },
+    {
+      "bar": {
+        "x": 752,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 752,
+        "y": 44,
+        "h": 453,
+        "b": 497
+      },
+      "content": {
+        "x": 752,
+        "y": 82,
+        "h": 415,
+        "b": 497
+      },
+      "tabs": [
+        {
+          "id": "component-toolkit",
+          "active": true,
+          "tab": {
+            "x": 757,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 773,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 860,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3e%3ctitle%3eToolkit%3c/title%3e%3cpath%20d='M16%2012v4M16%206V4a2%202%200%200%200-2-2h-4a2%202%200%200%200-2%202v2M17%206a2%202%200%200%201%201.414.586l3%203A2%202%200%200%201%2022%2011v8a2%202%200%200%201-2%202H4a2%202%200%200%201-2-2v-8a2%202%200%200%201%20.586-1.414l3-3A2%202%200%200%201%207%206zM2%2014h20M8%2012v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 752,
+        "y": 505,
+        "h": 38,
+        "b": 543
+      },
+      "group": {
+        "x": 752,
+        "y": 505,
+        "h": 453,
+        "b": 958
+      },
+      "content": {
+        "x": 752,
+        "y": 543,
+        "h": 415,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-example",
+          "active": true,
+          "tab": {
+            "x": 757,
+            "y": 509,
+            "h": 33.333335876464844,
+            "b": 542.3333358764648
+          },
+          "label": {
+            "x": 773,
+            "y": 515.6666870117188,
+            "h": 20,
+            "b": 535.6666870117188
+          },
+          "close": {
+            "x": 849,
+            "y": 517.6666870117188,
+            "h": 16,
+            "b": 533.6666870117188
+          },
+          "icon": "none",
+          "iconHeight": "auto",
+          "color": "rgba(255, 255, 255, 0.098)",
+          "line": "rgb(128, 186, 255) 0px -2px 0px 0px inset"
+        }
+      ],
+      "nativeTop": 543
+    }
+  ],
+  "mixed-music": [
+    {
+      "bar": {
+        "x": 12,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 12,
+        "y": 44,
+        "h": 453,
+        "b": 497
+      },
+      "content": {
+        "x": 12,
+        "y": 82,
+        "h": 415,
+        "b": 497
+      },
+      "tabs": [
+        {
+          "id": "component-toolkit",
+          "active": false,
+          "tab": {
+            "x": 17,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 33,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 120,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3e%3ctitle%3eToolkit%3c/title%3e%3cpath%20d='M16%2012v4M16%206V4a2%202%200%200%200-2-2h-4a2%202%200%200%200-2%202v2M17%206a2%202%200%200%201%201.414.586l3%203A2%202%200%200%201%2022%2011v8a2%202%200%200%201-2%202H4a2%202%200%200%201-2-2v-8a2%202%200%200%201%20.586-1.414l3-3A2%202%200%200%201%207%206zM2%2014h20M8%2012v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(0, 0, 0, 0)",
+          "line": "none"
+        },
+        {
+          "id": "component-music",
+          "active": true,
+          "tab": {
+            "x": 152,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 168,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 250.25,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%3e%3ctitle%3eMusic%3c/title%3e%3cpath%20d='M2%2010v4m4-7v10m4-14v18m4-13v11m4-14v14m4-9v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.098)",
+          "line": "rgb(128, 186, 255) 0px -2px 0px 0px inset"
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 12,
+        "y": 505,
+        "h": 38,
+        "b": 543
+      },
+      "group": {
+        "x": 12,
+        "y": 505,
+        "h": 453,
+        "b": 958
+      },
+      "content": {
+        "x": 12,
+        "y": 543,
+        "h": 415,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-prompts",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 509,
+            "h": 33.333335876464844,
+            "b": 542.3333358764648
+          },
+          "label": {
+            "x": 33,
+            "y": 515.6666870117188,
+            "h": 20,
+            "b": 535.6666870117188
+          },
+          "close": {
+            "x": 133,
+            "y": 517.6666870117188,
+            "h": 16,
+            "b": 533.6666870117188
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linejoin='round'%3e%3ctitle%3ePrompt%20library%3c/title%3e%3cpath%20d='M3%205h6l2%203h10v12H3z'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 752,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 752,
+        "y": 44,
+        "h": 914,
+        "b": 958
+      },
+      "content": {
+        "x": 752,
+        "y": 82,
+        "h": 876,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-example",
+          "active": true,
+          "tab": {
+            "x": 757,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 773,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 849,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "none",
+          "iconHeight": "auto",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ]
+    }
+  ],
+  "mixed-toolkit": [
+    {
+      "bar": {
+        "x": 12,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 12,
+        "y": 44,
+        "h": 453,
+        "b": 497
+      },
+      "content": {
+        "x": 12,
+        "y": 82,
+        "h": 415,
+        "b": 497
+      },
+      "tabs": [
+        {
+          "id": "component-toolkit",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 33,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 120,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3e%3ctitle%3eToolkit%3c/title%3e%3cpath%20d='M16%2012v4M16%206V4a2%202%200%200%200-2-2h-4a2%202%200%200%200-2%202v2M17%206a2%202%200%200%201%201.414.586l3%203A2%202%200%200%201%2022%2011v8a2%202%200%200%201-2%202H4a2%202%200%200%201-2-2v-8a2%202%200%200%201%20.586-1.414l3-3A2%202%200%200%201%207%206zM2%2014h20M8%2012v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.098)",
+          "line": "rgb(128, 186, 255) 0px -2px 0px 0px inset"
+        },
+        {
+          "id": "component-music",
+          "active": false,
+          "tab": {
+            "x": 152,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 168,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 250.25,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%3e%3ctitle%3eMusic%3c/title%3e%3cpath%20d='M2%2010v4m4-7v10m4-14v18m4-13v11m4-14v14m4-9v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(0, 0, 0, 0)",
+          "line": "none"
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 12,
+        "y": 505,
+        "h": 38,
+        "b": 543
+      },
+      "group": {
+        "x": 12,
+        "y": 505,
+        "h": 453,
+        "b": 958
+      },
+      "content": {
+        "x": 12,
+        "y": 543,
+        "h": 415,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-prompts",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 509,
+            "h": 33.333335876464844,
+            "b": 542.3333358764648
+          },
+          "label": {
+            "x": 33,
+            "y": 515.6666870117188,
+            "h": 20,
+            "b": 535.6666870117188
+          },
+          "close": {
+            "x": 133,
+            "y": 517.6666870117188,
+            "h": 16,
+            "b": 533.6666870117188
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linejoin='round'%3e%3ctitle%3ePrompt%20library%3c/title%3e%3cpath%20d='M3%205h6l2%203h10v12H3z'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 752,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 752,
+        "y": 44,
+        "h": 914,
+        "b": 958
+      },
+      "content": {
+        "x": 752,
+        "y": 82,
+        "h": 876,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-example",
+          "active": true,
+          "tab": {
+            "x": 757,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 773,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 849,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "none",
+          "iconHeight": "auto",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ]
+    }
+  ],
+  "restored": [
+    {
+      "bar": {
+        "x": 12,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 12,
+        "y": 44,
+        "h": 453,
+        "b": 497
+      },
+      "content": {
+        "x": 12,
+        "y": 82,
+        "h": 415,
+        "b": 497
+      },
+      "tabs": [
+        {
+          "id": "component-toolkit",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 33,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 120,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3e%3ctitle%3eToolkit%3c/title%3e%3cpath%20d='M16%2012v4M16%206V4a2%202%200%200%200-2-2h-4a2%202%200%200%200-2%202v2M17%206a2%202%200%200%201%201.414.586l3%203A2%202%200%200%201%2022%2011v8a2%202%200%200%201-2%202H4a2%202%200%200%201-2-2v-8a2%202%200%200%201%20.586-1.414l3-3A2%202%200%200%201%207%206zM2%2014h20M8%2012v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.098)",
+          "line": "rgb(128, 186, 255) 0px -2px 0px 0px inset"
+        },
+        {
+          "id": "component-music",
+          "active": false,
+          "tab": {
+            "x": 152,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 168,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 250.25,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linecap='round'%3e%3ctitle%3eMusic%3c/title%3e%3cpath%20d='M2%2010v4m4-7v10m4-14v18m4-13v11m4-14v14m4-9v4'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(0, 0, 0, 0)",
+          "line": "none"
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 12,
+        "y": 505,
+        "h": 38,
+        "b": 543
+      },
+      "group": {
+        "x": 12,
+        "y": 505,
+        "h": 453,
+        "b": 958
+      },
+      "content": {
+        "x": 12,
+        "y": 543,
+        "h": 415,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-prompts",
+          "active": true,
+          "tab": {
+            "x": 17,
+            "y": 509,
+            "h": 33.333335876464844,
+            "b": 542.3333358764648
+          },
+          "label": {
+            "x": 33,
+            "y": 515.6666870117188,
+            "h": 20,
+            "b": 535.6666870117188
+          },
+          "close": {
+            "x": 133,
+            "y": 517.6666870117188,
+            "h": 16,
+            "b": 533.6666870117188
+          },
+          "icon": "url(\"data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='currentColor'%20stroke-width='2'%20stroke-linejoin='round'%3e%3ctitle%3ePrompt%20library%3c/title%3e%3cpath%20d='M3%205h6l2%203h10v12H3z'/%3e%3c/svg%3e\")",
+          "iconHeight": "16px",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ]
+    },
+    {
+      "bar": {
+        "x": 752,
+        "y": 44,
+        "h": 38,
+        "b": 82
+      },
+      "group": {
+        "x": 752,
+        "y": 44,
+        "h": 914,
+        "b": 958
+      },
+      "content": {
+        "x": 752,
+        "y": 82,
+        "h": 876,
+        "b": 958
+      },
+      "tabs": [
+        {
+          "id": "component-example",
+          "active": true,
+          "tab": {
+            "x": 757,
+            "y": 48,
+            "h": 33.333335876464844,
+            "b": 81.33333587646484
+          },
+          "label": {
+            "x": 773,
+            "y": 54.66666793823242,
+            "h": 20,
+            "b": 74.66666793823242
+          },
+          "close": {
+            "x": 849,
+            "y": 56.66666793823242,
+            "h": 16,
+            "b": 72.66666793823242
+          },
+          "icon": "none",
+          "iconHeight": "auto",
+          "color": "rgba(255, 255, 255, 0.047)",
+          "line": "none"
+        }
+      ]
+    }
+  ]
+}

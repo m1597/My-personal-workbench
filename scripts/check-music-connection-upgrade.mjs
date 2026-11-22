@@ -6,7 +6,11 @@ import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { _electron, expect } from '@playwright/test'
 import { openConnections } from '../examples/component-host/api-connections.mjs'
-import { requestMusicModel, configureModel } from '../dist/component-prototype/host/music-model.mjs'
+import {
+  requestMusicModel,
+  configureModel,
+  modelInfo,
+} from '../dist/component-prototype/host/music-model.mjs'
 
 let profile = await mkdtemp(path.resolve('tmp/music-upgrade-'))
 const key = randomUUID()
@@ -129,6 +133,45 @@ try {
       (e) => e.message.includes('401') && !e.message.includes(key),
     )
     assert.deepEqual(seen, { path: '/v1/' + suffix, authorized: true })
+  }
+  for (const raw of ['null', '{', '{"active":"openai","accounts":null}']) {
+    const info = modelInfo({ get: () => raw })
+    assert(info.providers.every((p) => !p.hasKey))
+  }
+  // Another window may change the binding between two separate SQLite reads.
+  const snapshot = connections.resolve('music.model')
+  const concurrent = {
+    get: () => null,
+    connections: {
+      resolve: () => snapshot,
+      read: () => {
+        throw Error('Unexpected second connection read')
+      },
+    },
+  }
+  await assert.rejects(
+    requestMusicModel(concurrent, null, 'search', {}, new AbortController().signal),
+    (e) => e.message.includes('401') && !e.message.includes(key),
+  )
+  const db = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'))
+  try {
+    const migrated = {
+      connections,
+      get: (k) => db.prepare('SELECT value FROM state WHERE key=?').get(k)?.value,
+      set: (k, v) => db.prepare('INSERT OR REPLACE INTO state VALUES(?,?)').run(k, v),
+    }
+    const { importMusicConnection } = await import(
+      '../examples/component-host/music-connection.mjs'
+    )
+    importMusicConnection(migrated, connections)
+    configureModel(migrated, null, 'openai', 'first', key)
+    const binding = connections.read('music.model')
+    connections.write('music.model', { ...binding, clearKey: true })
+    configureModel(migrated, null, 'claude', 'second', key)
+    configureModel(migrated, null, 'openai', 'again', '')
+    assert.equal(connections.resolve('music.model'), null)
+  } finally {
+    db.close()
   }
   console.log(
     'PASS Music first-open legacy migration, preset key retention and four protocol routes',

@@ -1,3 +1,4 @@
+import { buildToolkitRecorder } from './build-toolkit-recorder.mjs'
 import { build } from 'vite'
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { buildSongPath } from './build-song-path.mjs'
@@ -8,6 +9,7 @@ await cp('examples/component-host', `${root}/host`, {
   recursive: true,
   filter: (file) => !/(?:^|[\\/])plugins$/.test(file),
 })
+await cp('components/toolkit/model.mjs', `${root}/host/prompt-model.mjs`)
 await mkdir(`${root}/host/toolkit-local`, { recursive: true })
 for (const file of ['local-files.mjs', 'word-pdf.ps1'])
   await cp('components/toolkit/' + file, `${root}/host/toolkit-local/${file}`)
@@ -22,6 +24,7 @@ for (const f of [
   'local-library.mjs',
 ])
   await cp('components/music/' + f, `${root}/host/music/${f}`)
+await buildToolkitRecorder(root + '/toolkit-recorder')
 for (const [source, output] of [
   ['examples/sample-component', 'component'],
   ['components/music', 'music'],

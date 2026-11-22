@@ -116,8 +116,9 @@ try {
   await expect(ui.getByRole('textbox', { name: '提示词正文' })).toHaveValue('测试关闭恢复')
   if (desktop) {
     await openSettings(ui, '全局快捷键')
-    await ui.getByRole('textbox', { name: '快捷键' }).fill('Control+Alt+Shift+F10')
-    await ui.getByRole('button', { name: '应用快捷键' }).click()
+    await ui.getByRole('textbox', { name: '调用提示词' }).click()
+    await ui.getByRole('textbox', { name: '调用提示词' }).press('Control+Alt+Shift+F10')
+    await ui.getByRole('button', { name: '保存调用提示词快捷键' }).click()
     await expect(ui.getByRole('status')).toHaveText('快捷键已保存')
     const fixture = path.join(evidence, 'input.cjs')
     await writeFile(

@@ -47,7 +47,7 @@ export function ComponentInstallSettings({ onInstalled }: { onInstalled: () => v
   }, [api, scan])
   const names = {
     music: 'Music',
-    prompts: t('文件库', 'File library'),
+    prompts: t('提示词库', 'Prompt library'),
     toolkit: t('工具集', 'Toolkit'),
   }
   const states = {

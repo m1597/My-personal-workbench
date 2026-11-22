@@ -1,0 +1,28 @@
+{
+  "before": {
+    "buttons": [],
+    "windows": []
+  },
+  "electronBefore": [
+    [
+      "Electron - 1 个运行窗口",
+      "Appid: D:\\Desktop\\Projects\\Personal workbench development\\node_modules\\electron\\dist\\electron.exe"
+    ]
+  ],
+  "open": {
+    "buttons": [],
+    "windows": [
+      {
+        "title": "FitBay",
+        "pid": 38064,
+        "style": "0x200100"
+      }
+    ]
+  },
+  "added": [
+    [
+      "Electron - 2 个运行窗口",
+      "Appid: D:\\Desktop\\Projects\\Personal workbench development\\node_modules\\electron\\dist\\electron.exe"
+    ]
+  ]
+}

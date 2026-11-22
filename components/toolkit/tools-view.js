@@ -1,15 +1,15 @@
-import { createSettingsGear, createSettingsShell } from './settings-shell.js'
+import { createBackButton, createSettingsGear, createSettingsShell } from './settings-shell.js'
 import { el, field } from './ui-dom.js'
 export { toolkitHome, glyph, makeCanvas }
 /* Local toolkit pages use opaque file IDs returned by the native picker. */
 const glyphs = {
   toolkit: 'M3 8h18v12H3z M8 8V5h8v3 M3 12h18 M9 11v3m6-3v3',
+  color: 'M15 3l6 6-2 2-2-2-9 9-4 1 1-4 9-9-1-1z',
   capture: 'M3 8V3h5m8 0h5v5m0 8v5h-5m-8 0H3v-5 M10 8l7 6-4 1-2 4z',
   selection: 'M6 4h12m-6 0v16m-6 0h12',
   settings:
     'M9 3h6l.6 2.6 2.5 1.4 2.4-.8 2 4-2 1.7v2.4l2 1.7-2 4-2.4-.8-2.5 1.4L15 23H9l-.6-2.4-2.5-1.4-2.4.8-2-4 2-1.7v-2.4l-2-1.7 2-4 2.4.8 2.5-1.4z M16 13a4 4 0 1 1-8 0 4 4 0 1 1 8 0',
   annotate: 'M4 16L16 4l4 4L8 20H4z M14 6l4 4',
-  measure: 'M3 16L16 3l5 5L8 21z M8 12l3 3m1-7l3 3',
   compare: 'M2 5h12v12H2z M16 8h6v13H9v-2',
   album: 'M3 3h18v8H3z M3 14h18v7H3z M5 9l3-3 4 4',
   compress: 'M3 3l6 6m-5 0h5V4m12 17l-6-6m0 5v-5h5',
@@ -162,10 +162,12 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
   settingsBox.hidden = true
   root.append(head, notice, surface, settingsBox)
   notice.textContent = s.notice
+  let refreshShortcuts
   async function settingsPage() {
     surface.hidden = true
     settingsBox.hidden = false
     head.hidden = true
+    if (refreshShortcuts) await refreshShortcuts()
     if (!settingsBox.childElementCount) {
       const shell = createSettingsShell({
         title: '工具集设置',
@@ -190,7 +192,8 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
       shell.content.append(panels)
       try {
         const values = api.shortcutSettings ? await api.shortcutSettings() : s
-        settingsContents(values, panels, { api, button, notice, error })
+        if (!panels.isConnected) return
+        refreshShortcuts = settingsContents(values, panels, { api, button, notice, error })
         api.onSettingsTarget?.((route) => {
           if (route) {
             shell.select('api')
@@ -214,27 +217,8 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     if (route) settingsPage()
   })
   const images = () => files.filter((f) => f.type.startsWith('image/'))
-  function applies(id) {
-    const count = images().length,
-      texts = files.filter((f) => f.type === 'text/plain').length,
-      allImages = count === files.length
-    return (
-      !files.length ||
-      {
-        resize: allImages && count > 0,
-        rename: files.length > 0,
-        diff: texts === 2 && texts === files.length,
-        compare: allImages && count === 2,
-        album: allImages && count >= 2,
-        compress: allImages && count > 0,
-        convert: files.every((f) => f.type.startsWith('image/') || f.type === 'application/docx'),
-        pairs: count > 0 && texts === count && files.length === count * 2,
-      }[id]
-    )
-  }
   function select(id) {
     notice.textContent = ''
-    if (id === 'annotate' || id === 'measure') return api.capture(id)
     active = id
     draw()
   }
@@ -265,36 +249,17 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
           api.capture(),
         ),
         tile('划词助手', '选中文字后按快捷键翻译或提问', 'selection', '设置快捷键', settingsPage),
+        tile('屏幕取色', '点选屏幕像素，复制十六进制色值', 'color', '开始取色', () =>
+          api.capture('color'),
+        ),
       )
       surface.append(primary)
-      const heading = el('div', '', 'tools-heading')
-      heading.append(el('h2', '其他工具'), button('选择文件', pick))
-      surface.append(heading)
-      if (files.length) {
-        surface.append(
-          el('small', '已选择 ' + files.length + ' 个文件'),
-          button('清除选择', () => {
-            files = []
-            draw()
-          }),
-        )
-      }
-      const list = el('div', '', 'tool-list')
-      surface.append(list)
-      for (const [id, [name, detail]] of Object.entries(toolNames))
-        if (applies(id)) {
-          const b = button(name, () => select(id))
-          b.className = 'tool-item'
-          b.prepend(glyph(id))
-          b.append(el('small', detail))
-          list.append(b)
-        }
       return
     }
     const panel = el('section', '', 'tool-page'),
       out = el('div', '', 'tool-results')
     surface.append(
-      button('返回工具列表', () => {
+      createBackButton(() => {
         active = ''
         draw()
       }),

@@ -64,7 +64,11 @@ try {
     })
     console.log(width, dimensions)
     if (width === 920) {
-      await row.locator('.library-name strong').click()
+      const title = row.locator('.library-name strong')
+      await title.hover()
+      const background = await row.evaluate((el) => getComputedStyle(el).backgroundColor)
+      await title.click()
+      await expect(row).toHaveCSS('background-color', background)
       await expect(row).toHaveAttribute('data-selected', 'true')
       assert.equal(await page.locator('audio').evaluate((a) => a.paused), true)
       await row.locator('.library-name strong').dblclick()

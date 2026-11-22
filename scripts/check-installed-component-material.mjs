@@ -15,8 +15,8 @@ try {
   const page = await app.firstWindow()
   for (const [name, role] of [
     ['Music', 'menuitemcheckbox'],
-    ['工具集', 'menuitem'],
-    ['文件库', 'menuitemcheckbox'],
+    ['工具集', 'menuitemcheckbox'],
+    ['提示词库', 'menuitemcheckbox'],
   ]) {
     await page.getByRole('button', { name: '组件', exact: true }).click()
     await page.getByRole(role, { name, exact: true }).click()

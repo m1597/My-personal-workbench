@@ -94,12 +94,10 @@ try {
   }
   async function menu(name) {
     await button('组件').click()
-    await page
-      .getByRole(name === toolkit ? 'menuitem' : 'menuitemcheckbox', { name, exact: true })
-      .click()
+    await page.getByRole('menuitemcheckbox', { name, exact: true }).click()
   }
   const toolkit = '工具集',
-    files = '文件库'
+    files = '提示词库'
   for (const [label, id] of [
     [toolkit, 'toolkit'],
     [files, 'prompts'],
@@ -108,16 +106,8 @@ try {
     await expect(quick.getByRole('button', { name: label, exact: true })).toBeVisible()
     if (id === 'toolkit') {
       await expect(quick.locator('.host-toolkit-icon')).toHaveCSS(
-        'background-image',
-        /toolkit\.png/,
-      )
-      assert(
-        await page.evaluate(async () => {
-          const img = new Image()
-          img.src = './toolkit.png'
-          await img.decode()
-          return img.naturalWidth > 0
-        }),
+        'mask-image',
+        /host-toolbox\.svg|%3eToolkit%3c/i,
       )
       await page.screenshot({ path: path.join(root, 'quick.png') })
     }
@@ -163,11 +153,10 @@ try {
   function near(a, b) {
     assert(Math.abs(a - b) < 0.05)
   }
-  for (const [state, groups] of Object.entries(records)) {
-    const mixed = state.startsWith('mixed')
+  for (const groups of Object.values(records)) {
     const music = groups.flatMap((g) => g.tabs).find((t) => t.id === 'component-music')
     for (const g of groups) {
-      near(g.bar.h, mixed ? 32 : 38)
+      near(g.bar.h, 38)
       near(g.content.y, g.bar.b)
       for (const other of groups.filter((other) => Math.abs(other.group.y - g.group.y) < 1)) {
         near(g.bar.b, other.bar.b)
@@ -190,7 +179,7 @@ try {
   assert.equal(toolsActive.color, musicActive.color)
   assert.equal(toolsActive.line, musicActive.line)
   assert.match(musicActive.line, /inset/)
-  assert.match(toolsActive.icon, /toolkit\.png/)
+  assert.match(toolsActive.icon, /host-toolbox\.svg|%3eToolkit%3c/i)
   await page.evaluate(() => {
     const key = 'workbench.layout'
     window.addEventListener('beforeunload', () => {
@@ -204,7 +193,7 @@ try {
   app = await launch()
   page = await app.firstWindow()
   await expect(tab('toolkit')).toContainText('工具集')
-  await expect(tab('prompts')).toContainText('文件库')
+  await expect(tab('prompts')).toContainText('提示词库')
   await expect(
     page
       .locator('.dv-groupview')

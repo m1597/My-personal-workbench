@@ -88,14 +88,34 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     show(panel)
     panel.webContents.send('prompt:focus')
   }
-  function register(value) {
+  function validateKey(value) {
+    if (value === '') return
+    if (typeof value !== 'string' || value.length > 100) throw Error('无效快捷键')
+    const parts = value.split('+')
+    const key = parts.pop()
     if (
-      typeof value !== 'string' ||
-      !/^(?:(?:Control|Alt|Shift|Super|CommandOrControl)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space)$/i.test(
-        value,
-      )
+      parts.some(
+        (part) => !['Control', 'Ctrl', 'CommandOrControl', 'Alt', 'Shift', 'Super'].includes(part),
+      ) ||
+      new Set(parts).size !== parts.length
     )
-      throw Error('请输入带修饰键的快捷键，例如 Control+Alt+P')
+      throw Error('无效修饰键')
+    if (/^(?:F(?:[1-9]|1\d|2[0-4])|MediaPlayPause|MediaNextTrack|MediaPreviousTrack)$/.test(key))
+      return
+    if (
+      !parts.length ||
+      !/^(?:[A-Z0-9]|Space|Up|Down|Left|Right|Home|End|PageUp|PageDown|Insert|Delete)$/.test(key)
+    )
+      throw Error('请选择组合键或功能键')
+  }
+  function register(value) {
+    if (!value) {
+      if (active) globalShortcut.unregister(active)
+      active = ''
+      registrationError = ''
+      return
+    }
+    validateKey(value)
     if (active === value) return
     if (!globalShortcut.register(value, () => void summon().catch(console.error)))
       throw Error('快捷键已被占用，请换一个组合')
@@ -112,7 +132,7 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
       }
     }
     try {
-      register(library.state().shortcut)
+      if (library.state().shortcutEnabled) register(library.state().shortcut)
     } catch (e) {
       registrationError = e.message
     }
@@ -206,23 +226,80 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     ...library.state(),
     registrationError: registrationError || library.state().preferenceError,
   }))
+  handle('organize', 'editor', async (root, name) => {
+    const connection = settingsStore().resolve('prompts.model')
+    if (!connection) throw Error('请先配置 API 与模型')
+    const source = await library.read(root, name)
+    const { complete } = await import('./prompt-model.mjs')
+    const organized = await complete(
+      connection,
+      connection.key,
+      [
+        {
+          role: 'user',
+          content:
+            '请将以下提示词整理为清晰的 Markdown，保留模板变量和相对引用，直接返回整理后的内容。\n' +
+            source.text,
+        },
+      ],
+      new AbortController().signal,
+    )
+    // The confirmed copy lives at the catalogue root. Keep local Markdown links
+    // relative to their original assets even when the source was nested.
+    const base = path.dirname(name).replaceAll('\\', '/')
+    if (base === '.') return organized
+    let fence = ''
+    const relocate = (target) => {
+      const angled = target.startsWith('<')
+      const value = angled ? target.slice(1, -1) : target
+      if (!value || /^(?:[a-z][a-z0-9+.-]*:|[/#?])/i.test(value)) return target
+      const next = path.posix.join(base, value)
+      return angled || /\s/.test(next) ? '<' + next + '>' : next
+    }
+    return organized
+      .split('\n')
+      .map((line) => {
+        const marker = line.match(/^\s*(`{3,}|~{3,})/)
+        if (marker) {
+          if (!fence) fence = marker[1]
+          else if (marker[1].startsWith(fence)) fence = ''
+          return line
+        }
+        if (fence) return line
+        return line.replace(
+          /(\]\(\s*|^\s*\[[^\]]+\]:\s*)(<[^>]*>|[^\s)]+)/g,
+          (_, prefix, target) => prefix + relocate(target),
+        )
+      })
+      .join('\n')
+  })
+  handle('saveOrganized', 'editor', (root, text) => library.saveOrganized(root, text))
+  handle('catalogue', 'editor', (query) => library.catalogue(query))
   handle('choose', 'editor', async (remember) => {
     if (typeof remember !== 'boolean') throw Error('DENIED')
     const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
     if (!result.canceled) await library.select(result.filePaths[0], remember)
   })
   handle('default', 'editor', () => library.select(library.state().defaultRoot, false))
-  handle('shortcut', 'editor', async (value) => {
-    const old = active
-    register(value)
-    try {
-      await library.shortcut(value)
-    } catch (e) {
-      globalShortcut.unregister(value)
-      active = ''
-      if (old) register(old)
-      throw e
-    }
+  let shortcutWrite = Promise.resolve()
+  handle('shortcut', 'editor', (value, enabled) => {
+    const work = shortcutWrite.then(async () => {
+      if (disposed) throw Error('提示词库已关闭')
+      const nextEnabled = enabled === undefined ? library.state().shortcutEnabled : enabled
+      validateKey(value)
+      if (typeof nextEnabled !== 'boolean') throw Error('启停状态无效')
+      const old = active
+      register(nextEnabled ? value : '')
+      try {
+        await library.shortcut(value, nextEnabled)
+      } catch (e) {
+        if (!disposed) register(old)
+        throw e
+      }
+      return library.state()
+    })
+    shortcutWrite = work.catch(() => {})
+    return work
   })
   handle('batch', 'editor', async (tool, items) => {
     if (!['rename', 'resize'].includes(tool)) throw Error('未知批量工具')

@@ -143,7 +143,13 @@ export function componentView({
     if (!standalone || standalone.isDestroyed()) {
       standalone = new BaseWindow({
         ...options(660, 620),
-        title: prompts ? '文件库' : music ? 'Music' : '示例组件 · 独立窗口',
+        title: prompts
+          ? language === 'en'
+            ? 'Prompt library'
+            : '提示词库'
+          : music
+            ? 'Music'
+            : '示例组件 · 独立窗口',
       })
       watchNativeDock(standalone, {
         target: (point) => {
@@ -233,7 +239,11 @@ export function componentView({
             e.path.length <= 300,
         )
         .slice(0, 200)
-        .map(({ name, target, path }) => ({ name, target, path }))
+        .map(({ name, target, path }) => ({
+          name,
+          target,
+          path: prompts ? path.replace(/^(文件库|提示词仓库)(?=\s*[→›])/, '提示词库') : path,
+        }))
       return root
     } catch (failure) {
       if (!reportFailure) return

@@ -1,3 +1,4 @@
+import { selectSongRow } from './song-row-fixture.mjs'
 import { openDiscovery } from './discovery-fixture.mjs'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
@@ -23,11 +24,28 @@ lx.on('request', ({action,info}) => {
 })
 lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
 )
+const docked = process.argv.includes('--docked')
+async function musicPage(app) {
+  const shell = await app.firstWindow()
+  if (!docked) return shell
+  await shell.getByRole('button', { name: '组件', exact: true }).click()
+  const entry = shell.getByRole('menuitemcheckbox', { name: 'Music', exact: true })
+  if ((await entry.getAttribute('aria-checked')) === 'true') await entry.press('Escape')
+  else await entry.click()
+  await expect
+    .poll(() => app.windows().some((p) => p.url().includes('/music/index.html')))
+    .toBe(true)
+  const page = app.windows().find((p) => p.url().includes('/music/index.html'))
+  await expect
+    .poll(() => page.evaluate(async () => (await window.musicWindow.status()).mode))
+    .toBe('docked')
+  return page
+}
 async function launch() {
   const app = await electron.launch({
     args: [
       path.resolve('dist/component-prototype/host'),
-      '--mode=music',
+      docked ? '--mode=workbench' : '--mode=music',
       '--mute-audio',
       '--user-data-dir=' + profile,
       '--workbench=' + path.resolve('out/renderer/index.html'),
@@ -36,9 +54,7 @@ async function launch() {
   })
   await app.firstWindow()
   await app.evaluate(({ BaseWindow }) => {
-    BaseWindow.getAllWindows()
-      .find((win) => win.getTitle() === 'Music')
-      .setContentSize(1000, 740)
+    BaseWindow.getAllWindows()[0].setContentSize(1000, 740)
   })
   await offlineSourceRepository(app)
   await app.evaluate(({ app }, file) => {
@@ -85,7 +101,7 @@ const choose = (app, file) =>
   }, file)
 let app = await launch()
 try {
-  let page = await app.firstWindow()
+  let page = await musicPage(app)
   const button = (name) => page.getByRole('button', { name, exact: true })
   const tab = (name) => page.getByRole('tab', { name, exact: true })
   const result = () =>
@@ -127,6 +143,7 @@ try {
   await expect
     .poll(() => page.evaluate(async () => (await window.music.state()).prefs.manualDir))
     .toBe(downloads)
+  await button('返回').click()
   await openDiscovery(page, false)
   const platforms = page.getByRole('tablist', { name: '搜索平台' })
   for (const label of ['QQ 音乐', '酷狗音乐', '网易云音乐']) {
@@ -185,15 +202,17 @@ try {
   await result().getByRole('button', { name: '加入歌单' }).click()
   await page.getByRole('menuitem', { name: '路上听' }).click()
   await expect(page.getByRole('status')).toContainText('已加入「路上听」')
-  await result().dispatchEvent('click')
+  const title = result().getByText('远山', { exact: true })
+  await selectSongRow(result(), title)
   assert.ok(await page.locator('audio').evaluate((a) => a.paused))
-  await result().dispatchEvent('dblclick')
+  await page.screenshot({ path: path.join(root, 'selected-search-row.png') })
+  await title.dblclick()
   await playing()
   assert.deepEqual(await fs.readdir(downloads), [])
   assert.deepEqual(await fs.readdir(cache), [])
   await app.close()
   app = await launch()
-  page = await app.firstWindow()
+  page = await musicPage(app)
   await openDiscovery(page, false)
   await expect(
     page

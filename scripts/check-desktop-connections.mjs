@@ -5,10 +5,13 @@ const dir = path.resolve(process.argv[2])
 const [port] = (await readFile(path.join(dir, 'DevToolsActivePort'), 'utf8')).split(/\r?\n/)
 const browser = await chromium.connectOverCDP('http://127.0.0.1:' + Number(port))
 try {
-  const page = browser
-    .contexts()[0]
-    .pages()
-    .find((p) => p.url().includes('/out/renderer/index.html'))
+  const findWorkbench = () =>
+    browser
+      .contexts()[0]
+      .pages()
+      .find((p) => p.url().includes('/out/renderer/index.html'))
+  await expect.poll(() => !!findWorkbench(), { timeout: 15000 }).toBe(true)
+  const page = findWorkbench()
   const b = (name) => page.getByRole('button', { name, exact: true })
   await b('工作台设置').click()
   await b('API 与模型').click()

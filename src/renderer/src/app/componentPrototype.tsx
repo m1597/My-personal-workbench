@@ -205,7 +205,7 @@ export function useComponentPrototype(
       bind(
         window.promptDock,
         'component-prompts',
-        readPreferences().language === 'en' ? 'File library' : '文件库',
+        readPreferences().language === 'en' ? 'Prompt library' : '提示词库',
       )
     const offMusic = window.musicDock && bind(window.musicDock, 'component-music', 'Music')
     let dragging = ''

@@ -54,6 +54,7 @@ export async function toolkitLauncher(packaged, profile, installation) {
         [
           ...args,
           '--fitbay-hosted',
+          '--fitbay-owner-pid=' + process.pid,
           '--workbench-profile=' + profile,
           ...(capture ? ['--toolkit-capture'] : []),
           ...(page ? ['--toolkit-page=' + page] : []),
@@ -76,7 +77,8 @@ export async function toolkitLauncher(packaged, profile, installation) {
 export async function toolkitShortcutRequest(launch, profile, value) {
   if (
     value !== null &&
-    (!['capture', 'selection'].includes(value?.id) ||
+    value?.id !== 'defaults' &&
+    (!['capture', 'selection', 'color'].includes(value?.id) ||
       typeof value.key !== 'string' ||
       value.key.length > 100 ||
       typeof value.enabled !== 'boolean')
@@ -89,7 +91,9 @@ export async function toolkitShortcutRequest(launch, profile, value) {
   await writeFile(
     file,
     JSON.stringify(
-      value === null ? null : { id: value.id, key: value.key, enabled: value.enabled },
+      value === null
+        ? null
+        : { id: value.id, key: value.key, enabled: value.enabled, field: value.field },
     ),
     { flag: 'wx' },
   )

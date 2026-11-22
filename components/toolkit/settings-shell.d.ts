@@ -1,3 +1,4 @@
+export function createBackButton(onBack: () => void): HTMLButtonElement
 export type Category = { id: string; name: string }
 export type Shell = {
   element: HTMLDivElement

@@ -28,6 +28,12 @@ function button(label, graphic, callback) {
   node.addEventListener('click', callback)
   return node
 }
+export function createBackButton(onBack) {
+  const back = button('返回', icon('m12 19-7-7 7-7M5 12h14'), onBack)
+  back.append(sheet(controls))
+  back.style.justifySelf = 'start'
+  return back
+}
 export function createSettingsGear({ label, onClick }) {
   const gear = button(label, icon(gearPath, '<circle cx="12" cy="12" r="3"/>'), onClick)
   gear.append(sheet(controls))
@@ -66,7 +72,7 @@ export function createSettingsShell({ title, categories, active, onSelect, onBac
   const header = document.createElement('header')
   const heading = document.createElement('h2')
   heading.textContent = title
-  const back = button('返回', icon('m12 19-7-7 7-7M5 12h14'), onBack)
+  const back = createBackButton(onBack)
   const toggle = document.createElement('button')
   toggle.type = 'button'
   toggle.className = 'fitbay-category-toggle'
@@ -102,6 +108,7 @@ export function createSettingsShell({ title, categories, active, onSelect, onBac
       select(item.id)
       expand(false)
       onSelect(item.id)
+      if (getComputedStyle(toggle).display !== 'none') toggle.focus({ preventScroll: true })
     }
     buttons.set(item.id, action)
     nav.append(action)

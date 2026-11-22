@@ -1,3 +1,4 @@
+import { useEdgeCollapse } from './useEdgeCollapse'
 import { applyMaterial } from './material'
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react'
@@ -41,6 +42,7 @@ export default function App() {
     ),
   }))
   const [workspace, setWorkspace] = useState<WorkspaceState>({ visible: [] })
+  const collapsed = useEdgeCollapse(workspace.api)
   const [firstEntry, setFirstEntry] = useState(firstEntryPending)
   const [detached, setDetached] = useState<ModuleId[]>([])
   const music = useMusicHostState()
@@ -100,7 +102,7 @@ export default function App() {
                 <img src="./fitbay.png" alt="" draggable={false} />
                 <span className="fitbay-brand">FitBay</span>
               </div>
-              {!settingsOpen && <WindowMenu />}
+              {!settingsOpen && <WindowMenu collapsed={collapsed} />}
               <WorkbenchSettings
                 value={preferences}
                 onChange={setPreferences}

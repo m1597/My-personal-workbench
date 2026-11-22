@@ -22,3 +22,6 @@
 复验入口为 scripts/check-packaged-update-page.mjs、scripts/check-workbench-settings-integration.mjs、tests/product-updates.test.mjs。后者另覆盖损坏包清理。
 
 2026-11-21 复验。全局设置实际联网检查 GitHub Release 后，FitBay 和 Music 0.1.0 均已是最新。新接入安装清单的提示词仓库与截图划词工具集和示例组件都列出本地版本，标为未接入在线更新。同期复验单项失败重试、托盘回调、窄窗、设置搜索和播放连续性。见[真实发行结果](../../../tmp/settings-integration-5kR2bh/live.json)。另用临时打包的 FitBay.exe 和受控发行字节复验仅交接 Music 安装包、安装缺席时移除失效搜索结果，见[测试发行记录](../../../tmp/updates-packaged-VVI5i1/launch.json)。
+
+- [x] 实现逐行组件布局、换行操作组和页级开发构建说明。
+- [x] 从桌面启动目标实测，截图见 docs/images/host-update-layout。

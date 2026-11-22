@@ -95,6 +95,17 @@ export function musicShortcuts() {
       if (scope === 'global') applyGlobal(getMusicPreferences(store))
     },
     reset(store, scope) {
+      if (scope === 'all') {
+        const keys = Object.keys(appBindings).flatMap((action) => [
+          'app-shortcut-' + action,
+          'shortcut-' + action,
+        ])
+        store.db
+          .prepare('DELETE FROM state WHERE key IN (SELECT value FROM json_each(?))')
+          .run(JSON.stringify(keys))
+        applyGlobal(getMusicPreferences(store))
+        return
+      }
       if (!['app', 'global'].includes(scope)) throw Error('快捷键范围无效')
       const prefs = getMusicPreferences(store)
       const globalKeys = Object.values(scope === 'app' ? prefs.shortcuts : defaultShortcuts).concat(

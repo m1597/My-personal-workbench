@@ -33,15 +33,20 @@ try {
   const tabs = page.locator('.dv-tab[data-tab-panel-id]')
   await expect(tabs).toHaveCount(4)
   while (await tabs.count()) await tabs.first().locator('.dv-default-tab-action').click()
-  const names = ['模块 1', '模块 2', '模块 3', '模块 4', '工具集', '文件库', 'Music', '示例组件']
+  const names = ['模块 1', '模块 2', '模块 3', '模块 4', '工具集', '提示词库', 'Music', '示例组件']
   const evidence = []
   for (const [i, name] of names.entries()) {
     await page.getByRole('button', { name: '组件', exact: true }).click()
     await page
-      .getByRole(['Music', '示例组件', '文件库'].includes(name) ? 'menuitemcheckbox' : 'menuitem', {
-        name,
-        exact: true,
-      })
+      .getByRole(
+        ['Music', '示例组件', '提示词库', '工具集'].includes(name)
+          ? 'menuitemcheckbox'
+          : 'menuitem',
+        {
+          name,
+          exact: true,
+        },
+      )
       .click()
     await expect(tabs).toHaveCount(i + 1)
     const groups = await page.locator('.dv-groupview').evaluateAll((nodes) =>

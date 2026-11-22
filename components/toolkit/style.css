@@ -6,9 +6,12 @@ html {
 }
 body {
   margin: 0;
-  background: var(--panel-surface);
-  color: var(--text);
-  font: var(--font-size-body) / var(--line-height-ui) var(--font-ui);
+  background: rgba(32, 42, 53, 0.9);
+  color: #edf4fa;
+  font:
+    14px / 1.5 "HarmonyOS Sans SC",
+    "Microsoft YaHei UI",
+    sans-serif;
 }
 [hidden] {
   display: none !important;
@@ -32,8 +35,8 @@ h2 {
 section,
 fieldset {
   min-width: 0;
-  background: var(--glass);
-  border: 1px solid var(--stroke);
+  background: #2a3643;
+  border: 1px solid #495a69;
   border-radius: 8px;
   padding: 12px;
   display: grid;
@@ -48,18 +51,17 @@ input,
 textarea {
   font: inherit;
   color: inherit;
-  background: var(--control);
-  border: 1px solid var(--stroke);
+  background: #303f4e;
+  border: 1px solid #647889;
   border-radius: 5px;
   padding: 6px 10px;
   max-width: 100%;
 }
-button:not(:disabled):hover {
-  border-color: var(--stroke-strong);
-  background: var(--hover);
+button:hover {
+  background: #425467;
 }
 button:disabled {
-  opacity: var(--opacity-disabled);
+  opacity: 0.55;
 }
 input,
 textarea {
@@ -115,9 +117,9 @@ pre {
 .bar {
   position: absolute;
   max-width: 100%;
-  background: var(--solid-surface);
+  background: #283644f5;
   padding: 6px;
-  border: 1px solid var(--stroke);
+  border: 1px solid #647889;
   border-radius: 7px;
   cursor: auto;
 }
@@ -125,7 +127,7 @@ pre {
   position: absolute;
   left: 12px;
   top: 12px;
-  background: var(--solid-surface);
+  background: #233445;
   padding: 6px 12px;
   pointer-events: none;
 }
@@ -135,8 +137,8 @@ pre {
   min-width: 0;
   font: inherit;
   color: inherit;
-  background: var(--control);
-  border: 1px solid var(--stroke);
+  background: #303f4e;
+  border: 1px solid #647889;
   border-radius: 5px;
   padding: 6px 10px;
 }
@@ -150,7 +152,7 @@ pre {
   min-width: 0;
 }
 .connection-status {
-  color: var(--text-secondary);
+  color: #bfcedc;
   overflow-wrap: anywhere;
 }
 .connections button {
@@ -161,16 +163,5 @@ pre {
 }
 
 .connections input::placeholder {
-  color: var(--text-muted);
-}
-
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--accent);
-}
-select option {
-  background: var(--solid-surface);
-  color: var(--text);
+  color: #afbecd;
 }

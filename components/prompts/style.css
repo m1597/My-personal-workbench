@@ -183,6 +183,20 @@ summary {
   display: grid;
   gap: 8px;
 }
+.prompt-settings .settings-shortcut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-8);
+  margin-block: 8px;
+}
+.prompt-settings label:has(input[type="checkbox"]) {
+  display: flex;
+}
+.prompt-settings input[type="checkbox"] {
+  width: auto;
+  flex: none;
+}
 .prompt-settings label {
   display: grid;
   grid-template-columns: minmax(6em, auto) minmax(0, 1fr);
@@ -212,7 +226,7 @@ select option {
 }
 
 .split {
-  grid-template-columns: minmax(130px, 21%) minmax(170px, 1fr) minmax(170px, 1fr);
+  grid-template-columns: minmax(170px, 30%) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
 .locations {

@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { fileBrowser } from './file-browser.mjs'
-import { mkdir, opendir, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { mkdir, opendir, writeFile, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { watch, watchFile, unwatchFile } from 'node:fs'
 import {
   actionCatalogue,
@@ -12,6 +12,19 @@ import {
 } from './prompt-actions.mjs'
 
 export async function promptLibrary(profile, changed) {
+  async function assertWritableFolder(folder) {
+    let parent = await realpath(folder)
+    for (;;) {
+      try {
+        if ((await stat(path.join(parent, 'SKILL.md'))).isFile()) throw Error('Skill 目录只读')
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e
+      }
+      const next = path.dirname(parent)
+      if (next === parent) return
+      parent = next
+    }
+  }
   async function selectedDirectory(folder) {
     const resolved = await realpath(folder)
     if (!(await stat(resolved)).isDirectory()) throw Error('目录不可用')
@@ -21,9 +34,15 @@ export async function promptLibrary(profile, changed) {
       return resolved
     }
   }
-  const file = path.join(profile, 'prompt-library', 'preferences.json')
+  const file = path.join(profile, 'prompt-library', 'catalogue-preferences.json')
   await mkdir(path.dirname(file), { recursive: true })
-  let prefs = { defaultRoot: '', shortcut: 'Control+Alt+Shift+P', favorites: [], paletteRoot: '' }
+  let prefs = {
+    shortcutEnabled: true,
+    defaultRoot: '',
+    shortcut: 'Control+Alt+Shift+P',
+    favorites: [],
+    paletteRoot: '',
+  }
   let preferenceError = ''
   try {
     const stored = JSON.parse(await readFile(file, 'utf8'))
@@ -36,6 +55,7 @@ export async function promptLibrary(profile, changed) {
     prefs = {
       defaultRoot: stored.defaultRoot,
       shortcut: stored.shortcut,
+      shortcutEnabled: stored.shortcutEnabled !== false,
       favorites: Array.isArray(stored.favorites)
         ? stored.favorites.filter((p) => typeof p === 'string' && path.isAbsolute(p))
         : [],
@@ -45,7 +65,16 @@ export async function promptLibrary(profile, changed) {
           : '',
     }
   } catch (e) {
-    if (e.code !== 'ENOENT') preferenceError = '配置不可用，请重新选择默认目录或快捷键'
+    if (e.code === 'ENOENT') {
+      try {
+        const legacy = JSON.parse(
+          await readFile(path.join(path.dirname(file), 'preferences.json'), 'utf8'),
+        )
+        if (typeof legacy.shortcut === 'string') prefs.shortcut = legacy.shortcut
+      } catch {
+        /* No prior preferences on first install. */
+      }
+    } else preferenceError = '配置不可用，请重新选择默认目录或快捷键'
   }
   let root = prefs.defaultRoot,
     timer
@@ -152,8 +181,11 @@ export async function promptLibrary(profile, changed) {
   }
   monitor()
   function preference(key, value) {
+    return preferences({ [key]: value })
+  }
+  function preferences(changes) {
     const work = pending.then(async () => {
-      const next = { ...prefs, [key]: value }
+      const next = { ...prefs, ...changes }
       await atomicWrite(file, JSON.stringify(next))
       preferenceError = ''
       prefs = next
@@ -170,6 +202,11 @@ export async function promptLibrary(profile, changed) {
         }
         return []
       })
+      const manifest = entries.find((entry) => entry.isFile() && entry.name === 'SKILL.md')
+      if (manifest) {
+        results.push(path.relative(folder, path.join(dir, manifest.name)))
+        return
+      }
       for (const e of entries) {
         if (e.isSymbolicLink()) continue
         const full = path.join(dir, e.name)
@@ -224,11 +261,58 @@ export async function promptLibrary(profile, changed) {
       monitor()
       refresh()
     },
-    shortcut: (value) => preference('shortcut', value),
+    shortcut: (shortcut, shortcutEnabled) => preferences({ shortcut, shortcutEnabled }),
     files: () => files(root),
+    async catalogue(query = '') {
+      if (typeof query !== 'string' || query.length > 4096) throw Error('搜索文字过长')
+      const needle = query.trim().toLocaleLowerCase()
+      const folder = root
+      const cards = []
+      for (const name of await files(folder)) {
+        try {
+          const { text } = await readPrompt(folder, name)
+          const skill = path.basename(name) === 'SKILL.md'
+          const title =
+            text.match(/^#\s+(.+)$/m)?.[1]?.trim() ||
+            (skill
+              ? path.basename(path.resolve(folder, path.dirname(name)))
+              : path.parse(name).name)
+          const parts = name.split(path.sep)
+          const category = parts.length > (skill ? 2 : 1) ? parts[0] : '未分类'
+          cards.push({
+            name,
+            title,
+            category,
+            skill,
+            match: [name, title, category, text].some((v) =>
+              v.toLocaleLowerCase().includes(needle),
+            ),
+          })
+        } catch {
+          /* Files removed during scanning disappear on reconciliation. */
+        }
+      }
+      return cards
+    },
     read: (expected, name) => {
       assertRoot(expected)
       return readPrompt(expected, name)
+    },
+    async saveOrganized(expected, text) {
+      if (
+        !expected ||
+        expected !== root ||
+        typeof text !== 'string' ||
+        !text.trim() ||
+        Buffer.byteLength(text) > 4 * 1024 * 1024
+      )
+        throw Error('无法保存整理结果')
+      const dest = await checkedDiskPath(root, '')
+      await assertWritableFolder(dest)
+      const name = '整理-' + crypto.randomUUID() + '.md'
+      await writeFile(path.join(dest, name), text, { flag: 'wx' })
+      refresh()
+      return name
     },
     save(expected, name, revision, text) {
       const operation = saving.then(async () => {
@@ -237,6 +321,7 @@ export async function promptLibrary(profile, changed) {
           throw Error('文本过大')
         const check = async () => {
           assertRoot(expected)
+          await assertWritableFolder(path.dirname(await promptPath(expected, name)))
           const old = await readPrompt(expected, name)
           if (old.revision !== revision) throw Error('文件已在外部修改，请重新加载或复制草稿')
           return old

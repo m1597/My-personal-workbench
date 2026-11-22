@@ -50,18 +50,19 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
     unsupported: t('未接入在线更新', 'Online updates unsupported'),
   }
   return (
-    <section>
-      <div id="setting-3-0">
+    <section className="update-page">
+      <header id="setting-3-0">
+        <p>
+          {t('上次检查', 'Last checked')} ·{' '}
+          {state?.lastChecked
+            ? new Date(state.lastChecked).toLocaleString()
+            : t('尚未检查', 'Not checked')}
+        </p>{' '}
         <Button disabled={busy || !api} onClick={() => api && void run(() => api.check())}>
           {t('检查全部更新', 'Check all updates')}
         </Button>
-      </div>
-      <p>
-        {t('上次检查', 'Last checked')} ·{' '}
-        {state?.lastChecked
-          ? new Date(state.lastChecked).toLocaleString()
-          : t('尚未检查', 'Not checked')}
-      </p>
+      </header>
+
       {!api && (
         <p>{t('当前启动方式未连接更新服务', 'Update service unavailable in this launch mode')}</p>
       )}
@@ -80,27 +81,31 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
             ]
           : [])
       ).map((row) => (
-        <section key={row.id}>
-          <h3>{row.name}</h3>
-          <p>
-            {t('已安装版本', 'Installed version')} {row.version} · {labels[row.status]}
-            {row.available && ' · ' + row.available}
-          </p>
-          {api && row.status !== 'unsupported' && (
-            <Button disabled={busy} onClick={() => void run(() => api.check(row.id))}>
-              {row.status === 'failed' ? t('重试', 'Retry') : t('检查更新', 'Check for updates')}
-            </Button>
-          )}
-          {row.status === 'available' &&
-            (api && row.installable ? (
+        <section className="update-row" key={row.id}>
+          <div>
+            <h3>{row.name}</h3>
+            <p>
+              {t('已安装版本', 'Installed version')} {row.version} · {labels[row.status]}
+              {row.available && ' · ' + t('可用版本', 'Available version') + ' ' + row.available}
+            </p>
+          </div>
+          <div className="update-actions">
+            {api && row.status !== 'unsupported' && (
+              <Button disabled={busy} onClick={() => void run(() => api.check(row.id))}>
+                {row.status === 'failed' ? t('重试', 'Retry') : t('检查更新', 'Check for updates')}
+              </Button>
+            )}
+            {row.status === 'available' && api && row.installable && (
               <Button disabled={busy} onClick={() => void run(() => api.install(row.id))}>
                 {t('更新', 'Update')} {row.name}
               </Button>
-            ) : (
-              <p>{t('开发构建仅支持检查版本', 'Development builds support version checks only')}</p>
-            ))}
+            )}
+          </div>
         </section>
       ))}
+      {state?.rows.some((row) => !row.installable && row.id === 'workbench') && (
+        <p>{t('开发构建仅支持检查版本', 'Development builds support version checks only')}</p>
+      )}
       {error && <p role="alert">{error}</p>}
     </section>
   )

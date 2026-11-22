@@ -125,6 +125,7 @@ await fs.mkdir('tmp', { recursive: true })
 const root = await fs.mkdtemp(path.resolve('tmp/music-models-')),
   profile = path.join(root, 'profile')
 const fixtureStore = new MusicStore(path.join(profile, 'fitbay-music'))
+fixtureStore.set('music-guide-v1', '1')
 fixtureStore.library.upsert({
   title: '已同意的摘要',
   artist: '测试艺人',

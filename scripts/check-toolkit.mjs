@@ -63,9 +63,11 @@ try {
   await home.getByText('保存 API 配置').click()
   await expect(home.getByRole('status')).toContainText('已保存')
   await category(home, '快捷键')
-  const fields = home.getByLabel('全局快捷键')
-  await fields.first().fill(keys.selection.key)
-  await home.getByText('应用快捷键').first().click()
+  const captureRow = home.getByRole('region', { name: '屏幕截图' })
+  const field = captureRow.getByRole('textbox')
+  await field.click()
+  await field.press(keys.selection.key)
+  await captureRow.getByRole('button', { name: '保存屏幕截图快捷键' }).click()
   await expect(home.getByRole('status')).toContainText('占用')
   assert(
     await app.evaluate(
@@ -80,9 +82,12 @@ try {
       keys.capture.key,
     )),
   )
-  await fields.first().fill(keys.capture.key)
-  await home.getByText('启用', { exact: true }).click()
-  await home.getByText('应用快捷键').first().click()
+  await captureRow.getByText('启用', { exact: true }).click()
+  await expect
+    .poll(() =>
+      app.evaluate(({ globalShortcut }, key) => globalShortcut.isRegistered(key), keys.capture.key),
+    )
+    .toBe(true)
   await home.setViewportSize({ width: 320, height: 600 })
   await home.screenshot({ path: path.join(folder, 'home-narrow.png') })
   assert(await home.evaluate(() => document.documentElement.scrollWidth <= innerWidth))

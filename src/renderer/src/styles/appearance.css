@@ -120,17 +120,6 @@
   background: var(--accent-soft);
 }
 
-/* Share the live Music strip dimensions across every row, including empty slots. */
-.dockview-theme-workbench:has(.dv-tab ~ .dv-tab) {
-  --dv-tabs-and-actions-container-height: 32px;
-}
-.dockview-theme-workbench:has(
-  .dv-tabs-and-actions-container:has([data-tab-panel-id="component-music"]):not(
-      :has(.dv-tab ~ .dv-tab)
-    )
-) {
-  --dv-tabs-and-actions-container-height: var(--panel-tab-height);
-}
 .dockview-theme-workbench .dv-tab {
   margin-block-start: var(--space-4);
 }
@@ -418,4 +407,48 @@
   min-width: 110px;
   min-height: 68px;
   gap: 10px;
+}
+
+.update-page {
+  container-type: inline-size;
+  display: grid;
+  gap: 12px;
+}
+.update-page header,
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.update-page header {
+  padding-bottom: 12px;
+}
+.update-row {
+  padding: 16px;
+  background: var(--control);
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+}
+.update-row h3 {
+  margin-bottom: 5px;
+}
+.update-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-inline-start: auto;
+}
+.dockview-theme-workbench .dv-default-tab-action {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+@container (max-width: 500px) {
+  .update-actions:not(:empty) {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
 }
