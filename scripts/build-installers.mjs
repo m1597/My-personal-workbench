@@ -97,11 +97,14 @@ async function writeInstallerInclude(output, appOutDir) {
         lines.push(`Delete "$INSTDIR\\${quotePath(child)}"`)
       }
     }
+    if (
+      path.basename(path.dirname(output)) === 'workbench' &&
+      relative === path.join('resources', 'app')
+    ) {
+      lines.push('Delete "$INSTDIR\\resources\\app\\music-offline-setup.exe"')
+    }
     if (!relative) lines.push(`Delete "$INSTDIR\\\${UNINSTALL_FILENAME}"`)
     lines.push(`RMDir "${target}"`, `${skip}:`)
-  }
-  if (path.basename(path.dirname(output)) === 'workbench') {
-    lines.push('Delete "$INSTDIR\\resources\\app\\music-offline-setup.exe"')
   }
   await directory('')
   // biome-ignore lint/suspicious/noTemplateCurlyInString: NSIS expands this symbol.

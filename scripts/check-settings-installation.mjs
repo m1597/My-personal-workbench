@@ -83,6 +83,17 @@ try {
   }
   const page = await app.firstWindow()
   await page.getByRole('button', { name: /^(工作台设置|Workbench settings)$/i }).click()
+  async function removeComponent(product, row) {
+    await row.getByRole('button', { name: /卸载|Uninstall/i }).click()
+    await row.getByRole('button', { name: /确认卸载|Confirm uninstall/i }).click()
+    await expect(row.getByRole('status')).toContainText(/未安装|Not installed/i, {
+      timeout: 360000,
+    })
+    await assert.rejects(stat(path.join(root, product, 'resources/app/package.json')), {
+      code: 'ENOENT',
+    })
+    console.log(`PASS settings removed ${product}`)
+  }
   async function verifyDisk(product, expected) {
     const file = path.join(root, product, 'resources/app/package.json')
     const pkg = JSON.parse(await readFile(file, 'utf8'))
@@ -134,11 +145,21 @@ try {
     )
   } else {
     await page.getByRole('button', { name: /^(组件管理|Components)$/ }).click()
-    for (const product of products) {
+    const legacy = process.argv.includes('--legacy-reinstall')
+    const selected = legacy ? ['Prompts'] : products
+    if (legacy) {
+      await verifyDisk('Prompts', process.argv[process.argv.indexOf('--legacy-reinstall') + 1])
+      await removeComponent('Prompts', page.locator('[data-install-product="prompts"]'))
+      assert.equal(
+        (await readFile(path.join(root, 'Prompts/resources/my-retained-note.txt'), 'utf8')).trim(),
+        'legacy note',
+      )
+    }
+    for (const product of selected) {
       const row = page.locator(`[data-install-product="${product.toLowerCase()}"]`)
       await expect(row.getByRole('status')).toContainText(/未安装|Not installed/i)
     }
-    for (const product of products) {
+    for (const product of selected) {
       const row = page.locator(`[data-install-product="${product.toLowerCase()}"]`)
       await row.getByRole('button').click()
       await expect
@@ -158,18 +179,10 @@ try {
       await verifyDisk(product, version)
       console.log(`PASS settings installed ${product} ${version} in ${path.join(root, product)}`)
     }
-    if (process.argv.includes('--remove')) {
-      for (const product of products) {
+    if (legacy || process.argv.includes('--remove')) {
+      for (const product of selected) {
         const row = page.locator(`[data-install-product="${product.toLowerCase()}"]`)
-        await row.getByRole('button', { name: /卸载|Uninstall/i }).click()
-        await row.getByRole('button', { name: /确认卸载|Confirm uninstall/i }).click()
-        await expect(row.getByRole('status')).toContainText(/未安装|Not installed/i, {
-          timeout: 360000,
-        })
-        await assert.rejects(stat(path.join(root, product, 'resources/app/package.json')), {
-          code: 'ENOENT',
-        })
-        console.log(`PASS settings removed ${product}`)
+        await removeComponent(product, row)
       }
     }
   }

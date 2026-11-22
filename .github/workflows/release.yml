@@ -62,6 +62,17 @@ jobs:
             $process = Start-Process $installer -ArgumentList '/S /currentuser' -Wait -PassThru -WindowStyle Hidden
             if ($process.ExitCode -or (Get-ItemPropertyValue $registry $product) -ne (Join-Path $root $product)) { throw "Could not restore baseline $product" }
           }
+          $history = 'HKCU:\Software\FitBay\PreviousInstallations'
+          Remove-ItemProperty -LiteralPath $history -Name Prompts
+          $retained = Join-Path $root 'Prompts/resources/my-retained-note.txt'
+          Set-Content -LiteralPath $retained -Value 'legacy note'
+          node scripts/check-settings-installation.mjs $root --candidate --legacy-reinstall $previous
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ((Get-Content -LiteralPath $retained) -ne 'legacy note') { throw 'Previous uninstaller lost the note' }
+          Remove-Item -LiteralPath $retained
+          $installer = Join-Path $baseline "FitBay-Prompts-Setup-$previous-x64.exe"
+          $process = Start-Process $installer -ArgumentList '/S /currentuser' -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode) { throw 'Could not restore previous Prompts for batch upgrade' }
           node scripts/check-settings-installation.mjs $root --candidate --batch $previous
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-upgrade-data.mjs verify (Join-Path $root 'Music')
