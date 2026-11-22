@@ -1,3 +1,4 @@
+import { BackButton } from '../music/BackButton'
 import { SettingsGear, SettingsShell } from '../../src/renderer/src/app/ComponentSettings'
 import { WindowNewRegular } from '@fluentui/react-icons'
 import { useEffect, useRef, useState } from 'react'
@@ -5,9 +6,10 @@ import { createRoot } from 'react-dom/client'
 import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import './style.css'
 import { PromptConnectionSettings, ActionConnection } from './PromptConnections'
-import { FileBrowser, DiskImage, type Entry, type Listing } from './FileBrowser'
+import { DiskImage, type Entry, type Listing } from './FileBrowser'
 import { MarkdownPreview } from './MarkdownPreview'
 
+type Card = { name: string; title: string; category: string; skill: boolean; match: boolean }
 type Doc = { text: string; revision: string }
 type Hit = { name: string; folder: string; snippet: string }
 type State = {
@@ -35,6 +37,9 @@ declare global {
       choose(remember: boolean): Promise<void>
       default(): Promise<void>
       shortcut(value: string): Promise<void>
+      organize(root: string, name: string): Promise<string>
+      saveOrganized(root: string, text: string): Promise<string>
+      catalogue(query: string): Promise<Card[]>
       files(): Promise<string[]>
       read(root: string, name: string): Promise<Doc>
       save(root: string, name: string, revision: string, text: string): Promise<Doc>
@@ -157,7 +162,12 @@ function Library() {
     [entry, setEntry] = useState<Entry>(),
     [enlarged, enlarge] = useState(false),
     [companion, setCompanion] = useState(''),
-    [locationVersion, setLocationVersion] = useState(0),
+    [cards, setCards] = useState<Card[]>([]),
+    [filter, setFilter] = useState(''),
+    [purpose, setPurpose] = useState(''),
+    [organized, setOrganized] = useState(''),
+    [raw, setRaw] = useState(false),
+    [values, setValues] = useState<Record<string, string>>({}),
     [doc, setDoc] = useState<Doc>(),
     [draft, edit] = useState(''),
     [editMode, setEditMode] = useState(false),
@@ -303,10 +313,41 @@ function Library() {
     if (enlarged && imageDialog.current && !imageDialog.current.open)
       imageDialog.current.showModal()
   }, [enlarged])
+  const currentRoot = state?.root
+  // biome-ignore lint/correctness/useExhaustiveDependencies: disk and focus events invalidate the catalogue.
+  useEffect(() => {
+    let active = true
+    if (currentRoot)
+      void api
+        .catalogue(filter)
+        .then((rows) => {
+          if (!active) return
+          setDirectoryIssue('')
+          setCards(rows)
+          setEntry((old) => (old && !rows.some((c) => c.name === old.name) ? undefined : old))
+        })
+        .catch(() => {
+          if (active) {
+            setCards([])
+            setDirectoryIssue('目录不可用')
+          }
+        })
+    return () => {
+      active = false
+    }
+  }, [currentRoot, tick, filter])
+  const variablePattern = /\{\{([^{}\r\n]+)\}\}/g
+  const variables = [...new Set(Array.from(draft.matchAll(variablePattern), (m) => m[1].trim()))]
+  const result = draft.replace(variablePattern, (original, key: string) =>
+    Object.hasOwn(values, key.trim()) && values[key.trim()] ? values[key.trim()] : original,
+  )
   function discard() {
     return !dirty || window.confirm('放弃此文件未保存的修改？')
   }
   function reset(item?: Entry) {
+    setOrganized('')
+    setValues({})
+    setRaw(false)
     const next = item?.name || ''
     if (item?.type !== 'image' && item?.type !== 'text') enlarge(false)
     localStorage.removeItem(draftKey)
@@ -331,7 +372,7 @@ function Library() {
     await (mode === 'default' ? api.default() : api.choose(mode === 'remember'))
     if ((await api.state()).root !== previous) {
       reset()
-      setLocationVersion((v) => v + 1)
+      setCards([])
     }
     update()
   }
@@ -340,7 +381,7 @@ function Library() {
       {settings && (
         <main className="library prompt-settings">
           <SettingsShell
-            title="文件库设置"
+            title="提示词库设置"
             categories={[
               { id: 'directory', name: '目录' },
               { id: 'shortcut', name: '全局快捷键' },
@@ -399,9 +440,9 @@ function Library() {
       )}
       <main hidden={settings} className="library">
         <header>
-          <h1>文件库</h1>
+          <h1>提示词库</h1>
           <div className="tools">
-            <SettingsGear label="文件库设置" onClick={() => setSettings(true)} />
+            <SettingsGear label="提示词库设置" onClick={() => setSettings(true)} />
             <button
               type="button"
               className="fitbay-settings-action"
@@ -419,8 +460,11 @@ function Library() {
           </div>
         </header>
         <div className="tools">
-          <button type="button" onClick={() => void attempt(() => folder('temp'))}>
-            打开文件夹
+          <button
+            type="button"
+            onClick={() => void attempt(() => folder(state?.root ? 'temp' : 'remember'))}
+          >
+            选择提示词目录
           </button>
 
           <button
@@ -433,20 +477,44 @@ function Library() {
         </div>
         <small title={state?.root}>{state?.root || '请选择文件夹'}</small>
         <section className="split">
-          <FileBrowser
-            key={locationVersion}
-            root={state?.root || ''}
-            favorites={state?.favorites || []}
-            defaultRoot={state?.defaultRoot || ''}
-            tick={tick}
-            current={entry}
-            dirty={dirty}
-            select={reset}
-            allow={discard}
-            refresh={update}
-            issue={setDirectoryIssue}
-            enlarge={() => enlarge(true)}
-          />
+          <nav aria-label="提示词">
+            <input
+              aria-label="搜索提示词"
+              placeholder="搜索提示词"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <button type="button" onClick={() => setPurpose('')}>
+              全部用途
+            </button>
+            {[...new Set(cards.map((c) => c.category))].map((c) => (
+              <button
+                type="button"
+                key={c}
+                aria-pressed={purpose === c}
+                onClick={() => setPurpose(c)}
+              >
+                {c}
+              </button>
+            ))}
+            <div className="entries list">
+              {cards
+                .filter((c) => (!purpose || purpose === c.category) && c.match)
+                .map((c) => (
+                  <button
+                    type="button"
+                    key={c.name}
+                    onClick={() => {
+                      if (state && discard())
+                        reset({ root: state.root, name: c.name, label: c.title, type: 'text' })
+                    }}
+                  >
+                    {c.title}
+                    {c.skill ? ' · Skill' : ''}
+                  </button>
+                ))}
+            </div>
+          </nav>
           <article className={entry ? 'file-preview active' : 'file-preview'}>
             {enlarged && entry && (
               <dialog
@@ -466,7 +534,7 @@ function Library() {
                 </button>
                 {entry.type === 'image' ? (
                   <DiskImage file={entry} tick={tick} />
-                ) : /\.md$/i.test(name) ? (
+                ) : !raw && /\.md$/i.test(name) ? (
                   <MarkdownPreview text={draft} />
                 ) : (
                   <pre>{draft}</pre>
@@ -505,9 +573,67 @@ function Library() {
             )}
             {entry?.type === 'text' && fileRoot && (
               <>
-                <h2>{name}</h2>
+                <h2>{entry.label}</h2>
+                <BackButton
+                  onClick={() => {
+                    if (discard()) reset()
+                  }}
+                />
+                <button type="button" onClick={() => setRaw(!raw)}>
+                  {raw ? '结构化预览' : '查看原文'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void attempt(async () => {
+                      if (!(await window.promptConnections.snapshot()).own?.configured) {
+                        setCategory('api')
+                        setSettings(true)
+                        return
+                      }
+                      const text = await api.organize(fileRoot, name)
+                      if (live.current.root === fileRoot && live.current.name === name)
+                        setOrganized(text)
+                    })
+                  }
+                >
+                  AI 整理
+                </button>
+                {organized && (
+                  <section aria-label="整理预览">
+                    <MarkdownPreview text={organized} />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void attempt(async () => {
+                          const saved = await api.saveOrganized(fileRoot, organized)
+                          setOrganized('')
+                          say('已保存 ' + saved)
+                        })
+                      }
+                    >
+                      确认保存副本
+                    </button>
+                    <button type="button" onClick={() => setOrganized('')}>
+                      取消整理
+                    </button>
+                  </section>
+                )}
+                {variables.map((key) => (
+                  <label key={key}>
+                    {key}
+                    <input
+                      value={Object.hasOwn(values, key) ? values[key] : ''}
+                      onChange={(e) => setValues({ ...values, [key]: e.target.value })}
+                    />
+                  </label>
+                ))}
                 <div className="tools">
-                  <button type="button" onClick={() => setEditMode(!editMode)}>
+                  <button
+                    type="button"
+                    disabled={/(^|[\\/])SKILL\.md$/i.test(name)}
+                    onClick={() => setEditMode(!editMode)}
+                  >
                     {editMode ? '预览' : '编辑'}
                   </button>
                   <button
@@ -535,12 +661,12 @@ function Library() {
                     type="button"
                     onClick={() =>
                       void attempt(async () => {
-                        await api.copy(draft)
+                        await api.copy(result)
                         say('已复制')
                       })
                     }
                   >
-                    复制正文
+                    复制本次结果
                   </button>
                 </div>
                 {conflict && (
@@ -570,7 +696,7 @@ function Library() {
                     value={draft}
                     onChange={(e) => changeDraft(e.target.value)}
                   />
-                ) : /\.md$/i.test(name) ? (
+                ) : !raw && /\.md$/i.test(name) ? (
                   <MarkdownPreview text={draft} />
                 ) : (
                   <pre>{draft}</pre>

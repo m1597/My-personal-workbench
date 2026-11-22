@@ -8,6 +8,7 @@ await cp('examples/component-host', `${root}/host`, {
   recursive: true,
   filter: (file) => !/(?:^|[\\/])plugins$/.test(file),
 })
+await cp('components/toolkit/model.mjs', `${root}/host/prompt-model.mjs`)
 await mkdir(`${root}/host/toolkit-local`, { recursive: true })
 for (const file of ['local-files.mjs', 'word-pdf.ps1'])
   await cp('components/toolkit/' + file, `${root}/host/toolkit-local/${file}`)

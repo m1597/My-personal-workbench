@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "protocol": "0.1",
   "hostApi": "0.1",
-  "name": "文件库",
+  "name": "提示词库",
   "uiEntry": "index.html",
   "capabilities": ["view.transfer"],
   "modes": ["standalone", "docked"],
@@ -12,17 +12,17 @@
     {
       "target": "directory",
       "name": "目录",
-      "path": "文件库 → 目录"
+      "path": "提示词库 → 目录"
     },
     {
       "target": "shortcut",
       "name": "全局快捷键",
-      "path": "文件库 → 全局快捷键"
+      "path": "提示词库 → 全局快捷键"
     },
     {
       "target": "api",
       "name": "API 与模型",
-      "path": "文件库 → API 与模型"
+      "path": "提示词库 → API 与模型"
     }
   ]
 }

@@ -206,6 +206,55 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     ...library.state(),
     registrationError: registrationError || library.state().preferenceError,
   }))
+  handle('organize', 'editor', async (root, name) => {
+    const connection = settingsStore().resolve('prompts.model')
+    if (!connection) throw Error('请先配置 API 与模型')
+    const source = await library.read(root, name)
+    const { complete } = await import('./prompt-model.mjs')
+    const organized = await complete(
+      connection,
+      connection.key,
+      [
+        {
+          role: 'user',
+          content:
+            '请将以下提示词整理为清晰的 Markdown，保留模板变量和相对引用，直接返回整理后的内容。\n' +
+            source.text,
+        },
+      ],
+      new AbortController().signal,
+    )
+    // The confirmed copy lives at the catalogue root. Keep local Markdown links
+    // relative to their original assets even when the source was nested.
+    const base = path.dirname(name).replaceAll('\\', '/')
+    if (base === '.') return organized
+    let fence = ''
+    const relocate = (target) => {
+      const angled = target.startsWith('<')
+      const value = angled ? target.slice(1, -1) : target
+      if (!value || /^(?:[a-z][a-z0-9+.-]*:|[/#?])/i.test(value)) return target
+      const next = path.posix.join(base, value)
+      return angled || /\s/.test(next) ? '<' + next + '>' : next
+    }
+    return organized
+      .split('\n')
+      .map((line) => {
+        const marker = line.match(/^\s*(`{3,}|~{3,})/)
+        if (marker) {
+          if (!fence) fence = marker[1]
+          else if (marker[1].startsWith(fence)) fence = ''
+          return line
+        }
+        if (fence) return line
+        return line.replace(
+          /(\]\(\s*|^\s*\[[^\]]+\]:\s*)(<[^>]*>|[^\s)]+)/g,
+          (_, prefix, target) => prefix + relocate(target),
+        )
+      })
+      .join('\n')
+  })
+  handle('saveOrganized', 'editor', (root, text) => library.saveOrganized(root, text))
+  handle('catalogue', 'editor', (query) => library.catalogue(query))
   handle('choose', 'editor', async (remember) => {
     if (typeof remember !== 'boolean') throw Error('DENIED')
     const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })

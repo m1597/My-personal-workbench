@@ -21,6 +21,7 @@ const commonHostFiles = [
   'prompt-actions.mjs',
   'file-browser.mjs',
   'prompt-library.mjs',
+  'prompt-model.mjs',
   'prompt-palette.mjs',
   'prompt-preload.cjs',
   'music-thumbnails.mjs',

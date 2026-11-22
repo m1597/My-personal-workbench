@@ -20,7 +20,14 @@ export function MarkdownPreview({ text }: { text: string }) {
       )
     } else if (/^#{1,6}\s/.test(line))
       blocks.push(<h3 key={start}>{line.replace(/^#{1,6}\s+/, '')}</h3>)
-    else if (/^[-*+]\s/.test(line)) {
+    else if (/^\d+[.)]\s/.test(line)) {
+      const items = [<li key={start}>{line.replace(/^\d+[.)]\s+/, '')}</li>]
+      while (i < lines.length && /^\d+[.)]\s/.test(lines[i])) {
+        const key = i
+        items.push(<li key={key}>{lines[i++].replace(/^\d+[.)]\s+/, '')}</li>)
+      }
+      blocks.push(<ol key={start}>{items}</ol>)
+    } else if (/^[-*+]\s/.test(line)) {
       const items = [<li key={start}>{line.slice(2)}</li>]
       while (i < lines.length && /^[-*+]\s/.test(lines[i])) {
         const key = i
