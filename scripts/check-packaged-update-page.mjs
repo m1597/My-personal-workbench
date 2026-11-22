@@ -4,7 +4,9 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { prepareProduct } from './prepare-package.mjs'
 const root = await mkdtemp(path.resolve('tmp/updates-packaged-'))
-const runtime = path.resolve('.cache/fitbay-build/workbench/win-unpacked')
+const runtime = path.resolve(
+  process.env.FITBAY_TEST_RUNTIME || '.cache/fitbay-build/workbench/win-unpacked',
+)
 async function copyRuntime(source, dest) {
   await mkdir(dest, { recursive: true })
   for (const e of await readdir(source, { withFileTypes: true })) {
@@ -12,7 +14,13 @@ async function copyRuntime(source, dest) {
       dst = path.join(dest, e.name)
     if (src === path.join(runtime, 'resources', 'app')) continue
     if (e.isDirectory()) await copyRuntime(src, dst)
-    else await link(src, dst)
+    else
+      await link(
+        process.env.FITBAY_TEST_INSTALLED_RUNTIME
+          ? path.join(process.env.FITBAY_TEST_INSTALLED_RUNTIME, path.relative(runtime, src))
+          : src,
+        dst,
+      )
   }
 }
 await copyRuntime(runtime, root)
@@ -33,7 +41,7 @@ await writeFile(
   discovery,
   src.replace(
     'const directory = installDirectory(name)',
-    "if (id === 'music') {await realpath(process.env.TEST_MUSIC_ROOT);return process.env.TEST_MUSIC_ROOT}\n    const directory = installDirectory(name)",
+    "if (id === 'music') {await realpath(process.env.TEST_MUSIC_ROOT);return process.env.TEST_MUSIC_ROOT}\n    return undefined",
   ),
 )
 const pkg = JSON.parse(await readFile(path.join(productRoot, 'package.json'), 'utf8'))
@@ -56,16 +64,15 @@ const release = {
 }
 await writeFile(
   probe,
-  `const {net,shell}=require('electron');global.downloads=[];net.fetch=async url=>{if(url.endsWith('/releases/latest'))return Response.json(${JSON.stringify(release)});global.downloads.push(url);return new Response(${JSON.stringify(payload)})};shell.openPath=async file=>{require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'launch.json'))},JSON.stringify({file,downloads:global.downloads,data:require('node:fs').readFileSync(file,'utf8')}));return ''}`,
+  `const {net}=require('electron');global.downloads=[];net.fetch=async url=>{if(url.endsWith('/releases/latest'))return Response.json(${JSON.stringify(release)});global.downloads.push(url);return new Response(global.downloads.length===1?'damaged':${JSON.stringify(payload)})};global.fixtureInstall=async file=>{require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'launch.json'))},JSON.stringify({file,downloads:global.downloads,data:require('node:fs').readFileSync(file,'utf8')}));const fs=require('node:fs');const p=require('node:path').join(process.env.TEST_MUSIC_ROOT,'package.json');const pkg=JSON.parse(fs.readFileSync(p));pkg.version='0.2.0';fs.writeFileSync(p,JSON.stringify(pkg))}`,
 )
 const entry = path.join(productRoot, 'host/main.mjs')
 await writeFile(
   entry,
   "import '../../../fixture.cjs'\n" +
-    (await readFile(entry, 'utf8')).replace(
-      'if (!background) {\n          const poll',
-      'if (true) {\n          const poll',
-    ),
+    (await readFile(entry, 'utf8'))
+      .replace('await executeInstaller(file,', 'await globalThis.fixtureInstall(file,')
+      .replace('if (!background) {\n          const poll', 'if (true) {\n          const poll'),
 )
 const app = await electron.launch({
   executablePath: path.join(root, 'FitBay.exe'),
@@ -100,14 +107,17 @@ try {
   await b('工作台设置').click()
   await b('更新').click()
   await page.screenshot({ path: path.join(root, 'available.png') })
-  await b('更新 Music').click()
+  await b('更新全部').click()
+  await b('确认更新全部').click()
+  await expect(b('重试更新 Music')).toBeVisible()
+  await b('重试更新 Music').click()
   await expect
     .poll(
       async () =>
         JSON.parse(await readFile(path.join(root, 'launch.json'), 'utf8').catch(() => '{}'))
           .downloads,
     )
-    .toEqual([url])
+    .toEqual([url, url])
   const result = JSON.parse(await readFile(path.join(root, 'launch.json'), 'utf8'))
   expect(result.data).toBe(payload)
   console.log('PASS', root)

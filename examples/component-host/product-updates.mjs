@@ -84,7 +84,13 @@ export async function saveInstaller(update, temp, request = fetch, progress = ()
 }
 
 // Renderer callers supply a product id. Download URLs and hashes stay in the main process.
-export function updateCatalog({ inventory, launch, request = fetch, changed = () => {} }) {
+export function updateCatalog({
+  inventory,
+  launch,
+  previousSelfUpdate,
+  request = fetch,
+  changed = () => {},
+}) {
   const results = new Map()
   const operations = new Map()
   let lastChecked = null
@@ -100,7 +106,13 @@ export function updateCatalog({ inventory, launch, request = fetch, changed = ()
       const result = saved?.installed === row.version ? saved : undefined
       return {
         ...row,
-        operation: operations.get(row.id),
+        operation:
+          operations.get(row.id) ??
+          (row.id === 'workbench' &&
+          previousSelfUpdate &&
+          result?.update?.version === previousSelfUpdate
+            ? { stage: 'failed' }
+            : undefined),
         status: result?.status ?? (supportsUpdate(row.id) ? 'unchecked' : 'unsupported'),
         available: result?.update?.version ?? null,
       }
@@ -168,8 +180,11 @@ export function updateCatalog({ inventory, launch, request = fetch, changed = ()
     try {
       await report('downloading', 0)
       await launch(result.update, row.id, report)
+      const refreshed = await inventory()
+      if (refreshed.find((item) => item.id === row.id)?.version === result.update.version)
+        results.set(row.id, { installed: result.update.version, status: 'current' })
       report('done')
-      changed(await snapshot())
+      changed(state(refreshed))
     } catch {
       report('failed')
     }
@@ -188,7 +203,15 @@ export function updateCatalog({ inventory, launch, request = fetch, changed = ()
         .filter((r) => r.installable && r.status === 'available')
         .sort((a, b) => Number(a.id === 'workbench') - Number(b.id === 'workbench'))) {
         // Keep the workbench available for per-component retries.
-        if (row.id === 'workbench' && [...operations.values()].some((op) => op.stage === 'failed'))
+        if (
+          row.id === 'workbench' &&
+          rows.some(
+            (item) =>
+              item.id !== 'workbench' &&
+              item.status === 'available' &&
+              operations.get(item.id)?.stage === 'failed',
+          )
+        )
           break
         await runUpdate(row)
       }

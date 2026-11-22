@@ -6,6 +6,7 @@ import {
   installedToolkitRoot,
 } from './toolkit-launcher.mjs'
 import { componentInstallation, executeInstaller } from './component-installation.mjs'
+import { startSelfUpdate } from './self-update.mjs'
 import { installMusic } from './music-installer.mjs'
 import { updateCatalog, saveInstaller, productUpdater, supportsUpdate } from './product-updates.mjs'
 import { installedProducts, registeredProduct } from './installed-products.mjs'
@@ -503,7 +504,14 @@ else {
         if (!isShell(event)) throw Error('DENIED')
         return modifyProducts(() => componentSetup.uninstall(id))
       })
+      let previousSelfUpdate
+      try {
+        previousSelfUpdate = readFileSync(path.join(profile, 'self-update-target'), 'utf8')
+      } catch {
+        /* First launch. */
+      }
       const catalog = updateCatalog({
+        previousSelfUpdate,
         request: (...args) => net.fetch(...args),
         inventory: async () => {
           const rows = []
@@ -541,7 +549,25 @@ else {
           )
           await report('installing')
           if (id === 'workbench') {
-            if (await systemShell.openPath(file)) throw Error('Installer launch failed')
+            try {
+              if (
+                path.relative(
+                  await realpath(app.getAppPath()),
+                  (await installation.registered(id)) || '',
+                )
+              )
+                throw Error('Registration changed')
+              await startSelfUpdate({
+                file,
+                digest: update.digest,
+                version: update.version,
+                executable: process.execPath,
+                profile,
+              })
+            } catch (error) {
+              await rm(path.dirname(file), { recursive: true, force: true, maxRetries: 3 })
+              throw error
+            }
             app.quit()
           } else {
             try {

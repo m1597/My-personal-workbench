@@ -78,3 +78,18 @@ test('batch keeps the host alive after a component failure and retries only that
   await service.installAll()
   assert.deepEqual(launches, ['music', 'prompts', 'toolkit', 'prompts', 'workbench'])
 })
+
+test('a restarted host offers retry when a silent update left the original version', async () => {
+  const host = {
+    ...asset,
+    name: asset.name.replace('Music', 'Workbench'),
+    browser_download_url: asset.browser_download_url.replace('Music', 'Workbench'),
+  }
+  const service = updateCatalog({
+    previousSelfUpdate: '0.10.0',
+    inventory: async () => [{ id: 'workbench', version: '0.9.0', installable: true }],
+    request: async () => Response.json({ ...release, assets: [host] }),
+  })
+  await service.check()
+  assert.equal((await service.snapshot()).rows[0].operation.stage, 'failed')
+})

@@ -99,7 +99,9 @@ try {
   })
   await shell.getByRole('button', { name: '重试' }).first().click()
   await expect(shell.getByText(/已是最新/)).toHaveCount(1)
-  await expect(shell.getByText(/检查失败/)).toHaveCount(3)
+  await expect(shell.getByText(/检查失败/)).toHaveCount(
+    live.rows.filter((r) => r.status !== 'unsupported').length - 1,
+  )
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].setContentSize(920, 680),
   )
