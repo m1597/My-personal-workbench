@@ -103,6 +103,10 @@ foreach ($p in @('Workbench')+$components) {
   Write-Host "Verified real baseline $p $oldVersion at $dest"
   Set-Content -LiteralPath (Join-Path $dest 'existing-file.txt') -Value $p
 }
+if ($LegacyDir -and $Previous -eq '0.2.4') {
+  node scripts/check-settings-installation.mjs $oldRoot --candidate --reproduce-old
+  if ($LASTEXITCODE) { throw 'Mixed-version update defect was not reproduced' }
+}
 node scripts/check-upgrade-data.mjs seed $locations.Music
 if ($LASTEXITCODE) { throw 'Could not seed baseline data' }
 $foreign = $null

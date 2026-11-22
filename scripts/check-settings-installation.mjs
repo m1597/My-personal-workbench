@@ -100,7 +100,27 @@ try {
     assert.equal(pkg.fitbayProduct, product.toLowerCase())
     assert.equal(pkg.version, expected)
   }
-  if (process.argv.includes('--batch')) {
+  if (process.argv.includes('--reproduce-old')) {
+    await page.getByRole('button', { name: /^(更新|Updates)$/ }).click()
+    await page.getByRole('button', { name: /检查全部更新|Check all updates/i }).click()
+    for (const [id, name] of [
+      ['prompts', /提示词库|Prompt library/i],
+      ['toolkit', /工具集|Toolkit/i],
+    ]) {
+      const row = page.locator('.update-row').filter({ has: page.getByRole('heading', { name }) })
+      await expect(row).toContainText('0.2.1')
+      await row.getByRole('button', { name: /^(更新 |Update )/i }).click()
+      await expect(page.getByRole('alert')).toBeVisible()
+      await assert.rejects(
+        page.evaluate((id) => window.fitbayUpdates.install(id), id),
+        /DENIED/,
+      )
+    }
+    assert.equal(downloads.size, 0)
+    console.log(
+      'PASS reproduced both 0.2.1 update failures in real 0.2.4 Workbench: IPC rejected before download',
+    )
+  } else if (process.argv.includes('--batch')) {
     const previous = process.argv[process.argv.indexOf('--batch') + 1]
     for (const product of products)
       await verifyDisk(product, product === 'Music' ? previous : '0.2.1')
