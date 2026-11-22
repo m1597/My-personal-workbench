@@ -56,27 +56,29 @@ for (const mode of ['music', 'workbench']) {
           await field(name).press(key)
           await page.getByRole('button', { name: '保存' + name + '快捷键', exact: true }).click()
         }
-        await save(toggle, 'F8')
+        await save(toggle, 'F1')
         await save(next, 'Control+Shift+F9')
         await save(next, 'Control+Shift+F11')
         await expect(page.getByRole('status')).toContainText('已被占用')
+        await expect(field(next)).toHaveValue('Ctrl+Shift+F9')
         expect(
           await page.evaluate(async () => (await window.music.state()).prefs.shortcuts.next),
         ).toBe('Ctrl+Shift+F9')
-        await save('应用内下一首', 'F8')
+        await save('应用内下一首', 'F1')
         await expect(page.getByRole('status')).toContainText('已分配')
         await field(toggle).click()
         await field(toggle).press('Escape')
-        await expect(field(toggle)).toHaveValue('F8')
+        await expect(field(toggle)).toHaveValue('F1')
         await field(toggle)
           .locator('xpath=ancestor::form')
           .getByRole('button', { name: '恢复默认' })
           .click()
         await expect(field(toggle)).toHaveValue('Space')
+        await expect(field(next)).toHaveValue('Ctrl+Shift+F9')
         expect(
           await page.evaluate(async () => (await window.music.state()).prefs.shortcuts.next),
         ).toBe('Ctrl+Shift+F9')
-        await save(toggle, 'F10')
+        await save(toggle, 'F2')
         await page.getByRole('button', { name: '恢复全部 Music 默认快捷键' }).click()
       }
       await expect(field(toggle)).toHaveValue('Space')

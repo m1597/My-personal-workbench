@@ -29,8 +29,12 @@ export function ShortcutRecorder({
       if (await change(key)) {
         setValue(key)
         setHint('')
-      } else setHint(failure)
+      } else {
+        setValue(saved)
+        setHint(failure)
+      }
     } catch {
+      setValue(saved)
       setHint(failure)
     } finally {
       setBusy(false)

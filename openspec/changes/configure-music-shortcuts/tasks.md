@@ -20,3 +20,5 @@
 
 - [x] 3.1 平台维护公共录制控件，Music 接入并提供单项恢复和事务性组件全部恢复。
 - [x] 3.2 独立和停靠入口使用隔离配置实测 F8、Ctrl+Shift+F9、冲突、Escape、单项恢复、全部恢复、应用内关闭、全局开启、媒体键关闭后的重启及系统占用。脚本 scripts/check-music-shortcut-resets.mjs，四张截图在 tmp/music-shortcut-reset-S4CD7x。搜索焦点另见 2.1。
+
+- [x] 公共录制器在保存冲突时恢复旧显示。Music 独立及停靠入口验证单键 F1/F2、冲突保旧和单项、全部恢复。

@@ -13,3 +13,5 @@
 - 工作台设置搜索「全局快捷键」进入「提示词库 › 全局快捷键」，读到相同 F8 和启用状态。逐一切换三个分类，仅一项 aria-pressed，活动元素位于当前分类的具体控件。
 - 快捷键证据 tmp/prompt-shortcuts-LNQWgY，原位升级回归 tmp/prompt-cards-OC9h9T。复验命令为 node scripts/check-prompt-shortcuts.mjs 和 node scripts/check-prompt-catalogue.mjs。
 - 实测构建的 prompts/component.js SHA256 为 5292F80CFA880D14C8311F4A9D8BE6BBEBB53FCCFBB2775ECF47FCE8B4AAE7ED。build:app 与 build-component-prototype.mjs 分别执行成功，open-workbench.cmd --check 通过。全仓 check 遇到其他在途文件格式差异；单跑类型检查遇到 tests/edge-collapse.spec.ts:10 的空值错误。未跑远程 CI 或发行包验收。
+
+- [x] 实际录制 F1/F2，核对冲突保旧、重启读取和恢复默认。
