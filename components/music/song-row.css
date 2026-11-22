@@ -1,5 +1,4 @@
 [data-song-row][data-selected="true"] {
-  background-color: var(--colorSubtleBackgroundSelected);
   box-shadow: inset 3px 0 var(--colorBrandStroke1);
 }
 [data-song-row] {
