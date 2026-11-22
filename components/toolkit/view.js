@@ -1,3 +1,4 @@
+import { layoutTranslation } from './translated-diagram.js'
 import { settingsContents } from './settings-view.js'
 import { el, field, feedback } from './ui-dom.js'
 import { toolkitHome, glyph } from './tools-view.js'
@@ -144,7 +145,8 @@ async function screenView(s) {
 }
 async function result(s) {
   root.append(el('h1', s.image ? '截图助手' : '划词助手'))
-  if (s.image) root.append(picture(s.image, 'preview'))
+  const preview = s.image && picture(s.image, 'preview')
+  if (preview) root.append(preview)
   else root.append(el('pre', s.text))
   const prompt = el('textarea')
   prompt.placeholder = '输入问题'
@@ -174,7 +176,16 @@ async function result(s) {
     try {
       const answer = await api.ask({ mode, id, question })
       if (mode !== 'follow') history.replaceChildren()
-      history.append(el('h2', question || '回答'), el('pre', answer))
+      if (answer?.blocks) {
+        history.append(await layoutTranslation(s.image, answer.blocks))
+        preview.hidden = true
+      } else {
+        if (preview && mode !== 'follow') preview.hidden = false
+        history.append(
+          el('h2', question || (mode === 'explain' ? '解释' : '回答')),
+          el('pre', answer),
+        )
+      }
       output.hidden = false
       hasAnswer = true
       prompt.value = ''
@@ -244,16 +255,6 @@ api
       return
     }
     if (s.kind === 'result') return result(s)
-    if (s.kind === 'pin') {
-      root.className = 'pinned'
-      root.append(picture(s.image))
-    } else
-      root.append(
-        el('p', s.text),
-        button('关闭', () => api.dismiss()),
-      )
-  })
-  .catch((e) => {
     if (s.kind === 'color-result') {
       const rgb =
         'rgb(' +
@@ -278,6 +279,16 @@ api
       root.append(el('h1', '取色结果'), sample, actions, notice)
       return
     }
+    if (s.kind === 'pin') {
+      root.className = 'pinned'
+      root.append(picture(s.image))
+    } else
+      root.append(
+        el('p', s.text),
+        button('关闭', () => api.dismiss()),
+      )
+  })
+  .catch((e) => {
     root.append(notice)
     error(e)
   })

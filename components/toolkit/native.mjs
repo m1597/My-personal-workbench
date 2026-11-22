@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-export function readSelectionOrOcr(png, hwnd, signal) {
+export function readSelectionOrOcr(png, hwnd, signal, layout = false) {
   const script = fileURLToPath(new URL(png ? 'ocr.ps1' : 'selection.ps1', import.meta.url))
   return new Promise((resolve, reject) => {
     const process = execFile(
@@ -16,6 +16,7 @@ export function readSelectionOrOcr(png, hwnd, signal) {
         '-File',
         script,
         ...(hwnd ? [hwnd] : []),
+        ...(png && layout ? ['-Layout'] : []),
       ],
       { signal, windowsHide: true, timeout: 20000, maxBuffer: 1024 * 1024, encoding: 'utf8' },
       (err, out) => {

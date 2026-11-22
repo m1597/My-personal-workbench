@@ -303,3 +303,38 @@ fitbay-toolkit-choice .fui-Option {
   border-radius: 8px;
   border: 1px solid var(--stroke);
 }
+.translated-diagram {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.translated-diagram .row {
+  padding: 6px;
+}
+.translated-diagram button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #14202b;
+}
+.translated-diagram input[type="range"] {
+  min-width: 64px;
+  width: 80px;
+}
+.diagram-scroll {
+  overflow: auto;
+  max-height: 65vh;
+}
+.diagram-scroll svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: "Microsoft YaHei UI", sans-serif;
+}
+.diagram-scroll g[role="button"] {
+  cursor: pointer;
+}
+.block-detail {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding-inline: 8px;
+}

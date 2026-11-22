@@ -165,3 +165,8 @@ pre {
 .connections input::placeholder {
   color: #afbecd;
 }
+
+main:has(.translated-diagram),
+main:has(.translated-diagram) section {
+  min-width: 0;
+}

@@ -20,6 +20,7 @@ import { release } from 'node:os'
 import koffi from 'koffi'
 import { installLocalFiles, setToolInputs } from './local-files.mjs'
 import { nativeImage } from 'electron'
+import { translateImage } from './image-translation.mjs'
 import { complete } from './model.mjs'
 import { toolkitConnections } from './toolkit-connections.mjs'
 import { readSelectionOrOcr } from './native.mjs'
@@ -325,8 +326,8 @@ async function startToolkit() {
   handle('state', kinds, (s) => ({
     kind: s.kind,
     intent: s.intent,
-    text: s.text,
     hex: s.hex,
+    text: s.text,
     image: (s.full || s.image)?.toDataURL(),
     settings:
       s.kind === 'home'
@@ -594,6 +595,24 @@ async function startToolkit() {
       const follow = mode === 'follow' && s.history.length
       const route = follow ? s.route : image ? 'vision' : 'translation'
       const service = await connections.resolve(route)
+      if (mode === 'translate' && s.image) {
+        let blocks
+        try {
+          blocks = await translateImage(selected(s), service, s.abort.signal)
+        } catch (error) {
+          if (/HTTP (401|403)\b/.test(error.message))
+            throw Error('TOOLKIT_CONFIG_translation ' + error.message)
+          throw error
+        }
+        const original = blocks.map((b) => b.text).join('\n')
+        const translated = blocks.map((b) => b.zh).join('\n')
+        s.history = [
+          { role: 'user', content: original },
+          { role: 'assistant', content: translated },
+        ]
+        s.route = 'translation'
+        return { blocks }
+      }
       const history = follow ? s.history : []
       let content = prompt
       if (!follow) {
