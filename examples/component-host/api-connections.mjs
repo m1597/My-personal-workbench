@@ -252,11 +252,19 @@ export function openConnections(profile, legacyVault, { request = fetch } = {}) 
         request,
       )
       const models = await planModels(record, request).catch(() => [])
-      const chosen =
-        models.find((m) => m.id === direct?.model && (use !== 'toolkit.vision' || m.vision)) ??
-        models.find((m) => use !== 'toolkit.vision' || m.vision)
       return transaction(() => {
         if ((effective(use)?.id ?? null) !== expectedId) throw Error('连接已变化，请重试')
+        if (
+          prior &&
+          !db
+            .prepare('SELECT 1 FROM plan_accounts WHERE id=? AND credential IS ? AND lease=0')
+            .get(direct.id, prior.credential)
+        )
+          throw Error('授权已变化，请重试')
+        const needVision =
+          use === 'toolkit.vision' || (prior && row('toolkit.vision')?.id === direct.id)
+        const compatible = models.filter((m) => !needVision || m.vision)
+        const chosen = compatible.find((m) => m.id === direct?.model) ?? compatible[0]
         const id = prior ? direct.id : randomUUID()
         db.prepare(
           "INSERT INTO connections VALUES(?,?,?,NULL,'responses') ON CONFLICT(id) DO UPDATE SET model=excluded.model",
