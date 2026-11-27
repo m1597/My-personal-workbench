@@ -41,7 +41,7 @@ function Read-FitBayClipboardSelection([long]$TargetWindow,[scriptblock]$isFocus
         try {
             $selection = $clipboard::GetText()
             if (!(& $isFocused) -or [SelectionWindow]::GetClipboardSequenceNumber() -ne $after) { return }
-            $result=$selection
+            if ($selection.Length -le 120000) { $result=$selection }
         } finally {
             if ([SelectionWindow]::GetClipboardSequenceNumber() -eq $after) {
                 if ($null -ne $previous) { $clipboard::SetDataObject($snapshot,$true,5,30) }

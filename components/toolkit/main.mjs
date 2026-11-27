@@ -265,14 +265,17 @@ async function startToolkit() {
         width: Math.round(d.size.width * d.scaleFactor),
         height: Math.round(d.size.height * d.scaleFactor),
       }
-      const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size })
+      const sources = await desktopCapturer
+        .getSources({ types: ['screen'], thumbnailSize: size })
+        .catch(() => [])
       const source =
         sources.find((s) => s.display_id === String(d.id)) ||
         (sources.length === 1 && screen.getAllDisplays().length === 1 && !sources[0].display_id
           ? sources[0]
           : null)
       let full = source?.thumbnail
-      const probe = full?.resize({ width: 24, height: 24 }).toBitmap()
+      const probe =
+        full && !full.isEmpty() ? full.resize({ width: 24, height: 24 }).toBitmap() : null
       if (!probe?.some((value, index) => index % 4 !== 3 && value > 2)) {
         full = nativeImage.createFromBuffer(
           await readDisplayPixels(screen.dipToScreenRect(null, d.bounds)),
