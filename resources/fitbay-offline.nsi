@@ -70,6 +70,19 @@ SectionEnd
 !macroend
 
 Function .onInit
+  SetRegView 64
+  ReadRegStr $0 HKCU "Software\FitBay\Installations" "Workbench"
+  ; NSIS removes its special trailing /D= argument from GetParameters.
+  ; Preserve that explicit override, including paths with spaces.
+  System::Call 'kernel32::GetCommandLineW() p.r1'
+  System::Call 'shlwapi::StrStrIW(p r1, w " /D=") p.r1'
+  ${If} $0 == ""
+  ${AndIf} $1 == 0
+    ReadRegStr $0 HKCU "Software\FitBay\PreviousInstallations" "Workbench"
+    ${If} $0 != ""
+      StrCpy $INSTDIR "$0"
+    ${EndIf}
+  ${EndIf}
   ${GetParameters} $0
   !insertmacro SelectRequested MUSIC ${MusicSection}
   !insertmacro SelectRequested PROMPTS ${PromptsSection}

@@ -103,17 +103,31 @@ async function writeInstallerInclude(output, appOutDir) {
     ) {
       lines.push('Delete "$INSTDIR\\resources\\app\\music-offline-setup.exe"')
     }
-    if (!relative) lines.push(`Delete "$INSTDIR\\\${UNINSTALL_FILENAME}"`)
-    lines.push(`RMDir "${target}"`, `${skip}:`)
+    if (relative) lines.push(`RMDir "${target}"`)
+    lines.push(`${skip}:`)
   }
   await directory('')
-  // The installer template defines UNINSTALL_FILENAME after the destination validator.
-  // biome-ignore lint/suspicious/noTemplateCurlyInString: NSIS expands this product name.
-  checkVacantFile('$INSTDIR\\Uninstall FitBay ${FITBAY_SLOT}.exe')
+  const productName = path.basename(path.dirname(output))
+  const executable =
+    productName === 'workbench'
+      ? 'FitBay'
+      : 'FitBay ' + productName[0].toUpperCase() + productName.slice(1)
+  checkVacantFile(`$INSTDIR\\Uninstall ${executable}.exe`)
   lines.push(
+    `IfFileExists "$INSTDIR\\${executable}.exe" fitbayIncompleteRemoval`,
+    'IfFileExists "$INSTDIR\\resources\\app\\package.json" fitbayIncompleteRemoval',
+    '!insertmacro FitBaySuite Detach',
+    `Delete "$INSTDIR\\\${UNINSTALL_FILENAME}"`,
+    'RMDir "$INSTDIR"',
+    'Goto fitbayRemovalDone',
+    'fitbayIncompleteRemoval:',
+    'SetErrorLevel 2',
+    'Quit',
+    'fitbayRemovalDone:',
     '!macroend',
     ...checks,
     '!macroend',
+    `!define FITBAY_SUITE_SCRIPT "${quotePath(path.resolve('resources/fitbay-suite.ps1'))}"`,
     `!include "${quotePath(path.resolve('resources/fitbay-install.nsh'))}"`,
   )
   await writeFile(output, `\ufeff${lines.join('\r\n')}\r\n`)

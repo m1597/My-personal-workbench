@@ -64,7 +64,7 @@ export async function registeredProduct(id) {
   }
 }
 
-export async function installedProducts(applicationRoot) {
+export async function installedProducts(applicationRoot, registered = registeredProduct) {
   const { fitbayProduct: product } = JSON.parse(
     await readFile(path.join(applicationRoot, 'package.json'), 'utf8'),
   )
@@ -73,13 +73,15 @@ export async function installedProducts(applicationRoot) {
     if (id === product) return applicationRoot
     if (!Object.hasOwn(names, id)) return
     if (product === 'workbench') {
+      const workbench = await registered('workbench')
+      if (workbench && !path.relative(workbench, applicationRoot)) return registered(id)
       const parent = await realpath(path.resolve(applicationRoot, '../..'))
       for (const name of [names[id], 'FitBay ' + names[id]]) {
         const root = await productAt(path.join(parent, name), id, true)
         if (root) return root
       }
     }
-    return registeredProduct(id)
+    return registered(id)
   }
-  return { product, find, registered: registeredProduct }
+  return { product, find, registered }
 }

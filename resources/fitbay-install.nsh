@@ -23,12 +23,12 @@
       ${If} $0 != ""
         StrCpy $INSTDIR "$0\${FITBAY_SLOT}"
       ${EndIf}
-      ReadRegStr $0 HKCU "${FITBAY_HISTORY}" "${FITBAY_SLOT}"
-      ${If} $0 != ""
-      ${AndIf} ${FileExists} "$0\."
-        StrCpy $INSTDIR "$0"
-      ${EndIf}
     !endif
+    SetRegView 64
+    ReadRegStr $0 HKCU "${FITBAY_HISTORY}" "${FITBAY_SLOT}"
+    ${If} $0 != ""
+      StrCpy $INSTDIR "$0"
+    ${EndIf}
   !endif
 !macroend
 
@@ -46,8 +46,41 @@
   !insertmacro setInstallModePerUser
 !macroend
 
+!macro FitBayLock
+  System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\FitBaySplitInstaller") p.r1 ?e'
+  Pop $0
+  ${If} $1 == 0
+  ${OrIf} $0 == 183
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+!macroend
+
+!macro FitBaySuite operation
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\fitbay-suite.ps1" "${FITBAY_SUITE_SCRIPT}"
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\fitbay-suite.ps1" -Operation ${operation} -Slot ${FITBAY_SLOT} -Directory "$INSTDIR"'
+  Pop $0
+  ${If} $0 != 0
+    MessageBox MB_OK|MB_ICONSTOP "FitBay 安装登记未能核对或更新，请检查安装目录并重试。" /SD IDOK
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+!macroend
+
 !macro customUnInit
   !insertmacro FitBayCurrentUserOnly
+  ${StdUtils.TestParameter} $0 "delete-app-data"
+  ${If} $0 == "true"
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+  ${IfNot} ${isUpdated}
+    ${StdUtils.TestParameter} $0 "fitbay-suite-child"
+    ${If} $0 != "true"
+      !insertmacro FitBayLock
+    ${EndIf}
+  ${EndIf}
 !macroend
 
 !ifndef BUILD_UNINSTALLER
@@ -149,13 +182,11 @@
       !insertmacro rejectOverlap "$1"
     ${EndIf}
 
-    !if "${FITBAY_SLOT}" != "Workbench"
-      ReadRegStr $1 HKCU "${FITBAY_HISTORY}" "${FITBAY_SLOT}"
-      ${If} $1 == $INSTDIR
-        !insertmacro FitBayCheckReinstallFiles
-        Goto validPath
-      ${EndIf}
-    !endif
+    ReadRegStr $1 HKCU "${FITBAY_HISTORY}" "${FITBAY_SLOT}"
+    ${If} $1 == $INSTDIR
+      !insertmacro FitBayCheckReinstallFiles
+      Goto validPath
+    ${EndIf}
 
     ; Use FindFirst so that hidden files and empty subdirectories count as contents too.
     FindFirst $0 $1 "$2\*"
@@ -187,13 +218,7 @@
       ReadRegStr $fitbayPreviousDirectory HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
     !endif
     ; Hold the handle until this installer exits so two products cannot claim one empty folder.
-    System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\FitBaySplitInstaller") p.r1 ?e'
-    Pop $0
-    ${If} $1 == 0
-    ${OrIf} $0 == 183
-      SetErrorLevel 2
-      Quit
-    ${EndIf}
+    !insertmacro FitBayLock
     ${If} ${Silent}
       Call FitBayValidateDestination
     ${EndIf}
@@ -229,19 +254,14 @@
   !endif
   SetRegView 64
   WriteRegStr HKCU "${FITBAY_REG}" "${FITBAY_SLOT}" "$INSTDIR"
+  !insertmacro FitBaySuite Register
 !macroend
 
 !macro customUnInstall
-  SetRegView 64
-  ReadRegStr $0 HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
-  ${If} $0 != ""
-    GetFullPathName $0 "$0\."
-    GetFullPathName $1 "$INSTDIR\."
-    ${If} $0 == $1
-      !if "${FITBAY_SLOT}" != "Workbench"
-        WriteRegStr HKCU "${FITBAY_HISTORY}" "${FITBAY_SLOT}" "$1"
-      !endif
-      DeleteRegValue HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
+  ${IfNot} ${isUpdated}
+    ${StdUtils.TestParameter} $0 "fitbay-suite"
+    ${If} $0 == "true"
+      !insertmacro FitBaySuite RemoveSuite
     ${EndIf}
   ${EndIf}
 !macroend
