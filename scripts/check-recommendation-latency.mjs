@@ -288,6 +288,7 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}
   await mockRequests()
   await page.evaluate(() => window.music.configureModel('deepseek', 'fixture', 'fixture', false))
   await openDiscovery(page, true)
+  await page.locator('#music-description').fill('测试来源恢复')
   async function checkTransferFallback() {
     const progress = page.locator('.music-batch-status [role="status"]')
     for (const song of ['超时换源', '单源恢复']) {
