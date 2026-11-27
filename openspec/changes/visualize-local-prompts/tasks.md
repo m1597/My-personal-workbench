@@ -21,3 +21,9 @@
 编辑器的专用 preload 提供 `visual(root,name,generate)`。仅显式生成时解析有效的 `prompts.model` 并请求模型；结构在本地校验后缓存于 profile 的 `prompt-library/visuals-v1`。缓存按路径区分，以原文修订号判定是否可用。无缓存读取返回空视图，过期返回 `stale: true`；模型错误、无效引用或并发修改均可重新生成。`exportVisual(root,name)` 读取当前有效版本，系统对话框取消返回 false，成功返回 true。
 
 本组功能提交 `d59f28e`。两个暂存产品的渲染入口复验通过，记录为 `tmp/staged-visual-Dpp0Bf`。类型检查与两个 OpenSpec 严格校验通过。全仓 `npm run check` 在六份已有 `docs/changes` 文档的格式检查停止，完整日志见 `tmp/visual-check.log`。桌面 FitBay.cmd 当前指向 `D:/Desktop/Projects/FitBay/workbench/scripts/open-workbench.cmd`；由集成负责人将本提交纳入该构建。本组未执行发行、远程 CI 或安装器验收。
+
+## 2026-11-27 布局可靠性
+
+- [x] 用分窗样例的连续逐字引用复现同一行 6 节点成功、7 和 24 节点失败。流程转换为三列多行；紧凑布局容纳不了的原句使用按行换行的纵向布局，所有方向、分支、长边和回路保留。恢复在宿主本地完成。
+- [x] `node scripts/check-prompt-layout.mjs` 实测六种组合。分别生成 6、7、24 个节点的紧凑及长文案流程，包含首末双向边。由真实组件打开图，点首节点核对引用、放大到 150%、通过导出按钮写 HTML 并另窗打开。核对节点和边数、SVG 一致性与标签边界，包含 40 个大写 W 的宽字符样本。变更后模拟连接失败，旧图仍可读，过期图无法作为新图导出。
+- [x] 并发测试让 A 的回环响应延迟至切换到 B 之后返回，确认 B 的 150% 缩放与选中原句保留。回环数据与真实模型验收分开记录。证据目录 `tmp/prompt-visuals-trGfnM`。

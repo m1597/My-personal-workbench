@@ -61,7 +61,23 @@ export function PromptVisual({
   }
   return (
     <section aria-label="提示词可视化">
+      {error && (
+        <p role="status">
+          {error}
+          {error.includes('配置 API') && (
+            <button type="button" onClick={configure}>
+              配置 API 与模型
+            </button>
+          )}
+        </p>
+      )}
       {view?.stale && <p>原文已修改，可视化待更新。</p>}
+      {(!view?.html || view.stale) && (
+        <button type="button" disabled={busy || !view} onClick={() => void generate()}>
+          {busy ? '正在生成…' : view?.stale ? '更新可视化' : '生成可视化'}
+        </button>
+      )}
+      {view?.stale && view.html && <small>上次生成的图</small>}
       {!view?.html && (/\.md$/i.test(name) ? <MarkdownPreview text={text} /> : <pre>{text}</pre>)}
       {view?.html ? (
         <>
@@ -120,7 +136,12 @@ export function PromptVisual({
                   ))}
             </div>
           </div>
-          {offset >= 0 && (
+          {view.stale && quote && (
+            <blockquote>
+              <mark>{quote}</mark>
+            </blockquote>
+          )}
+          {!view.stale && offset >= 0 && (
             <blockquote>
               {text.slice(Math.max(0, offset - 40), offset)}
               <mark>{quote}</mark>
@@ -129,6 +150,7 @@ export function PromptVisual({
           )}
           <button
             type="button"
+            disabled={view.stale}
             onClick={async () => {
               try {
                 await window.promptLibrary.exportVisual(root, name)
@@ -140,21 +162,7 @@ export function PromptVisual({
             导出 HTML
           </button>
         </>
-      ) : (
-        <button type="button" disabled={busy || !view} onClick={() => void generate()}>
-          {busy ? '正在生成…' : view?.stale ? '更新可视化' : '生成可视化'}
-        </button>
-      )}
-      {error && (
-        <p role="status">
-          {error}
-          {error.includes('配置 API') && (
-            <button type="button" onClick={configure}>
-              配置 API 与模型
-            </button>
-          )}
-        </p>
-      )}
+      ) : null}
     </section>
   )
 }

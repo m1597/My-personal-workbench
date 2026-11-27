@@ -29,11 +29,11 @@ function check(data, text) {
     return q
   }
   const nodes = data.nodes.map((n) => ({
-    quote: quote(n.quote),
-    group: groups.has(n.group) ? n.group : '其他',
+    quote: quote(n?.quote),
+    group: groups.has(n?.group) ? n.group : '其他',
   }))
   const edges = data.edges.map((e) => {
-    if (!Number.isInteger(e.from) || !nodes[e.from] || !Number.isInteger(e.to) || !nodes[e.to])
+    if (!Number.isInteger(e?.from) || !nodes[e.from] || !Number.isInteger(e.to) || !nodes[e.to])
       throw Error('流程连接无效')
     return { from: e.from, to: e.to, quote: quote(e.quote) }
   })
@@ -68,6 +68,107 @@ document.querySelector('input').oninput = event => {
 }
 `
 const scriptHash = createHash('sha256').update(script).digest('base64')
+// A single column leaves both sides free for return and forward routes. Each edge
+// gets a separate rail; arbitrary branches and self-loops stay outside the labels.
+function routedWorkflow(nodes, edges) {
+  const margin = 30 + edges.length * 10
+  const boxWidth = 380
+  const right = margin + boxWidth
+  let y = 20
+  const boxes = nodes.map(({ quote }) => {
+    const lines = ['']
+    let units = 0
+    for (const char of quote) {
+      const width = /[\x20-\x7e]/.test(char) && !/[MW@%]/.test(char) ? 12 : 20
+      if (char === '\n' || units + width > boxWidth - 32) {
+        lines.push('')
+        units = 0
+      }
+      if (char !== '\n') {
+        lines[lines.length - 1] += char
+        units += width
+      }
+    }
+    const top = y
+    const height = Math.max(54, lines.length * 22 + 24)
+    y += height + 36
+    return { top, height, lines }
+  })
+  const paths = edges.map(({ from, to, quote }, i) => {
+    const forward = to > from
+    const side = forward ? right : margin
+    const rail = side + (forward ? 1 : -1) * (18 + i * 10)
+    const a = boxes[from],
+      b = boxes[to]
+    const start = a.top + a.height / 2 + 7,
+      end = b.top + b.height / 2 - 7
+    return (
+      '<path data-edge-from="n' +
+      from +
+      '" data-edge-to="n' +
+      to +
+      '" class="' +
+      (forward ? 'a-default' : 'a-dashed') +
+      '" d="M ' +
+      side +
+      ' ' +
+      start +
+      ' H ' +
+      rail +
+      ' V ' +
+      end +
+      ' H ' +
+      side +
+      '" marker-end="url(#route-arrow)"><title>' +
+      escapeHtml(quote) +
+      '</title></path>'
+    )
+  })
+  const cards = boxes.map(
+    ({ top, height, lines }, i) =>
+      '<g data-node-id="n' +
+      i +
+      '" tabindex="0" role="button" aria-label="' +
+      escapeHtml(nodes[i].quote) +
+      '"><rect class="c-backend" x="' +
+      margin +
+      '" y="' +
+      top +
+      '" width="' +
+      boxWidth +
+      '" height="' +
+      height +
+      '" rx="8"/><text class="t-primary" font-size="16">' +
+      lines
+        .map(
+          (line, j) =>
+            '<tspan x="' +
+            (margin + 14) +
+            '" y="' +
+            (top + 26 + j * 22) +
+            '">' +
+            escapeHtml(line) +
+            '</tspan>',
+        )
+        .join('') +
+      '</text></g>',
+  )
+  const width = right + margin
+  return (
+    '<svg data-node-ui="" viewBox="0 0 ' +
+    width +
+    ' ' +
+    y +
+    '" width="' +
+    width +
+    '" height="' +
+    y +
+    '"><defs><marker id="route-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="m-default" d="M0 0L10 5L0 10Z"/></marker></defs>' +
+    paths.join('') +
+    cards.join('') +
+    '</svg>'
+  )
+}
 function render(data, text, name) {
   const { nodes, edges, kind } = data
   const card = (n, i) => '<button data-ref="n' + i + '">' + escapeHtml(n.quote) + '</button>'
@@ -77,13 +178,16 @@ function render(data, text, name) {
       schema_version: 2,
       diagram_type: 'workflow',
       meta: { title: '流程', output: 'prompt.html', locale: 'zh-CN', legend: { mode: 'hidden' } },
-      lanes: [{ id: 'steps', label: '流程' }],
+      lanes: Array.from({ length: Math.ceil(nodes.length / 3) }, (_, row) => ({
+        id: 'steps' + row,
+        label: '流程 ' + (row + 1),
+      })),
       nodes: nodes.map((n, col) => ({
         id: 'n' + col,
-        lane: 'steps',
-        col,
+        lane: 'steps' + Math.floor(col / 3),
+        col: col % 3,
         type: 'backend',
-        label: [...n.quote].slice(0, 16).join(''),
+        label: n.quote,
         width: 240,
       })),
       edges: edges.map((e, i) => ({
@@ -93,15 +197,25 @@ function render(data, text, name) {
         variant: e.to <= e.from ? 'dashed' : 'default',
       })),
     }
-    const compiled = compileWorkflow({ workflow })
-    if (!compiled.ok) throw Error('流程布局未通过本地校验，请重试')
+    let svg
+    // Archify's compact labels have a fixed text area. Full quotes need wrapped rows.
+    if (nodes.every((n) => [...n.quote].length <= 12 && !n.quote.includes('\n'))) {
+      try {
+        const compiled = compileWorkflow({ workflow })
+        if (compiled.ok) svg = compiled.svg
+      } catch {
+        /* geometry rejected: route locally using the same verified data */
+      }
+    }
+    if (!svg) svg = routedWorkflow(nodes, edges)
+    const diagramWidth = Number(svg.match(/viewBox="0 0 (\d+(?:\.\d+)?)/)?.[1]) || 660
     body =
-      compiled.svg.replace(
+      svg.replace(
         /<svg\b[^>]*>/,
         (tag) =>
           tag.replace(/^<svg\b/, '<svg xmlns="http://www.w3.org/2000/svg"') +
           '<style>svg[data-node-ui]{min-width:' +
-          Math.max(580, nodes.length * 220) +
+          diagramWidth +
           'px}svg[data-node-ui] text[data-node-label]{font-size:16px}svg[data-node-ui]{--mask:#24323e;--backend-stroke:#82a9ca;--lane-stroke:#526d87}.c-backend{fill:#334c60;stroke:#82a9ca}.t-primary{fill:#f5f8fc}.t-muted{fill:#bdcddd}.c-lane,.c-mask{fill:#24323e}.c-grid{stroke:#425260;fill:none}.a-default,.a-dashed{stroke:#91c5ee;fill:none;stroke-width:2}.a-dashed{stroke-dasharray:6 4}.m-default,.m-dashed{fill:#91c5ee}.s-backend{color:#a1cfff;fill:currentColor}[data-node-id]{cursor:pointer}</style>',
       ) +
       '<section>' +
@@ -171,11 +285,29 @@ export function promptVisuals(profile, library, model) {
         /* regenerate a damaged cache */
       }
     }
-    if (!generate) return { html: '', stale: !!stored }
+    if (!generate) {
+      if (stored?.data) {
+        try {
+          const previous = [...stored.data.nodes, ...stored.data.edges]
+            .map((n) => n.quote)
+            .join('\n')
+          return { ...render(check(stored.data, previous), previous, name), stale: true }
+        } catch {
+          /* unusable old cache */
+        }
+      }
+      return { html: '', stale: !!stored }
+    }
     const taskKey = key + doc.revision
     if (pending.has(taskKey)) return pending.get(taskKey)
     const work = (async () => {
-      const raw = await model(instruction, doc.text)
+      let raw
+      try {
+        raw = await model(instruction, doc.text)
+      } catch (error) {
+        if (String(error?.message).includes('配置 API')) throw Error('请先配置 API 与模型')
+        throw Error('模型连接失败，请检查连接或服务状态')
+      }
       let parsed
       try {
         parsed = JSON.parse(
@@ -188,11 +320,18 @@ export function promptVisuals(profile, library, model) {
         throw Error('模型没有返回有效结构')
       }
       const data = check(parsed, doc.text)
-      const rendered = render(data, doc.text, name)
-      if ((await library.read(root, name)).revision !== doc.revision)
-        throw Error('生成期间原文已修改，请重新生成')
+      let rendered
+      try {
+        rendered = render(data, doc.text, name)
+      } catch {
+        throw Error('本地布局失败，已保留上次可用图及原文')
+      }
+      async function currentRevision() {
+        if ((await library.read(root, name)).revision !== doc.revision)
+          throw Error('生成期间原文已修改，请重新生成')
+      }
       await mkdir(dir, { recursive: true })
-      await atomicWrite(file, JSON.stringify({ revision: doc.revision, data }))
+      await atomicWrite(file, JSON.stringify({ revision: doc.revision, data }), currentRevision)
       return { ...rendered, stale: false }
     })()
     pending.set(taskKey, work)

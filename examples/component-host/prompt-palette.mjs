@@ -237,7 +237,12 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     return complete(
       connection,
       connection.key,
-      [{ role: 'user', content: instruction + '\n原文如下\n' + text }],
+      ['chat', 'responses'].includes(connection.protocol || 'chat')
+        ? [
+            { role: 'system', content: instruction },
+            { role: 'user', content: text },
+          ]
+        : [{ role: 'user', content: instruction + '\n文档数据：' + JSON.stringify({ text }) }],
       new AbortController().signal,
     )
   })
@@ -245,8 +250,8 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
   handle('autoVisual', 'editor', library.autoVisual)
   handle('importText', 'editor', library.importText)
   handle('exportVisual', 'editor', async (root, name) => {
-    const { html } = await visuals(root, name, false)
-    if (!html) throw Error('请先生成当前版本的可视化')
+    const { html, stale } = await visuals(root, name, false)
+    if (!html || stale) throw Error('请先生成当前版本的可视化')
     const choice = await dialog.showSaveDialog({
       defaultPath: path.parse(name).name + '.html',
       filters: [{ name: 'HTML', extensions: ['html'] }],
