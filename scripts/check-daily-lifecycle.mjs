@@ -395,6 +395,9 @@ for (const title of ['回收失败', '已有副本']) {
     .prepare('INSERT INTO pending_trash(local,file,lyric) VALUES(?,?,?)')
     .run(id, file, lyricPath(file))
 }
+// The OS previously acknowledged recycling this path, then a file reappeared
+// before restart. Keep the existing library membership and matching sidecar.
+journal.db.prepare('UPDATE pending_trash SET recycled=1 WHERE local=?').run(tracks['已有副本'].id)
 await unlink(tracks['回收失败'].file)
 journal.db.close()
 const restarted = await launch()

@@ -36,9 +36,11 @@ const safeName = (name) =>
 export async function recyclableLyrics(db, audio) {
   const lyric = await ownedLyrics(db, audio)
   if (!lyric) return null
-  const other = db.prepare(
-    'SELECT 1 FROM lyric_files WHERE file=? COLLATE NOCASE AND audio<>? COLLATE NOCASE LIMIT 1',
-  ).get(lyric, audio)
+  const other = db
+    .prepare(
+      'SELECT 1 FROM lyric_files WHERE file=? COLLATE NOCASE AND audio<>? COLLATE NOCASE LIMIT 1',
+    )
+    .get(lyric, audio)
   return other || (await hasOtherRecording(audio)) ? null : lyric
 }
 async function hasOtherRecording(audio) {
@@ -99,17 +101,18 @@ async function finishTrash(store, row, trash) {
 export async function recoverTrash(store, forget, trash) {
   for (const row of store.db.prepare('SELECT * FROM pending_trash').all()) {
     const missing = await confirmedMissing(row.file)
-    if (!row.recycled && !missing) {
-      if (stat(row.file)) store.db.prepare('DELETE FROM pending_trash WHERE local=?').run(row.local)
+    if (!missing) {
+      // A replacement may have appeared at the original path before restart.
+      // A disconnected volume must keep the journal until it can be checked.
+      const existing = await lstat(row.file).catch(() => null)
+      if (existing) store.db.prepare('DELETE FROM pending_trash WHERE local=?').run(row.local)
       continue
     }
     if (
       store.db.prepare('SELECT 1 FROM local_tracks WHERE id=? AND file=?').get(row.local, row.file)
     )
       forget([row.local])
-    if (missing) await finishTrash(store, row, trash).catch(() => {})
-    else if (stat(row.file))
-      store.db.prepare('DELETE FROM pending_trash WHERE local=?').run(row.local)
+    await finishTrash(store, row, trash).catch(() => {})
   }
 }
 export async function trashAudio(store, row, lyric, trash, forget) {
@@ -415,13 +418,17 @@ export async function sortFavorite(store, id, manualDirectory, onMove) {
 export async function retireOrphanLyrics(store, trash, signal) {
   const directory = store.get('music-recommend-dir')
   const db = store.db
-  if (!directory || !await safeDir(directory).catch(() => false) ||
-      !db.prepare("SELECT 1 FROM sqlite_master WHERE name='lyric_files'").get()) return 0
+  if (
+    !directory ||
+    !(await safeDir(directory).catch(() => false)) ||
+    !db.prepare("SELECT 1 FROM sqlite_master WHERE name='lyric_files'").get()
+  )
+    return 0
   let failures = 0
   for (const { audio, file } of db.prepare('SELECT audio,file FROM lyric_files').all()) {
     signal?.throwIfAborted()
     if (pathKey(path.dirname(audio)) !== pathKey(directory)) continue
-    if (!await confirmedMissing(audio) || file !== await recyclableLyrics(db, audio)) continue
+    if (!(await confirmedMissing(audio)) || file !== (await recyclableLyrics(db, audio))) continue
     if (db.prepare('SELECT 1 FROM local_tracks WHERE path_key=?').get(pathKey(audio))) continue
     try {
       await trash(file)

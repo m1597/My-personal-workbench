@@ -81,10 +81,16 @@ export function musicService(
       recoverFavoriteMoves(store)
       recoveringTrash = recoverTrash(store, forgetTracks, (file) => shell.trashItem(file))
       if (store.db.prepare('SELECT 1 FROM retiring_daily_batches LIMIT 1').get()) {
-        recoveringTrash = recoveringTrash.then(() => retirePendingBatches(store, {
-          forget: forgetTracks,
-          trash: (file) => shell.trashItem(file),
-        }, new AbortController().signal))
+        recoveringTrash = recoveringTrash.then(() =>
+          retirePendingBatches(
+            store,
+            {
+              forget: forgetTracks,
+              trash: (file) => shell.trashItem(file),
+            },
+            new AbortController().signal,
+          ),
+        )
       }
       taste = new MusicTaste(store, root, (data, signal) =>
         requestMusicModel(store, safeStorage, 'profile', data, signal),
@@ -1023,10 +1029,14 @@ export function musicService(
         update('cancelled', '本次推荐已终止（' + signal.reason.message + '）')
       signal.addEventListener('abort', recordCancellation, { once: true })
       try {
-        const failures = await retirePendingBatches(store, {
-          forget: forgetTracks,
-          trash: (file) => shell.trashItem(file),
-        }, signal)
+        const failures = await retirePendingBatches(
+          store,
+          {
+            forget: forgetTracks,
+            trash: (file) => shell.trashItem(file),
+          },
+          signal,
+        )
         store.set('retiring-daily-run', '')
         if (failures) cleanupMessage = ' · 上轮有 ' + failures + ' 首未能完整回收'
         if (
@@ -1239,7 +1249,8 @@ export function musicService(
           const fresh = []
           // A failed match may exhaust the model's five selections before the chart itself.
           const rankedRows = [...rows]
-          if (chartOptions.length && !requiredVocalLanguage) rankedRows.push(...chartOptions.slice(0, 5))
+          if (chartOptions.length && !requiredVocalLanguage)
+            rankedRows.push(...chartOptions.slice(0, 5))
           for (let row of rankedRows) {
             if (chart) {
               const listed = chartCandidates.find((entry) => inLibrary(row, [entry]))

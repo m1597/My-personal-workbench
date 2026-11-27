@@ -540,7 +540,8 @@ export class MusicStore {
           .run(batch, targetCount)
         for (const key of ['retiring-daily-run', 'latest-daily-run']) {
           const previous = this.get(key)
-          if (previous) this.db.prepare('INSERT OR IGNORE INTO retiring_daily_batches VALUES(?)').run(previous)
+          if (previous)
+            this.db.prepare('INSERT OR IGNORE INTO retiring_daily_batches VALUES(?)').run(previous)
         }
         this.set('latest-daily-run', batch)
       }

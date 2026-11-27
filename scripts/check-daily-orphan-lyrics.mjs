@@ -20,14 +20,18 @@ for (let i = 0; i < 20; i++) {
   else await saveLyrics(store.db, file, async () => '[00:00]fixture')
   if (i === 6) await writeFile(lyricPath(file), '[00:00]edited')
   if (i === 7) {
-    store.db.prepare('INSERT INTO lyric_files SELECT ?,file,digest,identity FROM lyric_files WHERE audio=?')
+    store.db
+      .prepare(
+        'INSERT INTO lyric_files SELECT ?,file,digest,identity FROM lyric_files WHERE audio=?',
+      )
       .run(path.join(directory, '7.wav'), file)
   }
-  if (i === 8) store.library.upsert({ file, title: 'missing', artist: 'fixture', album: '', duration: 3 })
+  if (i === 8)
+    store.library.upsert({ file, title: 'missing', artist: 'fixture', album: '', duration: 3 })
 }
 assert.equal((await readdir(directory)).length, 25)
-const trash = file => rename(file, path.join(bin, path.basename(file)))
-const result = await retireOrphanLyrics(store, file => {
+const trash = (file) => rename(file, path.join(bin, path.basename(file)))
+const result = await retireOrphanLyrics(store, (file) => {
   if (path.basename(file) === '9.lrc') throw Error('temporary failure')
   return trash(file)
 })
@@ -37,7 +41,12 @@ store.db.close()
 const reopened = new MusicStore(path.join(root, 'profile'))
 assert.equal(await retireOrphanLyrics(reopened, trash), 0)
 assert.equal(await retireOrphanLyrics(reopened, trash), 0)
-assert.deepEqual((await readdir(bin)).sort(), Array.from({length: 11}, (_, n) => (n + 9) + '.lrc').sort())
+assert.deepEqual(
+  (await readdir(bin)).sort(),
+  Array.from({ length: 11 }, (_, n) => n + 9 + '.lrc').sort(),
+)
 assert.equal((await readdir(directory)).length, 14)
 reopened.db.close()
-console.log('PASS 5 audio, 20 lyrics: 11 proven orphans recycled, 9 retained; reopened retry is idempotent.')
+console.log(
+  'PASS 5 audio, 20 lyrics: 11 proven orphans recycled, 9 retained; reopened retry is idempotent.',
+)
