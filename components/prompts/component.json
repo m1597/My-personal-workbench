@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "io.fitbay.prompts",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "protocol": "0.1",
   "hostApi": "0.1",
   "name": "提示词库",
