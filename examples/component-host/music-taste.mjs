@@ -30,6 +30,7 @@ export class MusicTaste {
         .update(
           JSON.stringify(
             this.store.connections?.resolve('music.model') ??
+              this.store.connections?.read?.('music.model') ??
               this.store.get('recommendation-providers') ??
               '',
           ),

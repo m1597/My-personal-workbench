@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import { openConnections } from '../dist/component-prototype/host/api-connections.mjs'
 import { sharedConnectionVault } from '../dist/component-prototype/host/connection-vault.mjs'
+import { MusicTaste } from '../dist/component-prototype/host/music-taste.mjs'
 import { requestMusicModel } from '../dist/component-prototype/host/music-model.mjs'
 
 await mkdir('tmp', { recursive: true })
@@ -76,6 +77,24 @@ try {
     sqlite.prepare("INSERT INTO bindings VALUES('default',?)").run(id)
   } finally {
     sqlite.close()
+  }
+  let requests = 0
+  const taste = new MusicTaste({ connections, get: () => '1' }, dir, async () => String(++requests))
+  const reference = [
+    { name: 'reference', id: 'group', kind: 'playlist', tracks: new Map([['track', {}]]) },
+  ]
+  const profile = () => taste.referenceProfile(reference, new AbortController().signal)
+  await profile()
+  await profile()
+  assert.equal(requests, 1)
+  const fixtureDb = new DatabaseSync(path.join(dir, 'api-connections.sqlite'))
+  try {
+    fixtureDb.prepare('UPDATE connections SET model=? WHERE id=?').run('another-plan-model', id)
+    await profile()
+    assert.equal(requests, 2)
+    fixtureDb.prepare('UPDATE connections SET model=? WHERE id=?').run('fixture-plan', id)
+  } finally {
+    fixtureDb.close()
   }
   const call = () =>
     requestMusicModel(
