@@ -34,7 +34,8 @@ const translations = [
   [/user/i, '用户'],
   [/KCS/i, '公钥密码标准接口'],
 ]
-const copyResults = process.argv.includes('--copy-results')
+const checkTheme = process.argv.includes('--result-theme')
+const copyResults = checkTheme || process.argv.includes('--copy-results')
 let bad = !copyResults
 let unblock
 const responseGate = new Promise((resolve) => {
@@ -79,7 +80,15 @@ const b = (p, n) => p.getByRole('button', { name: n, exact: true })
 async function checkDiagram() {
   const profileArg = '--workbench-profile=' + profile
   let panel
-  if (candidateRoot || process.argv.includes('--packaged')) {
+  if (checkTheme) {
+    await writeFile(
+      path.join(profile, 'workbench-material.json'),
+      JSON.stringify({ brightness: 15, transparency: 25, frost: 65 }),
+    )
+    app = await _electron.launch({ args: ['components/toolkit', profileArg], env })
+    panel = await app.firstWindow()
+    await panel.setViewportSize({ width: 320, height: 650 })
+  } else if (candidateRoot || process.argv.includes('--packaged')) {
     app = await _electron.launch({
       executablePath: candidateRoot
         ? path.join(candidateRoot, 'Toolkit', 'FitBay Toolkit.exe')
@@ -143,7 +152,7 @@ async function checkDiagram() {
     panel = shell.locator('.toolkit-panel')
     await expect(b(panel, '开始取色')).toBeVisible()
   }
-  if (copyResults) {
+  if (copyResults && !checkTheme) {
     await (host ? await host.firstWindow() : panel).setViewportSize({ width: 360, height: 600 })
     await b(panel, '设置快捷键').click()
     const row = panel.getByRole('region', { name: '划词助手' })
@@ -198,6 +207,41 @@ im.save(sys.stdout.buffer,'PNG')`,
   if (copyResults) {
     await result.setViewportSize({ width: 320, height: 650 })
     await expect(b(result, '仅中文')).toBeVisible({ timeout: 30000 })
+    const surface = (page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+    let light
+    if (checkTheme) {
+      const dark = await surface(panel)
+      assert.equal(await surface(result), dark)
+      await b(result, '原图').click()
+      const original = result.locator('.diagram-scroll svg')
+      const sourcePng = await original.locator('image').getAttribute('href')
+      const before = await original.screenshot()
+      await writeFile(
+        path.join(profile, 'workbench-material.json'),
+        JSON.stringify({ brightness: 90, transparency: 40, frost: 50 }),
+      )
+      await expect.poll(() => surface(result)).not.toBe(dark)
+      light = await surface(result)
+      await expect.poll(() => surface(panel)).toBe(light)
+      assert.equal(await original.locator('image').getAttribute('href'), sourcePng)
+      await writeFile(path.join(folder, 'theme-original-before.png'), before)
+      await original.screenshot({ path: path.join(folder, 'theme-original-after.png') })
+      execFileSync('python', [
+        '-c',
+        `from PIL import Image,ImageChops
+import sys
+from pathlib import Path
+files=Path(sys.argv[1])
+a,b=[Image.open(files/('theme-original-'+name+'.png')).convert('RGB') for name in ('before','after')]
+assert a.size==b.size
+box=(1,1,a.width-1,a.height-1)
+diff=ImageChops.difference(a.crop(box),b.crop(box)).getbbox()
+assert diff is None,diff`,
+        folder,
+      ])
+      await b(result, '仅中文').click()
+      await panel.screenshot({ path: path.join(folder, 'theme-home.png') })
+    }
     const read = () =>
       app.evaluate(async ({ clipboard }) => (await clipboard.readText()).replace(/\r\n/g, '\n'))
     const copy = b(result, '复制结果')
@@ -209,6 +253,7 @@ im.save(sys.stdout.buffer,'PNG')`,
         nodes.map((n) => n.getAttribute('aria-label').split('：').slice(1).join('：')).join('\n'),
       )
     assert.equal(await read(), translated)
+    if (checkTheme) await result.screenshot({ path: path.join(folder, 'theme-translation.png') })
     await result.getByLabel('问题').fill('用一句话总结')
     await b(result, '追问').click()
     await expect(result.getByText('已根据选区回答', { exact: true })).toBeVisible()
@@ -221,6 +266,13 @@ im.save(sys.stdout.buffer,'PNG')`,
     await copy.click()
     await expect(result.getByText('复制失败，请再试一次', { exact: true })).toBeVisible()
     assert.equal(await read(), translated)
+    if (checkTheme) {
+      await expect(result.getByText('复制失败，请再试一次')).toHaveCSS(
+        'color',
+        'rgb(255, 180, 171)',
+      )
+      await result.screenshot({ path: path.join(folder, 'theme-copy-error.png') })
+    }
     await app.evaluate(({ clipboard }) => {
       clipboard.writeText = globalThis.restoreCopy
     })
@@ -232,6 +284,57 @@ im.save(sys.stdout.buffer,'PNG')`,
     await result.screenshot({ path: path.join(folder, 'copy-result.png') })
     await b(result, '窗口已置顶').click()
     await expect(b(result, '窗口置顶')).toHaveAttribute('aria-pressed', 'false')
+    if (checkTheme) {
+      await expect(result.getByText('已复制最新回答')).toHaveCSS('color', 'rgb(193, 199, 210)')
+      await result.close()
+      overlay = await region()
+      next = app.waitForEvent('window')
+      await b(overlay, '提取文字').click()
+      result = await next
+      await expect(result.getByRole('heading', { name: '划词助手' })).toBeVisible()
+      assert.equal(await surface(result), light)
+      await result.screenshot({ path: path.join(folder, 'theme-text.png') })
+      await result.close()
+      next = app.waitForEvent('window')
+      await b(panel, '开始取色').click()
+      const picker = await next
+      await picker.locator('img').evaluate((img) => img.decode())
+      next = app.waitForEvent('window')
+      await picker.mouse.click(mapX(35), mapY(35))
+      result = await next
+      await expect(result.getByText('#3978AD', { exact: true })).toBeVisible()
+      assert.equal(await surface(result), light)
+      const sample = result.locator('.picked-color')
+      await expect(sample).toHaveCSS('background-color', 'rgb(57, 120, 173)')
+      const sampleImage = await sample.screenshot()
+      await b(result, '复制 HEX').click()
+      assert.equal(await read(), '#3978AD')
+      await expect(result.getByText('已复制 HEX')).toHaveCSS('color', 'rgb(193, 199, 210)')
+      await result.screenshot({ path: path.join(folder, 'theme-color.png') })
+      await writeFile(
+        path.join(profile, 'workbench-material.json'),
+        JSON.stringify({ brightness: 15, transparency: 25, frost: 65 }),
+      )
+      await expect.poll(() => surface(result)).not.toBe(light)
+      const center = (png) =>
+        execFileSync(
+          'python',
+          [
+            '-c',
+            "from PIL import Image;import io,sys;im=Image.open(io.BytesIO(sys.stdin.buffer.read())).convert('RGB');print(im.getpixel((im.width//2,im.height//2)))",
+          ],
+          { input: png },
+        )
+          .toString()
+          .trim()
+      assert.equal(center(sampleImage), '(57, 120, 173)')
+      assert.equal(center(await sample.screenshot()), '(57, 120, 173)')
+      console.log(
+        'PASS shared live material, unchanged rendered original and sampled pixel; text, image, color windows',
+        folder,
+      )
+      return
+    }
     console.log(
       'PASS narrow home shortcut, disabled state, translation and latest answer clipboard, failure retry and pin',
       folder,

@@ -170,3 +170,54 @@ main:has(.translated-diagram),
 main:has(.translated-diagram) section {
   min-width: 0;
 }
+
+/* Only the regular result window chrome follows the workbench material. */
+body.result-window {
+  background: var(--workbench-material);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+}
+.result-window main {
+  gap: var(--space-12);
+}
+.result-window h1 {
+  font-size: var(--font-size-empty);
+  font-weight: 600;
+}
+.result-window h2 {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+}
+.result-window section {
+  background: var(--panel-surface);
+  border-color: var(--stroke);
+  border-radius: var(--radius-10);
+}
+.result-window :where(button, input, textarea) {
+  background: var(--control);
+  border-color: var(--stroke);
+  border-radius: var(--radius-6);
+  font-size: var(--font-size-control);
+}
+.result-window :where(button):hover:enabled {
+  background: var(--hover);
+}
+.result-window :where(button, input, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.result-window textarea::placeholder {
+  color: var(--text-muted);
+}
+.result-window .notice,
+.result-window .connection-status {
+  color: var(--text-secondary);
+}
+.result-window .notice[data-error="true"] {
+  color: #ffb4ab;
+}
+.result-window .row {
+  gap: var(--space-6);
+  align-items: center;
+}

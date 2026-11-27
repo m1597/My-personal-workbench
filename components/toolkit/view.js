@@ -195,8 +195,10 @@ async function result(s) {
   const copy = copyUI.button('复制结果', async () => {
     try {
       await api.copyAnswer()
+      delete copyUI.notice.dataset.error
       copyUI.notice.textContent = '已复制' + copyKind
     } catch {
+      copyUI.notice.dataset.error = 'true'
       copyUI.notice.textContent = '复制失败，请再试一次'
     }
     copyUI.notice.hidden = false
@@ -232,6 +234,7 @@ async function result(s) {
     for (const action of requests) action.disabled = true
     row.setAttribute('aria-busy', 'true')
     configure.hidden = true
+    delete notice.dataset.error
     notice.textContent = '正在处理…'
     try {
       const answer = await api.ask({ mode, id, question })
@@ -252,6 +255,7 @@ async function result(s) {
       if (prompt.value === question) prompt.value = ''
       notice.textContent = ''
     } catch (e) {
+      notice.dataset.error = 'true'
       failed = { mode, id, question }
       retry.hidden = false
       const missing = String(e.message || e).match(/TOOLKIT_CONFIG_(translation|vision)/)
@@ -300,7 +304,8 @@ window.addEventListener('keydown', (e) => {
 api
   .state()
   .then(async (s) => {
-    if (s.kind === 'home') {
+    if (s.material) {
+      if (s.kind !== 'home') document.body.classList.add('result-window')
       const apply = (m) => {
         document.documentElement.style.setProperty('--material-light', String(m.brightness / 100))
         document.documentElement.style.setProperty(
@@ -310,7 +315,9 @@ api
         document.documentElement.style.setProperty('--material-frost', String(m.frost / 100))
       }
       api.onMaterial(apply)
-      apply(s.settings.material)
+      apply(s.material)
+    }
+    if (s.kind === 'home') {
       return toolkitHome(s.settings, { api, root, notice, error, button, settingsContents })
     }
     if (s.kind === 'screen') {

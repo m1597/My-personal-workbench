@@ -104,9 +104,13 @@ async function startToolkit() {
     } catch {}
     return { transparency: 100, brightness: 100, frost: 100 }
   }
+  const themedWindows = new Set(['home', 'result', 'color-result'])
   const materialWatcher = watch(shared, { persistent: false }, (_, name) => {
-    if (name === 'workbench-material.json' && home && !home.isDestroyed())
-      home.webContents.send('toolkit:material', material())
+    if (name !== 'workbench-material.json') return
+    const current = material()
+    for (const { kind, win } of states.values())
+      if (themedWindows.has(kind) && !win.isDestroyed())
+        win.webContents.send('toolkit:material', current)
   })
   materialWatcher.on('error', () => materialWatcher.close())
   app.once('will-quit', () => materialWatcher.close())
@@ -373,6 +377,7 @@ async function startToolkit() {
   handle('state', kinds, (s) => ({
     kind: s.kind,
     intent: s.intent,
+    material: themedWindows.has(s.kind) ? material() : undefined,
     hex: s.hex,
     text: s.text,
     image: (s.full || s.image)?.toDataURL(),
@@ -546,7 +551,7 @@ async function startToolkit() {
       .slice(1)
       .match(/../g)
       .map((c) => parseInt(c, 16))
-    clipboard.writeText(format === 'rgb' ? 'rgb(' + channels.join(', ') + ')' : s.hex)
+    return clipboard.writeText(format === 'rgb' ? 'rgb(' + channels.join(', ') + ')' : s.hex)
   })
   handle('repick', ['color-result'], async (s) => {
     s.win.hide()

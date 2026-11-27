@@ -18,6 +18,7 @@ export function feedback() {
   const notice = el('div', '', 'notice')
   notice.setAttribute('role', 'status')
   function error(e) {
+    notice.dataset.error = 'true'
     notice.textContent = String(e.message || e).replace(/^.*?Error: /, '')
   }
   function button(label, action) {
@@ -25,6 +26,7 @@ export function feedback() {
     b.onclick = async () => {
       b.disabled = true
       try {
+        delete notice.dataset.error
         notice.textContent = ''
         await action(b)
       } catch (e) {

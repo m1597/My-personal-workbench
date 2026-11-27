@@ -34,3 +34,9 @@ openspec validate polish-toolkit-existing-entries --strict
 工作台视口缩至 [360px](../../tmp/toolkit-shell-gfqU1k/dock-open-360.png) 和 [640px](../../tmp/toolkit-shell-gfqU1k/dock-open-640.png) 后，展开项的左右边缘均位于实际窗格内，返回保留上次设置分类。独立窗和停靠页的齿轮通过同一图形路径与点击区尺寸断言。
 
 为复测本轮 PDF 划词，尝试创建未切换的独立 Win32 desktop，在其中启动已知文本编辑框。编辑框取得该线程的本地焦点，系统 GetForegroundWindow 仍未指向它，划词入口所需的真实前台条件不成立。探测未发送任何全局按键。历史回归另留有[外部 PDF 阅读器](../../tmp/toolkit-5cU7FF/viewer.png)和[划词结果](../../tmp/toolkit-5cU7FF/pdf-selection.png)。
+
+### 普通结果窗材质
+
+独立首页、截图结果、文字结果及取色结果共用工作台材质。后台打开窗口后将亮度从 15 调到 90、透明度从 25 调到 40；首页与打开的结果窗实时跟随，随后打开的文字及取色结果采用相同设置。[320px 首页与复制后的结果窗](evidence/toolkit-result-theme/home-and-result.png)、[复制失败](evidence/toolkit-result-theme/theme-copy-error.png)、[文字结果](evidence/toolkit-result-theme/theme-text.png)、[取色结果](evidence/toolkit-result-theme/theme-color.png)。
+
+复测命令为 `python scripts/toolkit-color-desktop.py --diagram --result-theme`。使用隔离 profile、生成屏幕样张和回环模型。文字结果通过框选后「提取文字」打开，使用与外部划词相同的结果视图。切换材质前后，完整选区 PNG 一致，原图绘制区内像素逐一相同（排除外缘 1px 亚像素混合区），色块中心实际像素保持 RGB(57, 120, 173)，复制值为 #3978AD。
