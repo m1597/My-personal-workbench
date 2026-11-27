@@ -58,7 +58,7 @@ async function startToolkit() {
     capture: { enabled: true, key: 'Control+Alt+S' },
     translate: { enabled: true, key: 'Alt+S' },
     color: { enabled: true, key: 'Control+Alt+C' },
-    selection: { enabled: true, key: 'Control+Alt+T' },
+    selection: { enabled: true, key: 'Alt+D' },
     endpoint: 'https://api.openai.com/v1',
     model: '',
     secret: '',
@@ -268,7 +268,9 @@ async function startToolkit() {
       const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size })
       const source =
         sources.find((s) => s.display_id === String(d.id)) ||
-        (sources.length === 1 ? sources[0] : null)
+        (sources.length === 1 && screen.getAllDisplays().length === 1 && !sources[0].display_id
+          ? sources[0]
+          : null)
       if (!source || source.thumbnail.isEmpty()) throw Error('无法读取当前显示器')
       overlay = show(
         { kind: 'screen', full: source.thumbnail, intent, displayId: d.id },
@@ -319,7 +321,14 @@ async function startToolkit() {
   const user32 = koffi.load('user32.dll')
   const windowRect = user32.func('int __stdcall GetWindowRect(intptr_t hwnd, void *rect)')
   const foreground = user32.func('intptr_t __stdcall GetForegroundWindow()')
-  async function select(fromHost = hosted) {
+  let readingSelection
+  function select(fromHost = hosted) {
+    readingSelection ??= readForegroundSelection(fromHost).finally(() => {
+      readingSelection = undefined
+    })
+    return readingSelection
+  }
+  async function readForegroundSelection(fromHost) {
     const hwnd = foreground()
     const rect = Buffer.alloc(16)
     const hasRect = hwnd && windowRect(hwnd, rect)
@@ -335,8 +344,22 @@ async function startToolkit() {
             }),
           )
         : screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-    const text = await readSelectionOrOcr(undefined, String(hwnd))
-    showResult({ text }, display, fromHost)
+    try {
+      if (!hwnd) throw Error('没有前台选区')
+      const text = await readSelectionOrOcr(undefined, String(hwnd))
+      showResult({ text, initial: { mode: 'translate' } }, display, fromHost)
+    } catch {
+      show(
+        {
+          kind: 'message',
+          text: '没有读到本次选区。可以重新划词，或框选屏幕翻译。',
+          fallback: true,
+          displayId: display.id,
+        },
+        resultBounds(display.workArea, 400, 230),
+        fromHost,
+      )
+    }
   }
   function bind(id, key) {
     if (
@@ -391,6 +414,7 @@ async function startToolkit() {
   handle('state', kinds, (s) => ({
     kind: s.kind,
     intent: s.intent,
+    fallback: s.fallback === true,
     material: themedWindows.has(s.kind) ? material() : undefined,
     hex: s.hex,
     text: s.text,
@@ -409,6 +433,17 @@ async function startToolkit() {
     s.reveal = null
   })
   handle('dismiss', kinds, (s) => s.win.close())
+  handle('fallbackTranslate', ['message'], async (s) => {
+    if (!s.fallback || !cfg.translate.enabled) throw Error('请先启用截图翻译')
+    s.win.hide()
+    try {
+      await capture('translate', s.hosted, s.displayId)
+      s.win.close()
+    } catch (error) {
+      if (!s.win.isDestroyed()) s.win.showInactive()
+      throw error
+    }
+  })
   handle('settingsTarget', ['home'], () => targetRoute)
   handle('connections', ['home', 'result'], () => connections.snapshot())
   installLocalFiles(handle)

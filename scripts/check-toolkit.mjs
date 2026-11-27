@@ -268,7 +268,6 @@ try {
       execFileSync('python', ['scripts/toolkit-pdf-hotkey.py'])
       const selected = await waiting
       await expect(selected.locator('pre').first()).toContainText('HELLO FITBAY 123')
-      await selected.getByText('翻译', { exact: true }).click()
       await expect(selected.getByText('测试接口回答 5')).toBeVisible()
       assert.equal(typeof requests[4].messages[0].content, 'string')
       await selected.screenshot({ path: path.join(folder, 'pdf-selection.png') })
@@ -289,7 +288,7 @@ try {
       const empty = app.waitForEvent('window', { timeout: 15000 })
       execFileSync('python', ['scripts/toolkit-pdf-hotkey.py'])
       const message = await empty
-      await expect(message.getByText(/没有读到文字/)).toBeVisible()
+      await expect(message.getByText(/没有读到本次选区/)).toBeVisible()
       assert.equal(requests.length, before)
       await message.close()
       console.log('PASS Chrome PDF, OS shortcut, extracted text, translation and empty selection')

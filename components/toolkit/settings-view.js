@@ -167,7 +167,7 @@ export function settingsContents(s, target, ctx) {
   const defaults = {
     translate: 'Alt+S',
     capture: 'Control+Alt+S',
-    selection: 'Control+Alt+T',
+    selection: 'Alt+D',
     color: 'Control+Alt+C',
   }
   const refreshers = []

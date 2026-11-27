@@ -402,11 +402,14 @@ api
         },
         { passive: false },
       )
-    } else
+    } else {
+      root.append(el('p', s.text))
+      if (s.fallback) root.append(button('框选翻译', () => api.fallbackTranslate()))
       root.append(
-        el('p', s.text),
         button('关闭', () => api.dismiss()),
+        notice,
       )
+    }
   })
   .catch((e) => {
     root.append(notice)

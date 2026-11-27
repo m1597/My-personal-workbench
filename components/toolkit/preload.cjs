@@ -4,6 +4,7 @@ const commands = [
   'screenReady',
   'initial',
   'toolTarget',
+  'fallbackTranslate',
   'batchInputs',
   'selectionImage',
   'applyAnnotation',

@@ -33,8 +33,11 @@ def run():
         entry = "scripts/check-toolkit.mjs" if assistant_test else "scripts/check-toolkit-capture-colors.mjs"
         if "--candidate" in sys.argv[1:] or "--diagram" in sys.argv[1:]:
             entry = "scripts/check-toolkit-diagram.mjs"
+        command = ["node", entry, *sys.argv[1:]]
+        if "--selection-private" in sys.argv[1:]:
+            command = [sys.executable, "scripts/toolkit-private-desktop.py", "powershell.exe", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", "scripts/check-toolkit-selection-range.ps1"]
         proc = subprocess.Popen(
-            ["node", entry, *sys.argv[1:]],
+            command,
             cwd=Path(__file__).resolve().parents[1],
         )
         while proc.poll() is None:

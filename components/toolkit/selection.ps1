@@ -1,38 +1,27 @@
 param([long]$TargetWindow)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class SelectionWindow {
-    [DllImport("user32")] public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32")] public static extern uint GetClipboardSequenceNumber();
-    [DllImport("user32")] public static extern IntPtr GetClipboardOwner();
-    [DllImport("user32")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
-}
-"@
+. (Join-Path $PSScriptRoot 'selection-copy.ps1')
 function Has-Focus { [SelectionWindow]::GetForegroundWindow().ToInt64() -eq $TargetWindow }
-# Some PDF viewers publish selected text only through Copy.
-if (!(Has-Focus)) { exit 0 }
-$before = [SelectionWindow]::GetClipboardSequenceNumber()
-$previous = [System.Windows.Forms.Clipboard]::GetDataObject()
-if (!(Has-Focus)) { exit 0 }
-[System.Windows.Forms.SendKeys]::SendWait('^c')
-for ($attempt=0; $attempt -lt 20; $attempt++) {
-    Start-Sleep -Milliseconds 40
-    $after = [SelectionWindow]::GetClipboardSequenceNumber()
-    if ($after -eq $before) { continue }
-    [uint32]$ownerPid = 0
-    [uint32]$targetPid = 0
-    $null = [SelectionWindow]::GetWindowThreadProcessId([SelectionWindow]::GetClipboardOwner(), [ref]$ownerPid)
-    $null = [SelectionWindow]::GetWindowThreadProcessId([IntPtr]$TargetWindow, [ref]$targetPid)
-    if ($ownerPid -ne $targetPid -or !(Has-Focus)) { exit 0 }
-    $selection = [System.Windows.Forms.Clipboard]::GetText()
-    if ([SelectionWindow]::GetClipboardSequenceNumber() -eq $after) {
-        if ($null -ne $previous) { [System.Windows.Forms.Clipboard]::SetDataObject($previous,$true) }
-        else { [System.Windows.Forms.Clipboard]::Clear() }
+# Only selected ranges of the focused control inside the captured top-level window.
+if ($TargetWindow -le 0 -or !(Has-Focus)) { exit 0 }
+try {
+    . (Join-Path $PSScriptRoot 'selection-range.ps1')
+    $uia=[FitBaySelection]::new()
+    $state=''
+    $text=$uia.Read($uia.Focused(),$TargetWindow,[ref]$state)
+    if ($state -eq 'selected') {
+        if (Has-Focus) { [Console]::Write($text) }
+        exit 0
     }
-    [Console]::Write($selection)
-    exit 0
+    if ($state -in 'caret','private','tooLong') { exit 0 }
+} catch { }
+
+function Modifier-Held { foreach($key in 16,17,18,91,92){ if([SelectionWindow]::GetAsyncKeyState($key) -lt 0){return $true} };return $false }
+# Wait for the invoking chord to release before sending ordinary Copy.
+for ($i=0; $i -lt 25 -and (Modifier-Held); $i++) {
+    Start-Sleep -Milliseconds 20
 }
+if (!(Has-Focus) -or (Modifier-Held)) { exit 0 }
+$selection = Read-FitBayClipboardSelection $TargetWindow {Has-Focus} { [System.Windows.Forms.SendKeys]::SendWait('^c') }
+if (![string]::IsNullOrWhiteSpace($selection)) { [Console]::Write($selection) }
