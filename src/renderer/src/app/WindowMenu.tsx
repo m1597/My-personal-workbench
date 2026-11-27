@@ -162,12 +162,15 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
     window.addEventListener('fitbay-layout-name', sync)
     return () => window.removeEventListener('fitbay-layout-name', sync)
   }, [inspect])
+  function restoreForOpen(id: string) {
+    const entry = collapsed.find((item) => item.panels.includes(id)) ?? collapsed.at(-1)
+    entry?.restore()
+  }
   async function openComponent(host: Window['componentHost'], id: string) {
     if (!host) return
     try {
       if (workspace.api?.hasMaximizedGroup()) workspace.api.exitMaximizedGroup()
-      const entry = collapsed.find((item) => item.panels.includes(id))
-      if (entry) entry.restore()
+      restoreForOpen(id)
       setMusicError((await host.show(false)).error ?? '')
     } catch (error) {
       setMusicError(String(error))
@@ -256,9 +259,11 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
                 close={() => {
                   if (toolkitPanel) workspace.api?.removePanel(toolkitPanel)
                 }}
-                open={() =>
-                  workspace.api && openToolkitPanel(workspace.api, t('工具集', 'Toolkit'))
-                }
+                open={() => {
+                  if (!workspace.api) return
+                  restoreForOpen('component-toolkit')
+                  openToolkitPanel(workspace.api, t('工具集', 'Toolkit'))
+                }}
                 action={{
                   label: toolkitHidden
                     ? t('显示工具集', 'Show toolkit')

@@ -1,0 +1,341 @@
+[
+  {
+    "key": "width-start-same",
+    "first": {
+      "id": "component-example",
+      "span": 1473,
+      "panes": [
+        0,
+        1473
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-example",
+      "span": 1473,
+      "panes": [
+        0,
+        1473
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "width-start-new",
+    "first": {
+      "id": "component-example",
+      "span": 1473,
+      "panes": [
+        0,
+        1473
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-example",
+      "span": 1473,
+      "panes": [
+        0,
+        1473
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "width-start-neighbor",
+    "first": {
+      "id": "component-example",
+      "span": 1473,
+      "panes": [
+        0,
+        1473
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-example",
+      "span": 1473,
+      "panes": [
+        0,
+        1473
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "width-end-same",
+    "first": {
+      "id": "component-toolkit",
+      "span": 1473,
+      "panes": [
+        1473,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-toolkit",
+      "span": 1473,
+      "panes": [
+        1473,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "width-end-new",
+    "first": {
+      "id": "component-toolkit",
+      "span": 1473,
+      "panes": [
+        1473,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-toolkit",
+      "span": 1473,
+      "panes": [
+        1473,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "width-end-neighbor",
+    "first": {
+      "id": "component-toolkit",
+      "span": 1473,
+      "panes": [
+        1473,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-toolkit",
+      "span": 1473,
+      "panes": [
+        1473,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "height-start-same",
+    "first": {
+      "id": "component-example",
+      "span": 914,
+      "panes": [
+        0,
+        914
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-example",
+      "span": 914,
+      "panes": [
+        0,
+        914
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "height-start-new",
+    "first": {
+      "id": "component-example",
+      "span": 914,
+      "panes": [
+        0,
+        914
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-example",
+      "span": 914,
+      "panes": [
+        0,
+        450.66668701171875,
+        222.6666717529297,
+        224.6666717529297
+      ],
+      "gaps": [
+        0,
+        -0.0000457763671875
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "height-start-neighbor",
+    "first": {
+      "id": "component-example",
+      "span": 914,
+      "panes": [
+        0,
+        914
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-example",
+      "span": 914,
+      "panes": [
+        0,
+        914
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "height-end-same",
+    "first": {
+      "id": "component-toolkit",
+      "span": 914,
+      "panes": [
+        914,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-toolkit",
+      "span": 914,
+      "panes": [
+        914,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "height-end-new",
+    "first": {
+      "id": "component-toolkit",
+      "span": 914,
+      "panes": [
+        914,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "span": 914,
+      "panes": [
+        914,
+        0,
+        0,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  },
+  {
+    "key": "height-end-neighbor",
+    "first": {
+      "id": "component-toolkit",
+      "span": 914,
+      "panes": [
+        914,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "second": {
+      "id": "component-toolkit",
+      "span": 914,
+      "panes": [
+        914,
+        0
+      ],
+      "gaps": [
+        0,
+        0
+      ]
+    },
+    "contentRetained": true
+  }
+]
