@@ -11,9 +11,6 @@ const root = path.join(evidence, 'prompts')
 const profile = path.join(evidence, 'profile')
 await mkdir(root)
 await mkdir(path.join(profile, 'prompt-library'), { recursive: true })
-for (const file of ['修复分窗收起问题.md', '接入ai订阅.md'])
-  await cp(path.join(source, file), path.join(root, file))
-for (let i = 0; i < 40; i++) await writeFile(path.join(root, '阿文档-' + i + '.txt'), 'SDK test')
 await writeFile(
   path.join(profile, 'prompt-library/catalogue-preferences.json'),
   JSON.stringify({ defaultRoot: root, shortcut: 'F20', shortcutEnabled: false }),
@@ -33,6 +30,11 @@ const app = await _electron.launch({
   env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
 })
 try {
+  await app.evaluate(({ clipboard }) => {
+    clipboard.writeText = async (value) => {
+      globalThis.isolatedCopy = value
+    }
+  })
   const page = await app.firstWindow()
   const btn = (name) => page.getByRole('button', { name, exact: true })
   const results = []
@@ -54,6 +56,9 @@ try {
     )
   }
   async function capture(label) {
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    )
     const measure = await page.evaluate(() => {
       const v = visualViewport
       const selectors = [
@@ -106,6 +111,8 @@ try {
         }
       return {
         outside,
+        query: document.querySelector('[aria-label="搜索提示词"]').value,
+        resultCount: document.querySelectorAll('.entries.list button').length,
         width: v.width,
         height: v.height,
         dpr: devicePixelRatio,
@@ -155,6 +162,15 @@ try {
   }
   const search = page.getByLabel('搜索提示词')
   const expectedCopy = await readFile(path.join(source, '接入ai订阅.md'), 'utf8')
+  await viewport(1160, 800, 1)
+  await expect(page.getByText('当前目录暂无文档，可粘贴或拖入 TXT、Markdown 文件。')).toBeVisible()
+  await expect(page.locator('.empty-reader')).toHaveCount(0)
+  await capture('empty-directory')
+  for (const file of ['修复分窗收起问题.md', '接入ai订阅.md'])
+    await cp(path.join(source, file), path.join(root, file))
+  for (let i = 0; i < 40; i++) await writeFile(path.join(root, '阿文档-' + i + '.txt'), 'SDK test')
+
+  await expect(page.locator('.entries.list button')).toHaveCount(42)
   let count = 0
   for (const [surface, width, height] of [
     ['standalone', 1160, 800],
@@ -192,12 +208,21 @@ try {
       await paste.click()
     }
     await search.fill('没有这个测试关键词')
-    await expect(page.getByText('没有找到与「没有这个测试关键词」匹配的文档')).toBeVisible()
+    await expect(page.getByText(/没有找到与「没有这个测试关键词」匹配的文档/)).toBeVisible()
+    await expect(search).toHaveValue('没有这个测试关键词')
+    await expect(page.locator('.entries.list button')).toHaveCount(0)
     if (surface === 'standalone') {
-      await expect(page.getByText('选择列表中的文档即可阅读')).toBeVisible()
+      await expect(page.getByText('选择列表中的文档即可阅读')).toHaveCount(0)
       await capture('no-match')
     }
     await search.fill('')
+    if (surface === 'standalone') {
+      await expect(search).toHaveValue('')
+      await expect(page.getByText('选择列表中的文档即可阅读')).toBeVisible()
+      await expect(page.locator('.entries.list button')).toHaveCount(42)
+      await expect(page.locator('.empty-list')).toHaveCount(0)
+      await capture('cleared-list')
+    }
     await search.fill('SDK')
     if (surface === 'standalone') {
       const purpose = page.getByRole('combobox', { name: '按用途筛选' })
@@ -262,39 +287,11 @@ try {
     await expect(copy).toBeInViewport()
     const before = await reader.evaluate((el) => el.scrollTop)
     assert(before > 0)
-    await app.evaluate(async ({ clipboard, ClipboardItem }) => {
-      // Electron read items are lazy and cannot be passed back to write().
-      // Materialize every representation before the UI changes the system clipboard.
-      globalThis.priorClipboard = await Promise.all(
-        (await clipboard.read()).map(async (item) => {
-          const formats = await Promise.all(
-            item.types.map(async (type) => [type, await item.getType(type)]),
-          )
-          return new ClipboardItem(Object.fromEntries(formats))
-        }),
-      )
-    })
-    try {
-      await copy.click()
-      await expect(page.getByRole('status').filter({ hasText: '已复制' })).toBeVisible()
-      assert(
-        await app.evaluate(
-          async ({ clipboard }, expected) => (await clipboard.readText()) === expected,
-          expectedCopy,
-        ),
-        'copy must contain complete unmodified document',
-      )
-      assert.equal(await reader.evaluate((el) => el.scrollTop), before)
-      await capture(surface + '-copy')
-    } finally {
-      await app.evaluate(async ({ clipboard }, expected) => {
-        if ((await clipboard.readText()) === expected) {
-          if (globalThis.priorClipboard.length) await clipboard.write(globalThis.priorClipboard)
-          else clipboard.clear()
-        }
-        delete globalThis.priorClipboard
-      }, expectedCopy)
-    }
+    await copy.click()
+    await expect(page.getByRole('status').filter({ hasText: '已复制' })).toBeVisible()
+    assert(await app.evaluate((_, expected) => globalThis.isolatedCopy === expected, expectedCopy))
+    assert.equal(await reader.evaluate((el) => el.scrollTop), before)
+    await capture(surface + '-copy')
     await capture(surface + '-oauth')
     await reader.evaluate((el) => {
       el.scrollTop = el.scrollHeight
@@ -317,7 +314,7 @@ try {
   }
   const data = await readFile(path.join(root, '接入ai订阅.md'))
   assert(data.equals(await readFile(path.join(source, '接入ai订阅.md'))))
-  console.log('PASS', count, 'viewports,', data.length, 'bytes; clipboard:', 'system', evidence)
+  console.log('PASS', count, 'viewports,', data.length, 'bytes; clipboard:', 'isolated', evidence)
 } finally {
   await app.close()
 }

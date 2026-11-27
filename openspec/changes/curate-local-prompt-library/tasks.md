@@ -31,3 +31,7 @@
 实测独立、停靠、半屏及窄窗，在长文 OAuth Providers 章节点击标题旁的复制按钮。每次从 Windows 系统剪贴板读回，均与 110459 字节源文件的 UTF-8 正文完全一致，点击前后的正文滚动值相等。返回后核对搜索词 SDK、当前文档以及打开前非零的列表滚动位置。草稿不落盘，未填变量保留占位符，只读 Skill 仍可复制。首次测试因 Electron 不接受直接写回只读 ClipboardItem，未能还原测试前的剪贴板，后续复验先完整读取各格式数据并重新构造可写项。
 
 [用途菜单](../../../tmp/prompt-reading-CUs66q/purpose-options.png) · [窄窗复制](../../../tmp/prompt-reading-CUs66q/narrow-copy.png) · [返回列表](../../../tmp/prompt-reading-CUs66q/narrow-list.png) · [无匹配](../../../tmp/prompt-reading-CUs66q/no-match.png)。构建 prompts/component.js SHA-256 为 `C24D637E3A98DAAFABD9280F46E5EE827BF6C6276DB84B0993B617D2294B0D23`。
+
+### 列表空状态与清空搜索
+
+在隔离 Electron 窗口中先打开真正的空目录，只显示粘贴或拖入文件的提示。加入 42 份测试文档后，输入「没有这个测试关键词」，核实搜索框保留该值、结果为零，阅读区没有选文提示。清空同一搜索框后列表恢复 42 项，此时显示选文提示。证据取自已完成绘制的界面并核对图像，测试剪贴板为进程内内存替身。[空目录](../../../tmp/prompt-reading-Sau9zX/empty-directory.png) · [带关键词的零结果](../../../tmp/prompt-reading-Sau9zX/no-match.png) · [清空后恢复的列表](../../../tmp/prompt-reading-Sau9zX/cleared-list.png)

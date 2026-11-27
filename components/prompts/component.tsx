@@ -182,6 +182,7 @@ function Library() {
     [cards, setCards] = useState<Card[]>([]),
     [lastSelected, setLastSelected] = useState(''),
     [filter, setFilter] = useState(''),
+    [loadedQuery, setLoadedQuery] = useState<{ root: string; filter: string }>(),
     [purpose, setPurpose] = useState(''),
     [visualVersion, setVisualVersion] = useState(0),
     [organized, setOrganized] = useState(''),
@@ -387,6 +388,7 @@ function Library() {
         .then((rows) => {
           if (!active) return
           setDirectoryIssue('')
+          setLoadedQuery({ root: currentRoot, filter })
           setCards(rows)
           if (selection === selectionVersion.current)
             setEntry((old) => (old && !rows.some((c) => c.name === old.name) ? undefined : old))
@@ -402,6 +404,12 @@ function Library() {
     }
   }, [currentRoot, tick, filter])
   const visibleCards = cards.filter((c) => (!purpose || purpose === c.category) && c.match)
+  const listReady = Boolean(
+    currentRoot &&
+      !directoryIssue &&
+      loadedQuery?.root === currentRoot &&
+      loadedQuery.filter === filter,
+  )
   const variablePattern = /\{\{([^{}\r\n]+)\}\}/g
   const variables = [...new Set(Array.from(draft.matchAll(variablePattern), (m) => m[1].trim()))]
   const result = draft.replace(variablePattern, (original, key: string) =>
@@ -679,7 +687,9 @@ function Library() {
             </button>
           </form>
         )}
-        {!entry && <small className="drop-hint">可拖入 TXT 或 Markdown 文件</small>}
+        {!entry && listReady && visibleCards.length > 0 && !filter && (
+          <small className="drop-hint">可拖入 TXT 或 Markdown 文件</small>
+        )}
         <section className={entry ? 'split prompt-split reading' : 'split prompt-split'}>
           <nav aria-label="提示词">
             <div className="purpose-filter">
@@ -721,19 +731,21 @@ function Library() {
                   </span>
                 </button>
               ))}
-              {!visibleCards.length && state?.root && (
+              {!visibleCards.length && listReady && (
                 <p className="empty-list">
-                  {filter
-                    ? '没有找到与「' + filter + '」匹配的文档'
-                    : purpose
-                      ? '此用途下暂无文档'
-                      : '当前目录暂无文档'}
+                  {!cards.length
+                    ? '当前目录暂无文档，可粘贴或拖入 TXT、Markdown 文件。'
+                    : filter
+                      ? '没有找到与「' + filter + '」匹配的文档，可修改或清空搜索。'
+                      : '此用途下暂无文档，可切换到全部用途。'}
                 </p>
               )}
             </div>
           </nav>
           <article className={entry ? 'file-preview active' : 'file-preview'}>
-            {!entry && state?.root && <p className="empty-reader">选择列表中的文档即可阅读</p>}
+            {!entry && listReady && visibleCards.length > 0 && (
+              <p className="empty-reader">选择列表中的文档即可阅读</p>
+            )}
             {enlarged && entry && (
               <dialog
                 ref={imageDialog}
