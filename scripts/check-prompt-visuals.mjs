@@ -74,6 +74,9 @@ const launch = () =>
   })
 let app = await launch(),
   ui = await app.firstWindow()
+await app.evaluate(({ shell }) => {
+  shell.openPath = async () => ''
+})
 const btn = (name) => ui.getByRole('button', { name, exact: true }),
   frame = () => ui.getByRole('region', { name: '提示词可视化' })
 try {
@@ -209,12 +212,15 @@ try {
   await expect(ui.locator('details[open] > pre')).toHaveText(flow)
   await app.close()
   app = await launch()
+  await app.evaluate(({ shell }) => {
+    shell.openPath = async () => ''
+  })
   ui = await app.firstWindow()
   await btn('开发').click()
   await expect(frame().locator('[data-node-id]')).toHaveCount(3)
   assert.equal(requests, 1)
   await writeFile(path.join(root, '开发.md'), flow + '补充')
-  await expect(ui.getByText('原文已修改，可视化待更新。')).toBeVisible()
+  await expect(ui.getByText('原文已更新。')).toBeVisible()
   await btn('提示词库设置').click()
   const categories = ui.getByRole('navigation', { name: '设置分类' })
   await categories.getByRole('button', { name: 'API 与模型' }).click()

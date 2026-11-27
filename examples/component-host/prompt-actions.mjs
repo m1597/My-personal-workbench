@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, open, readFile, realpath, rename, unlink } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { copyFile, link, mkdir, open, readFile, realpath, rename, unlink } from 'node:fs/promises'
 
 export const promptExtension = /\.(md|txt)$/i
 // A substituted drive has its own lifetime. Keep its letter in preferences but
@@ -32,6 +33,49 @@ export async function checkedDiskPath(root, relative) {
 export async function promptPath(root, relative) {
   if (!promptExtension.test(relative)) throw Error('FILE_UNAVAILABLE')
   return checkedDiskPath(root, relative)
+}
+// An unrelated HTML document may share the same stem (including Markdown and TXT siblings).
+export async function visualSidecar(root, name, directory) {
+  const source = await promptPath(root, name)
+  const owner = Buffer.from(path.basename(name)).toString('base64url')
+  const marker = '<!-- FitBay Archify ' + owner + ' '
+  const parsed = path.parse(source)
+  const dir = directory || parsed.dir
+  let available
+  for (const leaf of [parsed.name + '.html', parsed.base + '.fitbay.html']) {
+    const file = path.join(dir, leaf)
+    let handle
+    try {
+      await checkedDiskPath(directory || root, path.relative(directory || root, file))
+      handle = await open(file, 'r')
+      const header = Buffer.alloc(1024)
+      const { bytesRead } = await handle.read(header, 0, header.length, 0)
+      const first = header.toString('utf8', 0, bytesRead).split('\n', 1)[0]
+      if (first.startsWith(marker) && /^[a-f0-9]{64} -->$/.test(first.slice(marker.length))) {
+        const info = await handle.stat({ bigint: true })
+        return {
+          file,
+          marker,
+          revision: first.slice(marker.length, -4),
+          stamp: [info.ino, info.size, info.mtimeNs].join('/'),
+        }
+      }
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e
+      available ??= file
+    } finally {
+      await handle?.close()
+    }
+  }
+  return { file: available, marker, revision: '' }
+}
+export async function publishExclusive(source, target) {
+  try {
+    await link(source, target)
+  } catch (e) {
+    if (!['ENOSYS', 'ENOTSUP', 'EPERM', 'EXDEV', 'EINVAL', 'EOPNOTSUPP'].includes(e.code)) throw e
+    await copyFile(source, target, constants.COPYFILE_EXCL)
+  }
 }
 export async function readPrompt(root, relative) {
   const handle = await open(await promptPath(root, relative), 'r')

@@ -7,6 +7,7 @@ type Connection = {
   endpoint: string
   model: string
   protocol: string
+  authType?: 'subscription'
   configured: boolean
 }
 type Snapshot = {
@@ -56,6 +57,11 @@ function useConnections() {
   }, [version])
   return { state, failed, refresh }
 }
+function status(binding: Connection) {
+  if (binding.authType === 'subscription')
+    return binding.configured ? 'ChatGPT 订阅已授权' : 'ChatGPT 订阅待授权或选择模型'
+  return binding.configured ? '已设置密钥' : '未设置密钥'
+}
 function Retry({ refresh }: { refresh: () => void }) {
   return (
     <p>
@@ -83,7 +89,7 @@ export function ActionConnection({ kind }: { kind: 'image' | 'text' }) {
                   binding.source === 'default' ? '全局默认' : '专用连接',
                   binding.endpoint,
                   binding.model,
-                  binding.configured ? '已设置密钥' : '未设置密钥',
+                  status(binding),
                 ].join(' · ')
               : '尚未配置，可先固定动作'}
         </small>
@@ -164,10 +170,7 @@ function ConnectionForm({
         void save()
       }}
     >
-      <p>
-        {own ? (own.configured ? '已设置密钥' : '已选模型，未设置密钥') : '尚未配置'} ·
-        本地浏览、编辑、搜索和插入可直接使用。
-      </p>
+      <p>{own ? status(own) : '尚未配置'} · 本地浏览、编辑、搜索和插入可直接使用。</p>
       <label htmlFor="prompt-source">
         连接来源
         <ChoiceDropdown
@@ -201,37 +204,41 @@ function ConnectionForm({
           }}
         />
       </label>
-      <label>
-        API Key
-        <input
-          type="password"
-          autoComplete="off"
-          disabled={busy || !!source}
-          value={key}
-          placeholder={
-            (source ? connection?.configured : endpoint === own?.endpoint && own?.configured)
-              ? '已设置 · 密钥已遮盖'
-              : '尚未设置'
-          }
-          onChange={(e) => setKey(e.target.value)}
-        />
-      </label>
-      <label htmlFor="prompt-protocol">
-        协议
-        <ChoiceDropdown
-          id="prompt-protocol"
-          aria-label="协议"
-          disabled={busy || !!source}
-          value={(source ? connection?.protocol : protocol) || 'chat'}
-          onChange={setProtocol}
-          choices={[
-            { value: 'chat', label: 'Chat Completions' },
-            { value: 'responses', label: 'Responses' },
-            { value: 'claude', label: 'Anthropic Messages' },
-            { value: 'gemini', label: 'Gemini' },
-          ]}
-        />
-      </label>
+      {connection?.authType !== 'subscription' && (
+        <label>
+          API Key
+          <input
+            type="password"
+            autoComplete="off"
+            disabled={busy || !!source}
+            value={key}
+            placeholder={
+              (source ? connection?.configured : endpoint === own?.endpoint && own?.configured)
+                ? '已设置 · 密钥已遮盖'
+                : '尚未设置'
+            }
+            onChange={(e) => setKey(e.target.value)}
+          />
+        </label>
+      )}
+      {connection?.authType !== 'subscription' && (
+        <label htmlFor="prompt-protocol">
+          协议
+          <ChoiceDropdown
+            id="prompt-protocol"
+            aria-label="协议"
+            disabled={busy || !!source}
+            value={(source ? connection?.protocol : protocol) || 'chat'}
+            onChange={setProtocol}
+            choices={[
+              { value: 'chat', label: 'Chat Completions' },
+              { value: 'responses', label: 'Responses' },
+              { value: 'claude', label: 'Anthropic Messages' },
+              { value: 'gemini', label: 'Gemini' },
+            ]}
+          />
+        </label>
+      )}
       <label>
         适用模型
         <input

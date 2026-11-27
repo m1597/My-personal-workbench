@@ -1,8 +1,13 @@
-import { promptVisuals } from './prompt-visuals.mjs'
+import {
+  prepareReader,
+  promptVisuals,
+  readerTarget,
+  requestVisualModel,
+} from './prompt-visuals.mjs'
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
 import path from 'node:path'
-import { app } from 'electron'
+import { app, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { mkdir, unlink } from 'node:fs/promises'
 import { atomicWrite } from './prompt-actions.mjs'
@@ -230,23 +235,27 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     ...library.state(),
     registrationError: registrationError || library.state().preferenceError,
   }))
-  const visuals = promptVisuals(profile, library, async (instruction, text) => {
-    const connection = settingsStore().resolve('prompts.model')
-    if (!connection) throw Error('请先配置 API 与模型')
-    const { complete } = await import('./prompt-model.mjs')
-    return complete(
-      connection,
-      connection.key,
-      ['chat', 'responses'].includes(connection.protocol || 'chat')
-        ? [
-            { role: 'system', content: instruction },
-            { role: 'user', content: text },
-          ]
-        : [{ role: 'user', content: instruction + '\n文档数据：' + JSON.stringify({ text }) }],
-      new AbortController().signal,
-    )
+  const visuals = promptVisuals(profile, library, (instruction, text) =>
+    requestVisualModel(settingsStore(), instruction, text),
+  )
+  handle('visual', 'editor', async (root, name, generate) => {
+    const view = await visuals(root, name, generate === true)
+    const { revision } = await readerTarget(profile, library, root, name)
+    return {
+      ...view,
+      reader: !!revision,
+      stale: revision ? revision !== (await library.read(root, name)).revision : view.stale,
+    }
   })
-  handle('visual', 'editor', (root, name, generate) => visuals(root, name, generate === true))
+  handle('prepareReader', 'editor', (root, name, regenerate) =>
+    prepareReader(profile, library, visuals, root, name, regenerate === true),
+  )
+  handle('openReader', 'editor', async (root, name) => {
+    await library.read(root, name)
+    const target = await readerTarget(profile, library, root, name)
+    if (!target.revision || (await shell.openPath(target.file)))
+      throw Error('无法打开 HTML，请检查默认浏览器')
+  })
   handle('autoVisual', 'editor', library.autoVisual)
   handle('importText', 'editor', library.importText)
   handle('exportVisual', 'editor', async (root, name) => {

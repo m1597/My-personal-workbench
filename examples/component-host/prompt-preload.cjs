@@ -21,6 +21,8 @@ const methods = [
   'copy',
   'files',
   'catalogue',
+  'openReader',
+  'prepareReader',
   'visual',
   'exportVisual',
   'importText',

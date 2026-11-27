@@ -6,7 +6,7 @@ export type VisualData = {
   nodes: (Reference & { group: string })[]
   edges: (Reference & { from: number; to: number })[]
 }
-type View = { html: string; stale: boolean; data?: VisualData; svg?: string }
+type View = { reader?: boolean; html: string; stale: boolean; data?: VisualData; svg?: string }
 type VisualState = {
   view?: View
   phase: 'reading' | 'generating' | 'ready' | 'cache-error' | 'error'
@@ -23,7 +23,7 @@ export function usePromptVisual(
   const serial = useRef(0),
     pending = useRef(false)
   const request = useCallback(
-    async (generate: boolean) => {
+    async (generate: boolean, openReader = false, regenerate = false) => {
       if (!root || !revision || pending.current) return
       const id = ++serial.current
       pending.current = true
@@ -33,7 +33,12 @@ export function usePromptVisual(
         error: undefined,
       }))
       try {
-        const view = await window.promptLibrary.visual(root, name, generate)
+        if (openReader) {
+          await window.promptLibrary.prepareReader(root, name, regenerate)
+          if (serial.current !== id) return
+          await window.promptLibrary.openReader(root, name)
+        }
+        const view = await window.promptLibrary.visual(root, name, generate && !openReader)
         if (serial.current === id) setState({ phase: 'ready', view })
       } catch (e) {
         if (serial.current === id)
@@ -109,8 +114,8 @@ export function PromptVisual({
           )}
         </p>
       )}
-      {view?.stale && <p>原文已修改，可视化待更新。</p>}
-      {(!view?.html || view.stale) && (
+      {view?.stale && <p>原文已更新。</p>}
+      {((!view?.html && !view?.reader) || view.stale) && (
         <button type="button" disabled={busy} onClick={onGenerate}>
           {visual.phase === 'reading'
             ? '正在读取…'

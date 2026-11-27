@@ -34,6 +34,8 @@ declare global {
         name: string,
         generate: boolean,
       ): Promise<{ html: string; stale: boolean; svg?: string; data?: VisualData }>
+      prepareReader(root: string, name: string, regenerate: boolean): Promise<void>
+      openReader(root: string, name: string): Promise<void>
       exportVisual(root: string, name: string): Promise<boolean>
       importText(root: string, name: string, text: string): Promise<string>
       autoVisual(value: boolean): Promise<void>
@@ -447,11 +449,11 @@ function Library() {
         ?.replace(/\.(md|txt)$/i, '') || '',
     )
   }
-  function showVisual() {
+  function showVisual(regenerate = false) {
     if (!doc || dirty || visual.busy) return
     setRaw(false)
     if (visual.phase === 'cache-error') void visual.request(false)
-    else if (!hasVisual || visual.view?.stale) void visual.request(true)
+    else void visual.request(true, true, regenerate)
   }
   async function importOne(filename: string, body: string) {
     const root = state?.root
@@ -465,7 +467,7 @@ function Library() {
     const selection = selectionVersion.current
     if (state.autoVisual) {
       try {
-        await api.visual(root, name, true)
+        await api.prepareReader(root, name, false)
         if (selection !== selectionVersion.current) return
         update()
         setVisualVersion((v) => v + 1)
@@ -834,7 +836,7 @@ function Library() {
                     aria-pressed={!raw && hasVisual}
                     disabled={dirty || !doc || editMode || visual.busy}
                     title={visual.error}
-                    onClick={showVisual}
+                    onClick={() => showVisual()}
                   >
                     {visual.phase === 'generating'
                       ? '正在生成…'
@@ -862,7 +864,7 @@ function Library() {
                       text={doc.text}
                       original={raw}
                       visual={visual}
-                      onGenerate={showVisual}
+                      onGenerate={() => showVisual(!!visual.view?.stale)}
                       configure={() => {
                         setCategory('api')
                         setSettings(true)

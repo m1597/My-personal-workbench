@@ -12,13 +12,22 @@ for (const product of ['prompts', 'workbench']) {
     ? path.join(root, product === 'prompts' ? 'Prompts' : '', 'resources/app')
     : (await prepareProduct(product)).app
   const host = path.join(app, 'host')
-  for (const file of ['LICENSE', 'LICENSE-MIT', 'NOTICE', 'THIRD_PARTY_NOTICES.md']) {
+  for (const file of [
+    'LICENSE',
+    'LICENSE-MIT',
+    'NOTICE',
+    'THIRD_PARTY_NOTICES.md',
+    'assets/template.html',
+    'assets/JetBrainsMono-OFL.txt',
+  ]) {
     await access(path.join(host, 'archify', file))
   }
   await access(path.join(app, product === 'prompts' ? 'prompts' : 'workbench', 'index.html'))
   const manifest = JSON.parse(await readFile(path.join(app, 'package.json'), 'utf8'))
   await access(path.join(app, manifest.main))
-  const { promptVisuals } = await import(pathToFileURL(path.join(host, 'prompt-visuals.mjs')).href)
+  const { promptVisuals, standaloneReader } = await import(
+    pathToFileURL(path.join(host, 'prompt-visuals.mjs')).href
+  )
   const text = 'Read. Save.'
   const data = {
     kind: 'flow',
@@ -33,5 +42,8 @@ for (const product of ['prompts', 'workbench']) {
   const result = await run(scratch, 'sample.md', true)
   assert.match(result.svg, /data-node-id="n1"/)
   assert.match(result.html, /archify-software-notices/)
+  const reader = standaloneReader(result, 'sample.md')
+  assert.match(reader, /archify-i18n-data/)
+  assert.match(reader, /prompt-original/)
   console.log('PASS', product, manifest.version, manifest.main, scratch)
 }

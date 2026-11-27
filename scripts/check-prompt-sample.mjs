@@ -65,6 +65,9 @@ const launch = () =>
 let app
 try {
   app = await launch()
+  await app.evaluate(({ shell }) => {
+    shell.openPath = async () => ''
+  })
   async function open() {
     const page = await app.firstWindow()
     await page.getByRole('button', { name: '修复分窗收起问题', exact: true }).click()
@@ -105,6 +108,9 @@ try {
   await page.locator('.visual-reader').screenshot({ path: path.join(evidence, 'real.png') })
   await app.close()
   app = await launch()
+  await app.evaluate(({ shell }) => {
+    shell.openPath = async () => ''
+  })
   await app.evaluate(() => {
     globalThis.sampleRequests = 0
     globalThis.fetch = () => {
