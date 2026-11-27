@@ -130,12 +130,37 @@ try {
   const dock = w.locator('.toolkit-panel')
   await expect(b(dock, '框选屏幕')).toBeVisible()
   await expect.poll(() => count(kit)).toBe(0)
+  const initial = await w.evaluate(() => ({ width: innerWidth, height: innerHeight }))
+  for (const width of [640, 360]) {
+    await w.setViewportSize({ width, height: 620 })
+    await checkRows(w, dock, 'dock-' + width)
+    await b(dock, '设置').click()
+    const categories = b(dock, '设置分类')
+    if (await categories.isVisible()) await categories.click()
+    await b(dock, 'API 与模型').click()
+    await dock.getByRole('combobox', { name: '用途' }).click()
+    const option = dock.getByRole('option', { name: '视觉问答' })
+    await expect(option).toBeVisible()
+    const bounds = await option.boundingBox(),
+      panelBounds = await dock.boundingBox()
+    assert(
+      bounds.x >= panelBounds.x - 1 &&
+        bounds.x + bounds.width <= panelBounds.x + panelBounds.width + 1,
+    )
+    await dock.screenshot({ path: path.join(profile, 'dock-open-' + width + '.png') })
+    await option.click()
+    await b(dock, '返回').click()
+  }
+  await w.setViewportSize(initial)
   await checkRows(w, dock, 'dock-home')
   assert.equal(
     await dock.evaluate((el) => getComputedStyle(el).backgroundColor),
     'rgba(0, 0, 0, 0)',
   )
   await b(dock, '设置').click()
+  const categoryMenu = b(dock, '设置分类')
+  if (await categoryMenu.isVisible()) await categoryMenu.click()
+  await b(dock, '快捷键').click()
   await expect(dock.getByRole('region', { name: '屏幕取色' })).toBeVisible()
   await expect.poll(() => count(kit)).toBe(0)
   await expect(dock.getByRole('textbox').first()).toBeVisible()
