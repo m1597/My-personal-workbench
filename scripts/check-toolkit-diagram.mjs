@@ -85,10 +85,8 @@ async function checkDiagram() {
       path.join(profile, 'workbench-material.json'),
       JSON.stringify({ brightness: 15, transparency: 25, frost: 65 }),
     )
-    app = await _electron.launch({ args: ['components/toolkit', profileArg], env })
-    panel = await app.firstWindow()
-    await panel.setViewportSize({ width: 320, height: 650 })
-  } else if (candidateRoot || process.argv.includes('--packaged')) {
+  }
+  if (candidateRoot || process.argv.includes('--packaged')) {
     app = await _electron.launch({
       executablePath: candidateRoot
         ? path.join(candidateRoot, 'Toolkit', 'FitBay Toolkit.exe')
@@ -96,6 +94,9 @@ async function checkDiagram() {
       args: [profileArg],
       env,
     })
+    panel = await app.firstWindow()
+  } else if (checkTheme) {
+    app = await _electron.launch({ args: ['components/toolkit', profileArg], env })
     panel = await app.firstWindow()
   } else {
     app = await _electron.launch({ args: ['components/toolkit', profileArg], env })
@@ -113,6 +114,7 @@ async function checkDiagram() {
     await shell.locator('#window-menu').getByText('工具集', { exact: true }).click()
     panel = shell.locator('.toolkit-panel')
   }
+  if (checkTheme) await panel.setViewportSize({ width: 320, height: 650 })
   const template = '逐步推导并说明每个分支的作用'
   if (candidateRoot) {
     const library = path.join(folder, 'library')
