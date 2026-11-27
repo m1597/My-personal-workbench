@@ -104,22 +104,6 @@ async function checkDiagram() {
     await shell.locator('#window-menu').getByText('工具集', { exact: true }).click()
     panel = shell.locator('.toolkit-panel')
   }
-  if (copyResults) {
-    await (await host.firstWindow()).setViewportSize({ width: 360, height: 600 })
-    await b(panel, '设置快捷键').click()
-    const row = panel.getByRole('region', { name: '划词助手' })
-    await row.getByRole('textbox').click()
-    await row.getByRole('textbox').press('Control+Alt+Shift+F11')
-    await b(row, '保存划词助手快捷键').click()
-    await b(panel, '返回').click()
-    const hint = panel.locator('.tool-row[data-tool=selection] small')
-    await expect(hint).toContainText('Ctrl+Alt+Shift+F11')
-    await panel.screenshot({ path: path.join(folder, 'selection-key.png') })
-    await b(panel, '设置快捷键').click()
-    await b(row, '停用').click()
-    await b(panel, '返回').click()
-    await expect(hint).toHaveText('划词助手已停用')
-  }
   const template = '逐步推导并说明每个分支的作用'
   if (candidateRoot) {
     const library = path.join(folder, 'library')
@@ -158,6 +142,22 @@ async function checkDiagram() {
     await shell.getByRole('menuitemcheckbox', { name: '工具集', exact: true }).click()
     panel = shell.locator('.toolkit-panel')
     await expect(b(panel, '开始取色')).toBeVisible()
+  }
+  if (copyResults) {
+    await (host ? await host.firstWindow() : panel).setViewportSize({ width: 360, height: 600 })
+    await b(panel, '设置快捷键').click()
+    const row = panel.getByRole('region', { name: '划词助手' })
+    await row.getByRole('textbox').click()
+    await row.getByRole('textbox').press('Control+Alt+Shift+F11')
+    await b(row, '保存划词助手快捷键').click()
+    await b(panel, '返回').click()
+    const hint = panel.locator('.tool-row[data-tool=selection] small')
+    await expect(hint).toContainText('Ctrl+Alt+Shift+F11')
+    await panel.screenshot({ path: path.join(folder, 'selection-key.png') })
+    await b(panel, '设置快捷键').click()
+    await b(row, '停用').click()
+    await b(panel, '返回').click()
+    await expect(hint).toHaveText('划词助手已停用')
   }
   const frame = execFileSync(
     'python',
