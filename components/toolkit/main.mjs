@@ -592,13 +592,19 @@ async function startToolkit() {
       s.win.close()
     }
   })
-  handle('copyMeasuredColor', ['screen'], (s, hex) => {
+  handle('copyMeasuredColor', ['screen'], async (s, hex) => {
     if (!/^#[0-9A-F]{6}$/.test(hex)) throw Error('请先取色')
-    clipboard.writeText(hex)
+    await clipboard.writeText(hex)
     const display = displayFor(s)
     show(
       { kind: 'color-result', hex, displayId: display.id },
-      { title: 'FitBay 取色结果', ...resultBounds(display.workArea, 365, 245) },
+      {
+        title: 'FitBay 取色结果',
+        frame: false,
+        roundedCorners: true,
+        skipTaskbar: true,
+        ...resultBounds(display.workArea, 365, 245),
+      },
       s.hosted,
     )
     s.win.close()

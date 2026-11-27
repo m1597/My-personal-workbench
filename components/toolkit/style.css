@@ -244,3 +244,26 @@ body.result-window {
 .screen .bar button:hover {
   background: var(--hover);
 }
+
+.color-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  -webkit-app-region: drag;
+}
+.color-title img {
+  width: 20px;
+  height: 20px;
+}
+.result-window .color-title h1 {
+  margin: 0;
+}
+.color-title button {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 20px;
+  -webkit-app-region: no-drag;
+}

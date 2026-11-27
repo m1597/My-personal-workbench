@@ -361,7 +361,15 @@ api
         }),
         button('重新取色', () => api.repick()),
       )
-      root.append(el('h1', '取色结果'), sample, actions, notice)
+      const header = el('header', '', 'color-title')
+      const icon = el('img')
+      icon.src = './toolkit.ico'
+      icon.alt = ''
+      const close = button('×', () => api.dismiss())
+      close.title = '关闭取色结果 (Esc)'
+      close.setAttribute('aria-label', '关闭取色结果')
+      header.append(icon, el('h1', '取色结果'), close)
+      root.append(header, sample, actions, notice)
       return
     }
     if (s.kind === 'pin') {

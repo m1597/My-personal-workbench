@@ -145,7 +145,7 @@
 }
 .dv-tab[data-tab-panel-id="component-toolkit"] .dv-default-tab-content::before,
 .host-toolkit-icon {
-  background: currentColor;
+  background: #fff;
   mask: url("./host-toolbox.svg") center / contain no-repeat;
 }
 .host-toolkit-icon {
