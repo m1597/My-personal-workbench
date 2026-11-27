@@ -131,6 +131,10 @@ async function screenView(s) {
     }
     try {
       await api.crop([x / innerWidth, y / innerHeight, r / innerWidth, b / innerHeight])
+      if (s.intent === 'translate') {
+        await ask('translate')
+        return
+      }
       bar.hidden = false
       bar.style.display = 'flex'
       bar.style.left = Math.max(0, Math.min(x, innerWidth - bar.offsetWidth)) + 'px'

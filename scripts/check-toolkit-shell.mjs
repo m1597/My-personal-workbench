@@ -86,7 +86,7 @@ try {
       items.map((item) => {
         const badge = item.querySelector('.badge'),
           svg = badge.querySelector('svg'),
-          action = item.querySelector('button')
+          action = item.querySelector('button:last-of-type')
         return {
           label: badge.getAttribute('aria-label'),
           background: getComputedStyle(badge).backgroundColor,
@@ -94,8 +94,11 @@ try {
           width: svg.getBoundingClientRect().width,
           right: action.getBoundingClientRect().right,
           gap:
-            action.getBoundingClientRect().left -
-            item.querySelector('.tool-text').getBoundingClientRect().right,
+            action.getBoundingClientRect().top >=
+            item.querySelector('.tool-text').getBoundingClientRect().bottom
+              ? 0
+              : action.getBoundingClientRect().left -
+                item.querySelector('.tool-text').getBoundingClientRect().right,
         }
       }),
     )
@@ -108,7 +111,7 @@ try {
     }
     await b(surface, '设置').hover()
     await expect(surface.getByRole('tooltip')).toBeVisible()
-    await expect(b(surface, '框选屏幕')).toBeDisabled()
+    await expect(b(surface, '截图')).toBeDisabled()
     await page.screenshot({ path: path.join(profile, name + '.png') })
   }
   for (const width of [850, 600, 320]) {
@@ -128,7 +131,7 @@ try {
   await b(w, '组件').click()
   await w.locator('#window-menu').getByText('工具集', { exact: true }).click()
   const dock = w.locator('.toolkit-panel')
-  await expect(b(dock, '框选屏幕')).toBeVisible()
+  await expect(b(dock, '截图')).toBeVisible()
   await expect.poll(() => count(kit)).toBe(0)
   const initial = await w.evaluate(() => ({ width: innerWidth, height: innerHeight }))
   for (const width of [640, 360]) {
@@ -192,7 +195,7 @@ try {
   await dock.screenshot({ path: path.join(profile, 'dock-api.png') })
   await dock.getByLabel('服务地址').fill('https://example.invalid/')
   await b(dock, '返回').click()
-  await expect(b(dock, '框选屏幕')).toBeVisible()
+  await expect(b(dock, '截图')).toBeVisible()
   assert.equal(await count(host), 1)
   assert.equal(await count(kit), 0)
   await b(w, '组件').click()

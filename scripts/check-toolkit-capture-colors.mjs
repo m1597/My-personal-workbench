@@ -81,7 +81,7 @@ try {
         ])
       else
         await (entry === 'dock' ? dock : home)
-          .getByRole('button', { name: '框选屏幕', exact: true })
+          .getByRole('button', { name: '截图', exact: true })
           .click()
       const overlay = await opening
       await overlay.locator('.screen img').waitFor()
@@ -247,7 +247,7 @@ dlg.wait_not('exists',timeout=10)`,
   }
   for (const cancel of [false, true]) {
     const opening = app.waitForEvent('window')
-    await dock.getByRole('button', { name: '框选屏幕' }).click()
+    await dock.getByRole('button', { name: '截图' }).click()
     const picker = await opening
     await picker.locator('.screen img').waitFor()
     await picker.mouse.move(130, 130)

@@ -51,6 +51,7 @@ async function startToolkit() {
   const file = path.join(app.getPath('userData'), 'settings.json')
   const defaults = {
     capture: { enabled: true, key: 'Control+Alt+S' },
+    translate: { enabled: true, key: 'Alt+S' },
     color: { enabled: true, key: 'Control+Alt+C' },
     selection: { enabled: true, key: 'Control+Alt+T' },
     endpoint: 'https://api.openai.com/v1',
@@ -347,7 +348,7 @@ async function startToolkit() {
         void (
           id === 'selection'
             ? select(fromHost)
-            : capture(id === 'color' ? 'color' : undefined, fromHost)
+            : capture(id === 'capture' ? undefined : id, fromHost)
         ).catch((error) => fail(error, fromHost))
       })
     )
@@ -355,12 +356,12 @@ async function startToolkit() {
     if (old) globalShortcut.unregister(old)
     bound.set(id, key)
   }
-  for (const id of ['capture', 'selection', 'color'])
+  for (const id of ['capture', 'selection', 'color', 'translate'])
     if (cfg[id]?.enabled)
       try {
         bind(id, cfg[id].key)
       } catch (e) {
-        notice += `${id === 'capture' ? '截图' : id === 'color' ? '取色' : '划词'}快捷键：${e.message} `
+        notice += `${id === 'capture' ? '截图' : id === 'color' ? '取色' : id === 'translate' ? '截图翻译' : '划词'}快捷键：${e.message} `
       }
   function handle(name, kinds, fn) {
     ipcMain.handle(`toolkit:${name}`, (e, v) => {
@@ -375,6 +376,7 @@ async function startToolkit() {
     return {
       color: cfg.color,
       capture: cfg.capture,
+      translate: cfg.translate,
       selection: { ...cfg.selection, activeKey: bound.get('selection') || '' },
       notice,
     }
@@ -434,9 +436,9 @@ async function startToolkit() {
   })
   handle('toolTarget', ['home'], () => targetTool)
   handle('capture', ['home'], (s, intent) => {
-    if (intent === 'color' ? !cfg.color.enabled : !cfg.capture.enabled)
-      throw Error('请先启用该工具')
-    return capture(intent === 'color' ? intent : undefined, s.hosted)
+    const tool = ['color', 'translate'].includes(intent) ? intent : 'capture'
+    if (!cfg[tool].enabled) throw Error('请先启用该工具')
+    return capture(tool === 'capture' ? undefined : tool, s.hosted)
   })
   function setShortcut(v) {
     if (v?.id === 'defaults') {
@@ -445,7 +447,7 @@ async function startToolkit() {
       for (const key of bound.values()) globalShortcut.unregister(key)
       bound.clear()
       try {
-        for (const id of ['capture', 'selection', 'color']) {
+        for (const id of ['capture', 'selection', 'color', 'translate']) {
           next[id] = { ...cfg[id], key: defaults[id].key }
           if (next[id].enabled) bind(id, next[id].key)
         }
@@ -459,7 +461,7 @@ async function startToolkit() {
       return
     }
     if (
-      !['capture', 'selection', 'color'].includes(v?.id) ||
+      !['capture', 'selection', 'color', 'translate'].includes(v?.id) ||
       typeof v.enabled !== 'boolean' ||
       typeof v.key !== 'string'
     )
@@ -835,6 +837,14 @@ async function startToolkit() {
       }
       writeFileSync(file + '.tmp', JSON.stringify(result))
       renameSync(file + '.tmp', file + '.reply')
+      return
+    }
+    if (argv.includes('--toolkit-page=translate')) {
+      if (!cfg.translate.enabled) {
+        fail(Error('请先启用截图翻译'))
+        return
+      }
+      void capture('translate', hosted).catch(fail)
       return
     }
     if (argv.includes('--toolkit-page=color')) {

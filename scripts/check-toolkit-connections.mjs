@@ -29,10 +29,10 @@ try {
   app = await _electron.launch(standalone)
   await installScreenFixture(app, frame)
   let home = await app.firstWindow()
-  await expect(home.getByText('框选屏幕')).toBeVisible()
+  await expect(home.getByText('截图')).toBeVisible()
   async function region() {
     const ready = app.waitForEvent('window')
-    await home.getByText('框选屏幕').click()
+    await home.getByText('截图').click()
     const overlay = await ready
     await expect(overlay.locator('.screen img')).toBeVisible()
     await overlay.mouse.move(20, 20)
@@ -76,7 +76,7 @@ try {
   await expect(result.getByLabel('服务地址')).toBeFocused()
   await result.getByRole('button', { name: '返回', exact: true }).click()
   await expect(result.getByRole('button', { name: '重试', exact: true })).toBeVisible()
-  await expect(home.getByRole('button', { name: '框选屏幕', exact: true })).toBeVisible()
+  await expect(home.getByRole('button', { name: '截图', exact: true })).toBeVisible()
   const encrypted = await app.evaluate(
     ({ safeStorage }, key) => safeStorage.encryptString(key).toString('base64'),
     marker,

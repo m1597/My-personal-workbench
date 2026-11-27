@@ -193,7 +193,7 @@ im.save(sys.stdout.buffer,'PNG')`,
   const mapY = (y) => Math.round((y * display.fixture.bounds.height) / 640)
   async function region() {
     const next = app.waitForEvent('window')
-    await b(panel, '框选屏幕').click()
+    await b(panel, '截图').click()
     const overlay = await next
     await overlay.locator('.screen img').waitFor()
     await overlay.mouse.move(mapX(82), mapY(82))
@@ -202,6 +202,28 @@ im.save(sys.stdout.buffer,'PNG')`,
     await overlay.mouse.up()
     await b(overlay, '翻译').waitFor()
     return overlay
+  }
+  if (process.argv.includes('--direct-translation')) {
+    bad = false
+    unblock()
+    let next = app.waitForEvent('window')
+    await b(panel, '截图翻译').click()
+    const overlay = await next
+    await overlay.locator('.screen img').waitFor()
+    next = app.waitForEvent('window')
+    await overlay.mouse.move(mapX(82), mapY(82))
+    await overlay.mouse.down()
+    await overlay.mouse.move(mapX(678), mapY(440))
+    await overlay.mouse.up()
+    const result = await next
+    await expect(b(result, '仅中文')).toBeVisible({ timeout: 30000 })
+    assert.equal(requests.length, 1)
+    await b(result, '双语').click()
+    await expect(result.locator('[data-mode="双语"]')).toBeVisible()
+    assert.equal(requests.length, 1)
+    await result.screenshot({ path: path.join(folder, 'direct.png') })
+    console.log('PASS dock direct crop to translated overlay', folder)
+    return
   }
   let overlay = await region()
   if (process.argv.includes('--pin-in-place')) {

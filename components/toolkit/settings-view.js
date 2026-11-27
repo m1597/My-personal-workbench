@@ -164,7 +164,12 @@ export function connectionEditor(parent, { api, button, notice, error }, initial
 export function settingsContents(s, target, ctx) {
   const { api, button, notice } = ctx
   notice.textContent = s.notice
-  const defaults = { capture: 'Control+Alt+S', selection: 'Control+Alt+T', color: 'Control+Alt+C' }
+  const defaults = {
+    translate: 'Alt+S',
+    capture: 'Control+Alt+S',
+    selection: 'Control+Alt+T',
+    color: 'Control+Alt+C',
+  }
   const refreshers = []
   const sync = (values) => {
     for (const apply of refreshers) apply(values)
@@ -174,6 +179,7 @@ export function settingsContents(s, target, ctx) {
     sync(api.shortcutSettings ? await api.shortcutSettings() : (await api.state()).settings)
   for (const [id, title] of [
     ['capture', '屏幕截图'],
+    ['translate', '截图翻译'],
     ['selection', '划词助手'],
     ['color', '屏幕取色'],
   ]) {

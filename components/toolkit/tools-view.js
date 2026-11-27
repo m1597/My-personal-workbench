@@ -275,6 +275,11 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     const action = button(label, fn)
     if (icon !== 'selection') action.dataset.tool = icon
     item.append(badge, text, action)
+    if (icon === 'capture') {
+      const translate = button('截图翻译', () => api.capture('translate'))
+      translate.dataset.tool = 'translate'
+      item.append(translate)
+    }
     return item
   }
   async function pick() {
@@ -290,9 +295,7 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     if (!active) {
       const primary = el('section', '', 'primary-tools')
       primary.append(
-        tile('屏幕截图', '框选后可复制、贴图或提取文字', 'capture', '框选屏幕', () =>
-          api.capture(),
-        ),
+        tile('屏幕截图', '框选后可复制、贴图或提取文字', 'capture', '截图', () => api.capture()),
         tile('划词助手', '读取快捷键…', 'selection', '设置快捷键', () => settingsPage('keys')),
         tile('屏幕取色', '点选屏幕像素，复制十六进制色值', 'color', '开始取色', () =>
           api.capture('color'),

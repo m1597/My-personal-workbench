@@ -99,7 +99,7 @@ try {
   await expect(page.getByLabel('模型名')).toHaveValue('shared-vision')
   await b(page, '返回').click()
   const waiting = kit.waitForEvent('window')
-  await b(page, '框选屏幕').click()
+  await b(page, '截图').click()
   const overlay = await waiting
   await overlay.locator('.screen img').waitFor()
   await overlay.mouse.move(100, 100)

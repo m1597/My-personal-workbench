@@ -386,3 +386,23 @@ fitbay-toolkit-choice .fui-Option {
 .tool-row[data-tool="selection"] small {
   overflow-wrap: anywhere;
 }
+
+.tool-row[data-tool="capture"] > button {
+  min-inline-size: 0;
+}
+@container (max-width: 420px) {
+  .tool-row[data-tool="capture"] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 6px;
+  }
+  .tool-row[data-tool="capture"] .tool-text {
+    grid-column: 2 / -1;
+  }
+  .tool-row[data-tool="capture"] button:first-of-type {
+    grid-column: 3;
+  }
+  .tool-row[data-tool="capture"] button:last-of-type {
+    grid-column: 4;
+  }
+}

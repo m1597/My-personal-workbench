@@ -680,6 +680,7 @@ else {
               'files',
               'settings',
               'color',
+              'translate',
               'compare',
               'album',
               'compress',

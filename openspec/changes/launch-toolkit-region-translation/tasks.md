@@ -1,0 +1,3 @@
+- [x] 独立与停靠共用「截图」「截图翻译」，直达路径松手翻译。
+- [x] 从构建工作台打开停靠页，选区松手后真实 OCR，回环模型一次调用得到仅中文图，切换双语未追加请求。复测：node scripts/check-toolkit-diagram.mjs --direct-translation。
+- [ ] 对接平台第 15 项能力接口并单列适配证据。

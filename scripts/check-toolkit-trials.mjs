@@ -85,7 +85,7 @@ for file in ('exe-icon.png','window-icon.png','shortcut-icon.png'):
   }
   page.setDefaultTimeout(12000)
   const B = (name, p = home) => p.getByRole('button', { name, exact: true })
-  await expect(B('框选屏幕')).toBeVisible()
+  await expect(B('截图')).toBeVisible()
   assert.deepEqual(await home.locator('.tool-row strong').allTextContents(), [
     '屏幕截图',
     '划词助手',

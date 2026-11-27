@@ -329,7 +329,7 @@ try {
       await shell.getByRole('button', { name: '组件', exact: true }).click()
       await shell.locator('#window-menu').getByText('工具集', { exact: true }).click()
       const waiting = app.waitForEvent('window', { timeout: 20000 })
-      await shell.getByRole('button', { name: '框选屏幕' }).click()
+      await shell.getByRole('button', { name: '截图' }).click()
       const overlay = await waiting
       await expect(overlay.locator('.screen')).toBeVisible()
       assert(
@@ -366,7 +366,7 @@ if (process.argv.includes('--absent')) {
     await expect(home.getByLabel('模型名')).toHaveValue('vision-test')
     const waiting = standalone.waitForEvent('window')
     await home.getByRole('button', { name: '返回', exact: true }).click()
-    await home.getByText('框选屏幕', { exact: true }).click()
+    await home.getByText('截图', { exact: true }).click()
     const overlay = await waiting
     await expect(overlay.locator('.screen')).toBeVisible()
     const actions = () => overlay.evaluate(() => window.toolkit.actions())
