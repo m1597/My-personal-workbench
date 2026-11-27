@@ -77,12 +77,16 @@ try {
     path: path.join(root, '歌词设置.png'),
     style: ':root{background:var(--base)!important}',
   })
+  await page.getByRole('button', { name: '返回', exact: true }).click()
+  await expect(page.locator('.music-settings')).toHaveCount(0)
   const open = app.waitForEvent('window')
   await page.getByRole('button', { name: '桌面歌词', exact: true }).click()
   const overlay = await open
   await page.getByRole('button', { name: /^(播放|从 .* 秒继续)$/ }).click()
   await page.getByRole('button', { name: '暂停', exact: true }).click()
   const groups = overlay.locator('.lyric-group')
+  await openMusicSettings(page)
+  await selectMusicSettings(page, '歌词')
   for (const [mode, count] of [
     ['双行', 2],
     ['单行', 1],
@@ -147,7 +151,10 @@ try {
       audio.currentTime = 6
     })
   }
+  await page.getByRole('button', { name: '返回', exact: true }).click()
+  await expect(page.locator('.music-settings')).toHaveCount(0)
   await page.getByRole('button', { name: '桌面歌词', exact: true }).click()
+  await openMusicSettings(page)
   await selectMusicSettings(page, '下载')
   await expect(page.getByLabel('同时保存同名 LRC 歌词文件')).toBeChecked()
   await page.getByLabel('有译文时同时保存译文').check()

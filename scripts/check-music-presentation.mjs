@@ -16,6 +16,7 @@ for (const title of ['夜航', '归途']) {
   await writeFile(file, recording('fitbay-tone-1'))
   store.library.upsert({ file, title, artist: 'FitBay', album: '', duration: 20 })
 }
+store.set('music-guide-v1', 1)
 store.db.close()
 const args = [
   path.resolve('dist/component-prototype/host'),
@@ -122,10 +123,19 @@ try {
           expect(await hideButton.evaluate((el) => el === el.parentElement.lastElementChild)).toBe(
             true,
           )
-          expect((await hideButton.boundingBox()).x).toBeGreaterThan((await more.boundingBox()).x)
+          // A dock narrower than 270px wraps the action row, so hide sits under the gear.
+          const hideBox = await hideButton.boundingBox()
+          const gearBox = await more.boundingBox()
+          expect(hideBox.y > gearBox.y + gearBox.height - 1 || hideBox.x > gearBox.x).toBe(true)
         }
         await more.click()
         await expect(music.locator('.music-settings')).toBeVisible()
+        await music.getByRole('button', { name: '返回', exact: true }).click()
+        await expect(music.locator('.music-settings')).toHaveCount(0)
+        await expect(musicTabs.getByRole('tab', { name: '歌单', exact: true })).toHaveAttribute(
+          'aria-selected',
+          'true',
+        )
         await music.getByRole('tab', { name: '曲库', exact: true }).click()
       }
       await app.evaluate(
@@ -331,10 +341,14 @@ try {
   await app.close()
 }
 
+const emptyProfile = path.join(evidence, 'empty-profile')
+const emptyStore = new MusicStore(path.join(emptyProfile, 'fitbay-music'))
+emptyStore.set('music-guide-v1', 1)
+emptyStore.db.close()
 const daily = await electron.launch({
   args: [
     ...args.filter((value) => !value.startsWith('--user-data-dir=')),
-    '--user-data-dir=' + path.join(evidence, 'empty-profile'),
+    '--user-data-dir=' + emptyProfile,
     '--mode=workbench',
   ],
   env: { ...env, FITBAY_TEST_PANELS: '0' },

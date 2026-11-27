@@ -132,6 +132,8 @@ for (const restart of [false, true]) {
       await selectMusicSettings(page, '下载')
       await page.getByRole('combobox', { name: '试听音质' }).click()
       await page.getByRole('option', { name: nextQuality, exact: true }).click()
+      await page.getByRole('button', { name: '返回', exact: true }).click()
+      await expect(page.locator('.music-settings')).toHaveCount(0)
       await openDiscovery(page, false)
       await pane.getByRole('textbox').fill('测试在线歌曲')
       await pane.getByRole('textbox').press('Enter')

@@ -136,6 +136,8 @@ try {
   ).toBe(false)
   await player.getByLabel('启用键盘媒体键').check()
   await expect.poll(async () => (await prefs()).mediaKeys).toBe(true)
+  await player.getByRole('button', { name: '返回', exact: true }).click()
+  await expect(player.locator('.music-settings')).toHaveCount(0)
   const mode = player.locator('.music-order')
   await mode.click()
   await mode.click()
@@ -156,6 +158,8 @@ try {
   await expect.poll(paused).toBe(true)
   await key(combo)
   await expect.poll(paused).toBe(false)
+  await openMusicSettings(player)
+  await selectMusicSettings(player, '快捷键')
   for (const [label, acc, expected] of [
     ['下一首', 'Ctrl+Alt+Shift+F9', 'B'],
     ['上一首', 'Ctrl+Alt+Shift+F8', 'A'],

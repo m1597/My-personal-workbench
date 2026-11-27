@@ -12,6 +12,16 @@ button.fitbay-settings-action {
 }
 button.fitbay-settings-action:hover {background:var(--hover);color:var(--text)}
 button.fitbay-settings-action:focus-visible,.fitbay-settings-shell button:focus-visible {outline:2px solid var(--accent);outline-offset:-2px}
+button.fitbay-settings-action {position:relative}
+button.fitbay-settings-action [role="tooltip"] {
+ display:none;position:absolute;z-index:10;right:0;top:calc(100% + var(--space-4, 4px));
+ width:max-content;padding:var(--space-4, 4px) var(--space-8, 8px);color:var(--text);
+ font-size:var(--font-size-caption, 12px);background:var(--menu-surface, var(--base));
+ border:1px solid var(--stroke-strong, var(--stroke));border-radius:var(--radius-6, 6px);
+ box-shadow:var(--shadow-menu);pointer-events:none
+}
+button.fitbay-settings-action:hover [role="tooltip"],
+button.fitbay-settings-action:focus-visible [role="tooltip"] {display:block}
 `
 function sheet(css) {
   const style = document.createElement('style')
@@ -34,9 +44,17 @@ export function createBackButton(onBack) {
   back.style.justifySelf = 'start'
   return back
 }
+let settingsHintSerial = 0
 export function createSettingsGear({ label, onClick }) {
   const gear = button(label, icon(gearPath, '<circle cx="12" cy="12" r="3"/>'), onClick)
-  gear.append(sheet(controls))
+  // Native title tooltips are not exposed as role=tooltip, and they do not show in the background checks.
+  gear.removeAttribute('title')
+  const tip = document.createElement('span')
+  tip.id = 'fitbay-settings-hint-' + ++settingsHintSerial
+  tip.role = 'tooltip'
+  tip.textContent = label
+  gear.setAttribute('aria-describedby', tip.id)
+  gear.append(tip, sheet(controls))
   return gear
 }
 export function createSettingsShell({ title, categories, active, onSelect, onBack }) {

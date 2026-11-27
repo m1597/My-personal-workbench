@@ -171,6 +171,7 @@ try {
   }, path.resolve('tests/fixtures/local-music/tone.flac'))
   await openMusicSettings(page)
   await press('添加文件')
+  await press('返回')
   await tab('曲库')
   await expect(titles).toHaveCount(3)
   const imported = await page.evaluate(async () =>

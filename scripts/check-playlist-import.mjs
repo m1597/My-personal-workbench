@@ -89,6 +89,9 @@ try {
     })
     await gear.click()
     await expect(page.locator('.music-settings')).toBeVisible()
+    // Settings hide the main tabs. Leave through the shell's back button, then the library tab is shown again.
+    await page.getByRole('button', { name: '返回', exact: true }).click()
+    await expect(page.locator('.music-settings')).toHaveCount(0)
     await page.getByRole('tab', { name: '曲库', exact: true }).click()
     const group = page.getByRole('group', { name: '导入音乐' })
     for (const name of ['添加文件', '添加文件夹', '导入歌单'])
