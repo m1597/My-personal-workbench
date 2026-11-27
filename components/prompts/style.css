@@ -520,3 +520,32 @@ select option {
   overflow-wrap: anywhere;
   tab-size: 2;
 }
+
+.markdown-table {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-block: 0.8em;
+}
+.markdown-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.markdown-table th,
+.markdown-table td {
+  min-width: 10rem;
+  padding: 0.45em 0.7em;
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--stroke);
+}
+.markdown-table th {
+  background: var(--control);
+  font-weight: 600;
+}
+.markdown-table [data-align="center"] {
+  text-align: center;
+}
+.markdown-table [data-align="right"] {
+  text-align: right;
+}

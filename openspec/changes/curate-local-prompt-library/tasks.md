@@ -19,3 +19,7 @@
 - 验收同时保存 Electron 原始透明图层、按宿主深色回退底合成的同尺寸 PNG 及[视口数据](../../../tmp/prompt-reading-UQRGbE/geometry.json)。[窄窗列表](../../../tmp/prompt-reading-UQRGbE/narrow-list.png)、[窄窗 OAuth](../../../tmp/prompt-reading-UQRGbE/narrow-oauth.png)、[停靠阅读](../../../tmp/prompt-reading-UQRGbE/docked-oauth.png)。毛玻璃与物理桌面壁纸的最终 DWM 合成未捕获。
 
 本组同次构建的 prompts/component.js SHA-256 为 `05D97F85887CD90E3F94D7220F7A3A6FB46B7FE40DCB667DFF2DC9E719E27B32`。
+
+### Markdown 表格复验
+
+从同一份《接入ai订阅.md》复现原版渲染 0 张表。修复后在独立、半屏、窄窗及停靠入口均读到 6 张表、79 行数据，首表首行为 OpenAI 和 OPENAI_API_KEY。实际 59 个目录链接均对应文内目标；点击 OAuth Providers 后标题可见并获得焦点。约 309 CSS 像素宽时，只在宽表内横向滚动，正文和页面无横向溢出。[窄窗表头与数据](../../../tmp/prompt-reading-xqJ3jx/narrow-table.png) · [OAuth 定位](../../../tmp/prompt-reading-xqJ3jx/narrow-oauth.png) · [窗口实测](../../../tmp/prompt-reading-xqJ3jx/geometry.json)

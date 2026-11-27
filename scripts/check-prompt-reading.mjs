@@ -194,6 +194,38 @@ try {
     const reader = page.locator('.reader-content')
     const generate = btn('生成可视化')
     await expect(generate).toBeInViewport()
+    const tables = reader.getByRole('table')
+    await expect(tables).toHaveCount(6)
+    await expect(tables.first().getByRole('columnheader')).toHaveText([
+      'Provider',
+      'Environment Variable(s)',
+    ])
+    await expect(tables.first().locator('tbody tr').first().locator('td')).toHaveText([
+      'OpenAI',
+      'OPENAI_API_KEY',
+    ])
+    const anchors = reader.locator('.markdown a[href^="#"]')
+    await expect(anchors).toHaveCount(59)
+    assert(
+      await anchors.evaluateAll((links) =>
+        links.every((a) => document.getElementById(a.hash.slice(1))),
+      ),
+    )
+    await expect(reader.locator('.markdown tbody tr')).toHaveCount(79)
+    if (surface === 'narrow') {
+      const scroller = tables.first().locator('..')
+      await scroller.scrollIntoViewIfNeeded()
+      const widths = await scroller.evaluate((el) => {
+        el.scrollLeft = el.scrollWidth
+        return [el.scrollLeft, el.scrollWidth, el.clientWidth]
+      })
+      assert(widths[0] > 0 && widths[1] > widths[2])
+      await scroller.evaluate((el) => {
+        el.scrollLeft = 0
+        el.scrollIntoView({ block: 'start' })
+      })
+      await capture('narrow-table')
+    }
     const toc = reader.getByRole('link', { name: 'OAuth Providers', exact: true })
     await toc.click()
     const heading = reader.getByRole('heading', { name: 'OAuth Providers', exact: true })

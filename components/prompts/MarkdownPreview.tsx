@@ -1,5 +1,26 @@
 import { createElement, useId, useMemo, type ReactNode } from 'react'
 
+function tableCells(line: string) {
+  const source = line.trim()
+  if (!source.includes('|')) return []
+  const parts = ['']
+  let separated = false
+  for (let index = 0; index < source.length; index++) {
+    const c = source[index]
+    if (c === '\\' && index + 1 < source.length) {
+      const next = source[++index]
+      parts[parts.length - 1] += next === '|' ? next : c + next
+    } else if (c === '|') {
+      parts.push('')
+      separated = true
+    } else parts[parts.length - 1] += c
+  }
+  if (!separated) return []
+  if (!parts[0]) parts.shift()
+  if (parts.at(-1) === '') parts.pop()
+  return parts.map((part) => part.trim())
+}
+
 // Only local fragment links become interactive. Imported markup stays text.
 function renderMarkdown(text: string, prefix: string) {
   const lines = text.split(/\r?\n/)
@@ -78,6 +99,57 @@ function renderMarkdown(text: string, prefix: string) {
         </pre>,
       )
       continue
+    }
+    if (line.includes('|') && /^\s*\|?\s*:?-/.test(lines[i] || '')) {
+      const headers = tableCells(line)
+      const delimiters = tableCells(lines[i])
+      if (
+        headers.length &&
+        delimiters.length === headers.length &&
+        delimiters.every((d) => /^:?-+:?$/.test(d))
+      ) {
+        i++
+        const columns = headers.map((label, column) => ({
+          label,
+          column,
+          align: delimiters[column].endsWith(':')
+            ? delimiters[column].startsWith(':')
+              ? 'center'
+              : 'right'
+            : 'left',
+        }))
+        const rows: ReactNode[] = []
+        while (i < lines.length) {
+          const values = tableCells(lines[i])
+          if (!values.length) break
+          rows.push(
+            <tr key={i++}>
+              {columns.map(({ column, align }) => (
+                <td key={column} data-align={align}>
+                  {inline(values[column] || '')}
+                </td>
+              ))}
+            </tr>,
+          )
+        }
+        blocks.push(
+          <div className="markdown-table" key={start}>
+            <table>
+              <thead>
+                <tr>
+                  {columns.map(({ label, column, align }) => (
+                    <th scope="col" key={column} data-align={align}>
+                      {inline(label)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>{rows}</tbody>
+            </table>
+          </div>,
+        )
+        continue
+      }
     }
     const heading = /^(#{1,6})\s+(.+)$/.exec(line)
     if (heading) {
