@@ -122,8 +122,9 @@ try {
     )
   } else if (process.argv.includes('--batch')) {
     const previous = process.argv[process.argv.indexOf('--batch') + 1]
+    const previousOptional = process.argv.includes('--uniform') ? previous : '0.2.1'
     for (const product of products)
-      await verifyDisk(product, product === 'Music' ? previous : '0.2.1')
+      await verifyDisk(product, product === 'Music' ? previous : previousOptional)
     await page.getByRole('button', { name: /^(更新|Updates)$/ }).click()
     await page.getByRole('button', { name: /检查全部更新|Check all updates/i }).click()
     const batch = page.getByRole('button', { name: /^(更新全部|Update all)$/i })
@@ -138,7 +139,7 @@ try {
     const retry = page.getByRole('button', { name: /重试更新|Retry update/i })
     await expect(retry).toBeEnabled({ timeout: 480000 })
     for (const product of products) {
-      await verifyDisk(product, product === 'Prompts' ? '0.2.1' : version)
+      await verifyDisk(product, product === 'Prompts' ? previousOptional : version)
       assert.equal(downloads.get(assetName(product)), 1)
     }
     await retry.click()

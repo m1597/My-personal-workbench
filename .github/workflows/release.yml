@@ -9,6 +9,7 @@ on:
         "codex/release-0.2.4",
         "codex/preview-0.2.5",
         "codex/resume-1127-candidate",
+        "codex/preview-0.2.6",
       ]
     tags: ["v*"]
 permissions:
@@ -117,6 +118,41 @@ jobs:
             dist/installers/SHA256SUMS.txt
             dist/installers/RELEASE-NOTES.md
           if-no-files-found: error
+  verify-distributed-upgrade:
+    if: github.ref == 'refs/heads/codex/preview-0.2.6'
+    needs: build
+    runs-on: windows-2022
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers
+          path: dist/installers
+      - name: Update all four products from the distributed 0.2.5 installation
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          npx --yes --package=$($pkg.packageManager) npm ci
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $baseline = Join-Path $env:RUNNER_TEMP 'distributed-025'
+          gh run download 45940364526 --name installers --dir $baseline
+          if ($LASTEXITCODE) { throw 'Could not download the frozen 0.2.5 installers' }
+          $setup = Join-Path $baseline 'FitBay-Offline-Setup-0.2.5-x64.exe'
+          if ((Get-FileHash $setup).Hash -ne '1c9714a2e1824db71814628dc0a2b91c6eaac2821a4d243fa2f80352c523c9d7') { throw 'Incorrect baseline installer' }
+          $root = Join-Path $env:RUNNER_TEMP 'Distributed FitBay'
+          $process = Start-Process $setup -ArgumentList "/S /WITHMUSIC /WITHPROMPTS /WITHTOOLKIT /D=$root" -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode) { throw 'Could not install baseline' }
+          node scripts/check-settings-installation.mjs $root --candidate --batch 0.2.5 --uniform
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
   publish:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build

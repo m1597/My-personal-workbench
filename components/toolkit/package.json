@@ -2,7 +2,7 @@
   "name": "fitbay-toolkit",
   "fitbayProduct": "toolkit",
   "productName": "FitBay Toolkit",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "FitBay 工具集",
   "author": "FitBay",
   "main": "main.mjs",
