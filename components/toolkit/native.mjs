@@ -39,3 +39,32 @@ export function readSelectionOrOcr(png, hwnd, signal, layout = false) {
     process.stdin.end(png)
   })
 }
+
+// Use the requested monitor's physical rectangle when the compositor returns a black frame.
+export function readDisplayPixels({ x, y, width, height }) {
+  const script = fileURLToPath(new URL('./capture-display.ps1', import.meta.url))
+  return new Promise((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        script,
+        ...[x, y, width, height].map(String),
+      ],
+      {
+        windowsHide: true,
+        timeout: 12000,
+        maxBuffer: width * height * 4 + 65536,
+        encoding: 'buffer',
+      },
+      (err, png) => {
+        if (err) reject(Error('未能读取当前显示器，请重新截图'))
+        else resolve(png)
+      },
+    )
+  })
+}

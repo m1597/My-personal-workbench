@@ -27,13 +27,13 @@ async function screenView(s) {
   bar.append(notice)
   const ask = (mode, id) => api.ask({ mode, id })
   for (const [name, fn] of [
+    ['标注', () => annotateRegion(rect, bar)],
     ['复制', api.copy],
     ['保存', api.save],
     ['贴图置顶', api.pin],
     ['提取文字', api.extractText],
     ['翻译', () => ask('translate')],
     ['问 AI', () => ask('explain')],
-    ['标注', () => annotateRegion(rect, bar)],
     [
       '选区取色',
       async () => {

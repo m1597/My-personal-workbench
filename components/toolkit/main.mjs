@@ -24,7 +24,7 @@ import { nativeImage } from 'electron'
 import { translateImage } from './image-translation.mjs'
 import { complete } from './model.mjs'
 import { toolkitConnections } from './toolkit-connections.mjs'
-import { readSelectionOrOcr } from './native.mjs'
+import { readDisplayPixels, readSelectionOrOcr } from './native.mjs'
 const here = import.meta.dirname
 const catalog = JSON.parse(readFileSync(path.join(here, 'catalog.json'), 'utf8'))
 const shared =
@@ -271,9 +271,16 @@ async function startToolkit() {
         (sources.length === 1 && screen.getAllDisplays().length === 1 && !sources[0].display_id
           ? sources[0]
           : null)
-      if (!source || source.thumbnail.isEmpty()) throw Error('无法读取当前显示器')
+      let full = source?.thumbnail
+      const probe = full?.resize({ width: 24, height: 24 }).toBitmap()
+      if (!probe?.some((value, index) => index % 4 !== 3 && value > 2)) {
+        full = nativeImage.createFromBuffer(
+          await readDisplayPixels(screen.dipToScreenRect(null, d.bounds)),
+        )
+      }
+      if (full.isEmpty()) throw Error('无法读取当前显示器')
       overlay = show(
-        { kind: 'screen', full: source.thumbnail, intent, displayId: d.id },
+        { kind: 'screen', full, intent, displayId: d.id },
         {
           ...d.bounds,
           minWidth: 1,
