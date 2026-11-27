@@ -18,6 +18,7 @@ const commonHostFiles = [
   'component-installation.mjs',
   'api-connections.mjs',
   'chatgpt-plan.mjs',
+  'window-identity.mjs',
   'music-connection.mjs',
   'connection-vault.mjs',
   'installed-products.mjs',
@@ -115,6 +116,7 @@ export async function prepareProduct(product) {
     for (const f of [
       'api-connections.mjs',
       'chatgpt-plan.mjs',
+      'window-identity.mjs',
       'connection-vault.mjs',
       'prompt-actions.mjs',
       'installed-products.mjs',

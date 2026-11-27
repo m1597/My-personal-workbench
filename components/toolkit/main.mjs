@@ -32,7 +32,12 @@ const shared =
   (app.isPackaged
     ? path.join(app.getPath('appData'), 'FitBay', 'desktop-profile')
     : path.resolve(here, '../../local/desktop-profile'))
-app.setAppUserModelId('io.github.m1597.fitbay.toolkit')
+const { windowsAppIds } = await import(
+  app.isPackaged ? './window-identity.mjs' : '../../examples/component-host/window-identity.mjs'
+)
+app.setAppUserModelId(
+  process.argv.includes('--fitbay-hosted') ? windowsAppIds.workbench : windowsAppIds.toolkit,
+)
 app.setPath('userData', path.join(shared, 'toolkit'))
 mkdirSync(app.getPath('userData'), { recursive: true })
 let dispatchIntent
@@ -141,7 +146,7 @@ async function startToolkit() {
     })
     if (process.platform === 'win32')
       win.setAppDetails({
-        appId: 'io.github.m1597.fitbay.toolkit',
+        appId: fromHost ? windowsAppIds.workbench : windowsAppIds.toolkit,
         relaunchIcon: path.join(here, 'toolkit.ico'),
         relaunchDisplayName: '工具集',
         relaunchCommand: app.isPackaged
@@ -232,6 +237,8 @@ async function startToolkit() {
       const state = states.get(home.webContents.id)
       state.hosted = fromHost
       home.setSkipTaskbar(fromHost)
+      if (process.platform === 'win32')
+        home.setAppDetails({ appId: fromHost ? windowsAppIds.workbench : windowsAppIds.toolkit })
       if (!backgroundTest) {
         home.restore()
         home.show()
@@ -801,6 +808,8 @@ async function startToolkit() {
         }
         hosted = false
         states.get(home.webContents.id).hosted = false
+        app.setAppUserModelId(windowsAppIds.toolkit)
+        home.setAppDetails({ appId: windowsAppIds.toolkit })
         home.setSkipTaskbar(false)
         syncTray()
       }
@@ -814,11 +823,14 @@ async function startToolkit() {
       return
     }
     hosted = argv.includes('--fitbay-hosted')
+    app.setAppUserModelId(hosted ? windowsAppIds.workbench : windowsAppIds.toolkit)
     watchOwner(argv)
     if (hosted) {
       for (const state of states.values()) {
         state.hosted = true
         state.win.setSkipTaskbar(true)
+        if (process.platform === 'win32')
+          state.win.setAppDetails({ appId: windowsAppIds.workbench })
       }
     }
     syncTray()

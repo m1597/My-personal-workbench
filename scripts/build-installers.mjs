@@ -4,6 +4,7 @@ import { build, Platform, Arch } from 'electron-builder'
 import nsis from 'app-builder-lib/out/targets/nsis/nsisUtil.js'
 import { cp, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { windowsAppIds } from '../examples/component-host/window-identity.mjs'
 import { prepareProduct } from './prepare-package.mjs'
 import { deliverInstallers } from './build-offline-setup.mjs'
 
@@ -162,7 +163,7 @@ for (const product of optionalProduct ? [optionalProduct] : Object.keys(products
     publish: 'never',
     config: {
       extends: path.resolve('electron-builder.yml'),
-      appId: `io.github.m1597.fitbay.${product}`,
+      appId: windowsAppIds[product],
       productName: title,
       publish: null,
       directories: { app, output },

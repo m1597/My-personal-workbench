@@ -9,6 +9,7 @@ import { componentInstallation, executeInstaller } from './component-installatio
 import { startSelfUpdate } from './self-update.mjs'
 import { installMusic } from './music-installer.mjs'
 import { updateCatalog, saveInstaller, productUpdater, supportsUpdate } from './product-updates.mjs'
+import { windowsAppIds } from './window-identity.mjs'
 import { installedProducts, registeredProduct } from './installed-products.mjs'
 import { builtinWindows, isBuiltin } from './builtin-windows.mjs'
 import { release } from 'node:os'
@@ -18,6 +19,7 @@ import {
   dialog,
   shell as systemShell,
   BrowserWindow,
+  BaseWindow,
   ipcMain,
   protocol,
   screen,
@@ -83,6 +85,7 @@ function options(width, height) {
     width,
     height,
     show: false,
+    skipTaskbar: Boolean(shell),
     icon: path.join(here, 'fitbay.png'),
     backgroundColor: supportsAcrylic ? '#00000000' : '#202227',
     ...(supportsAcrylic ? { backgroundMaterial: 'acrylic' } : {}),
@@ -97,6 +100,7 @@ function options(width, height) {
   }
 }
 function show(window) {
+  if (process.platform === 'win32' && shell && window !== shell) window.setSkipTaskbar(true)
   if (background) window.showInactive()
   else window.show()
 }
@@ -204,6 +208,7 @@ async function createWorkbench() {
   const entry = await findWorkbenchFile()
   if (!entry) throw new Error('NOT_INSTALLED：未安装 FitBay 工作台；当前组件仍可独立使用')
   const file = await realpath(entry)
+  if (process.platform === 'win32') app.setAppUserModelId(windowsAppIds.workbench)
   shell = new BrowserWindow({
     ...options(1480, 960),
     minWidth: 900,
@@ -228,6 +233,8 @@ async function createWorkbench() {
     },
   })
   if (process.platform === 'win32') {
+    shell.setAppDetails({ appId: windowsAppIds.workbench })
+    for (const win of BaseWindow.getAllWindows()) if (win !== shell) win.setSkipTaskbar(true)
     const workbench = shell
     const updateSymbols = () =>
       workbench.setTitleBarOverlay({
@@ -677,6 +684,7 @@ else {
           if (
             page !== undefined &&
             ![
+              'translate',
               'files',
               'settings',
               'color',
