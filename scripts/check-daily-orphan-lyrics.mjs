@@ -5,6 +5,7 @@ import { MusicStore } from '../components/music/store.mjs'
 import { lyricPath, saveLyrics } from '../examples/component-host/music-lyrics.mjs'
 import { retireOrphanLyrics } from '../dist/component-prototype/host/daily-lifecycle.mjs'
 
+await mkdir('tmp', { recursive: true })
 const root = await mkdtemp(path.resolve('tmp/orphan-lyrics-'))
 const directory = path.join(root, 'daily')
 const bin = path.join(root, 'recycled')

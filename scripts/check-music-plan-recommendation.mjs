@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdir, mkdtemp } from 'node:fs/promises'
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import { openConnections } from '../dist/component-prototype/host/api-connections.mjs'
 import { sharedConnectionVault } from '../dist/component-prototype/host/connection-vault.mjs'
 import { requestMusicModel } from '../dist/component-prototype/host/music-model.mjs'
 
+await mkdir('tmp', { recursive: true })
 const dir = await mkdtemp(path.resolve('tmp/music-plan-'))
 const token = randomUUID()
 const legacyKey = randomUUID()

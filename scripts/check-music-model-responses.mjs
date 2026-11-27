@@ -9,11 +9,13 @@ const root = await fs.mkdtemp(path.resolve('tmp/model-responses-'))
 const originalFetch = globalThis.fetch
 try {
   await fs.mkdir(path.join(root, 'music'))
+  const hostModules = new Set(await fs.readdir('examples/component-host'))
   for (const file of [
     'music-model.mjs',
     'music-connection.mjs',
     'api-connections.mjs',
     'connection-vault.mjs',
+    ...(hostModules.has('chatgpt-plan.mjs') ? ['chatgpt-plan.mjs'] : []),
   ])
     await fs.copyFile(path.join('examples/component-host', file), path.join(root, file))
   await fs.copyFile(
