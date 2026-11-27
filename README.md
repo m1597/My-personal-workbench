@@ -74,7 +74,7 @@ SQLite 和媒体播放当前用于第一方Music组件。Git 只备份已提交�
 
 运行 `npm run dist:win` 后，`dist/installers/` 内有五个 Windows x64 安装程序。文件名中的 Workbench 表示仅工作台，Offline 表示整合离线安装包，Music、Prompts、Toolkit 各对应一个可独立补装的组件。随包的 `SHA256SUMS.txt` 列出每个文件的摘要。
 
-在「Music → 设置 → 插件」单独下载安装波形与片段试听、歌曲标签与封面整理或智能歌单。安装后点「打开」，以后可从「扩展」进入。歌曲过渡插件在同一页选择本地安装包。卸载保留标记和规则。[公开插件与校验值](https://github.com/m1597/fitbay-plugins/releases/tag/music-v1.0.0)
+在「Music → 设置 → 插件」单独下载安装波形与片段试听、歌曲标签与封面整理或智能歌单。安装后点「打开」，以后可从「扩展」进入。歌曲过渡插件在同一页选择本地安装包。卸载保留标记和规则。[公开插件与校验值](https://github.com/m1597/My-personal-workbench/releases/tag/music-v1.0.0)
 
 ## 独立组件原型
 
