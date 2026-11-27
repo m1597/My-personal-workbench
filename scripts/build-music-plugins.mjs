@@ -17,7 +17,7 @@ const shared = {
 }
 const version = '1.0.0'
 const musicVersion = '0.1.0'
-const release = 'https://github.com/m1597/fitbay-plugins/releases/download/music-v' + version
+const release = 'https://github.com/m1597/My-personal-workbench/releases/download/music-v' + version
 
 export async function buildMusicPlugins(root, titles = publicTitles) {
   const dest = path.join(root, 'plugin-packs')
