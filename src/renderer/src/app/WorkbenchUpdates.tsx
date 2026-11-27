@@ -1,6 +1,7 @@
 import project from '../../../../package.json'
 import { Button } from '@fluentui/react-components'
-import { useState } from 'react'
+import { useComponentSetup } from './ComponentInstallSettings'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from './preferences'
 
 type Status = 'unchecked' | 'available' | 'current' | 'unsupported' | 'failed'
@@ -30,11 +31,20 @@ declare global {
     }
   }
 }
-export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
+export function WorkbenchUpdates({
+  state,
+  children,
+  onInstalled,
+}: {
+  state?: UpdateState
+  children: ReactNode
+  onInstalled: () => void
+}) {
   const t = useTranslation()
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [error, setError] = useState('')
+  const setup = useComponentSetup(onInstalled)
   const api = window.fitbayUpdates
   async function run(action: () => Promise<unknown>) {
     setBusy(true)
@@ -56,7 +66,7 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
   }
   return (
     <section className="update-page">
-      <header id="setting-3-0">
+      <header id="setting-2-3">
         <p>
           {t('上次检查', 'Last checked')} ·{' '}
           {state?.lastChecked
@@ -66,8 +76,11 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
         <Button disabled={busy || !api} onClick={() => api && void run(() => api.check())}>
           {t('检查全部更新', 'Check all updates')}
         </Button>
-        {state?.rows.some((r) => r.installable && r.status === 'available') && (
-          <Button disabled={busy} onClick={() => setConfirm(true)}>
+        {state?.rows.some((r) => r.installable) && (
+          <Button
+            disabled={busy || !state.rows.some((r) => r.installable && r.status === 'available')}
+            onClick={() => setConfirm(true)}
+          >
             {t('更新全部', 'Update all')}
           </Button>
         )}
@@ -97,76 +110,97 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
       {!api && (
         <p>{t('当前启动方式未连接更新服务', 'Update service unavailable in this launch mode')}</p>
       )}
-      {(
-        state?.rows ??
-        (!api
-          ? [
-              {
-                id: 'workbench',
+      {(['workbench', 'music', 'prompts', 'toolkit'] as const).map((id) => {
+        const row =
+          state?.rows.find((r) => r.id === id) ??
+          (id === 'workbench' && !api
+            ? {
+                id,
                 name: 'FitBay',
                 version: project.version,
-                available: null,
                 status: 'unsupported' as const,
                 development: true,
                 revision: undefined,
-                installable: false,
                 operation: undefined,
-              },
-            ]
-          : [])
-      ).map((row) => (
-        <section className="update-row" key={row.id}>
-          <div>
-            <h3>{row.name}</h3>
-            <p>
-              {row.development
-                ? t('产品开发构建', 'Product development build')
-                : t('已安装版本', 'Installed version')}{' '}
-              {row.version}
-              {row.revision && ` (${row.revision})`} ·{' '}
-              {row.development && (row.status === 'current' || row.status === 'available')
-                ? t('已检查', 'Checked')
-                : labels[row.status]}
-              {row.available &&
-                (row.id === 'workbench' || row.status === 'available') &&
-                ' · ' +
-                  (row.id === 'workbench'
-                    ? t('最新正式版', 'Latest stable release')
-                    : t('可用版本', 'Available version')) +
-                  ' ' +
-                  row.available}
-            </p>
-            {row.operation && (
-              <p role="status">
-                {
+                available: null,
+                installable: false,
+              }
+            : undefined)
+        const name = {
+          workbench: 'FitBay',
+          music: 'Music',
+          prompts: t('提示词库', 'Prompt library'),
+          toolkit: t('工具集', 'Toolkit'),
+        }[id]
+        const actions = setup.actions(id)
+        return (
+          <section className="update-row" key={id} data-product={id}>
+            <div>
+              <h3>{name}</h3>
+              {row && (
+                <p>
+                  {row.development
+                    ? t('产品开发构建', 'Product development build')
+                    : t('已安装版本', 'Installed version')}{' '}
+                  {row.version}
+                  {row.revision && ` (${row.revision})`} ·{' '}
+                  {row.development && (row.status === 'current' || row.status === 'available')
+                    ? t('已检查', 'Checked')
+                    : labels[row.status]}
+                  {row.available &&
+                    (row.id === 'workbench' || row.status === 'available') &&
+                    ' · ' +
+                      (row.id === 'workbench'
+                        ? t('最新正式版', 'Latest stable release')
+                        : t('可用版本', 'Available version')) +
+                      ' ' +
+                      row.available}
+                </p>
+              )}
+              {!row && !actions && (
+                <p>{state ? t('未安装', 'Not installed') : t('正在读取…', 'Loading…')}</p>
+              )}
+              {row?.operation && (
+                <p role="status">
                   {
-                    downloading: '下载并校验 ' + (row.operation.progress ?? 0) + '%',
-                    installing: '正在安装',
-                    restarting: '正在退出工作台，重启后核对安装结果',
-                    done: '已完成',
-                    failed: '更新失败，可单项重试',
-                  }[row.operation.stage]
-                }
-              </p>
-            )}
-          </div>
-          <div className="update-actions">
-            {api && row.status !== 'unsupported' && (
-              <Button disabled={busy} onClick={() => void run(() => api.check(row.id))}>
-                {row.status === 'failed' ? t('重试', 'Retry') : t('检查更新', 'Check for updates')}
-              </Button>
-            )}
-            {row.status === 'available' && api && row.installable && (
-              <Button disabled={busy} onClick={() => void run(() => api.install(row.id))}>
-                {row.operation?.stage === 'failed'
-                  ? t('重试更新', 'Retry update')
-                  : t('更新', 'Update')}{' '}
-                {row.name}
-              </Button>
-            )}
-          </div>
-        </section>
-      ))}
+                    {
+                      downloading: '下载并校验 ' + (row.operation.progress ?? 0) + '%',
+                      installing: '正在安装',
+                      restarting: '正在退出工作台，重启后核对安装结果',
+                      done: '已完成',
+                      failed: '更新失败，可单项重试',
+                    }[row.operation.stage]
+                  }
+                </p>
+              )}
+            </div>
+            <div className="update-actions">
+              {api && row && row.status !== 'unsupported' && (
+                <Button disabled={busy} onClick={() => void run(() => api.check(row.id))}>
+                  {row.status === 'failed'
+                    ? t('重试', 'Retry')
+                    : t('检查更新', 'Check for updates')}
+                </Button>
+              )}
+              {row?.status === 'available' && api && row.installable && (
+                <Button disabled={busy} onClick={() => void run(() => api.install(row.id))}>
+                  {row.operation?.stage === 'failed'
+                    ? t('重试更新', 'Retry update')
+                    : t('更新', 'Update')}{' '}
+                  {row.name}
+                </Button>
+              )}
+              {actions}
+            </div>
+            {id === 'music' && children}
+          </section>
+        )
+      })}
+      {setup.error && (
+        <Button onClick={setup.retry}>
+          {t('读取安装状态失败，重试', 'Could not read install status. Retry')}
+        </Button>
+      )}
       {state?.rows.some((row) => !row.installable && row.id === 'workbench') && (
         <p>{t('开发构建仅支持检查版本', 'Development builds support version checks only')}</p>
       )}

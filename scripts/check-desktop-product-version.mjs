@@ -16,7 +16,7 @@ try {
   const page = workbench()
   const button = (name) => page.getByRole('button', { name, exact: true })
   await button('工作台设置').click()
-  await button('更新').click()
+  await button('组件管理与更新').click()
   const host = page.locator('.update-row').first()
   await expect(host).toContainText('产品开发构建 ' + manifest.version)
   await expect(host).not.toContainText('已安装版本')

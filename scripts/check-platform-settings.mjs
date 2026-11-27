@@ -29,6 +29,12 @@ try {
     else await page.keyboard.press('Escape')
   }
   const form = page.locator('.api-connections form')
+  await page.getByRole('combobox', { name: '连接', exact: true }).click()
+  await page.getByRole('option', { name: 'ChatGPT 订阅授权' }).click()
+  await expect(button('Continue with ChatGPT')).toBeVisible()
+  await page.screenshot({ path: path.join(root, 'subscription.png') })
+  await page.getByRole('combobox', { name: '连接', exact: true }).click()
+  await page.getByRole('option', { name: '新建连接' }).click()
   await button('模型与推荐').click()
   await form.getByLabel('服务地址').fill('https://example.invalid/test')
   await form.getByLabel('模型', { exact: true }).fill('dedicated-test')
@@ -45,7 +51,10 @@ try {
   await expect(
     page.locator('.api-connections tbody tr').filter({ hasText: 'Music' }),
   ).toContainText('继承默认')
-  await button('更新').click()
+  await button('组件管理与更新').click()
+  expect(
+    await page.locator('.update-row').evaluateAll((rows) => rows.map((row) => row.dataset.product)),
+  ).toEqual(['workbench', 'music', 'prompts', 'toolkit'])
   await button('检查全部更新').click()
   await expect
     .poll(() => page.evaluate(async () => (await window.fitbayUpdates.snapshot()).lastChecked), {

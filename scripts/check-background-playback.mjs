@@ -36,7 +36,9 @@ async function tray(label) {
 }
 async function keep(on) {
   await shell.getByRole('button', { name: '工作台设置', exact: true }).press('Enter')
-  await shell.getByRole('button', { name: '组件管理', exact: true }).press('Enter')
+  await shell.getByRole('button', { name: '组件管理与更新', exact: true }).press('Enter')
+  const details = shell.locator('.music-runtime-options')
+  if ((await details.getAttribute('open')) === null) await details.locator('summary').click()
   const toggle = shell.getByRole('switch', { name: /Music.*后台|后台.*Music/ })
   if ((await toggle.isChecked()) !== on) await toggle.press('Space')
   await expect.poll(async () => (await status()).keepRunning).toBe(on)

@@ -45,6 +45,8 @@ try {
   await expect.poll(() => promptGroup.evaluate((g) => g.clientWidth)).toBeGreaterThan(100)
   await openMenu()
   await page.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
+  await openMenu()
+  await page.getByRole('menuitemcheckbox', { name: '示例组件', exact: true }).click()
   const groups = page.locator('.dv-groupview:visible')
   await expect(groups).toHaveCount(4)
   const dimensions = () =>
@@ -75,7 +77,7 @@ try {
     JSON.stringify({ before, after }, null, 2),
   )
   await b('工作台设置').click()
-  await b('更新').click()
+  await b('组件管理与更新').click()
   await expect(page.locator('.update-row')).toHaveCount(4)
   await expect(page.getByText('开发构建仅支持检查版本', { exact: true })).toHaveCount(1)
   console.log('PASS desktop launcher', profile)

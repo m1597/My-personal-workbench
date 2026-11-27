@@ -17,7 +17,7 @@ try {
   const page = await app.firstWindow(),
     b = (n) => page.getByRole('button', { name: n, exact: true })
   await b('工作台设置').click()
-  await b('更新').click()
+  await b('组件管理与更新').click()
   await b('检查全部更新').click()
   await expect(b('检查全部更新')).toBeEnabled({ timeout: 40000 })
   for (const [name, width] of [

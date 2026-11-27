@@ -79,7 +79,7 @@ try {
   await search.fill('zz-no-match')
   await expect(shell.getByText('没有匹配的设置')).toBeVisible()
   await search.fill('更新')
-  await button('更新 › 检查全部更新').click()
+  await button('组件管理与更新 › 检查全部更新').click()
   await button('检查全部更新').click()
   await expect
     .poll(() => shell.evaluate(async () => (await window.fitbayUpdates.snapshot()).lastChecked), {
@@ -87,7 +87,7 @@ try {
     })
     .toBeTruthy()
   const live = await shell.evaluate(() => window.fitbayUpdates.snapshot())
-  await expect(shell.getByText(/未接入在线更新/)).toHaveCount(1)
+  await expect(shell.locator('.update-row')).toHaveCount(4)
   await writeFile(path.join(root, 'live.json'), JSON.stringify(live, null, 2))
   await app.evaluate(() => {
     globalThis.fixtureFetch = async () => new Response('{}', { status: 503 })

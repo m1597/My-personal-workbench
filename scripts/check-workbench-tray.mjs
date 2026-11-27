@@ -54,7 +54,9 @@ async function settings() {
   await b('工作台设置').click()
   if (await shell.locator('.category-toggle').isVisible())
     await shell.locator('.category-toggle').click()
-  await b('组件管理').click()
+  await b('组件管理与更新').click()
+  const details = shell.locator('.music-runtime-options')
+  if ((await details.getAttribute('open')) === null) await details.locator('summary').click()
 }
 const clickTray = () => app.evaluate(() => [...global.trayProof.icons][0].emit('click'))
 const menuAction = (name) =>

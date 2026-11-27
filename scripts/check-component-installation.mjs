@@ -156,7 +156,7 @@ async function launch() {
   })
   const page = await app.firstWindow()
   await page.getByRole('button', { name: '工作台设置', exact: true }).click()
-  await page.getByRole('button', { name: '组件管理', exact: true }).click()
+  await page.getByRole('button', { name: '组件管理与更新', exact: true }).click()
   return { app, page }
 }
 const { app, page } = await launch()
@@ -181,6 +181,7 @@ try {
     await expect(row).toContainText('此位置未登记，无法卸载')
     await expect(row.getByRole('button')).toHaveCount(0)
   }
+  await page.getByText('Music 运行设置', { exact: true }).click()
   await expect(page.getByRole('button', { name: '在工作台显示 Music', exact: true })).toBeEnabled()
   await page.screenshot({ path: path.join(root, 'installed.png') })
 } finally {

@@ -447,6 +447,15 @@
 .update-row h3 {
   margin-bottom: 5px;
 }
+.music-runtime-options {
+  flex-basis: 100%;
+}
+.music-runtime-options summary {
+  cursor: pointer;
+}
+.music-runtime-options[open] > * + * {
+  margin-top: 8px;
+}
 .update-actions {
   display: flex;
   gap: 8px;

@@ -1,8 +1,6 @@
-import { ComponentInstallSettings } from './ComponentInstallSettings'
 import { ConnectionSettings } from './ConnectionSettings'
 import { materialDefaults } from './material'
 import { WorkbenchUpdates, type UpdateState } from './WorkbenchUpdates'
-import { Download } from 'lucide-react'
 import { WorkbenchChoice } from './WorkbenchChoice'
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { LayoutDialog } from './LayoutDialog'
@@ -44,7 +42,7 @@ export function WorkbenchSettings({
     if (!api) return
     const dispose = api.onState(setUpdates)
     const navigate = api.onOpen(() => {
-      setCategory(3)
+      setCategory(2)
       setQuery('')
       setExpanded(false)
       setOpen(true)
@@ -87,13 +85,11 @@ export function WorkbenchSettings({
   const names = [
     t('外观', 'Appearance'),
     t('布局与启动', 'Layout and startup'),
-    t('组件管理', 'Components'),
-    t('更新', 'Updates'),
+    t('组件管理与更新', 'Components and updates'),
     t('API 与模型', 'API and models'),
   ]
   const keepLabel = t('关闭后继续在后台运行', 'Keep running in background after closing')
-  const icons = [Palette, PanelsTopLeft, Boxes, Download, Settings]
-  const sampleShowLabel = t('在工作台显示示例组件', 'Show sample in workspace')
+  const icons = [Palette, PanelsTopLeft, Boxes, Settings]
   const entries = [
     [
       t('界面语言', 'Interface language'),
@@ -113,12 +109,10 @@ export function WorkbenchSettings({
       t('在工作台显示 Music', 'Show Music in workspace'),
       t('打开音乐设置', 'Open Music settings'),
       'Music · ' + keepLabel,
-      ...(sampleInfo?.installed
-        ? [t('示例组件', 'Sample component') + ' · ' + keepLabel, sampleShowLabel]
-        : []),
+      t('检查全部更新', 'Check all updates'),
     ],
+    [t('组件连接', 'Component connections')],
   ]
-  entries.push([t('检查全部更新', 'Check all updates')], [t('组件连接', 'Component connections')])
   const componentMatches = [
     { info: inventory, host: window.musicDock },
     { info: sampleInfo, host: window.componentHost },
@@ -148,6 +142,8 @@ export function WorkbenchSettings({
   useLayoutEffect(() => {
     if (!target) return
     const element = document.getElementById(target)
+    const details = element?.closest('details')
+    if (details) details.open = true
     element?.scrollIntoView({ block: 'nearest' })
     const control = element?.querySelector<HTMLElement>('button,input')
     if (control?.matches(':disabled') && !inventory) return
@@ -376,8 +372,7 @@ export function WorkbenchSettings({
               ) : (
                 <>
                   <h2>{names[category]}</h2>
-                  {category === 4 && <ConnectionSettings />}
-                  {category === 3 && <WorkbenchUpdates state={updates} />}
+                  {category === 3 && <ConnectionSettings />}
                   {category === 0 && (
                     <>
                       <p>
@@ -498,106 +493,65 @@ export function WorkbenchSettings({
                   )}
                   {category === 2 && (
                     <>
-                      <ComponentInstallSettings
-                        key={revision}
-                        onInstalled={() => refresh((n) => n + 1)}
-                      />
-                      <section className="settings-runtime-card">
-                        <div className="component-inventory">
-                          <h3>{t('Music 运行设置', 'Music runtime settings')}</h3>
-                          <Button
-                            size="small"
-                            onClick={() => {
-                              setComponentError('')
-                              refresh(revision + 1)
-                            }}
-                          >
-                            {t('刷新', 'Refresh')}
-                          </Button>
-                        </div>
-                        <p>
-                          {inventory?.installed
-                            ? [
-                                inventory.version,
-                                music?.phase === 'ready'
-                                  ? music.presentation === 'background'
-                                    ? t('后台运行', 'Running in background')
-                                    : music.mode === 'standalone'
-                                      ? t('独立窗口运行中', 'Running independently')
-                                      : t('工作台内运行中', 'Running in workspace')
-                                  : t('未运行', 'Stopped'),
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')
-                            : !window.musicDock || inventory
-                              ? t('未安装', 'Not installed')
-                              : t('正在检测…', 'Checking…')}
-                        </p>
-                        {entries[2].slice(0, 2).map((label, i) => (
-                          <div key={label} id={'setting-2-' + i}>
-                            <Button
-                              disabled={!inventory?.installed}
-                              onClick={() => void showMusic(i === 1)}
-                            >
-                              {label}
-                            </Button>
-                          </div>
-                        ))}
-                        {inventory?.installed && (
-                          <div id="setting-2-2">
-                            <Switch
-                              label={keepLabel}
-                              aria-label={entries[2][2]}
-                              checked={music?.keepRunning ?? false}
-                              onChange={(_, data) =>
-                                void window.musicDock
-                                  ?.keepRunning(data.checked)
-                                  .catch((error) => setComponentError(String(error)))
-                              }
-                            />
-                          </div>
-                        )}
-                      </section>
-                      {sampleInfo?.installed && (
-                        <section className="settings-runtime-card">
-                          <h3>{t('示例组件', 'Sample component')}</h3>
-                          <div id="setting-2-3">
-                            <Switch
-                              label={keepLabel}
-                              aria-label={entries[2][3]}
-                              checked={sampleState?.keepRunning ?? false}
-                              onChange={(_, data) =>
-                                void window.componentHost
-                                  ?.keepRunning(data.checked)
-                                  .catch((error) => setComponentError(String(error)))
-                              }
-                            />
-                          </div>
+                      <WorkbenchUpdates state={updates} onInstalled={() => refresh((n) => n + 1)}>
+                        <details className="music-runtime-options">
+                          <summary>{t('Music 运行设置', 'Music runtime settings')}</summary>
                           <p>
-                            {sampleInfo.version} ·{' '}
-                            {sampleState?.phase === 'ready'
-                              ? sampleState.presentation === 'background'
-                                ? t('后台运行', 'Running in background')
-                                : t('运行中', 'Running')
-                              : t('未运行', 'Stopped')}
+                            {inventory?.installed
+                              ? [
+                                  inventory.version,
+                                  music?.phase === 'ready'
+                                    ? music.presentation === 'background'
+                                      ? t('后台运行', 'Running in background')
+                                      : music.mode === 'standalone'
+                                        ? t('独立窗口运行中', 'Running independently')
+                                        : t('工作台内运行中', 'Running in workspace')
+                                    : t('未运行', 'Stopped'),
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')
+                              : !window.musicDock || inventory
+                                ? t('未安装', 'Not installed')
+                                : t('正在检测…', 'Checking…')}
                           </p>
-                          <div id="setting-2-4">
-                            <Button
-                              onClick={async () => {
-                                try {
-                                  const result = await window.componentHost?.open()
-                                  if (result?.ok) close()
-                                  else setComponentError(result?.error ?? '')
-                                } catch (error) {
-                                  setComponentError(String(error))
+                          {entries[2].slice(0, 2).map((label, i) => (
+                            <div key={label} id={'setting-2-' + i}>
+                              <Button
+                                disabled={!inventory?.installed}
+                                onClick={() => void showMusic(i === 1)}
+                              >
+                                {label}
+                              </Button>
+                            </div>
+                          ))}
+                          {inventory?.installed && (
+                            <div id="setting-2-2">
+                              <Switch
+                                label={keepLabel}
+                                aria-label={entries[2][2]}
+                                checked={music?.keepRunning ?? false}
+                                onChange={(_, data) =>
+                                  void window.musicDock
+                                    ?.keepRunning(data.checked)
+                                    .catch((error) => setComponentError(String(error)))
                                 }
-                              }}
-                            >
-                              {sampleShowLabel}
-                            </Button>
-                          </div>
-                        </section>
+                              />
+                            </div>
+                          )}
+                        </details>
+                      </WorkbenchUpdates>
+                      {sampleInfo?.installed && (
+                        <Switch
+                          label={'示例组件 · ' + keepLabel}
+                          checked={sampleState?.keepRunning ?? false}
+                          onChange={(_, v) =>
+                            void window.componentHost
+                              ?.keepRunning(v.checked)
+                              .catch((e) => setComponentError(String(e)))
+                          }
+                        />
                       )}
+
                       {componentError && <p role="alert">{componentError}</p>}
                     </>
                   )}

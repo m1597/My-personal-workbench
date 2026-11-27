@@ -28,7 +28,7 @@ declare global {
     }
   }
 }
-export function ComponentInstallSettings({ onInstalled }: { onInstalled: () => void }) {
+export function useComponentSetup(onInstalled: () => void) {
   const t = useTranslation()
   const [rows, setRows] = useState<Row[]>([])
   const [confirm, setConfirm] = useState<Id>()
@@ -85,75 +85,64 @@ export function ComponentInstallSettings({ onInstalled }: { onInstalled: () => v
       rescan((n) => n + 1)
     }
   }
-  return (
-    <>
-      {rows.map((row) => (
-        <div className="component-inventory" key={row.id} data-install-product={row.id}>
-          <strong>{names[row.id]}</strong>
-          <span role="status">
-            {row.stage === 'uninstalling' && row.status === 'failed'
-              ? '卸载失败'
-              : states[row.status]}{' '}
-            {row.status === 'installed'
-              ? row.version
-              : row.status === 'downloading'
-                ? row.progress + '%'
-                : row.status === 'failed'
-                  ? row.stage === 'uninstalling'
-                    ? t(
-                        '（请核对安装登记并重试）',
-                        '(check the installation registration and retry)',
-                      )
-                    : row.stage === 'downloading'
-                      ? t(
-                          '（下载或 SHA-256 校验失败）',
-                          '(download or SHA-256 verification failed)',
-                        )
-                      : row.stage === 'checking'
-                        ? t('（无法获取正式发行包）', '(release unavailable)')
-                        : t('（安装程序或安装后检测失败）', '(installer or detection failed)')
-                  : ''}
+  function actions(id: string) {
+    const row = rows.find((r) => r.id === id)
+    if (!row) return null
+    return (
+      <div className="component-inventory" key={row.id} data-install-product={row.id}>
+        <span role="status">
+          {row.stage === 'uninstalling' && row.status === 'failed'
+            ? '卸载失败'
+            : states[row.status]}{' '}
+          {row.status === 'installed'
+            ? row.version
+            : row.status === 'downloading'
+              ? row.progress + '%'
+              : row.status === 'failed'
+                ? row.stage === 'uninstalling'
+                  ? t('（请核对安装登记并重试）', '(check the installation registration and retry)')
+                  : row.stage === 'downloading'
+                    ? t('（下载或 SHA-256 校验失败）', '(download or SHA-256 verification failed)')
+                    : row.stage === 'checking'
+                      ? t('（无法获取正式发行包）', '(release unavailable)')
+                      : t('（安装程序或安装后检测失败）', '(installer or detection failed)')
+                : ''}
+        </span>
+        {row.status === 'installed' && row.canUninstall === false ? (
+          <span>
+            {t('此位置未登记，无法卸载', 'Uninstall unavailable at this unregistered location')}
           </span>
-          {row.status === 'installed' && row.canUninstall === false ? (
-            <span>
-              {t('此位置未登记，无法卸载', 'Uninstall unavailable at this unregistered location')}
-            </span>
-          ) : row.status === 'installed' ||
-            (row.stage === 'uninstalling' && row.status === 'failed') ? (
-            <div>
-              {confirm === row.id ? (
-                <>
-                  <span>保留数据并卸载？</span>
-                  <Button
-                    onClick={() => {
-                      setConfirm(undefined)
-                      void install(row.id, true)
-                    }}
-                  >
-                    确认卸载
-                  </Button>
-                  <Button onClick={() => setConfirm(undefined)}>取消</Button>
-                </>
-              ) : (
-                <Button disabled={row.busy} onClick={() => setConfirm(row.id)}>
-                  {row.status === 'failed' ? '重试卸载' : '卸载'} {names[row.id]}
+        ) : row.status === 'installed' ||
+          (row.stage === 'uninstalling' && row.status === 'failed') ? (
+          <div>
+            {confirm === row.id ? (
+              <>
+                <span>保留数据并卸载？</span>
+                <Button
+                  onClick={() => {
+                    setConfirm(undefined)
+                    void install(row.id, true)
+                  }}
+                >
+                  确认卸载
                 </Button>
-              )}
-            </div>
-          ) : (
-            <Button size="small" disabled={row.busy} onClick={() => void install(row.id)}>
-              {(row.status === 'failed' ? t('重试', 'Retry') : t('安装', 'Install')) +
-                ' ' +
-                names[row.id]}
-            </Button>
-          )}
-        </div>
-      ))}
-      {error && (
-        <Button onClick={() => rescan((n) => n + 1)}>
-          {t('读取安装状态失败，重试', 'Could not read install status. Retry')}
-        </Button>
-      )}
-    </>
-  )
+                <Button onClick={() => setConfirm(undefined)}>取消</Button>
+              </>
+            ) : (
+              <Button disabled={row.busy} onClick={() => setConfirm(row.id)}>
+                {row.status === 'failed' ? '重试卸载' : '卸载'} {names[row.id]}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <Button size="small" disabled={row.busy} onClick={() => void install(row.id)}>
+            {(row.status === 'failed' ? t('重试', 'Retry') : t('安装', 'Install')) +
+              ' ' +
+              names[row.id]}
+          </Button>
+        )}
+      </div>
+    )
+  }
+  return { actions, error, retry: () => rescan((n) => n + 1) }
 }
