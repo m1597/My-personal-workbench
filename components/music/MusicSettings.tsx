@@ -459,28 +459,6 @@ export function MusicSettings({
                 {taste.error ? ' · ' + taste.error : ''}
               </span>
             )}
-            <h3>不参与智能推荐</h3>
-            <p>右键文件夹或歌单可将其中歌曲排除出推荐偏好。主动收藏的歌曲仍会计入。</p>
-            {taste?.exclusions?.map(({ kind, id, name }) => (
-              <div className="settings-buttons" key={id}>
-                <span>
-                  {kind === 'folder' ? '文件夹' : '歌单'} · {name}
-                </span>
-                <Button
-                  size="small"
-                  disabled={busy}
-                  aria-label={`恢复参与智能推荐：${name}`}
-                  onClick={() =>
-                    void update(async () => {
-                      await window.music.setTasteExcluded(kind, id, false)
-                      setTaste(await window.music.getTasteStatus())
-                    })
-                  }
-                >
-                  恢复参与
-                </Button>
-              </div>
-            ))}
           </section>
         )}
         {category === 'keys' && (

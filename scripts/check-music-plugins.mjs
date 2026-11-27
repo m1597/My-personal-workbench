@@ -46,7 +46,7 @@ try {
     'playlists',
     'sources',
     'online',
-    'ai-toggle',
+    'ai-entry',
     'model',
     'recommend',
     'weight',

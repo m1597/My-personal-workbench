@@ -67,6 +67,7 @@ try {
     const { EventEmitter } = process.getBuiltinModule('events')
     const orig = https.request
     globalThis.fixtureCycle = 0
+    globalThis.playlistSearches = []
     https.request = function (url, opts, cb) {
       if (url.hostname !== 'music.163.com') return orig.call(this, url, opts, cb)
       const req = new EventEmitter()
@@ -75,7 +76,11 @@ try {
           let data,
             code = 200
           if (url.pathname.endsWith('/catalogue')) data = { sub: [] }
-          else if (url.pathname.endsWith('/list'))
+          else if (url.pathname.endsWith('/search/get')) {
+            const term = url.searchParams.get('s')
+            globalThis.playlistSearches.push(term)
+            data = { result: { playlists: [{ id: 15, name: term + '专辑精选' }] } }
+          } else if (url.pathname.endsWith('/list'))
             data = {
               playlists: [
                 '短片',
@@ -119,6 +124,19 @@ try {
   const panel = page.getByRole('region', { name: '公开歌单' }),
     cards = panel.locator('.public-cards article'),
     first = cards.first()
+  await expect(cards).toHaveCount(6)
+  const keyword = panel.getByRole('textbox', { name: '搜索公开歌单' })
+  await keyword.fill('雨后')
+  await keyword.press('Enter')
+  await expect(cards).toHaveCount(1)
+  await expect(first).toContainText('雨后专辑精选')
+  await openDiscovery(page, true)
+  await openDiscovery(page, false)
+  await expect(keyword).toHaveValue('雨后')
+  await expect(first).toContainText('雨后专辑精选')
+  assert.deepEqual(await app.evaluate(() => globalThis.playlistSearches), ['雨后'])
+  await keyword.fill('')
+  await keyword.press('Enter')
   await expect(cards).toHaveCount(6)
   const results = []
   for (const width of [1120, 460]) {

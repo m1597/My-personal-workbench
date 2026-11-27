@@ -88,59 +88,66 @@ try {
     }, width)
     await openDiscovery(page, false)
     const kinds = page.getByRole('tablist', { name: '查找内容' })
-    const geometry = async () =>
-      Promise.all(
-        [
-          kinds,
-          page.locator('form.download-search .fui-Input'),
-          page.locator('form.download-search button[aria-pressed]'),
-          page.locator('form.download-search button[type=submit]'),
-        ].map(async (el) => {
-          const r = await el.boundingBox()
-          assert.ok(r)
-          return [r.x, r.y, r.width, r.height]
-        }),
-      )
-    let baseline
-    for (const [kind, draft] of [
-      ['歌曲', '晚间路上'],
-      ['公开歌单', '开车时听的摇滚'],
+    const modes = page.getByRole('tablist', { name: '找歌方式' })
+    const visibleView = page.locator('.discovery-view:visible')
+    const keyword = visibleView.locator('form.download-search input')
+    for (const [kind, normalDraft, aiDraft] of [
+      ['歌曲', '晚间路上', '雨天散步'],
+      ['公开歌单', '开车时听的摇滚', '咖啡店的爵士'],
     ]) {
       await kinds.getByRole('tab', { name: kind, exact: true }).click()
-      const keyword = page.locator('form.download-search input')
-      await keyword.fill(draft)
-      const before = await geometry()
-      baseline ??= before
-      const anchor = page.getByRole('button', { name: 'AI 推荐', exact: true })
-      const r = await anchor.boundingBox()
-      for (const expected of [true, false]) {
-        await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2)
-        await expect(anchor).toHaveAttribute('aria-pressed', String(expected))
-        await expect(keyword).toHaveValue(draft)
-        const after = await geometry()
-        assert.ok(
-          after.every((v, i) => v.every((n, j) => Math.abs(n - baseline[i][j]) <= 1)),
-          JSON.stringify({ kind, width, before, baseline, after }),
-        )
-        await page.screenshot({
-          path: path.join(root, width + '-' + kind + '-' + (expected ? 'AI' : '普通') + '.png'),
-        })
-      }
+      await keyword.fill('')
+      const searchPlatform = visibleView.getByRole('tab', { name: 'QQ 音乐', exact: true })
+      await searchPlatform.click()
+      await keyword.fill(normalDraft)
+      await modes.getByRole('tab', { name: 'AI 推荐' }).click()
+      await kinds.getByRole('tab', { name: kind, exact: true }).click()
+      await keyword.fill(aiDraft)
+      await expect(visibleView.getByRole('button', { name: 'AI 推荐', exact: true })).toHaveCount(0)
+      await modes.getByRole('tab', { name: '普通搜索' }).click()
+      await expect(kinds.getByRole('tab', { name: kind, exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      await expect(keyword).toHaveValue(normalDraft)
+      await expect(searchPlatform).toHaveAttribute('aria-selected', 'true')
+      await modes.getByRole('tab', { name: 'AI 推荐' }).click()
+      await expect(keyword).toHaveValue(aiDraft)
+      await modes.getByRole('tab', { name: '普通搜索' }).click()
     }
     await kinds.getByRole('tab', { name: '歌曲', exact: true }).click()
-    await expect(page.locator('form.download-search input')).toHaveValue('晚间路上')
-    await page.locator('form.download-search input').fill('')
+    await expect(keyword).toHaveValue('晚间路上')
+    await keyword.fill('')
     for (const [name, selector] of [
-      ['在线找歌', '.download-search'],
+      ['在线找歌', '.discovery-view:visible .download-search'],
       ['智能推荐', '.music-compose'],
       ['歌手', '.followed-artists'],
     ]) {
       if (name === '歌手') await page.getByRole('tab', { name, exact: true }).click()
       else await openDiscovery(page, name === '智能推荐')
+      if (name === '智能推荐') await kinds.getByRole('tab', { name: '歌曲', exact: true }).click()
       const frame = await box(selector)
-      if (width > 740) {
-        const anchor = await box('.music-navigation [role=tab]')
-        assert.ok(Math.abs(frame.x - anchor.x) < 24, name + ' 正文与导航起点错位')
+      if (name !== '歌手') {
+        const nav = await modes.boundingBox()
+        const content = await kinds.boundingBox()
+        assert.ok(nav.x + nav.width <= content.x && Math.abs(content.x - frame.x) < 4)
+        const overflow = await visibleView.evaluate((el) =>
+          [...el.querySelectorAll('*')]
+            .filter(
+              (n) =>
+                n.getBoundingClientRect().right > el.getBoundingClientRect().x + el.clientWidth + 1,
+            )
+            .map((n) => [
+              n.tagName,
+              n.getAttribute('aria-label') || n.textContent.slice(0, 20),
+              n.getBoundingClientRect().width,
+            ])
+            .slice(0, 8),
+        )
+        assert.ok(
+          await visibleView.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+          JSON.stringify({ name, width, overflow }),
+        )
       }
       if (name === '在线找歌') {
         const platforms = page.getByRole('tablist', { name: '搜索平台' })
@@ -165,7 +172,7 @@ try {
             assert.equal(parseFloat(tab.width), 0)
           }
         }
-        const recent = await box('.search-history')
+        const recent = await box('.discovery-view:visible .search-history')
         assert.ok(
           width > 740 ? recent.x >= frame.x + frame.width : recent.y >= frame.y + frame.height,
         )

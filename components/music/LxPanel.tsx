@@ -1,6 +1,5 @@
 import { Dropdown, Option } from '../../src/renderer/src/app/SharedDropdown'
 import { useMusicFeedback } from './musicFeedback'
-import { PublicPlaylists } from './PublicPlaylists'
 import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { SongCredits } from './SongCredits'
 import { useEffect, useRef, useState } from 'react'
@@ -9,7 +8,7 @@ import { DiscoveryInput } from './DiscoveryInput'
 import { guardSearchEnter } from './searchSubmit'
 import { X } from 'lucide-react'
 import './search.css'
-import { formatTime, type Playlist } from './LibraryPane'
+import { formatTime } from './LibraryPane'
 export type Versions = {
   items: {
     key: string
@@ -111,31 +110,15 @@ function groupedVersions(items: Versions['items']) {
   })
 }
 export function DownloadPane({
-  publicMode,
-  publicDraft,
-  setPublicDraft,
-  publicAI,
-  togglePublic,
-  playlists,
   query,
   setQuery,
-  toggle,
-  playPublic,
   onPlay,
   onAdd,
   refresh,
   preferredQuality = '320k',
 }: {
-  publicMode: boolean
-  publicDraft: string
-  setPublicDraft(value: string): void
-  publicAI: boolean
-  togglePublic(): void
   query: string
   setQuery(value: string): void
-  toggle(): void
-  playlists: Playlist[]
-  playPublic: (ids: string[]) => Promise<unknown>
   onPlay: (key: string, quality?: string) => Promise<void>
   onAdd: (playlist: string, key: string) => Promise<boolean>
   refresh: () => Promise<void>
@@ -282,177 +265,162 @@ export function DownloadPane({
   }
   return (
     <section className="lx-panel" aria-label="搜索音乐">
-      {publicMode ? (
-        <PublicPlaylists
-          playlists={playlists}
-          play={playPublic}
-          refresh={refresh}
-          ai={publicAI}
-          draft={publicDraft}
-          setDraft={setPublicDraft}
-          toggleAI={togglePublic}
-        />
-      ) : (
-        <>
-          <div className="search-controls" data-query={hasQuery}>
-            <form
-              className="download-search"
-              onKeyDownCapture={guardSearchEnter}
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (!busy && name && searchable && !unsupported) void act(() => search())
-              }}
-            >
-              <DiscoveryInput
-                ai={false}
-                value={query}
-                disabled={busy}
-                toggle={toggle}
-                edit={(value) => {
-                  setQuery(value)
-                  setResult(undefined)
-                  setStatus('')
-                }}
-              />
+      <div className="search-controls" data-query={hasQuery}>
+        <form
+          className="download-search"
+          onKeyDownCapture={guardSearchEnter}
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!busy && name && searchable && !unsupported) void act(() => search())
+          }}
+        >
+          <DiscoveryInput
+            ai={false}
+            value={query}
+            disabled={busy}
+            edit={(value) => {
+              setQuery(value)
+              setResult(undefined)
+              setStatus('')
+            }}
+          />
+          <Button
+            type="submit"
+            appearance="primary"
+            disabled={!name || !searchable || busy || unsupported}
+          >
+            搜索
+          </Button>
+        </form>
+        <TabList
+          className="search-platforms"
+          size="small"
+          aria-label="搜索平台"
+          selectedValue={platform}
+          onTabSelect={(_, data) => {
+            const next = String(data.value)
+            if (next === platform || busy) return
+            setPlatform(next)
+            setResult(undefined)
+            setStatus('')
+            if (name && searchable && (!available || available.includes(next)))
+              void act(() => search(next))
+          }}
+        >
+          <Tab value="wy" disabled={busy}>
+            网易云音乐
+          </Tab>
+          <Tab value="tx" disabled={busy}>
+            QQ 音乐
+          </Tab>
+          <Tab value="kg" disabled={busy}>
+            酷狗音乐
+          </Tab>
+        </TabList>
+        {hasQuery && !searchable && <p>在线搜索关键词最多 256 字。</p>}
+        {!name && hasQuery && <p>正在等待可用音乐源，连接网络后会自动检查。</p>}
+        {unsupported && (
+          <p role="status">
+            当前音乐源不支持{platforms[platform as keyof typeof platforms]}
+            的搜索和下载，请更换音乐源。
+          </p>
+        )}
+        {history.length > 0 && (
+          <section className="search-history" aria-label="最近搜索">
+            <header>
+              <h2>最近搜索</h2>
               <Button
-                type="submit"
-                appearance="primary"
-                disabled={!name || !searchable || busy || unsupported}
+                disabled={busy}
+                size="small"
+                appearance="subtle"
+                onClick={() => void act(() => changeHistory('clear'), false)}
               >
-                搜索
+                清空
               </Button>
-            </form>
-            <TabList
-              className="search-platforms"
-              size="small"
-              aria-label="搜索平台"
-              selectedValue={platform}
-              onTabSelect={(_, data) => {
-                const next = String(data.value)
-                if (next === platform || busy) return
-                setPlatform(next)
-                setResult(undefined)
-                setStatus('')
-                if (name && searchable && (!available || available.includes(next)))
-                  void act(() => search(next))
-              }}
-            >
-              <Tab value="wy" disabled={busy}>
-                网易云音乐
-              </Tab>
-              <Tab value="tx" disabled={busy}>
-                QQ 音乐
-              </Tab>
-              <Tab value="kg" disabled={busy}>
-                酷狗音乐
-              </Tab>
-            </TabList>
-            {hasQuery && !searchable && <p>在线搜索关键词最多 256 字。</p>}
-            {!name && hasQuery && <p>正在等待可用音乐源，连接网络后会自动检查。</p>}
-            {unsupported && (
-              <p role="status">
-                当前音乐源不支持{platforms[platform as keyof typeof platforms]}
-                的搜索和下载，请更换音乐源。
-              </p>
-            )}
-            {history.length > 0 && (
-              <section className="search-history" aria-label="最近搜索">
-                <header>
-                  <h2>最近搜索</h2>
+            </header>
+            <div>
+              {history.map((word) => (
+                <span key={word}>
                   <Button
-                    disabled={busy}
                     size="small"
                     appearance="subtle"
-                    onClick={() => void act(() => changeHistory('clear'), false)}
-                  >
-                    清空
-                  </Button>
-                </header>
-                <div>
-                  {history.map((word) => (
-                    <span key={word}>
-                      <Button
-                        size="small"
-                        appearance="subtle"
-                        disabled={busy || !name || unsupported}
-                        onClick={() => {
-                          setQuery(word)
-                          void act(() => search(platform, word))
-                        }}
-                      >
-                        {word}
-                      </Button>
-                      <Button
-                        size="small"
-                        appearance="subtle"
-                        aria-label={'删除搜索词 ' + word}
-                        disabled={busy}
-                        icon={<X size={13} />}
-                        onClick={() => void act(() => changeHistory('remove', word), false)}
-                      />
-                    </span>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-          {busy ? (
-            <div role="status">
-              正在处理…{' '}
-              {operation === 'cancellable' && (
-                <Button size="small" onClick={() => void host.lxCancel()}>
-                  取消
-                </Button>
-              )}
-            </div>
-          ) : null}
-          {result && result.items.length > 0 && (
-            <>
-              <div className="search-result-head">
-                <label htmlFor="lx-quality">
-                  下载音质{' '}
-                  <Dropdown
-                    id="lx-quality"
-                    size="small"
-                    value={quality}
-                    selectedOptions={[quality]}
-                    onOptionSelect={(_, data) => {
-                      if (data.optionValue) setQuality(data.optionValue)
+                    disabled={busy || !name || unsupported}
+                    onClick={() => {
+                      setQuery(word)
+                      void act(() => search(platform, word))
                     }}
                   >
-                    {result.quality.map((q) => (
-                      <Option key={q} value={q}>
-                        {q}
-                      </Option>
-                    ))}
-                  </Dropdown>
-                </label>
-                <small>
-                  {result.items.length} 个版本
-                  {result.partial && ' · 后续结果暂时不可用'}
-                </small>
-              </div>
-              <ul>
-                {groupedVersions(result.items).map((group) =>
-                  group.items.length === 1 ? (
-                    versionRow(group.items[0])
-                  ) : (
-                    <li className="version-group" key={group.items[0].key}>
-                      <details open>
-                        <summary>
-                          {group.title} · {group.items[0].artist} · {group.items.length} 个版本
-                        </summary>
-                        <ul>{group.items.map(versionRow)}</ul>
-                      </details>
-                    </li>
-                  ),
-                )}
-              </ul>
-            </>
+                    {word}
+                  </Button>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    aria-label={'删除搜索词 ' + word}
+                    disabled={busy}
+                    icon={<X size={13} />}
+                    onClick={() => void act(() => changeHistory('remove', word), false)}
+                  />
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+      {busy ? (
+        <div role="status">
+          正在处理…{' '}
+          {operation === 'cancellable' && (
+            <Button size="small" onClick={() => void host.lxCancel()}>
+              取消
+            </Button>
           )}
-          {!busy && status && <p role="status">{status}</p>}
+        </div>
+      ) : null}
+      {result && result.items.length > 0 && (
+        <>
+          <div className="search-result-head">
+            <label htmlFor="lx-quality">
+              下载音质{' '}
+              <Dropdown
+                id="lx-quality"
+                size="small"
+                value={quality}
+                selectedOptions={[quality]}
+                onOptionSelect={(_, data) => {
+                  if (data.optionValue) setQuality(data.optionValue)
+                }}
+              >
+                {result.quality.map((q) => (
+                  <Option key={q} value={q}>
+                    {q}
+                  </Option>
+                ))}
+              </Dropdown>
+            </label>
+            <small>
+              {result.items.length} 个版本
+              {result.partial && ' · 后续结果暂时不可用'}
+            </small>
+          </div>
+          <ul>
+            {groupedVersions(result.items).map((group) =>
+              group.items.length === 1 ? (
+                versionRow(group.items[0])
+              ) : (
+                <li className="version-group" key={group.items[0].key}>
+                  <details open>
+                    <summary>
+                      {group.title} · {group.items[0].artist} · {group.items.length} 个版本
+                    </summary>
+                    <ul>{group.items.map(versionRow)}</ul>
+                  </details>
+                </li>
+              ),
+            )}
+          </ul>
         </>
       )}
+      {!busy && status && <p role="status">{status}</p>}
     </section>
   )
 }

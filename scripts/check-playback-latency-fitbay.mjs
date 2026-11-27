@@ -78,8 +78,7 @@ async function measure(page, target, label) {
 try {
   let page = await listen()
   await page.getByRole('tab', { name: '找歌', exact: true }).press('Enter')
-  const toggle = page.getByRole('button', { name: 'AI 推荐', exact: true })
-  if ((await toggle.getAttribute('aria-pressed')) === 'true') await toggle.press('Enter')
+  await page.getByRole('tab', { name: '普通搜索', exact: true }).press('Enter')
   const pane = page.getByRole('region', { name: '搜索音乐' })
   const input = pane.getByRole('textbox')
   await input.fill('Monkeys Spinning Monkeys Kevin MacLeod')

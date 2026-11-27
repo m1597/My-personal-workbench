@@ -3,6 +3,7 @@ import { useMusicFeedback } from './musicFeedback'
 import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { SongCredits } from './SongCredits'
 import { DiscoveryInput } from './DiscoveryInput'
+import { RecommendationReferences, type ReferenceControls } from './RecommendationReferences'
 import { BackButton } from './BackButton'
 import { Button, Checkbox, Tab, TabList } from '@fluentui/react-components'
 import { useEffect, useRef, useState } from 'react'
@@ -54,18 +55,15 @@ export function PublicPlaylists({
   playlists,
   refresh,
   ai,
-  draft,
-  setDraft,
-  toggleAI,
+  references,
 }: {
+  references?: ReferenceControls
   ai: boolean
-  draft: string
-  setDraft(value: string): void
-  toggleAI(): void
   play: (ids: string[]) => Promise<unknown>
   playlists: Playlist[]
   refresh: () => Promise<void>
 }) {
+  const [draft, setDraft] = useState('')
   const feedback = useMusicFeedback()
   const [platform, setPlatform] = useState('wy'),
     [tag, setTag] = useState(''),
@@ -85,13 +83,19 @@ export function PublicPlaylists({
     },
     [],
   )
+  const canSubmit = !thinking && (!ai || Boolean(draft.trim() && references?.result.preview))
   async function submit() {
+    if (!canSubmit) return
     const version = ++queryVersion.current
     setError('')
     setThinking(ai)
     try {
       const keyword = ai
-        ? await window.music.aiCatalogQuery('publicLists', draft.trim())
+        ? await window.music.aiCatalogQuery(
+            'publicLists',
+            draft.trim(),
+            references?.result.preview?.selection,
+          )
         : draft.trim()
       if (version !== queryVersion.current) return
       setTag('')
@@ -349,24 +353,15 @@ export function PublicPlaylists({
             onKeyDownCapture={guardSearchEnter}
             onSubmit={(e) => {
               e.preventDefault()
-              if (!thinking && (!ai || draft.trim())) void submit()
+              void submit()
             }}
           >
-            <DiscoveryInput
-              lists
-              ai={ai}
-              value={draft}
-              edit={setDraft}
-              toggle={() => {
-                queryVersion.current++
-                setThinking(false)
-                toggleAI()
-              }}
-            />
-            <Button type="submit" appearance="primary" disabled={thinking || (ai && !draft.trim())}>
+            <DiscoveryInput lists ai={ai} value={draft} edit={setDraft} />
+            <Button type="submit" appearance="primary" disabled={!canSubmit}>
               {ai ? '推荐歌单' : '搜索'}
             </Button>
           </form>
+          {references && <RecommendationReferences {...references} busy={thinking} />}
           <TabList
             aria-label="公开歌单平台"
             className="search-platforms"

@@ -329,7 +329,7 @@ async function verify() {
   const partial = await capture('01-four-saved')
   await openDiscovery(page, false)
   const input = page.getByRole('textbox', { name: '搜索关键词' })
-  await expect(input).toHaveValue('只听青禾本人的作品')
+  await expect(input).toHaveValue('')
   await input.fill(preview)
   await input.press('Enter')
   await page.getByRole('listitem').filter({ hasText: preview }).dispatchEvent('dblclick')
@@ -343,7 +343,7 @@ async function verify() {
   await page.keyboard.press('Escape')
   await openDiscovery(page, true)
   await expect(progress).toContainText('已入库 4/5')
-  await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveValue(preview)
+  await expect(page.getByLabel('想让 AI 推荐什么？（选填）')).toHaveValue('只听青禾本人的作品')
   const returned = await capture('03-return-running')
   for (const state of [partial, online, returned]) {
     assert.equal(state.status, 'running')

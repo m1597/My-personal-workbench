@@ -146,14 +146,14 @@ try {
   await page.getByRole('tab', { name: '找歌', exact: true }).click()
   await page.getByRole('tab', { name: '公开歌单', exact: true }).click()
   const panel = page.getByRole('region', { name: '公开歌单' }),
-    ai = panel.getByRole('button', { name: 'AI 推荐' }),
     input = panel.getByRole('textbox')
-  if ((await ai.getAttribute('aria-pressed')) === 'true') await ai.click()
+  await page.getByRole('tab', { name: '普通搜索', exact: true }).click()
   await input.fill('爵士')
   await input.press('Enter')
   await expect(panel.locator('.public-list-card').first()).toBeVisible({ timeout: 35000 })
   assert.equal((await calls()).filter((x) => x.model).length, 1)
-  await ai.click()
+  await page.getByRole('tab', { name: 'AI 推荐', exact: true }).click()
+  await page.getByRole('tab', { name: '公开歌单', exact: true }).click()
   await input.fill('想找几张适合安静咖啡店听的爵士歌单')
   await ime(input)
   await input.press('Enter')

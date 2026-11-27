@@ -1,0 +1,30 @@
+.music-reference-picker {
+  min-inline-size: 0;
+  margin: var(--space-8) 0;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--stroke-subtle, #ffffff24);
+  border-radius: 6px;
+}
+.music-reference-picker legend {
+  padding-inline: 4px;
+  font-weight: 600;
+}
+.music-reference-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  max-block-size: 12rem;
+  overflow: auto;
+}
+.music-reference-groups > div {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+.music-reference-groups label {
+  overflow-wrap: anywhere;
+}
+.music-reference-picker > small {
+  display: block;
+  margin-block-start: var(--space-8);
+}

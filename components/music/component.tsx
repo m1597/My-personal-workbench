@@ -120,6 +120,9 @@ type Item = {
 import { ArtistReleases, type ReleaseAPI } from './ReleaseCatalog'
 import { RecommendationComposer, StopRecommendation } from './RecommendationComposer'
 import type { ModelInfo } from './ModelSettings'
+import { DiscoveryNavigation, DiscoveryView } from './DiscoveryNavigation'
+import { PublicPlaylists } from './PublicPlaylists'
+import { useReferencePreview, type ReferenceSelection } from './RecommendationReferences'
 import { DownloadPane } from './LxPanel'
 import type { LibraryToolsAPI } from './LibraryTools'
 import type { Versions } from './LxPanel'
@@ -138,6 +141,7 @@ type State = {
   localTracks: LocalTrack[]
   onlineTracks: OnlineTrack[]
   albumRevision: number
+  referenceRevision: number
   importJob: ImportJob
   queue: string[]
   queueOccurrence: number
@@ -303,6 +307,9 @@ declare global {
         ): Promise<void>
         state(): Promise<State>
         draft(s: string): Promise<void>
+        getRecommendationReferences(
+          selection?: import('./RecommendationReferences').ReferenceSelection,
+        ): Promise<import('./RecommendationReferences').ReferencePreview>
         getTasteStatus(): Promise<TasteStatus>
         setTasteExcluded(kind: 'folder' | 'playlist', id: string, excluded: boolean): Promise<void>
         setTasteConsent(value: boolean): Promise<TasteStatus>
@@ -314,6 +321,7 @@ declare global {
           similar?: boolean,
           targetCount?: number,
           requestWeight?: number,
+          selection?: import('./RecommendationReferences').ReferenceSelection,
         ): Promise<string | null>
         stopGeneration(): Promise<void>
         match(id: string): Promise<void>
@@ -388,7 +396,10 @@ function Music() {
   const guideOrigin = useRef({ tab: 'library', category: 'library' as SettingsCategory })
   function visitGuide(step: number) {
     const page = guideSteps[step].page
-    if (page === 'audition' || page === 'download') setPublicMode(false)
+    if (page === 'audition' || page === 'download') {
+      setDiscoveryMode(page)
+      setPublicModes((modes) => ({ ...modes, [page]: false }))
+    }
     if (page === 'songs') setTab('library')
     else if (['audition', 'download', 'playlists', 'feed'].some((tab) => tab === page)) setTab(page)
     else {
@@ -405,14 +416,10 @@ function Music() {
   const startFirstGuide = useEffectEvent(() => visitGuide(0))
   const [script, setScript] = useState('')
   const [recommendationDraft, setRecommendationDraft] = useState<string>()
-  const [publicMode, setPublicMode] = useState(false)
-  const [publicDraft, setPublicDraft] = useState('')
-  const [publicAI, setPublicAI] = useState(false)
-  function selectDiscoveryKind(lists: boolean) {
-    setPublicMode(lists)
-    setTab(lists ? 'download' : discoveryMode)
-  }
   const [discoveryMode, setDiscoveryMode] = useState('download')
+  const [publicModes, setPublicModes] = useState<Record<string, boolean>>({})
+  const [searchQuery, setSearchQuery] = useState('')
+  const [referenceSelection, setReferenceSelection] = useState<ReferenceSelection>()
   const [recommendationCount, setRecommendationCount] = useState('5')
   function editRecommendation(value: string) {
     setRecommendationDraft(value)
@@ -1013,6 +1020,21 @@ function Music() {
   const [lyricsOpen, setLyricsOpen] = useState(false)
   const previousTab = useRef('library')
   const showPlayer = tab === 'playing'
+  const isDiscovery = tab === 'download' || tab === 'audition'
+  const publicMode = Boolean(publicModes[tab])
+  const referencePreview = useReferencePreview(
+    referenceSelection,
+    state && tab === 'audition' && !settingsOpen
+      ? `${publicMode ? 'lists' : 'songs'}:${state.albumRevision}:${state.referenceRevision}`
+      : undefined,
+  )
+  const referenceControls = {
+    result: referencePreview,
+    selection: referenceSelection,
+    change: setReferenceSelection,
+    openSettings: () => openSettings('model'),
+  }
+
   const needLyrics = lyricsOpen || showPlayer
   const coverId = (active && ('duration' in active ? active.id : active.localId)) || undefined
   const favoriteTrack = coverId ? trackById.get(coverId) : undefined
@@ -1394,6 +1416,8 @@ function Music() {
             v.artist.trim().toLocaleLowerCase() === row.artist.trim().toLocaleLowerCase(),
         )
         if (exact.length !== 1) {
+          setDiscoveryMode('audition')
+          setPublicModes((modes) => ({ ...modes, audition: false }))
           setTab('audition')
           setOnline({ row, result, queueIds })
           return
@@ -1486,13 +1510,7 @@ function Music() {
           onTabSelect={(_, data) => {
             setGuide(null)
             setSearch('')
-            setTab(
-              data.value === 'download'
-                ? publicMode
-                  ? 'download'
-                  : discoveryMode
-                : String(data.value),
-            )
+            setTab(data.value === 'download' ? discoveryMode : String(data.value))
           }}
         >
           <Tab
@@ -1583,24 +1601,13 @@ function Music() {
         </div>
       )}
       <main
-        key={tab}
+        key={isDiscovery ? 'discovery' : tab}
         ref={catalog.locations.length ? undefined : catalog.layout}
         className="music-scroll"
         data-page={tab}
         hidden={catalog.locations.length > 0}
         style={catalog.locations.length ? { display: 'none' } : undefined}
       >
-        {!showPlayer && (tab === 'download' || tab === 'audition') && (
-          <TabList
-            aria-label="查找内容"
-            className="discovery-kinds"
-            selectedValue={publicMode ? 'lists' : 'songs'}
-            onTabSelect={(_, d) => selectDiscoveryKind(d.value === 'lists')}
-          >
-            <Tab value="songs">歌曲</Tab>
-            <Tab value="lists">公开歌单</Tab>
-          </TabList>
-        )}
         {showPlayer ? (
           <NowPlaying
             actions={{
@@ -1636,10 +1643,6 @@ function Music() {
         ) : libraryPage ? (
           <LibraryPane
             key={tab + libraryVisit}
-            tasteExclusions={state?.tasteExclusions ?? []}
-            setTasteExcluded={(kind, id, excluded) =>
-              act(() => host.setTasteExcluded(kind, id, excluded))
-            }
             scope={inPlaylists ? 'playlists' : 'library'}
             releaseActions={{
               play: playSearchResult,
@@ -1786,376 +1789,394 @@ function Music() {
             songs={state?.onlineTracks ?? []}
             playCollected={(id, ids) => void act(() => playOrdered(id, ids))}
           />
-        ) : tab === 'download' ? (
-          <DownloadPane
-            publicMode={publicMode}
-            publicDraft={publicDraft}
-            setPublicDraft={setPublicDraft}
-            publicAI={publicAI}
-            togglePublic={() => setPublicAI(!publicAI)}
-            query={recommendationDraft ?? state?.draft ?? ''}
-            setQuery={editRecommendation}
-            toggle={() => {
-              setDiscoveryMode('audition')
-              setTab('audition')
-            }}
-            preferredQuality={state?.prefs.quality}
-            playlists={state?.playlists.filter((list) => !list.system) ?? []}
-            playPublic={(ids) => playOrdered(ids[0], ids)}
-            onPlay={playSearchResult}
-            onAdd={addSearchResult}
-            refresh={refresh}
-          />
         ) : (
-          <>
-            {state && (
-              <RecommendationComposer
-                savedWeight={state.prefs.requestWeight}
-                toggle={() => {
-                  setDiscoveryMode('download')
-                  setTab('download')
-                }}
-                currentSong={active}
-                activeTarget={running ? batch?.targetCount : null}
-                running={running}
-                models={state.models}
-                openSettings={() => openSettings('model')}
-                description={recommendationDraft ?? state.draft}
-                edit={editRecommendation}
-                count={recommendationCount}
-                setCount={setRecommendationCount}
-                onGenerating={setGenerating}
+          <div className="discovery-layout">
+            <DiscoveryNavigation
+              ai={tab === 'audition'}
+              publicMode={publicMode}
+              selectAI={(ai) => {
+                const mode = ai ? 'audition' : 'download'
+                setDiscoveryMode(mode)
+                setTab(mode)
+              }}
+              selectLists={(lists) => setPublicModes((modes) => ({ ...modes, [tab]: lists }))}
+            />
+            <DiscoveryView active={tab === 'download' && !publicMode}>
+              <DownloadPane
+                query={searchQuery}
+                setQuery={setSearchQuery}
+                preferredQuality={state?.prefs.quality}
+                onPlay={playSearchResult}
+                onAdd={addSearchResult}
                 refresh={refresh}
               />
-            )}
-            <section className="music-list">
-              <div className="music-section-head">
-                <h2>本次推荐</h2>
-                {(batch?.targetCount || legacyDaily) && (
-                  <div className="music-batch-status">
-                    {batch?.targetCount ? (
-                      <div className="music-batch-progress">
-                        <p role="status">
-                          已入库 {rows.length}/{batch.targetCount}
-                          {batch.state === 'completed' && rows.length < batch.targetCount
-                            ? '，部分已下载歌曲已移除或暂不可用'
-                            : running && rows.length >= batch.targetCount
-                              ? '，正在完成本批'
-                              : batch.message && `，${batch.message}`}
-                        </p>
-                        {running && <StopRecommendation refresh={refresh} />}
-                        {batch.retryableCount > 0 && (
-                          <Button
-                            size="small"
-                            disabled={generating}
-                            onClick={() => {
-                              if (retryingRecommendations.current) return
-                              retryingRecommendations.current = true
-                              setGenerating(true)
-                              void act(() => host.retryFailedRecommendations(batch.id)).finally(
-                                () => {
-                                  retryingRecommendations.current = false
-                                  setGenerating(false)
-                                },
-                              )
-                            }}
-                          >
-                            仅重试失败歌曲（{batch.retryableCount}）
-                          </Button>
-                        )}
-                        {batch.state === 'awaiting' && (
-                          <>
+            </DiscoveryView>
+            {['download', 'audition'].map((mode) => (
+              <DiscoveryView key={mode} active={tab === mode && publicMode}>
+                <PublicPlaylists
+                  playlists={state?.playlists.filter((list) => !list.system) ?? []}
+                  play={(ids) => playOrdered(ids[0], ids)}
+                  refresh={refresh}
+                  ai={mode === 'audition'}
+                  references={
+                    mode === 'audition' && tab === mode && publicMode && !settingsOpen
+                      ? referenceControls
+                      : undefined
+                  }
+                />
+              </DiscoveryView>
+            ))}
+            <DiscoveryView active={tab === 'audition' && !publicMode}>
+              {state && (
+                <RecommendationComposer
+                  savedWeight={state.prefs.requestWeight}
+                  references={
+                    tab === 'audition' && !publicMode && !settingsOpen
+                      ? referenceControls
+                      : undefined
+                  }
+                  currentSong={active}
+                  activeTarget={running ? batch?.targetCount : null}
+                  running={running}
+                  models={state.models}
+                  openSettings={() => openSettings('model')}
+                  description={recommendationDraft ?? state.draft}
+                  edit={editRecommendation}
+                  count={recommendationCount}
+                  setCount={setRecommendationCount}
+                  onGenerating={setGenerating}
+                  refresh={refresh}
+                />
+              )}
+              <section className="music-list">
+                <div className="music-section-head">
+                  <h2>本次推荐</h2>
+                  {(batch?.targetCount || legacyDaily) && (
+                    <div className="music-batch-status">
+                      {batch?.targetCount ? (
+                        <div className="music-batch-progress">
+                          <p role="status">
+                            已入库 {rows.length}/{batch.targetCount}
+                            {batch.state === 'completed' && rows.length < batch.targetCount
+                              ? '，部分已下载歌曲已移除或暂不可用'
+                              : running && rows.length >= batch.targetCount
+                                ? '，正在完成本批'
+                                : batch.message && `，${batch.message}`}
+                          </p>
+                          {running && <StopRecommendation refresh={refresh} />}
+                          {batch.retryableCount > 0 && (
                             <Button
                               size="small"
-                              onClick={() => void act(() => host.answerShortage(batch.id, false))}
+                              disabled={generating}
+                              onClick={() => {
+                                if (retryingRecommendations.current) return
+                                retryingRecommendations.current = true
+                                setGenerating(true)
+                                void act(() => host.retryFailedRecommendations(batch.id)).finally(
+                                  () => {
+                                    retryingRecommendations.current = false
+                                    setGenerating(false)
+                                  },
+                                )
+                              }}
                             >
-                              保留当前结果
+                              仅重试失败歌曲（{batch.retryableCount}）
                             </Button>
-                            <Button
-                              size="small"
-                              onClick={() => void act(() => host.answerShortage(batch.id, true))}
-                            >
-                              扩大到相近歌曲
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <p role="status">已下载 {downloaded.length} 首</p>
-                    )}
-                    {details && (
-                      <details className="music-failure-details">
-                        <summary>查看详情</summary>
-                        <p>{details}</p>
-                      </details>
-                    )}
-                  </div>
-                )}
-                {rows.some((r) => r.daily) && (
-                  <Button
-                    className="music-play-batch"
-                    size="small"
-                    disabled={!downloaded.length}
-                    onClick={() => {
-                      setShuffled(null)
-                      void act(() => play(downloaded[0], downloaded))
-                    }}
-                  >
-                    播放本次推荐
-                  </Button>
-                )}
-              </div>
-              {rows.length > 0 ? (
-                <>
-                  <div className="music-tools">
-                    {!batch?.targetCount && !legacyDaily && (
-                      <small>
-                        本次 {rows.length} 首 · 已下载 {downloaded.length}/{rows.length}
-                      </small>
-                    )}
-                    {rows.some((r) => r.daily) && (
-                      <QuickListenControls
-                        status={clipStatus}
-                        disabled={!downloaded.length}
-                        ready={!!clips.current && !clips.current.pending}
-                        favorite={
-                          !!state?.localTracks.find(
-                            (row) => row.id === clips.current?.ids[clips.current.index],
-                          )?.favorite
-                        }
-                        start={() => void act(() => quickAt(downloaded, 0))}
-                        save={() =>
-                          void act(async () => {
-                            const clip = clips.current
-                            if (clip) await host.setFavorite(clip.ids[clip.index], true)
-                          })
-                        }
-                        skip={() => void act(quickNext)}
-                        full={() =>
-                          void act(async () => {
-                            const clip = clips.current
-                            if (clip) await play(clip.ids[clip.index], clip.ids, 0, true, [], 0)
-                          })
-                        }
-                      />
-                    )}
-                    {rows.some((r) => r.status === '待匹配') && (
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          void act(() =>
-                            forBatches(
-                              rows.filter((r) => r.status === '待匹配'),
-                              host.match,
-                            ),
-                          )
-                        }
-                      >
-                        匹配目录
-                      </Button>
-                    )}
-                    {rows.some((row) => ['等候', '下载中'].includes(row.status)) && (
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          void act(() =>
-                            forBatches(
-                              rows.filter((r) => ['等候', '下载中'].includes(r.status)),
-                              host.cancelBatch,
-                            ),
-                          )
-                        }
-                      >
-                        取消本批下载
-                      </Button>
-                    )}
-                    {rows.some((r) => !r.daily) && (
-                      <Button
-                        size="small"
-                        appearance="subtle"
-                        disabled={!selected.length}
-                        icon={<FolderPlus size={15} />}
-                        onClick={() =>
-                          void act(() =>
-                            forBatches(
-                              selected.filter((r) => !r.daily),
-                              host.keep,
-                            ),
-                          )
-                        }
-                      >
-                        保留所选（{selected.length}）
-                      </Button>
-                    )}
-                  </div>
-                  <ol>
-                    {rows.map((r) => {
-                      const version = r.candidates.find((t) => t.id === r.track)
-                      return (
-                        <TrackMenu
-                          key={r.id}
-                          localId={r.localId}
-                          queueable={playable(r)}
-                          onQueue={(next) => onQueue(r.localId ?? r.id, next)}
-                          onDismiss={() => void act(() => host.dismissRecommendation(r.id))}
-                          dismissed={r.notInterested}
+                          )}
+                          {batch.state === 'awaiting' && (
+                            <>
+                              <Button
+                                size="small"
+                                onClick={() => void act(() => host.answerShortage(batch.id, false))}
+                              >
+                                保留当前结果
+                              </Button>
+                              <Button
+                                size="small"
+                                onClick={() => void act(() => host.answerShortage(batch.id, true))}
+                              >
+                                扩大到相近歌曲
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <p role="status">已下载 {downloaded.length} 首</p>
+                      )}
+                      {details && (
+                        <details className="music-failure-details">
+                          <summary>查看详情</summary>
+                          <p>{details}</p>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                  {rows.some((r) => r.daily) && (
+                    <Button
+                      className="music-play-batch"
+                      size="small"
+                      disabled={!downloaded.length}
+                      onClick={() => {
+                        setShuffled(null)
+                        void act(() => play(downloaded[0], downloaded))
+                      }}
+                    >
+                      播放本次推荐
+                    </Button>
+                  )}
+                </div>
+                {rows.length > 0 ? (
+                  <>
+                    <div className="music-tools">
+                      {!batch?.targetCount && !legacyDaily && (
+                        <small>
+                          本次 {rows.length} 首 · 已下载 {downloaded.length}/{rows.length}
+                        </small>
+                      )}
+                      {rows.some((r) => r.daily) && (
+                        <QuickListenControls
+                          status={clipStatus}
+                          disabled={!downloaded.length}
+                          ready={!!clips.current && !clips.current.pending}
+                          favorite={
+                            !!state?.localTracks.find(
+                              (row) => row.id === clips.current?.ids[clips.current.index],
+                            )?.favorite
+                          }
+                          start={() => void act(() => quickAt(downloaded, 0))}
+                          save={() =>
+                            void act(async () => {
+                              const clip = clips.current
+                              if (clip) await host.setFavorite(clip.ids[clip.index], true)
+                            })
+                          }
+                          skip={() => void act(quickNext)}
+                          full={() =>
+                            void act(async () => {
+                              const clip = clips.current
+                              if (clip) await play(clip.ids[clip.index], clip.ids, 0, true, [], 0)
+                            })
+                          }
+                        />
+                      )}
+                      {rows.some((r) => r.status === '待匹配') && (
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            void act(() =>
+                              forBatches(
+                                rows.filter((r) => r.status === '待匹配'),
+                                host.match,
+                              ),
+                            )
+                          }
                         >
-                          <li
-                            data-active={(r.localId ?? r.id) === active?.id}
-                            {...songRow(() => {
-                              if (playable(r)) void act(() => startTrack(r.localId ?? r.id))
-                              else if (r.online) void act(() => audition(r))
-                            })}
+                          匹配目录
+                        </Button>
+                      )}
+                      {rows.some((row) => ['等候', '下载中'].includes(row.status)) && (
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            void act(() =>
+                              forBatches(
+                                rows.filter((r) => ['等候', '下载中'].includes(r.status)),
+                                host.cancelBatch,
+                              ),
+                            )
+                          }
+                        >
+                          取消本批下载
+                        </Button>
+                      )}
+                      {rows.some((r) => !r.daily) && (
+                        <Button
+                          size="small"
+                          appearance="subtle"
+                          disabled={!selected.length}
+                          icon={<FolderPlus size={15} />}
+                          onClick={() =>
+                            void act(() =>
+                              forBatches(
+                                selected.filter((r) => !r.daily),
+                                host.keep,
+                              ),
+                            )
+                          }
+                        >
+                          保留所选（{selected.length}）
+                        </Button>
+                      )}
+                    </div>
+                    <ol>
+                      {rows.map((r) => {
+                        const version = r.candidates.find((t) => t.id === r.track)
+                        return (
+                          <TrackMenu
+                            key={r.id}
+                            localId={r.localId}
+                            queueable={playable(r)}
+                            onQueue={(next) => onQueue(r.localId ?? r.id, next)}
+                            onDismiss={() => void act(() => host.dismissRecommendation(r.id))}
+                            dismissed={r.notInterested}
                           >
-                            <div
-                              className="music-track-icon"
-                              data-cover={!!r.daily}
-                              data-playing={(r.localId ?? r.id) === current.current && !paused}
+                            <li
+                              data-active={(r.localId ?? r.id) === active?.id}
+                              {...songRow(() => {
+                                if (playable(r)) void act(() => startTrack(r.localId ?? r.id))
+                                else if (r.online) void act(() => audition(r))
+                              })}
                             >
-                              {r.daily && <Cover track id={r.localId ?? undefined} />}
-                              {playable(r) ? (
-                                <Button
-                                  appearance="subtle"
-                                  icon={
-                                    (r.localId ?? r.id) === current.current && !paused ? (
-                                      <Pause size={16} />
-                                    ) : (
-                                      <Play size={16} />
-                                    )
-                                  }
-                                  aria-label={
-                                    ((r.localId ?? r.id) === current.current && !paused
-                                      ? '暂停'
-                                      : '试听') + r.title
-                                  }
-                                  onClick={() => void act(() => startTrack(r.localId ?? r.id))}
-                                />
-                              ) : (
-                                <Disc3 size={18} />
-                              )}
-                            </div>
-                            <div className="music-track">
-                              <div>
-                                <strong>{r.title}</strong>
-                                <SongCredits song={r} />
-                              </div>
-                              <p>{r.reason}</p>
-                              {!r.daily &&
-                                r.status !== '模型推荐' &&
-                                !(r.daily && r.status === '待重试') && (
-                                  <small>
-                                    {r.status}
-                                    {version?.version && ' · ' + version.version}
-                                  </small>
+                              <div
+                                className="music-track-icon"
+                                data-cover={!!r.daily}
+                                data-playing={(r.localId ?? r.id) === current.current && !paused}
+                              >
+                                {r.daily && <Cover track id={r.localId ?? undefined} />}
+                                {playable(r) ? (
+                                  <Button
+                                    appearance="subtle"
+                                    icon={
+                                      (r.localId ?? r.id) === current.current && !paused ? (
+                                        <Pause size={16} />
+                                      ) : (
+                                        <Play size={16} />
+                                      )
+                                    }
+                                    aria-label={
+                                      ((r.localId ?? r.id) === current.current && !paused
+                                        ? '暂停'
+                                        : '试听') + r.title
+                                    }
+                                    onClick={() => void act(() => startTrack(r.localId ?? r.id))}
+                                  />
+                                ) : (
+                                  <Disc3 size={18} />
                                 )}
-                              {r.online && !playable(r) && (
-                                <Button
-                                  size="small"
-                                  disabled={resolving}
-                                  onClick={() => void act(() => audition(r))}
-                                >
-                                  试听在线录音
-                                </Button>
-                              )}
-                              {online?.row.id === r.id && (
-                                <section className="music-versions" aria-label="选择试听版本">
-                                  {online.result.items.map((v) => (
-                                    <Button
-                                      key={v.key}
-                                      size="small"
-                                      disabled={resolving}
-                                      onClick={() =>
-                                        void act(() =>
-                                          audition(
-                                            r,
-                                            v.key,
-                                            online.result.quality.includes('320k')
-                                              ? '320k'
-                                              : online.result.quality[0],
-                                            online.queueIds,
-                                          ),
-                                        )
-                                      }
-                                    >
-                                      {[v.title, v.artist, v.album].filter(Boolean).join(' · ')} ·
-                                      试听
-                                    </Button>
-                                  ))}
+                              </div>
+                              <div className="music-track">
+                                <div>
+                                  <strong>{r.title}</strong>
+                                  <SongCredits song={r} />
+                                </div>
+                                <p>{r.reason}</p>
+                                {!r.daily &&
+                                  r.status !== '模型推荐' &&
+                                  !(r.daily && r.status === '待重试') && (
+                                    <small>
+                                      {r.status}
+                                      {version?.version && ' · ' + version.version}
+                                    </small>
+                                  )}
+                                {r.online && !playable(r) && (
                                   <Button
                                     size="small"
-                                    onClick={() => {
-                                      if (resolving) void host.lxCancel()
-                                      setOnline(undefined)
-                                    }}
+                                    disabled={resolving}
+                                    onClick={() => void act(() => audition(r))}
+                                  >
+                                    试听在线录音
+                                  </Button>
+                                )}
+                                {online?.row.id === r.id && (
+                                  <section className="music-versions" aria-label="选择试听版本">
+                                    {online.result.items.map((v) => (
+                                      <Button
+                                        key={v.key}
+                                        size="small"
+                                        disabled={resolving}
+                                        onClick={() =>
+                                          void act(() =>
+                                            audition(
+                                              r,
+                                              v.key,
+                                              online.result.quality.includes('320k')
+                                                ? '320k'
+                                                : online.result.quality[0],
+                                              online.queueIds,
+                                            ),
+                                          )
+                                        }
+                                      >
+                                        {[v.title, v.artist, v.album].filter(Boolean).join(' · ')} ·
+                                        试听
+                                      </Button>
+                                    ))}
+                                    <Button
+                                      size="small"
+                                      onClick={() => {
+                                        if (resolving) void host.lxCancel()
+                                        setOnline(undefined)
+                                      }}
+                                    >
+                                      取消
+                                    </Button>
+                                  </section>
+                                )}
+                                {r.status === '待选版本' && (
+                                  <div className="music-versions">
+                                    {r.candidates.map((t) => (
+                                      <Button
+                                        key={t.id}
+                                        size="small"
+                                        onClick={() => void act(() => host.choose(r.id, t.id))}
+                                      >
+                                        {t.album} · {t.version}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                )}
+                                {['等候', '下载中'].includes(r.status) && (
+                                  <Button
+                                    size="small"
+                                    onClick={() => void act(() => host.cancel(r.id))}
                                   >
                                     取消
                                   </Button>
-                                </section>
-                              )}
-                              {r.status === '待选版本' && (
-                                <div className="music-versions">
-                                  {r.candidates.map((t) => (
-                                    <Button
-                                      key={t.id}
-                                      size="small"
-                                      onClick={() => void act(() => host.choose(r.id, t.id))}
-                                    >
-                                      {t.album} · {t.version}
-                                    </Button>
-                                  ))}
-                                </div>
-                              )}
-                              {['等候', '下载中'].includes(r.status) && (
-                                <Button
-                                  size="small"
-                                  onClick={() => void act(() => host.cancel(r.id))}
-                                >
-                                  取消
-                                </Button>
-                              )}
-                              {!r.online &&
-                                ['已过期', '文件缺失', '已取消', '中断', '下载失败'].includes(
-                                  r.status,
-                                ) && (
-                                  <Button
-                                    size="small"
-                                    onClick={() => void act(() => host.retry(r.id))}
-                                  >
-                                    重新获取
-                                  </Button>
                                 )}
-                            </div>
-                            {r.daily && <small className="daily-row-state">{r.status}</small>}
-                            {!r.daily && playable(r) && (
-                              <Checkbox
-                                aria-label="保留"
-                                title={'保留' + r.title}
-                                checked={!!r.checked}
-                                onChange={(_, v) =>
-                                  void act(() => host.checked(r.id, v.checked === true))
-                                }
-                              />
-                            )}
-                          </li>
-                        </TrackMenu>
-                      )
-                    })}
-                  </ol>
-                </>
-              ) : (
-                <div className="music-empty">
-                  <ListMusic size={24} />
-                  <p>
-                    {running
-                      ? '正在查找可下载的新歌…'
-                      : state?.batches.length
-                        ? '本次尚无新歌入库'
-                        : '生成后，这里会显示本次推荐'}
-                  </p>
-                </div>
-              )}
-            </section>
-          </>
+                                {!r.online &&
+                                  ['已过期', '文件缺失', '已取消', '中断', '下载失败'].includes(
+                                    r.status,
+                                  ) && (
+                                    <Button
+                                      size="small"
+                                      onClick={() => void act(() => host.retry(r.id))}
+                                    >
+                                      重新获取
+                                    </Button>
+                                  )}
+                              </div>
+                              {r.daily && <small className="daily-row-state">{r.status}</small>}
+                              {!r.daily && playable(r) && (
+                                <Checkbox
+                                  aria-label="保留"
+                                  title={'保留' + r.title}
+                                  checked={!!r.checked}
+                                  onChange={(_, v) =>
+                                    void act(() => host.checked(r.id, v.checked === true))
+                                  }
+                                />
+                              )}
+                            </li>
+                          </TrackMenu>
+                        )
+                      })}
+                    </ol>
+                  </>
+                ) : (
+                  <div className="music-empty">
+                    <ListMusic size={24} />
+                    <p>
+                      {running
+                        ? '正在查找可下载的新歌…'
+                        : state?.batches.length
+                          ? '本次尚无新歌入库'
+                          : '生成后，这里会显示本次推荐'}
+                    </p>
+                  </div>
+                )}
+              </section>
+            </DiscoveryView>
+          </div>
         )}
       </main>
       {catalog.locations.length > 0 && (

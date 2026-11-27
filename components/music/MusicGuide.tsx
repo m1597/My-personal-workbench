@@ -35,9 +35,9 @@ export const guideSteps = [
   },
   {
     page: 'download',
-    target: 'ai-toggle',
+    target: 'ai-entry',
     title: '切换到 AI 推荐',
-    text: '点搜索框右边的星光按钮切换模式。普通找歌可直接使用；要让 AI 推荐，再配置自己的模型。',
+    text: '在找歌侧栏选择「AI 推荐」。可填写想听的内容，并选择这一次要参考的歌曲。',
   },
   {
     page: 'model',

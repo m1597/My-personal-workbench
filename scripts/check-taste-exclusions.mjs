@@ -3,32 +3,47 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { _electron as electron, expect } from '@playwright/test'
 import { MusicStore } from '../components/music/store.mjs'
-import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
+import { openDiscovery } from './discovery-fixture.mjs'
+import { offlineSourceRepository } from './music-source-fixture.mjs'
 
 await fs.mkdir('tmp', { recursive: true })
-const root = await fs.mkdtemp(path.resolve('tmp/taste-exclusions-'))
+const root = await fs.mkdtemp(path.resolve('tmp/recommendation-references-'))
 const profile = path.join(root, 'profile')
-const library = path.join(profile, 'fitbay-music')
-const store = new MusicStore(library)
+const store = new MusicStore(path.join(profile, 'fitbay-music'))
+const output = path.join(root, 'downloads')
+await fs.mkdir(output)
 store.set('music-guide-v1', 1)
 store.set('music-media-keys', 'off')
-for (const [folder, title] of [
-  ['剪辑素材', '片头配乐'],
-  ['个人曲库', '广告配乐'],
-  ['个人曲库', '夜间爵士'],
-]) {
-  const dir = path.join(root, folder)
+store.set('music-global-keys', 'off')
+store.set('music-recommend-dir', output)
+const titles = ['素材录音', '单独收藏', '重叠录音', '目录独有', '旧歌单排除']
+for (const [i, title] of titles.entries()) {
+  const dir = path.join(root, i < 2 ? '剪辑素材' : '日常曲库')
   await fs.mkdir(dir, { recursive: true })
   const file = path.join(dir, title + '.mp3')
   await fs.copyFile('tests/fixtures/local-music/tone.mp3', file)
-  store.library.upsert({ file, title, artist: '测试艺人', album: '测试专辑', duration: 4 })
+  store.library.upsert({ file, title, artist: '试验艺人', album: '试验专辑', duration: 4 })
 }
 const tracks = store.library.list()
-store.library.createPlaylist(
-  '工程备用',
-  tracks.filter((t) => t.title === '广告配乐').map((t) => t.id),
+const track = (title) => tracks.find((t) => t.title === title)
+store.db.prepare('UPDATE local_tracks SET favorite=1 WHERE id=?').run(track('单独收藏').id)
+store.library.createPlaylist('混合歌单', [track('素材录音').id, track('重叠录音').id])
+const excludedPlaylist = store.library.createPlaylist('旧隐藏歌单', [track('旧歌单排除').id])
+store.set(
+  'taste-exclusions',
+  JSON.stringify([
+    { kind: 'folder', id: track('素材录音').folder.id, name: '剪辑素材' },
+    { kind: 'playlist', id: excludedPlaylist, name: '旧隐藏歌单' },
+  ]),
 )
 store.db.close()
+const sourceFile = path.join(root, 'source.js')
+await fs.writeFile(
+  sourceFile,
+  `// @name 范围验收源
+lx.on('request',()=>[])
+lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+)
 const app = await electron.launch({
   args: [
     path.resolve('dist/component-prototype/host'),
@@ -41,79 +56,124 @@ const app = await electron.launch({
 })
 try {
   const page = await app.firstWindow()
-  await app.evaluate(({ app, BaseWindow }) => {
-    BaseWindow.getAllWindows()
-      .find((w) => w.getTitle() === 'Music')
-      .setContentSize(1100, 760)
+  await page.waitForSelector('.music-shell')
+  await offlineSourceRepository(app)
+  await app.evaluate(({ BaseWindow, dialog, app }, file) => {
     if (
       !app.commandLine.hasSwitch('mute-audio') ||
       BaseWindow.getAllWindows().some((w) => w.isFocusable())
     )
-      throw Error('测试窗口需要后台静音')
-    globalThis.requests = []
-    globalThis.fetch = async (_url, req) => {
-      const data = JSON.parse(JSON.parse(req.body).messages.at(-1).content)
-      globalThis.requests.push(data)
-      const profile = [data.previous, ...data.changes.map((r) => r.title + ' ' + r.signal)]
-        .filter(Boolean)
-        .join('；')
-      return Response.json({ choices: [{ message: { content: JSON.stringify({ profile }) } }] })
+      throw Error('须后台静音')
+    BaseWindow.getAllWindows()[0].setContentSize(1200, 840)
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+    globalThis.testRecommendations = []
+    globalThis.fetch = async (_url, init) => {
+      const payload = JSON.parse(JSON.parse(init.body).messages.at(-1).content)
+      if (Array.isArray(payload.changes)) {
+        const profile = [payload.previous, ...new Set(payload.changes.map((c) => c.title))]
+          .filter(Boolean)
+          .join('；')
+        return Response.json({ choices: [{ message: { content: JSON.stringify({ profile }) } }] })
+      }
+      globalThis.testRecommendations.push(payload)
+      throw Error('已捕获推荐请求')
     }
-  })
+  }, sourceFile)
+
   await page.evaluate(async () => {
+    await window.music.lxImport()
     await window.music.configureModel('deepseek', 'fixture', 'fixture', false)
-    await window.music.setTasteConsent(true)
   })
-  const summary = async () =>
-    JSON.parse(await fs.readFile(path.join(library, 'music-taste.json'), 'utf8').catch(() => '{}'))
-      .text
-  await expect.poll(summary).toContain('广告配乐 主动加入自建歌单')
-  const screenshot = async (name) =>
-    page.screenshot({
-      path: path.join(root, name + '.png'),
-      animations: 'disabled',
-      style: ':root { background:var(--base)!important }',
-    })
-  const tab = async (name) => page.getByRole('tab', { name, exact: true }).click()
-  await tab('曲库')
-  await screenshot('00-library')
+  await page.getByRole('tab', { name: '曲库', exact: true }).click()
   await page.getByRole('button', { name: '剪辑素材', exact: true }).click({ button: 'right' })
-  await expect(page.getByRole('menuitem', { name: '不参与智能推荐' })).toBeVisible()
-  await screenshot('01-folder-menu')
-  await page.getByRole('menuitem', { name: '不参与智能推荐' }).click()
-  await expect.poll(summary).not.toContain('片头配乐')
-  await tab('歌单')
-  await page.getByRole('button', { name: '工程备用', exact: true }).click({ button: 'right' })
-  await screenshot('02-playlist-menu')
-  await page.getByRole('menuitem', { name: '不参与智能推荐' }).click()
-  await expect.poll(summary).toBe('夜间爵士 曲库新增')
-  const rebuilt = await app.evaluate(() => globalThis.requests.at(-1))
-  assert.equal(rebuilt.previous, '')
-  assert.deepEqual(
-    rebuilt.changes.map((row) => row.title),
-    ['夜间爵士'],
-  )
-  await tab('曲库')
-  await page.getByRole('button', { name: '剪辑素材', exact: true }).click()
-  await page.getByRole('button', { name: '管理歌单片头配乐' }).click()
-  await page.getByRole('checkbox', { name: '我的收藏' }).check()
-  await expect.poll(summary).toContain('片头配乐 主动收藏')
-  assert.ok(!(await summary()).includes('片头配乐 曲库新增'))
+  await expect(page.getByRole('menuitem', { name: '从曲库移除文件夹', exact: true })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: /参与智能推荐/ })).toHaveCount(0)
   await page.keyboard.press('Escape')
-  await openMusicSettings(page)
-  await selectMusicSettings(page, '模型与推荐')
-  await expect(page.getByRole('button', { name: '恢复参与智能推荐：剪辑素材' })).toBeVisible()
-  await screenshot('03-settings')
-  await page.getByRole('button', { name: '恢复参与智能推荐：工程备用' }).click()
-  await expect.poll(summary).toContain('广告配乐 主动加入自建歌单')
-  assert.ok(!(await summary()).includes('片头配乐 曲库新增'))
-  await page.getByRole('button', { name: '恢复参与智能推荐：剪辑素材' }).click()
-  await expect.poll(summary).toContain('片头配乐 曲库新增')
-  const requests = await app.evaluate(() => globalThis.requests)
-  assert.ok(!JSON.stringify(requests).includes('工程备用'))
-  await fs.writeFile(path.join(root, 'requests.json'), JSON.stringify(requests, null, 2))
+  await openDiscovery(page, true)
+  const references = page.getByRole('group', { name: '本次参考', exact: true })
+  const scope = page.getByLabel('本次参考范围', { exact: true })
+  const checkbox = (name) => references.getByRole('checkbox', { name, exact: true })
+  const submit = page.getByRole('button', { name: '生成推荐', exact: true })
+  await expect(checkbox('剪辑素材')).not.toBeChecked()
+  await expect(checkbox('混合歌单')).toBeChecked()
+  await expect(checkbox('旧隐藏歌单')).not.toBeChecked()
+  await expect(checkbox('我的收藏')).toBeChecked()
+  await expect(scope).toContainText('3 首')
+  const authorization = page.getByRole('button', { name: '前往模型设置', exact: true })
+  await expect(authorization).toBeVisible()
+  await authorization.click()
+  const consent = page.getByRole('checkbox', { name: '允许使用曲库摘要生成推荐偏好' })
+  await expect(consent).not.toBeChecked()
+  await consent.check()
+  await expect(consent).toBeChecked()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
+  await expect(scope).toContainText('3 首')
+  await expect(authorization).toHaveCount(0)
+  await expect(checkbox('剪辑素材')).not.toBeChecked()
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('雨天听的歌曲')
+  const receipts = []
+  async function verifyBatch(expected) {
+    const before = await app.evaluate(() => globalThis.testRecommendations.length)
+    await submit.click()
+    await expect
+      .poll(() => app.evaluate(() => globalThis.testRecommendations.length), { timeout: 15000 })
+      .toBeGreaterThan(before)
+    await expect(submit).toBeEnabled({ timeout: 15000 })
+    const request = await app.evaluate(() => globalThis.testRecommendations.at(-1))
+    const summary = request.profile || ''
+    for (const title of titles)
+      assert.equal(summary.includes(title), expected.includes(title), '参考曲目 ' + title)
+    assert(!JSON.stringify(request).includes(root))
+    assert(!JSON.stringify(request).includes('混合歌单'))
+    receipts.push({ expected, summary })
+  }
+  await verifyBatch(['单独收藏', '重叠录音', '目录独有'])
+  await checkbox('日常曲库').uncheck()
+  await expect(scope).toContainText('3 首')
+  await verifyBatch(['单独收藏', '重叠录音', '素材录音'])
+  await page.getByRole('tab', { name: '公开歌单', exact: true }).click()
+  await expect(scope).toContainText('3 首')
+  await expect(checkbox('日常曲库')).not.toBeChecked()
+  await checkbox('我的收藏').uncheck()
+  await expect(scope).toContainText('2 首')
+  const catalogInput = page.getByRole('textbox', { name: '描述想听的公开歌单' })
+  await catalogInput.fill('本次参考的风格')
+  const beforeCatalog = await app.evaluate(() => globalThis.testRecommendations.length)
+  await catalogInput.press('Enter')
+  await expect
+    .poll(() => app.evaluate(() => globalThis.testRecommendations.length))
+    .toBeGreaterThan(beforeCatalog)
+  const catalogRequest = await app.evaluate(() => globalThis.testRecommendations.at(-1))
+  assert.equal(catalogRequest.kind, 'publicLists')
+  for (const title of titles)
+    assert.equal(
+      (catalogRequest.profile || '').includes(title),
+      ['素材录音', '重叠录音'].includes(title),
+    )
+  receipts.push({
+    kind: catalogRequest.kind,
+    expected: ['素材录音', '重叠录音'],
+    summary: catalogRequest.profile,
+  })
+  await page.getByRole('tab', { name: '歌曲', exact: true }).click()
+  await expect(checkbox('我的收藏')).not.toBeChecked()
+  await expect(scope).toContainText('2 首')
+  await checkbox('我的收藏').check()
+  await expect(scope).toContainText('3 首')
+  await checkbox('日常曲库').check()
+  await expect(scope).toContainText('5 首')
+  await page.screenshot({
+    path: path.join(root, 'reference-selection.png'),
+    scale: 'css',
+    style: ':root { background: var(--base) !important }',
+  })
+  await verifyBatch(titles)
+  await references.getByRole('button', { name: '清空参考' }).click()
+  await expect(scope).toContainText('0 首')
+  await verifyBatch([])
+  await fs.writeFile(path.join(root, 'requests.json'), JSON.stringify(receipts, null, 2))
   console.log(
-    'PASS folder/playlist exclusion, rebuilt summary, explicit favorite, settings restoration',
+    'PASS 授权设置返回、歌曲与公开歌单共享参考/回车、旧选择迁移、跨范围去重、空集与实际请求',
     root,
   )
 } finally {

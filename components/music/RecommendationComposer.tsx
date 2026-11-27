@@ -3,6 +3,7 @@ import { Button, Input } from '@fluentui/react-components'
 import type { ModelInfo } from './ModelSettings'
 import { DiscoveryInput } from './DiscoveryInput'
 import { guardSearchEnter } from './searchSubmit'
+import { RecommendationReferences, type ReferenceControls } from './RecommendationReferences'
 type Props = {
   savedWeight: number
   models: ModelInfo
@@ -11,7 +12,7 @@ type Props = {
   running: boolean
   description: string
   edit(value: string): void
-  toggle(): void
+  references?: ReferenceControls
   count: string
   setCount(value: string): void
   currentSong?: { title: string; artist: string }
@@ -25,7 +26,7 @@ export function RecommendationComposer({
   running,
   description,
   edit,
-  toggle,
+  references,
   count,
   setCount,
   currentSong,
@@ -42,7 +43,7 @@ export function RecommendationComposer({
   const busy = submitting || running
   const [error, setError] = useState('')
   async function generate() {
-    if (busy || !validCount) return
+    if (busy || !validCount || !references?.result.preview) return
     onGenerating(true)
     setBusy(true)
     setError('')
@@ -55,7 +56,14 @@ export function RecommendationComposer({
         openSettings()
         return
       }
-      await window.music.generate(description, 'auto', false, target, effectiveWeight)
+      await window.music.generate(
+        description,
+        'auto',
+        false,
+        target,
+        effectiveWeight,
+        references?.result.preview.selection,
+      )
       await refresh()
     } catch (e) {
       setError(String(e).split('Error: ').pop() || '推荐失败')
@@ -76,15 +84,12 @@ export function RecommendationComposer({
           void generate()
         }}
       >
-        <DiscoveryInput
-          ai
-          value={description}
-          edit={edit}
-          toggle={toggle}
-          inputRef={input}
-          disabled={busy}
-        />
-        <Button type="submit" disabled={busy || !validCount} appearance="primary">
+        <DiscoveryInput ai value={description} edit={edit} inputRef={input} disabled={busy} />
+        <Button
+          type="submit"
+          disabled={busy || !validCount || !references?.result.preview}
+          appearance="primary"
+        >
           {busy ? '生成中…' : '生成推荐'}
         </Button>
       </form>
@@ -138,6 +143,13 @@ export function RecommendationComposer({
           本地口味 {100 - effectiveWeight}%
         </label>
       </div>
+      {references && (
+        <RecommendationReferences
+          {...references}
+          descriptionOnly={effectiveWeight === 100}
+          busy={busy}
+        />
+      )}
       {!validCount && <small>请输入大于零的整数。</small>}
       {error && <p role="alert">{error}</p>}
     </section>

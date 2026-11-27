@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { once } from 'node:events'
+import { referenceMetadata, resolveReferences } from './music-references.mjs'
 
 // The profile text and the exact set of incorporated signals are published together.
 export class MusicTaste {
@@ -12,9 +13,44 @@ export class MusicTaste {
     this.pending = null
     this.controller = null
     this.error = ''
+    this.referenceCache = null
   }
   exclusions() {
     return JSON.parse(this.store.get('taste-exclusions') || '[]')
+  }
+  references(selection) {
+    return resolveReferences(this.store, selection, this.exclusions())
+  }
+  async referenceProfile(tracks, signal) {
+    signal.throwIfAborted()
+    if (!tracks.length || this.store.get('taste-consent') !== '1') return ''
+    // Keep one completed summary in memory. A different credential, model, endpoint,
+    // consent grant or set of projected signals must start from a fresh document.
+    const connection = () =>
+      createHash('sha256')
+        .update(
+          JSON.stringify(
+            this.store.connections?.resolve('music.model') ??
+              this.store.get('recommendation-providers') ??
+              '',
+          ),
+        )
+        .digest('hex')
+    const account = connection()
+    const key = createHash('sha256').update(account).update(JSON.stringify(tracks)).digest('hex')
+    if (this.referenceCache?.key === key) return this.referenceCache.text
+    let previous = ''
+    for (let i = 0; i < tracks.length; i += 50) {
+      signal.throwIfAborted()
+      if (this.store.get('taste-consent') !== '1') return ''
+      if (i && account !== connection()) throw Error('模型连接已更改，请重新提交')
+      previous = await this.request({ previous, changes: tracks.slice(i, i + 50) }, signal)
+    }
+    signal.throwIfAborted()
+    if (this.store.get('taste-consent') !== '1') return ''
+    if (account !== connection()) throw Error('模型连接已更改，请重新提交')
+    this.referenceCache = { key, text: previous }
+    return previous
   }
   setExcluded(kind, id, excluded) {
     if (
@@ -70,21 +106,8 @@ export class MusicTaste {
       FROM local_tracks t ORDER BY t.rowid`)
       .all(JSON.stringify(playlists))
     for (const track of tracks) {
-      const clean = (value) =>
-        String(value ?? '')
-          .replace(/\p{Cc}/gu, ' ')
-          .slice(0, 160)
-          .trim()
-      const meta = {
-        title: clean(track.title),
-        artist: clean(track.artist),
-        album: clean(track.album),
-      }
-      if (
-        !meta.title ||
-        Object.values(meta).some((value) => /([a-z]:[\\/]|\\\\|https?:\/\/|^\/)/i.test(value))
-      )
-        continue
+      const meta = referenceMetadata(track)
+      if (!meta) continue
       const suppressed =
         track.excluded || (folders.size && folders.has(this.store.library.folderId(track.file)))
       for (const signal of [
@@ -157,7 +180,10 @@ export class MusicTaste {
   consent(value) {
     if (typeof value !== 'boolean') throw Error('授权状态无效')
     this.store.set('taste-consent', value ? '1' : '0')
-    if (!value) this.controller?.abort()
+    if (!value) {
+      this.referenceCache = null
+      this.controller?.abort()
+    }
   }
   async refresh(signal) {
     signal?.throwIfAborted()

@@ -164,6 +164,11 @@ try {
     await input.press('Enter')
     await expect(result()).toBeVisible()
   }
+  await openDiscovery(page, true)
+  await expect(page.getByRole('textbox', { name: '想让 AI 推荐什么？（选填）' })).toBeVisible()
+  await openDiscovery(page, false)
+  await expect(input).toHaveValue('录音 7')
+  await expect(result()).toBeVisible()
   await input.fill('')
   await expect(history.getByRole('button', { name: /^录音/ })).toHaveText([
     '录音 7',

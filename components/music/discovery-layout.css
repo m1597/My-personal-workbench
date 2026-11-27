@@ -1,7 +1,8 @@
 .music-scroll:is([data-page="download"], [data-page="audition"], [data-page="feed"]) {
   padding-inline: calc(clamp(4px, 1vw, 12px) + 12px);
 }
-.music-scroll:is([data-page="audition"], [data-page="feed"]) > section {
+.discovery-view > section,
+.music-scroll[data-page="feed"] > section {
   max-width: none;
   margin-inline: 0;
 }
@@ -150,11 +151,11 @@
 .music-scroll:is([data-page="download"], [data-page="audition"]) {
   scrollbar-gutter: stable;
 }
-.music-scroll > .discovery-kinds {
+.discovery-layout > .discovery-kinds {
   flex: none;
   margin: 0 0 var(--space-8);
 }
-.music-scroll[data-page="audition"] > .music-compose {
+.discovery-view > .music-compose {
   border: 0;
   padding: 0;
   background: transparent;
@@ -182,4 +183,47 @@
   .music-scroll .public-playlists > .download-search {
     width: calc((100% - var(--space-20)) * 0.6);
   }
+}
+
+.discovery-layout {
+  display: grid;
+  grid-template-columns: clamp(78px, 13vw, 148px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: clamp(6px, 1.4vw, 20px);
+  height: 100%;
+  min-height: 0;
+}
+.discovery-layout .discovery-sidebar {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: start;
+  border-inline-end: 1px solid var(--stroke);
+  padding-inline-end: var(--space-4);
+}
+.discovery-sidebar [role="tab"] {
+  justify-content: flex-start;
+  padding-inline: var(--space-8);
+  white-space: nowrap;
+}
+.discovery-layout > .discovery-kinds,
+.discovery-layout > .discovery-view {
+  grid-column: 2;
+  min-width: 0;
+}
+.discovery-view {
+  grid-row: 2;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.discovery-view[hidden] {
+  display: none;
+}
+
+.discovery-view > .lx-panel > ul {
+  flex: none;
+  overflow: visible;
+}
+.discovery-view .download-search > button[type="submit"] {
+  min-width: 0;
 }

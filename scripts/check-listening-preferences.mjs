@@ -71,7 +71,15 @@ store.set('music-quality', 'flac')
 store.set('music-manual-dir', output)
 store.set('music-recommend-dir', output)
 store.set('taste-consent', 1)
-store.set('taste-profile', '偏爱轻声室内乐')
+const referenceFile = path.join(root, '室内乐参考.wav')
+await writeFixtureRecording(referenceFile, 260)
+store.library.upsert({
+  file: referenceFile,
+  title: '室内乐参考',
+  artist: '测试艺人',
+  album: '',
+  duration: 1,
+})
 store.db.close()
 const songs = ['晨光', '街角', '踏歌', '清波', '流云', '深林']
 const files = {}
@@ -220,6 +228,7 @@ try {
   await expect(page.getByRole('combobox', { name: '试听音质' })).toContainText('快速试听')
   await expect(page.getByRole('combobox', { name: '下载音质' })).toContainText('flac')
   await shot('02-quality-settings')
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await openDiscovery(page, true)
   await page
     .getByLabel('想让 AI 推荐什么？（选填）')

@@ -116,6 +116,7 @@ const names = [
   'draft',
   'generate',
   'getTasteStatus',
+  'getRecommendationReferences',
   'setTasteExcluded',
   'setTasteConsent',
   'dismissRecommendation',

@@ -41,7 +41,7 @@ import { serviceErrorMessage } from './music-download-diagnosis.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
 import { searchCollection } from './search-collection.mjs'
-import { modelInfo, configureModel, requestMusicModel } from './music-model.mjs'
+import { modelInfo, configureModel, requestMusicModel, catalogKeyword } from './music-model.mjs'
 import { importMusicConnection, recoverMusicProfile } from './music-connection.mjs'
 import { ipcMain, clipboard, dialog, nativeImage, safeStorage, shell } from 'electron'
 import { MusicStore } from './music/store.mjs'
@@ -54,6 +54,8 @@ export function musicService(
   mcpScript = path.resolve(import.meta.dirname, '../../../scripts/music-source-mcp.mjs'),
 ) {
   let watchedLibrary
+  let referenceRevision = 0
+  const catalogReferenceJobs = new Set()
   let store,
     pending,
     generationFinished,
@@ -792,6 +794,7 @@ export function musicService(
     })
     return {
       ...store.snapshot(),
+      referenceRevision,
       tasteExclusions: taste.exclusions(),
       models: modelInfo(store),
       prefs: {
@@ -846,21 +849,22 @@ export function musicService(
       if (collectionSearch === job) collectionSearch = undefined
     }
   })
-  bind('aiCatalogQuery', (kind, description) => {
-    if (
-      !['publicLists', 'artists'].includes(kind) ||
-      typeof description !== 'string' ||
-      !description.trim() ||
-      description.length > 400
-    )
-      throw Error('请输入 400 字以内的目录搜索描述')
-    return requestMusicModel(
-      store,
-      safeStorage,
-      'catalog-query',
-      { kind, description: description.trim() },
-      AbortSignal.timeout(60000),
-    )
+  bind('aiCatalogQuery', async (kind, description, selection) => {
+    const controller = new AbortController()
+    if (kind === 'publicLists' && selection !== undefined) catalogReferenceJobs.add(controller)
+    try {
+      return await catalogKeyword(
+        store,
+        safeStorage,
+        taste,
+        kind,
+        description,
+        selection,
+        controller.signal,
+      )
+    } finally {
+      catalogReferenceJobs.delete(controller)
+    }
   })
   bind('connectionSnapshot', () => ({
     rows: [
@@ -893,6 +897,7 @@ export function musicService(
     }
   }
   function queueTasteUpdate() {
+    referenceRevision++
     clearTimeout(updateTimer)
     if (store.get('taste-consent') !== '1') return
     updateTimer = setTimeout(() => {
@@ -901,17 +906,27 @@ export function musicService(
     updateTimer.unref()
   }
   bind('getTasteStatus', () => taste.status())
+  bind('getRecommendationReferences', (selection) => taste.references(selection).summary)
   bind('setTasteExcluded', (kind, id, excluded) => {
     taste.setExcluded(kind, id, excluded)
     queueTasteUpdate()
   })
   bind('setTasteConsent', (value) => {
     taste.consent(value)
+    if (!value) for (const job of catalogReferenceJobs) job.abort()
     if (!value) pending?.abort(new DOMException('已撤回审美资料授权', 'AbortError'))
     queueTasteUpdate()
     return taste.status()
   })
-  bind('generate', (preference, mode = 'auto', similar = false, targetCount = 5, weight) => {
+  bind('generate', generate)
+  function generate(
+    preference,
+    mode = 'auto',
+    similar = false,
+    targetCount = 5,
+    weight,
+    selection,
+  ) {
     weight ??= getMusicPreferences(store).requestWeight
     text(preference)
     if (!Number.isInteger(weight) || weight < 0 || weight > 100) throw Error('无效推荐权重')
@@ -919,6 +934,7 @@ export function musicService(
     if (!['auto', 'artist', 'style'].includes(mode) || typeof similar !== 'boolean')
       throw Error('无效推荐方式')
     if (!Number.isSafeInteger(targetCount) || targetCount < 1) throw Error('目标首数须为正整数')
+    const scoped = selection !== undefined ? taste.references(selection) : null
     return generateTask(async (signal) => {
       const label = preference.trim() || (mode === 'artist' ? '按歌手推荐' : '按风格推荐')
       if (!weight) preference = ''
@@ -969,7 +985,12 @@ export function musicService(
         const policy = () =>
           weight < 100 && store.get('taste-consent') === '1' ? taste.policy() : null
         let profilePolicy = policy()
-        let profile = profilePolicy === null ? '' : await taste.refresh(signal)
+        let profile =
+          profilePolicy === null
+            ? ''
+            : scoped
+              ? await taste.referenceProfile(scoped.summary.consented ? scoped.tracks : [], signal)
+              : await taste.refresh(signal)
         const chart = wantsDouyinChart(preference) ? await readDouyinChart(signal) : undefined
         if (chart && !chart.songs.length)
           cleanupMessage += ' · 未取得近七天抖音音乐榜，候选热度未经核实'
@@ -1079,15 +1100,16 @@ export function musicService(
           }
           work.throwIfAborted()
           update('running', round > 1 ? '正在补推候选歌曲' : '正在生成候选歌曲')
-          if (profilePolicy !== policy()) {
+          if (!scoped && profilePolicy !== policy()) {
             profilePolicy = policy()
             profile = profilePolicy === null ? '' : await taste.refresh(work)
             work.throwIfAborted()
           }
           const remaining = targetCount - represented.length
-          const excluded = [...(profile ? history.slice(-20) : []), ...seen.slice(-100)].map(
-            ({ title, artist }) => ({ title, artist }),
-          )
+          const excluded = [
+            ...(profile && !scoped ? history.slice(-20) : []),
+            ...seen.slice(-100),
+          ].map(({ title, artist }) => ({ title, artist }))
           const local = localRows.all()
           const remainingChart = chartCandidates.filter(
             (row) => !inLibrary(row, seen) && !inLibrary(row, history) && !inLibrary(row, local),
@@ -1246,7 +1268,7 @@ export function musicService(
       if (musicView && !musicView.isDestroyed()) musicView.send('music:sources-changed')
       return batch
     })
-  })
+  }
   bind('retryFailedRecommendations', (batch) =>
     generateTask(async (signal) => {
       if (text(batch) !== store.get('latest-daily-run')) throw Error('推荐批次已过期')
@@ -1406,6 +1428,7 @@ export function musicService(
     dispose(reason = '音乐组件已关闭') {
       closeCleanup()
       collectionSearch?.abort()
+      for (const job of catalogReferenceJobs) job.abort()
       pending?.abort(new DOMException(reason, 'AbortError'))
 
       overlay.show(false)

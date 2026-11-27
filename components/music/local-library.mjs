@@ -635,7 +635,7 @@ export class LocalLibrary {
       this.db.exec('ROLLBACK TO new_playlist; RELEASE new_playlist')
       throw error
     }
-    if (members.length) this.changed?.()
+    this.changed?.()
     return id
   }
   renamePlaylist(id, name) {
@@ -645,6 +645,7 @@ export class LocalLibrary {
         .run(playlistName(name), id).changes
     )
       throw Error('已有同名歌单或歌单已移除')
+    this.changed?.()
   }
   setPlaylistSort(id, sort, descending) {
     if (

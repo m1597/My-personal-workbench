@@ -1,5 +1,4 @@
-import { Button, Input } from '@fluentui/react-components'
-import { Sparkles } from 'lucide-react'
+import { Input } from '@fluentui/react-components'
 import type { Ref } from 'react'
 
 export function DiscoveryInput({
@@ -7,7 +6,6 @@ export function DiscoveryInput({
   lists = false,
   value,
   edit,
-  toggle,
   disabled,
   inputRef,
 }: {
@@ -15,14 +13,21 @@ export function DiscoveryInput({
   ai: boolean
   value: string
   edit(value: string): void
-  toggle(): void
   disabled?: boolean
   inputRef?: Ref<HTMLInputElement>
 }) {
   return (
     <Input
-      id={ai ? 'music-description' : 'music-search-keyword'}
-      data-guide-anchor={ai ? 'recommend' : 'online'}
+      id={
+        lists
+          ? ai
+            ? 'music-list-description'
+            : 'music-list-keyword'
+          : ai
+            ? 'music-description'
+            : 'music-search-keyword'
+      }
+      data-guide-anchor={lists ? undefined : ai ? 'recommend' : 'online'}
       aria-label={
         lists
           ? ai
@@ -46,19 +51,6 @@ export function DiscoveryInput({
       maxLength={1000}
       input={{ readOnly: disabled }}
       onChange={(_, d) => edit(d.value)}
-      contentAfter={
-        <Button
-          type="button"
-          size="small"
-          appearance={ai ? 'primary' : 'subtle'}
-          aria-label="AI 推荐"
-          data-guide-anchor={ai ? undefined : 'ai-toggle'}
-          aria-pressed={ai}
-          title={ai ? '切换到普通搜索' : '切换到 AI 推荐'}
-          icon={<Sparkles size={16} />}
-          onClick={toggle}
-        />
-      }
     />
   )
 }

@@ -34,7 +34,11 @@ export type News = {
   date: string
 }
 export interface ReleaseAPI extends SongAPI {
-  aiCatalogQuery(kind: 'artists' | 'publicLists', description: string): Promise<string>
+  aiCatalogQuery(
+    kind: 'artists' | 'publicLists',
+    description: string,
+    selection?: import('./RecommendationReferences').ReferenceSelection,
+  ): Promise<string>
   findArtists(term: string): Promise<Artist[]>
   similarArtists(id: string): Promise<Artist[]>
   artistHighlights(id: string): Promise<Pick<ReleaseTrack, 'artist' | 'title' | 'artistCredits'>[]>
