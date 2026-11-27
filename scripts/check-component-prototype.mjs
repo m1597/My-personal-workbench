@@ -174,7 +174,13 @@ try {
       await s.detach()
     }),
   )
-  const zone = await dockShell.locator('.docking-area').boundingBox()
+  // Keep other background workbenches out of this native Z-order hit test.
+  await app.evaluate(({ BrowserWindow }) => {
+    const shell = BrowserWindow.getAllWindows()[0]
+    const [x, y] = shell.getPosition()
+    shell.setPosition(x - 6000, y)
+  })
+  const zone = await ordinaryPanel.boundingBox()
   const info = await app.evaluate(({ BaseWindow, BrowserWindow }, zone) => {
     const host = BrowserWindow.getAllWindows()[0]
     const win = BaseWindow.getAllWindows().find((w) => w.id !== host.id)
@@ -578,7 +584,21 @@ try {
   await expect(sample.locator('#mode')).toHaveText('已停靠')
   // Opening the sample in the test host must never create a second top-level HWND just to hide it.
   expect(await app.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows().length)).toBe(1)
-  await shell.getByRole('tab', { name: '模块 2', exact: true }).click()
+  // Default opening can put the sample in a different pane. Persist an actual
+  // inactive tab beside module 2 before verifying its native view on restart.
+  const sampleTab = shell.getByRole('tab', { name: '示例组件', exact: true })
+  const moduleTab = shell.getByRole('tab', { name: '模块 2', exact: true })
+  const group = shell.locator('.dv-groupview').filter({ has: moduleTab })
+  if (!(await group.getByRole('tab', { name: '示例组件', exact: true }).count())) {
+    const from = await sampleTab.boundingBox()
+    const to = await moduleTab.boundingBox()
+    await shell.mouse.move(from.x + 24, from.y + 14)
+    await shell.mouse.down()
+    await shell.mouse.move(to.x + 24, to.y + 14, { steps: 24 })
+    await shell.mouse.up()
+    await expect(group.getByRole('tab', { name: '示例组件', exact: true })).toHaveCount(1)
+  }
+  await moduleTab.click()
   await expect(shell.getByTestId('module-2')).toBeVisible()
 } finally {
   await app.close()
