@@ -64,10 +64,10 @@ export async function signInChatGPT(hostId, openBrowser, previous, request = fet
     receive = { resolve, reject }
   })
   const server = createServer((req, res) => {
-    const url = new URL(req.url, 'http://127.0.0.1')
+    const url = URL.parse(req.url, 'http://127.0.0.1')
     if (
       req.method !== 'GET' ||
-      url.pathname !== '/auth/callback' ||
+      url?.pathname !== '/auth/callback' ||
       url.searchParams.get('state') !== state
     ) {
       res.writeHead(400).end()
@@ -221,8 +221,9 @@ export async function inferPlan(record, model, { instructions, input, signal }, 
     received += bytes.length
     if (received > 8 * 1024 * 1024) throw Error('订阅响应过大')
     pending += decoder.decode(bytes, { stream: true })
-    let match
-    while ((match = /\r?\n\r?\n/.exec(pending))) {
+    for (;;) {
+      const match = /\r?\n\r?\n/.exec(pending)
+      if (!match) break
       const block = pending.slice(0, match.index)
       pending = pending.slice(match.index + match[0].length)
       const data = block

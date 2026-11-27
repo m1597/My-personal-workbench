@@ -18,3 +18,5 @@ if (connection?.authType === 'subscription') {
 ```
 
 `requestPlan` 返回 Promise<string>。图像输入可传 Responses 的用户消息数组，内容含 input_text 和 input_image；平台以账号目录的模型输入能力校验。通过平台调用后，错误原样传回设置或功能入口；组件收到拒绝、过期、额度或不支持的模型，应结束本次调用并提示处理。禁止在同一操作中再用 API Key 重试。渲染进程只接收能力和状态，令牌属于主进程。
+
+公共实现为 `9fda247`，窗口侧 `f5f19c8` 接受 `toolkit-launch:open` 的 `translate`。翻译发送字符串；视觉发送例如 `[{role:"user",content:[{type:"input_text",text:question},{type:"input_image",image_url:dataUrl}]}]`。两者从同一个 Promise 取得输出文本。请求失败会抛出 Error，设置或功能页显示 message；过期可重新授权，额度用尽稍后重试。
