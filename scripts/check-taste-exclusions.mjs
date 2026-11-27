@@ -45,12 +45,16 @@ lx.on('request',()=>[])
 lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
 )
 const app = await electron.launch({
+  executablePath: process.env.FITBAY_TEST_MUSIC_EXECUTABLE,
   args: [
-    path.resolve('dist/component-prototype/host'),
-    '--mode=music',
+    ...(process.env.FITBAY_TEST_MUSIC_EXECUTABLE
+      ? []
+      : [path.resolve('dist/component-prototype/host'), '--mode=music']),
     '--mute-audio',
     '--user-data-dir=' + profile,
-    '--workbench=' + path.resolve('out/renderer/index.html'),
+    ...(process.env.FITBAY_TEST_MUSIC_EXECUTABLE
+      ? []
+      : ['--workbench=' + path.resolve('out/renderer/index.html')]),
   ],
   env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
 })

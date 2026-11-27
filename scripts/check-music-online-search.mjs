@@ -27,12 +27,19 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}
 const docked = process.argv.includes('--docked')
 async function launch() {
   const app = await electron.launch({
+    executablePath: process.env.FITBAY_TEST_MUSIC_EXECUTABLE,
     args: [
-      path.resolve('dist/component-prototype/host'),
-      docked ? '--mode=workbench' : '--mode=music',
+      ...(process.env.FITBAY_TEST_MUSIC_EXECUTABLE
+        ? []
+        : [
+            path.resolve('dist/component-prototype/host'),
+            docked ? '--mode=workbench' : '--mode=music',
+          ]),
       '--mute-audio',
       '--user-data-dir=' + profile,
-      '--workbench=' + path.resolve('out/renderer/index.html'),
+      ...(process.env.FITBAY_TEST_MUSIC_EXECUTABLE
+        ? []
+        : ['--workbench=' + path.resolve('out/renderer/index.html')]),
     ],
     env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
   })

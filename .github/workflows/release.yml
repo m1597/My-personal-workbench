@@ -176,6 +176,11 @@ jobs:
           if ($process.ExitCode) { throw 'Could not install baseline' }
           node scripts/check-settings-installation.mjs $root --candidate --batch 0.2.5 --uniform
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:FITBAY_TEST_MUSIC_EXECUTABLE = Join-Path $root 'Music/FitBay Music.exe'
+          node scripts/check-music-online-search.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/check-taste-exclusions.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
   publish:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
