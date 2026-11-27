@@ -1,3 +1,5 @@
+import { Button, Input } from '@fluentui/react-components'
+import { Search, ClipboardPaste } from 'lucide-react'
 import { PromptVisual, type VisualData } from './PromptVisual'
 import { ChoiceDropdown } from '../../src/renderer/src/app/SharedDropdown'
 import { ShortcutRecorder } from '../../src/renderer/src/app/ShortcutRecorder'
@@ -176,6 +178,7 @@ function Library() {
     [enlarged, enlarge] = useState(false),
     [companion, setCompanion] = useState(''),
     [cards, setCards] = useState<Card[]>([]),
+    [lastSelected, setLastSelected] = useState(''),
     [filter, setFilter] = useState(''),
     [purpose, setPurpose] = useState(''),
     [visualVersion, setVisualVersion] = useState(0),
@@ -362,10 +365,12 @@ function Library() {
     if (enlarged && imageDialog.current && !imageDialog.current.open)
       imageDialog.current.showModal()
   }, [enlarged])
+  const selectionVersion = useRef(0)
   const currentRoot = state?.root
   // biome-ignore lint/correctness/useExhaustiveDependencies: disk and focus events invalidate the catalogue.
   useEffect(() => {
     let active = true
+    const selection = selectionVersion.current
     if (currentRoot)
       void api
         .catalogue(filter)
@@ -373,7 +378,8 @@ function Library() {
           if (!active) return
           setDirectoryIssue('')
           setCards(rows)
-          setEntry((old) => (old && !rows.some((c) => c.name === old.name) ? undefined : old))
+          if (selection === selectionVersion.current)
+            setEntry((old) => (old && !rows.some((c) => c.name === old.name) ? undefined : old))
         })
         .catch(() => {
           if (active) {
@@ -394,6 +400,7 @@ function Library() {
     return !dirty || window.confirm('放弃此文件未保存的修改？')
   }
   function reset(item?: Entry) {
+    selectionVersion.current++
     setOrganized('')
     setValues({})
     setRaw(false)
@@ -402,6 +409,7 @@ function Library() {
     localStorage.removeItem(draftKey)
     setFileIssue('')
     setPinOpen(false)
+    if (item) setLastSelected(item.name)
     setEntry(item)
     setDoc(undefined)
     edit('')
@@ -418,11 +426,22 @@ function Library() {
   async function showVisual() {
     setRaw(false)
     if (!fileRoot || dirty) return
+    const selection = selectionVersion.current
     try {
       await api.visual(fileRoot, name, true)
-      if (live.current.root === fileRoot && live.current.name === name)
+      if (
+        selection === selectionVersion.current &&
+        live.current.root === fileRoot &&
+        live.current.name === name
+      )
         setVisualVersion((v) => v + 1)
     } catch (e) {
+      if (
+        selection !== selectionVersion.current ||
+        live.current.root !== fileRoot ||
+        live.current.name !== name
+      )
+        return
       const error = message(e)
       say(error)
       if (error.includes('配置 API')) {
@@ -440,12 +459,15 @@ function Library() {
     reset({ root, name, label: name, type: 'text' })
     setImporting(false)
     setImportBody('')
+    const selection = selectionVersion.current
     if (state.autoVisual) {
       try {
         await api.visual(root, name, true)
+        if (selection !== selectionVersion.current) return
         update()
         setVisualVersion((v) => v + 1)
       } catch (e) {
+        if (selection !== selectionVersion.current) return
         const warning = name + ' 已导入，可视化未生成 · ' + message(e)
         say(warning)
         return warning
@@ -506,6 +528,22 @@ function Library() {
                 >
                   {dock ? '独立打开' : '加入工作台'}
                 </button>
+                <div className="tools">
+                  <button
+                    type="button"
+                    onClick={() => void attempt(() => folder(state?.root ? 'temp' : 'remember'))}
+                  >
+                    选择提示词目录
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!state?.defaultRoot}
+                    onClick={() => void attempt(() => folder('default'))}
+                  >
+                    返回默认目录
+                  </button>
+                </div>
                 <p>默认目录 · {state?.defaultRoot || '尚未设置'}</p>{' '}
                 <button type="button" onClick={() => void attempt(() => folder('remember'))}>
                   设置默认目录
@@ -596,25 +634,34 @@ function Library() {
             <SettingsGear label="提示词库设置" onClick={() => setSettings(true)} />
           </div>
         </header>
-        <div className="tools">
-          <button
-            type="button"
-            onClick={() => void attempt(() => folder(state?.root ? 'temp' : 'remember'))}
+        <div className="prompt-searchbar">
+          <Input
+            contentBefore={<Search size={16} aria-hidden="true" />}
+            aria-label="搜索提示词"
+            placeholder="搜索提示词"
+            value={filter}
+            onChange={(e) => {
+              if (entry && window.matchMedia('(max-width:700px)').matches) {
+                if (!discard()) return
+                reset()
+              }
+              setFilter(e.target.value)
+            }}
+          />
+          <Button
+            appearance="subtle"
+            icon={<ClipboardPaste size={16} />}
+            disabled={!state?.root}
+            onClick={() => setImporting(!importing)}
           >
-            选择提示词目录
-          </button>
-
-          <button
-            type="button"
-            disabled={!state?.defaultRoot}
-            onClick={() => void attempt(() => folder('default'))}
-          >
-            返回默认目录
-          </button>
+            粘贴导入
+          </Button>
+          {!state?.root && (
+            <button type="button" onClick={() => void attempt(() => folder('remember'))}>
+              选择提示词目录
+            </button>
+          )}
         </div>
-        <button type="button" disabled={!state?.root} onClick={() => setImporting(!importing)}>
-          粘贴导入
-        </button>
         {importing && (
           <form
             onSubmit={(e) => {
@@ -636,15 +683,9 @@ function Library() {
             </button>
           </form>
         )}
-        <small title={state?.root}>{state?.root || '请选择文件夹'}</small>
-        <section className="split">
+        {!entry && <small className="drop-hint">可拖入 TXT 或 Markdown 文件</small>}
+        <section className={entry ? 'split prompt-split reading' : 'split prompt-split'}>
           <nav aria-label="提示词">
-            <input
-              aria-label="搜索提示词"
-              placeholder="搜索提示词"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
             <button type="button" onClick={() => setPurpose('')}>
               全部用途
             </button>
@@ -665,6 +706,7 @@ function Library() {
                   <button
                     type="button"
                     key={c.name}
+                    aria-current={c.name === lastSelected || undefined}
                     onClick={() => {
                       if (state && discard())
                         reset({ root: state.root, name: c.name, label: c.title, type: 'text' })
@@ -734,193 +776,223 @@ function Library() {
             )}
             {entry?.type === 'text' && fileRoot && (
               <>
-                <h2>{entry.label}</h2>
-                <BackButton
-                  onClick={() => {
-                    if (discard()) reset()
-                  }}
-                />
-                <div className="tools">
-                  <button
+                <div className="reader-heading">
+                  <BackButton
+                    onClick={() => {
+                      if (discard()) reset()
+                    }}
+                  />
+                  <h2>{entry.label}</h2>
+                </div>
+                <div className="tools reader-tabs">
+                  <Button
+                    appearance="subtle"
                     type="button"
                     aria-pressed={!raw}
                     disabled={dirty}
                     onClick={() => void showVisual()}
                   >
                     可视化
-                  </button>
-                  <button type="button" aria-pressed={raw} onClick={() => setRaw(true)}>
+                  </Button>
+                  <Button
+                    appearance="subtle"
+                    type="button"
+                    aria-pressed={raw}
+                    onClick={() => setRaw(true)}
+                  >
                     原文
-                  </button>
+                  </Button>
                 </div>
-                {!raw && !editMode && doc && (
-                  <PromptVisual
-                    key={JSON.stringify([fileRoot, name, doc.revision, visualVersion])}
-                    root={fileRoot}
-                    name={name}
-                    revision={doc.revision}
-                    text={doc.text}
-                    configure={() => {
-                      setCategory('api')
-                      setSettings(true)
-                    }}
-                  />
-                )}
-                {raw && (
-                  <details>
-                    <summary>整理原文</summary>
+                <div className="reader-content" key={JSON.stringify([fileRoot, name])}>
+                  {!raw && !editMode && doc && (
+                    <PromptVisual
+                      key={JSON.stringify([fileRoot, name, doc.revision, visualVersion])}
+                      root={fileRoot}
+                      name={name}
+                      revision={doc.revision}
+                      text={doc.text}
+                      configure={() => {
+                        setCategory('api')
+                        setSettings(true)
+                      }}
+                    />
+                  )}
+                  {raw && (
+                    <details>
+                      <summary>整理原文</summary>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void attempt(async () => {
+                            if (!(await window.promptConnections.snapshot()).own?.configured) {
+                              setCategory('api')
+                              setSettings(true)
+                              return
+                            }
+                            const text = await api.organize(fileRoot, name)
+                            if (live.current.root === fileRoot && live.current.name === name)
+                              setOrganized(text)
+                          })
+                        }
+                      >
+                        AI 整理
+                      </button>
+                      {organized && (
+                        <section aria-label="整理预览">
+                          <MarkdownPreview text={organized} />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void attempt(async () => {
+                                const saved = await api.saveOrganized(fileRoot, organized)
+                                setOrganized('')
+                                say('已保存 ' + saved)
+                              })
+                            }
+                          >
+                            确认保存副本
+                          </button>
+                          <button type="button" onClick={() => setOrganized('')}>
+                            取消整理
+                          </button>
+                        </section>
+                      )}
+                    </details>
+                  )}
+                  {variables.map((key) => (
+                    <label key={key}>
+                      {key}
+                      <input
+                        value={Object.hasOwn(values, key) ? values[key] : ''}
+                        onChange={(e) => setValues({ ...values, [key]: e.target.value })}
+                      />
+                    </label>
+                  ))}
+                  <div className="tools">
+                    <button
+                      type="button"
+                      disabled={/(^|[\\/])SKILL\.md$/i.test(name)}
+                      onClick={() => setEditMode(!editMode)}
+                    >
+                      {editMode ? '预览' : '编辑'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!dirty || conflict}
+                      onClick={() =>
+                        void attempt(async () => {
+                          if (!doc || !state) return
+                          const saved = await api.save(fileRoot, name, doc.revision, draft)
+                          if (live.current.root !== fileRoot || live.current.name !== name) return
+                          if (live.current.draft === draft) localStorage.removeItem(draftKey)
+                          else
+                            localStorage.setItem(
+                              draftKey,
+                              JSON.stringify({
+                                revision: saved.revision,
+                                text: live.current.draft,
+                              }),
+                            )
+                          setDoc(saved)
+                          say('已保存')
+                        })
+                      }
+                    >
+                      保存
+                    </button>
                     <button
                       type="button"
                       onClick={() =>
                         void attempt(async () => {
-                          if (!(await window.promptConnections.snapshot()).own?.configured) {
-                            setCategory('api')
-                            setSettings(true)
-                            return
-                          }
-                          const text = await api.organize(fileRoot, name)
-                          if (live.current.root === fileRoot && live.current.name === name)
-                            setOrganized(text)
+                          await api.copy(result)
+                          say('已复制')
                         })
                       }
                     >
-                      AI 整理
+                      复制本次结果
                     </button>
-                    {organized && (
-                      <section aria-label="整理预览">
-                        <MarkdownPreview text={organized} />
+                  </div>
+                  {conflict && (
+                    <aside>
+                      磁盘文件已变更或不可用。可复制草稿后重新加载。
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void attempt(async () => {
+                            if (!state || !discard()) return
+                            const next = await api.read(fileRoot, name)
+                            localStorage.removeItem(draftKey)
+                            setDoc(next)
+                            edit(next.text)
+                            setConflict(false)
+                            say('已重新加载')
+                          })
+                        }
+                      >
+                        重新加载
+                      </button>
+                    </aside>
+                  )}
+                  {editMode ? (
+                    <textarea
+                      aria-label="提示词正文"
+                      value={draft}
+                      onChange={(e) => changeDraft(e.target.value)}
+                    />
+                  ) : raw ? (
+                    <pre>{draft}</pre>
+                  ) : null}
+                  <details
+                    key={name}
+                    className="reader-more"
+                    onToggle={(e) => {
+                      if (!e.currentTarget.open) setPinOpen(false)
+                    }}
+                  >
+                    <summary title="更多操作">更多</summary>
+                    <button
+                      type="button"
+                      aria-expanded={pinOpen}
+                      onClick={() => setPinOpen(!pinOpen)}
+                    >
+                      固定为工具集动作
+                    </button>
+                    {pinOpen && (
+                      <>
+                        <label>
+                          显示名
+                          <input value={label} onChange={(e) => setLabel(e.target.value)} />
+                        </label>
+                        <label htmlFor="prompt-input">
+                          输入类型
+                          <ChoiceDropdown
+                            id="prompt-input"
+                            aria-label="输入类型"
+                            value={kind}
+                            choices={[
+                              { value: 'text', label: '文本' },
+                              { value: 'image', label: '图片' },
+                            ]}
+                            onChange={(v) => setKind(v as typeof kind)}
+                          />
+                        </label>
+                        {pinOpen && <ActionConnection kind={kind} />}
                         <button
                           type="button"
+                          disabled={!doc || dirty || conflict}
                           onClick={() =>
                             void attempt(async () => {
-                              const saved = await api.saveOrganized(fileRoot, organized)
-                              setOrganized('')
-                              say('已保存 ' + saved)
+                              if (state) await api.pin(fileRoot, name, label, kind)
+                              say('已固定，工具集下次执行时读取磁盘内容')
                             })
                           }
                         >
-                          确认保存副本
+                          固定动作
                         </button>
-                        <button type="button" onClick={() => setOrganized('')}>
-                          取消整理
-                        </button>
-                      </section>
+                      </>
                     )}
                   </details>
-                )}
-                {variables.map((key) => (
-                  <label key={key}>
-                    {key}
-                    <input
-                      value={Object.hasOwn(values, key) ? values[key] : ''}
-                      onChange={(e) => setValues({ ...values, [key]: e.target.value })}
-                    />
-                  </label>
-                ))}
-                <div className="tools">
-                  <button
-                    type="button"
-                    disabled={/(^|[\\/])SKILL\.md$/i.test(name)}
-                    onClick={() => setEditMode(!editMode)}
-                  >
-                    {editMode ? '预览' : '编辑'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!dirty || conflict}
-                    onClick={() =>
-                      void attempt(async () => {
-                        if (!doc || !state) return
-                        const saved = await api.save(fileRoot, name, doc.revision, draft)
-                        if (live.current.root !== fileRoot || live.current.name !== name) return
-                        if (live.current.draft === draft) localStorage.removeItem(draftKey)
-                        else
-                          localStorage.setItem(
-                            draftKey,
-                            JSON.stringify({ revision: saved.revision, text: live.current.draft }),
-                          )
-                        setDoc(saved)
-                        say('已保存')
-                      })
-                    }
-                  >
-                    保存
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void attempt(async () => {
-                        await api.copy(result)
-                        say('已复制')
-                      })
-                    }
-                  >
-                    复制本次结果
-                  </button>
                 </div>
-                {conflict && (
-                  <aside>
-                    磁盘文件已变更或不可用。可复制草稿后重新加载。
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void attempt(async () => {
-                          if (!state || !discard()) return
-                          const next = await api.read(fileRoot, name)
-                          localStorage.removeItem(draftKey)
-                          setDoc(next)
-                          edit(next.text)
-                          setConflict(false)
-                          say('已重新加载')
-                        })
-                      }
-                    >
-                      重新加载
-                    </button>
-                  </aside>
-                )}
-                {editMode ? (
-                  <textarea
-                    aria-label="提示词正文"
-                    value={draft}
-                    onChange={(e) => changeDraft(e.target.value)}
-                  />
-                ) : raw ? (
-                  <pre>{draft}</pre>
-                ) : null}
-                <details open={pinOpen} onToggle={(event) => setPinOpen(event.currentTarget.open)}>
-                  <summary>固定为工具集动作</summary>
-                  <label>
-                    显示名
-                    <input value={label} onChange={(e) => setLabel(e.target.value)} />
-                  </label>
-                  <label htmlFor="prompt-input">
-                    输入类型
-                    <ChoiceDropdown
-                      id="prompt-input"
-                      aria-label="输入类型"
-                      value={kind}
-                      choices={[
-                        { value: 'text', label: '文本' },
-                        { value: 'image', label: '图片' },
-                      ]}
-                      onChange={(v) => setKind(v as typeof kind)}
-                    />
-                  </label>
-                  {pinOpen && <ActionConnection kind={kind} />}
-                  <button
-                    type="button"
-                    disabled={!doc || dirty || conflict}
-                    onClick={() =>
-                      void attempt(async () => {
-                        if (state) await api.pin(fileRoot, name, label, kind)
-                        say('已固定，工具集下次执行时读取磁盘内容')
-                      })
-                    }
-                  >
-                    固定动作
-                  </button>
-                </details>
               </>
             )}
           </article>

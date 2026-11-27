@@ -9,3 +9,9 @@
 独立与停靠组件实测使用开发版 0.1.0 和隔离 profile。新目录选择、正文检索、用途、结构化步骤和代码、原文、部分变量复制、外部修改、改名、删除和退出期间变化均通过。已确认取消整理不生成卡片，确认后生成独立 MD 副本，相对 Markdown 引用仍指向原 Skill 资源。AI 请求使用回环兼容端点。原配置及 Skill 子目录的写入保护另有宿主回归断言。
 
 [桌面实测截图](../../../tmp/prompt-cards-6NHzpN/docked.png) 与 [复验脚本](../../../scripts/check-prompt-catalogue.mjs)。注册交接已发平台组，宿主和安装界面的显示名由平台组更新。未在发行包或真实商用模型上复验。工作区全量检查的其他组格式差异见 tmp/prompt-catalogue-check.log。
+
+## 2026-11-27 阅读打磨
+
+- [x] 首页搜索、粘贴和拖入提示；目录管理移入设置。详情独立滚动，保留当前标题和两种查看方式。「更多」展开后主动选择固定动作才出现连接和输入类型。
+- [x] `node scripts/check-prompt-reading.mjs "D:/Desktop/Projects/Prompt repository"` 使用样例副本，从长文目录点到 OAuth Providers，定位、焦点与可见范围均正确；滚到文末展开更多后返回，原搜索、选中、列表位置均保留，110459 字节原文未改变。
+- [x] 隔离 Electron 实测独立 1160×800、半屏 760×720、窄窗 372×660（页面缩放 125%）及停靠 580×640。未移动系统鼠标或使用物理屏幕。见[窄窗定位](../../../tmp/prompt-reading-rapCe3/narrow-oauth.png)、[停靠返回列表](../../../tmp/prompt-reading-rapCe3/docked-list.png)。

@@ -120,6 +120,7 @@ try {
   })
   await ui.screenshot({ path: path.join(evidence, 'standalone-narrow.png') })
   await ui.getByRole('button', { name: '返回', exact: true }).click()
+  await ui.getByText('更多', { exact: true }).click()
   await ui.getByText('固定为工具集动作', { exact: true }).click()
   await expect(ui.locator('.action-connection')).toContainText('text-a')
   await ui.getByLabel('输入类型').click()

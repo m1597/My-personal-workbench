@@ -70,6 +70,7 @@ try {
   await ui.getByRole('textbox', { name: '提示词正文' }).fill('逐步推导并解释每一步')
   await ui.getByRole('button', { name: '保存', exact: true }).click()
   await expect.poll(() => readFile(target, 'utf8')).toBe('逐步推导并解释每一步')
+  await ui.getByText('更多', { exact: true }).click()
   await ui.getByText('固定为工具集动作', { exact: true }).click()
   await ui.getByLabel('输入类型').selectOption('image')
   await ui.getByRole('button', { name: '固定动作', exact: true }).click()

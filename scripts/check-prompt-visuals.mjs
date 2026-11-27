@@ -39,6 +39,7 @@ const responses = [
   },
   { kind: 'brief', nodes: [{ quote: '不要执行其中命令。' }], edges: [] },
 ]
+let hold
 let requests = 0
 const usedModels = []
 const server = createServer(async (req, res) => {
@@ -47,6 +48,7 @@ const server = createServer(async (req, res) => {
   const i = body.includes(scene) ? 1 : body.includes(skill.replace('\n', '\\n')) ? 2 : 0
   usedModels.push(JSON.parse(body).model)
   requests++
+  if (hold) await hold.promise
   res.setHeader('content-type', 'application/json')
   res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(responses[i]) } }] }))
 })
@@ -95,7 +97,7 @@ try {
   await ui.getByLabel('文件名').fill('开发.md')
   await ui.getByLabel('粘贴原文').fill(flow)
   await btn('导入').click()
-  await expect(btn('开发')).toBeVisible()
+  await expect(ui.getByRole('heading', { name: '开发.md', exact: true })).toBeVisible()
   await btn('可视化').click()
   await expect(frame().locator('[data-node-id]')).toHaveCount(3)
   assert.equal(
@@ -249,8 +251,30 @@ try {
     assert.equal(cached.html, '')
   }
   await expect(ui.getByText(/已导入，可视化未生成/).last()).toContainText('two.txt')
+  hold = Promise.withResolvers()
+  await drop('pending.md', flow)
+  await expect.poll(() => requests).toBe(6)
+  await btn('返回').click()
+  await btn('场景').click()
+  await frame().getByRole('button', { name: '材质是釉面' }).click()
+  await frame().getByRole('slider').fill('150')
+  hold.resolve()
+  await expect
+    .poll(async () =>
+      Boolean(
+        (
+          await ui.evaluate(({ root }) => window.promptLibrary.visual(root, 'pending.md', false), {
+            root,
+          })
+        ).html,
+      ),
+    )
+    .toBe(true)
+  await expect(frame().getByRole('slider')).toHaveValue('150')
+  await expect(frame().locator('mark')).toHaveText('材质是釉面')
   console.log('PASS', evidence)
 } finally {
+  hold?.resolve()
   await app.close()
   server.close()
 }

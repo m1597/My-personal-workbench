@@ -386,3 +386,130 @@ select option {
 .visual-reader button {
   margin: 4px;
 }
+
+.prompt-searchbar,
+.reader-heading,
+.reader-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prompt-searchbar input {
+  flex: 1;
+  min-width: 0;
+}
+.prompt-searchbar button,
+.reader-heading button {
+  flex: none;
+}
+.prompt-split {
+  min-height: 0;
+}
+.prompt-split .file-preview.active {
+  overflow: hidden;
+  max-height: none;
+  min-height: 0;
+}
+.reader-heading h2 {
+  font-size: 1.1rem;
+  overflow-wrap: anywhere;
+}
+.reader-heading,
+.reader-tabs {
+  flex: none;
+}
+.reader-content {
+  min-height: 0;
+  overflow: auto;
+  flex: 1;
+  scrollbar-gutter: stable;
+}
+.reader-content section,
+.reader-content details {
+  min-width: 0;
+}
+.reader-content pre,
+.markdown pre {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reader-content .markdown {
+  white-space: normal;
+  line-height: 1.65;
+}
+.markdown p,
+.markdown ul,
+.markdown ol {
+  margin: 0.45em 0;
+}
+.markdown ul,
+.markdown ol {
+  padding-inline-start: 1.6em;
+}
+.markdown li ul,
+.markdown li ol {
+  margin-block: 0;
+}
+.markdown a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+.markdown code {
+  font:
+    0.9em / 1.55 Consolas,
+    monospace;
+}
+.markdown pre {
+  overflow-x: auto;
+  color: var(--text);
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+}
+.reader-tabs [aria-pressed="true"],
+.entries [aria-current="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.visual-reader svg {
+  height: auto;
+  max-height: none;
+}
+.reader-more {
+  margin-block: 12px;
+}
+@media (max-width: 700px) {
+  .prompt-split {
+    display: flex;
+    flex-direction: column;
+  }
+  .prompt-split nav {
+    flex: 1;
+    min-height: 0;
+  }
+  .prompt-split.reading nav {
+    display: none;
+  }
+  .prompt-split.reading .file-preview {
+    display: flex;
+    flex: 1;
+    max-height: none;
+  }
+}
+
+.prompt-searchbar > .fui-Input {
+  flex: 1;
+  min-width: 0;
+}
+.prompt-searchbar .fui-Input input {
+  padding-inline: 4px;
+  background: transparent;
+  border: 0;
+}
+.reader-tabs .fui-Button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.library > small:empty {
+  display: none;
+}
