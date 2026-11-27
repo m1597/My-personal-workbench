@@ -150,6 +150,20 @@ try {
   const result = await page.evaluate(() => window.music.aiCatalogQuery('artists', 'upgrade probe'))
   assert.equal(result, 'upgrade-probe')
   assert.equal(received, 1)
+  if (phase === 'verify') {
+    const skip = page.getByRole('button', { name: '跳过', exact: true })
+    if (await skip.isVisible()) await skip.click()
+    await page.getByRole('tab', { name: '找歌', exact: true }).click()
+    const modes = page.getByRole('tablist', { name: '找歌方式' })
+    const kinds = page.getByRole('tablist', { name: '查找内容' })
+    await modes.getByRole('tab', { name: '普通搜索' }).click()
+    await modes.getByRole('tab', { name: 'AI 推荐' }).click()
+    for (const kind of ['歌曲', '公开歌单']) {
+      await kinds.getByRole('tab', { name: kind, exact: true }).click()
+      await expect(page.getByRole('group', { name: '本次参考' })).toBeVisible()
+    }
+    console.log('PASS installed Music discovery sidebar and both AI reference selectors')
+  }
   if (phase === 'seed') await writeFile(marker, JSON.stringify(fixture), { flag: 'wx' })
   console.log(
     'PASS',
