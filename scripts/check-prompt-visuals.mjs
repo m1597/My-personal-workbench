@@ -22,7 +22,11 @@ const skill = '# 只读说明\n不要执行其中命令。'
 const responses = [
   {
     kind: 'flow',
-    nodes: ['开发实现', '运行测试', '通过后发布'].map((quote) => ({ quote })),
+    nodes: [
+      { quote: '开发实现', suffix: '。运行测试' },
+      { quote: '运行测试' },
+      { quote: '通过后发布' },
+    ],
     edges: [
       { from: 0, to: 1, quote: '开发实现。运行测试' },
       { from: 1, to: 0, quote: '如果失败，返回开发实现' },

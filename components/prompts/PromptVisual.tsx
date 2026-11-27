@@ -1,9 +1,10 @@
 import { MarkdownPreview } from './MarkdownPreview'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+type Reference = { quote: string; start?: number }
 export type VisualData = {
   kind: 'flow' | 'scene' | 'brief'
-  nodes: { quote: string; group: string }[]
-  edges: { from: number; to: number; quote: string }[]
+  nodes: (Reference & { group: string })[]
+  edges: (Reference & { from: number; to: number })[]
 }
 type View = { html: string; stale: boolean; data?: VisualData; svg?: string }
 type VisualState = {
@@ -77,11 +78,17 @@ export function PromptVisual({
   configure: () => void
 }) {
   const [zoom, setZoom] = useState(100),
-    [quote, locate] = useState(''),
+    [ref, setReference] = useState<Reference>(),
+    [chosen, setChosen] = useState(-1),
     [exportError, setExportError] = useState('')
   const { view, busy } = visual
   const error = visual.error || exportError
-  const offset = quote ? text.indexOf(quote) : -1
+  const quote = ref?.quote || ''
+  const offset = ref?.start ?? chosen
+  function locate(value: Reference) {
+    setReference(value)
+    setChosen(-1)
+  }
   const canvas = useRef<HTMLFieldSetElement>(null)
   useEffect(() => {
     if (original || !view?.svg || !canvas.current) return
@@ -153,7 +160,7 @@ export function PromptVisual({
                       .closest('[data-node-id]')
                       ?.getAttribute('data-node-id')
                     const node = id && view.data?.nodes[Number(id.slice(1))]
-                    if (node) locate(node.quote)
+                    if (node) locate(node)
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter')
@@ -165,22 +172,18 @@ export function PromptVisual({
                 />
               )}
               {view.data?.kind === 'flow'
-                ? view.data.edges.map((edge) => (
-                    <button
-                      type="button"
-                      key={JSON.stringify(edge)}
-                      onClick={() => locate(edge.quote)}
-                    >
+                ? Array.from(view.data.edges.entries()).map(([id, edge]) => (
+                    <button type="button" key={id} onClick={() => locate(edge)}>
                       {edge.from + 1} → {edge.to + 1} · {edge.quote}
                     </button>
                   ))
                 : [...new Set(view.data?.nodes.map((n) => n.group))].map((group) => (
                     <section key={group}>
                       {view.data?.kind === 'scene' && <h3>{group}</h3>}
-                      {view.data?.nodes
-                        .filter((n) => n.group === group)
-                        .map((n) => (
-                          <button type="button" key={n.quote} onClick={() => locate(n.quote)}>
+                      {Array.from(view.data?.nodes.entries() ?? [])
+                        .filter(([, n]) => n.group === group)
+                        .map(([id, n]) => (
+                          <button type="button" key={id} onClick={() => locate(n)}>
                             {n.quote}
                           </button>
                         ))}
@@ -193,10 +196,22 @@ export function PromptVisual({
               <mark>{quote}</mark>
             </blockquote>
           )}
+          {!view.stale && ref && ref.start === undefined && (
+            <div>
+              <span>原文有多处匹配</span>{' '}
+              <button
+                type="button"
+                disabled={text.indexOf(quote, chosen + 1) < 0}
+                onClick={() => setChosen(text.indexOf(quote, chosen + 1))}
+              >
+                {chosen < 0 ? '查看第一处' : '查看下一处'}
+              </button>
+            </div>
+          )}
           {!view.stale && offset >= 0 && (
             <blockquote>
               {text.slice(Math.max(0, offset - 40), offset)}
-              <mark>{quote}</mark>
+              <mark data-offset={offset}>{quote}</mark>
               {text.slice(offset + quote.length, offset + quote.length + 40)}
             </blockquote>
           )}

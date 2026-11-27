@@ -107,6 +107,68 @@ try {
       console.log('PASS', n, long ? 'wrapped' : 'compact', edges.length, 'edges')
     }
   }
+  const quote = '检查步骤。'
+  const text = '甲'.repeat(32) + quote + '乙' + quote + '结束'
+  const file = '重复引用.txt'
+  await writeFile(path.join(root, file), text)
+  const data = {
+    kind: 'flow',
+    nodes: [
+      { quote, start: 32 },
+      { quote, prefix: '乙', suffix: '结束' },
+      { quote },
+      { quote, start: 37 },
+    ],
+    edges: [
+      { from: 0, to: 1, quote, start: 38 },
+      { from: 1, to: 2, quote },
+      { from: 2, to: 3, quote },
+    ],
+  }
+  await promptVisuals(profile, { read: readPrompt }, async () => JSON.stringify(data))(
+    root,
+    file,
+    true,
+  )
+  await ui.getByRole('button', { name: '重复引用', exact: true }).click()
+  const region = ui.getByRole('region', { name: '提示词可视化' })
+  async function checkReferences(view) {
+    for (const [id, offset] of [
+      [0, 32],
+      [1, 38],
+    ]) {
+      await view.locator('[data-node-id=n' + id + ']').click()
+      await expect(view.locator('mark')).toHaveAttribute('data-offset', String(offset))
+      await expect(view.locator('mark')).toHaveText(quote)
+    }
+    for (const id of [2, 3]) {
+      await view.locator('[data-node-id=n' + id + ']').click()
+      await expect(view.getByText('原文有多处匹配', { exact: true })).toBeVisible()
+      await expect(view.locator('mark')).toHaveCount(0)
+      await view.getByRole('button', { name: '查看第一处' }).click()
+      await expect(view.locator('mark')).toHaveAttribute('data-offset', '32')
+      await view.getByRole('button', { name: '查看下一处' }).click()
+      await expect(view.locator('mark')).toHaveAttribute('data-offset', '38')
+    }
+  }
+  await checkReferences(region)
+  const output = path.join(profile, '重复引用.html')
+  await app.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath })
+  }, output)
+  await region.getByRole('button', { name: '导出 HTML' }).click()
+  await expect
+    .poll(async () => {
+      try {
+        return (await readFile(output)).length > 0
+      } catch {
+        return false
+      }
+    })
+    .toBe(true)
+  await page.goto(pathToFileURL(output).href)
+  await checkReferences(page)
+  console.log('PASS duplicate references 32, 38 and ambiguous, embedded and HTML', profile)
 } finally {
   await app.close()
 }
