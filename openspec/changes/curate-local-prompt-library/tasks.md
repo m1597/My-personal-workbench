@@ -35,3 +35,9 @@
 ### 列表空状态与清空搜索
 
 在隔离 Electron 窗口中先打开真正的空目录，只显示粘贴或拖入文件的提示。加入 42 份测试文档后，输入「没有这个测试关键词」，核实搜索框保留该值、结果为零，阅读区没有选文提示。清空同一搜索框后列表恢复 42 项，此时显示选文提示。证据取自已完成绘制的界面并核对图像，测试剪贴板为进程内内存替身。[空目录](../../../tmp/prompt-reading-Sau9zX/empty-directory.png) · [带关键词的零结果](../../../tmp/prompt-reading-Sau9zX/no-match.png) · [清空后恢复的列表](../../../tmp/prompt-reading-Sau9zX/cleared-list.png)
+
+### 0.2.7 后续验收
+
+入口为列表的文件夹选择器。显示全部文件与真实多级目录（含空目录），创建目录落盘，移动文档与配套 HTML；同名冲突保留两边，外部变化后重新枚举。
+
+隔离目录验收命令为 `node scripts/check-prompt-sidecar.mjs "D:/Desktop/Projects/Prompt repository/修复分窗收起问题.md"`。独立窗口创建「开发」，外部新建「空目录」，从更多菜单移动文档及 HTML 后重开；外部改名目录、改名并跨目录移动文档，列表只保留实际路径。目标同名提示词保留双方内容，既有同名 HTML 样例副本逐字节未变。[文件夹截图](../../../tmp/prompt-sidecar-qnZXl9/folder.png) · [Archify 阅读页](../../../tmp/prompt-sidecar-qnZXl9/archify.png)。使用真实样例副本、受控模型响应和隐藏窗口；未操纵用户的资源管理器或浏览器。四种阅读窗口尺寸回归见 tmp/prompt-reading-1D1n7u。

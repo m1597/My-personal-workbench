@@ -36,8 +36,11 @@ declare global {
       ): Promise<{ html: string; stale: boolean; svg?: string; data?: VisualData }>
       prepareReader(root: string, name: string, regenerate: boolean): Promise<void>
       openReader(root: string, name: string): Promise<void>
+      folders(root: string): Promise<string[]>
+      createFolder(root: string, parent: string, name: string): Promise<string>
+      movePrompt(root: string, name: string, folder: string): Promise<string>
       exportVisual(root: string, name: string): Promise<boolean>
-      importText(root: string, name: string, text: string): Promise<string>
+      importText(root: string, name: string, text: string, parent?: string): Promise<string>
       autoVisual(value: boolean): Promise<void>
       identity(root: string, name: string): Promise<string>
       locate(root: string, name: string, identity: string): Promise<Entry | null>
@@ -186,6 +189,9 @@ function Library() {
     [filter, setFilter] = useState(''),
     [loadedQuery, setLoadedQuery] = useState<{ root: string; filter: string }>(),
     [purpose, setPurpose] = useState(''),
+    [folders, setFolders] = useState<string[]>([]),
+    [creating, setCreating] = useState(false),
+    [folderName, setFolderName] = useState(''),
     [visualVersion, setVisualVersion] = useState(0),
     [organized, setOrganized] = useState(''),
     [importing, setImporting] = useState(false),
@@ -385,13 +391,14 @@ function Library() {
     let active = true
     const selection = selectionVersion.current
     if (currentRoot)
-      void api
-        .catalogue(filter)
-        .then((rows) => {
+      void Promise.all([api.catalogue(filter), api.folders(currentRoot)])
+        .then(([rows, dirs]) => {
           if (!active) return
           setDirectoryIssue('')
           setLoadedQuery({ root: currentRoot, filter })
           setCards(rows)
+          setFolders(dirs)
+          setPurpose((old) => (dirs.includes(old) ? old : ''))
           if (selection === selectionVersion.current)
             setEntry((old) => (old && !rows.some((c) => c.name === old.name) ? undefined : old))
         })
@@ -405,7 +412,9 @@ function Library() {
       active = false
     }
   }, [currentRoot, tick, filter])
-  const visibleCards = cards.filter((c) => (!purpose || purpose === c.category) && c.match)
+  const visibleCards = cards.filter(
+    (c) => (!purpose || purpose === c.category || c.category.startsWith(purpose + '\\')) && c.match,
+  )
   const listReady = Boolean(
     currentRoot &&
       !directoryIssue &&
@@ -459,7 +468,7 @@ function Library() {
     const root = state?.root
     if (!root) throw Error('请先选择提示词目录')
     if (!discard()) return
-    const name = await api.importText(root, filename, body)
+    const name = await api.importText(root, filename, body, purpose)
     update()
     reset({ root, name, label: name, type: 'text' })
     setImporting(false)
@@ -695,19 +704,47 @@ function Library() {
         <section className={entry ? 'split prompt-split reading' : 'split prompt-split'}>
           <nav aria-label="提示词">
             <div className="purpose-filter">
-              <span>用途</span>
+              <span>文件夹</span>
               <ChoiceDropdown
-                aria-label="按用途筛选"
+                aria-label="按文件夹筛选"
                 value={purpose}
                 choices={[
-                  { value: '', label: '全部用途' },
-                  ...[...new Set(cards.map((c) => c.category))].map((value) => ({
-                    value,
-                    label: value,
-                  })),
+                  { value: '', label: '全部文件' },
+                  ...folders.map((value) => ({ value, label: value.split(/[\\/]/).join(' › ') })),
                 ]}
                 onChange={setPurpose}
               />
+              <button
+                type="button"
+                disabled={!currentRoot}
+                title="新建文件夹"
+                aria-label="新建文件夹"
+                onClick={() => setCreating(!creating)}
+              >
+                ＋
+              </button>
+              {creating && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    if (currentRoot)
+                      void attempt(async () => {
+                        const dir = await api.createFolder(currentRoot, purpose, folderName)
+                        setPurpose(dir)
+                        setFolderName('')
+                        setCreating(false)
+                        update()
+                      })
+                  }}
+                >
+                  <input
+                    aria-label="文件夹名称"
+                    value={folderName}
+                    onChange={(e) => setFolderName(e.target.value)}
+                  />
+                  <button type="submit">创建</button>
+                </form>
+              )}
             </div>
             <div className="entries list" ref={documentList}>
               {visibleCards.map((c) => (
@@ -739,7 +776,7 @@ function Library() {
                     ? '当前目录暂无文档，可粘贴或拖入 TXT、Markdown 文件。'
                     : filter
                       ? '没有找到与「' + filter + '」匹配的文档，可修改或清空搜索。'
-                      : '此用途下暂无文档，可切换到全部用途。'}
+                      : '此文件夹暂无文档，可切换到全部文件。'}
                 </p>
               )}
             </div>
@@ -991,6 +1028,25 @@ function Library() {
                     }}
                   >
                     <summary title="更多操作">更多</summary>
+                    {fileRoot && !/(^|[\\/])skill\.md$/i.test(name) && (
+                      <ChoiceDropdown
+                        aria-label="移动到文件夹"
+                        disabled={dirty}
+                        value={name.split(/[\\/]/).slice(0, -1).join('\\')}
+                        choices={[
+                          { value: '', label: '根目录' },
+                          ...folders.map((value) => ({ value, label: value })),
+                        ]}
+                        onChange={(folder) =>
+                          void attempt(async () => {
+                            const moved = await api.movePrompt(fileRoot, name, folder)
+                            setPurpose(folder)
+                            reset({ ...entry, name: moved })
+                            update()
+                          })
+                        }
+                      />
+                    )}
                     <button
                       type="button"
                       aria-expanded={pinOpen}

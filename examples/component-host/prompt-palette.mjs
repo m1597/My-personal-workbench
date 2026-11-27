@@ -256,6 +256,8 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
     if (!target.revision || (await shell.openPath(target.file)))
       throw Error('无法打开 HTML，请检查默认浏览器')
   })
+  for (const method of ['folders', 'createFolder', 'movePrompt'])
+    handle(method, 'editor', library[method])
   handle('autoVisual', 'editor', library.autoVisual)
   handle('importText', 'editor', library.importText)
   handle('exportVisual', 'editor', async (root, name) => {

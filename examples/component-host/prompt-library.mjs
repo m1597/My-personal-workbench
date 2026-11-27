@@ -1,6 +1,18 @@
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { fileBrowser } from './file-browser.mjs'
-import { mkdir, opendir, writeFile, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import {
+  unlink,
+  lstat,
+  rename,
+  mkdir,
+  opendir,
+  writeFile,
+  readdir,
+  readFile,
+  realpath,
+  stat,
+} from 'node:fs/promises'
 import { watch, watchFile, unwatchFile } from 'node:fs'
 import {
   actionCatalogue,
@@ -9,6 +21,8 @@ import {
   promptExtension,
   promptPath,
   readPrompt,
+  visualSidecar,
+  publishExclusive,
 } from './prompt-actions.mjs'
 
 export async function promptLibrary(profile, changed) {
@@ -269,7 +283,7 @@ export async function promptLibrary(profile, changed) {
       if (typeof value !== 'boolean') throw Error('设置无效')
       return preference('autoVisual', value)
     },
-    async importText(expected, name, text) {
+    async importText(expected, name, text, parent = '') {
       if (!root || expected !== root) throw Error('请先选择提示词目录')
       if (
         typeof name !== 'string' ||
@@ -282,7 +296,7 @@ export async function promptLibrary(profile, changed) {
         throw Error('请选择 TXT 或 Markdown 文件')
       if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text) > 4 * 1024 * 1024)
         throw Error('仅支持 4 MiB 以内的非空文本')
-      const folder = await checkedDiskPath(expected, '')
+      const folder = await checkedDiskPath(expected, parent)
       await assertWritableFolder(folder)
       const base = path.parse(name)
       for (let i = 0; i < 1000; i++) {
@@ -298,9 +312,112 @@ export async function promptLibrary(profile, changed) {
           throw e
         }
         refresh()
-        return target
+        return path.join(parent, target)
       }
       throw Error('同名文件过多，请更改名称')
+    },
+    async folders(expected) {
+      assertRoot(expected)
+      const result = []
+      async function walk(parent) {
+        const entries = await readdir(await checkedDiskPath(expected, parent), {
+          withFileTypes: true,
+        })
+        for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+          if (!e.isDirectory() || e.isSymbolicLink()) continue
+          const relative = path.join(parent, e.name)
+          result.push(relative)
+          await walk(relative).catch((e) => {
+            if (!['ENOENT', 'EACCES', 'EPERM'].includes(e.code)) throw e
+          })
+        }
+      }
+      await walk('')
+      return result
+    },
+    async createFolder(expected, parent, name) {
+      assertRoot(expected)
+      if (
+        typeof name !== 'string' ||
+        !name.trim() ||
+        /[<>:"/\\|?*]|[. ]$/u.test(name) ||
+        [...name].some((c) => c.charCodeAt(0) < 32) ||
+        /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(name)
+      )
+        throw Error('文件夹名称无效')
+      const dir = await checkedDiskPath(expected, parent)
+      await assertWritableFolder(dir)
+      await mkdir(path.join(dir, name)).catch((e) => {
+        if (e.code === 'EEXIST') throw Error('已有同名文件或文件夹')
+        throw e
+      })
+      refresh()
+      return path.join(parent, name)
+    },
+    async movePrompt(expected, name, folder) {
+      assertRoot(expected)
+      const source = await promptPath(expected, name)
+      const dir = await checkedDiskPath(expected, folder)
+      await assertWritableFolder(path.dirname(source))
+      await assertWritableFolder(dir)
+      const relative = path.join(folder, path.basename(source))
+      if (relative === name) return name
+      const target = path.join(expected, relative)
+      const side = await visualSidecar(expected, name)
+      const companion = side.revision && path.join(dir, path.basename(side.file))
+      const pairs = [
+        { source, target },
+        ...(companion ? [{ source: side.file, target: companion }] : []),
+      ]
+      for (const item of pairs) {
+        if (
+          await lstat(item.target).catch((e) => {
+            if (e.code !== 'ENOENT') throw e
+          })
+        )
+          throw Error('目标已有同名文件')
+      }
+      const staged = []
+      const published = []
+      try {
+        for (const item of pairs) {
+          const temp = item.source + '.' + randomUUID() + '.move'
+          await rename(item.source, temp)
+          staged.push({ ...item, temp })
+        }
+        for (const item of staged) {
+          await publishExclusive(item.temp, item.target)
+          published.push({ ...item, identity: await lstat(item.target, { bigint: true }) })
+        }
+      } catch (e) {
+        const recoveryFiles = []
+        for (const item of staged) {
+          try {
+            await publishExclusive(item.temp, item.source)
+          } catch {
+            recoveryFiles.push(item.temp)
+          }
+        }
+        for (const item of published) {
+          const current = await lstat(item.target, { bigint: true }).catch(() => null)
+          if (
+            current &&
+            current.ino === item.identity.ino &&
+            current.dev === item.identity.dev &&
+            current.mtimeNs === item.identity.mtimeNs &&
+            current.size === item.identity.size
+          )
+            await unlink(item.target)
+        }
+        for (const item of staged) if (!recoveryFiles.includes(item.temp)) await unlink(item.temp)
+        if (recoveryFiles.length)
+          throw Error('文件发生并发变动，已保留恢复副本：' + recoveryFiles.join('、'))
+        if (e.code === 'EEXIST') throw Error('目标已有同名文件')
+        throw e
+      }
+      for (const item of staged) await unlink(item.temp)
+      refresh()
+      return relative
     },
     files: () => files(root),
     async catalogue(query = '') {
@@ -317,8 +434,7 @@ export async function promptLibrary(profile, changed) {
             (skill
               ? path.basename(path.resolve(folder, path.dirname(name)))
               : path.parse(name).name)
-          const parts = name.split(path.sep)
-          const category = parts.length > (skill ? 2 : 1) ? parts[0] : '未分类'
+          const category = path.dirname(name) === '.' ? '' : path.dirname(name)
           cards.push({
             name,
             title,

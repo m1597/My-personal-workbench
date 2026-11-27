@@ -225,9 +225,9 @@ try {
     }
     await search.fill('SDK')
     if (surface === 'standalone') {
-      const purpose = page.getByRole('combobox', { name: '按用途筛选' })
+      const purpose = page.getByRole('combobox', { name: '按文件夹筛选' })
       await purpose.click()
-      await expect(page.getByRole('option', { name: '未分类', exact: true })).toBeVisible()
+      await expect(page.getByRole('option', { name: '全部文件', exact: true })).toBeVisible()
       await capture('purpose-options')
       await page.keyboard.press('Escape')
     }
