@@ -1028,7 +1028,18 @@ function Music() {
       ? `${publicMode ? 'lists' : 'songs'}:${state.albumRevision}:${state.referenceRevision}`
       : undefined,
   )
+  const [editedWeight, setEditedWeight] = useState<number>()
   const referenceControls = {
+    weight: editedWeight ?? state?.prefs.requestWeight ?? 80,
+    setWeight: async (value: number) => {
+      setEditedWeight(value)
+      try {
+        await window.music.setListeningPreference('requestWeight', String(value))
+      } catch (error) {
+        setEditedWeight(undefined)
+        throw error
+      }
+    },
     result: referencePreview,
     selection: referenceSelection,
     change: setReferenceSelection,
@@ -1829,7 +1840,6 @@ function Music() {
             <DiscoveryView active={tab === 'audition' && !publicMode}>
               {state && (
                 <RecommendationComposer
-                  savedWeight={state.prefs.requestWeight}
                   references={
                     tab === 'audition' && !publicMode && !settingsOpen
                       ? referenceControls

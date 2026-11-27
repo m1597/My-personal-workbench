@@ -21,7 +21,22 @@ const server = createServer(async (req, res) => {
   const payload = JSON.parse(JSON.parse(Buffer.concat(chunks)).messages.at(-1).content)
   calls.push(payload)
   const content = JSON.stringify(
-    payload.kind ? { keyword: '环境音乐' } : { profile: '测试摘要第' + calls.length + '段' },
+    payload.kind
+      ? { keyword: '日语歌' }
+      : payload.scope
+        ? {
+            songs: [
+              {
+                title: 'English Title',
+                artist: '试验甲',
+                reason: '夹具日语演唱',
+                vocalLanguage: 'ja',
+              },
+              { title: '英文演唱', artist: '试验乙', reason: '夹具英语演唱', vocalLanguage: 'en' },
+              { title: '未知', artist: '试验丙', reason: '语种不明', vocalLanguage: 'und' },
+            ],
+          }
+        : { profile: '测试摘要第' + calls.length + '段' },
   )
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({ choices: [{ message: { content } }] }))
@@ -70,11 +85,7 @@ try {
       'INSERT INTO recording_copies(version,local,automatic,platform,sourceId,artScope) VALUES(?,?,?,?,?,?)',
     )
     .run('v', 'local-a', 0, 'wy', 'online-copy', 'fixture')
-  const playlist = store.library.createPlaylist(
-    'PRIVATE-PLAYLIST',
-    ['online-copy', 'online-only'],
-    true,
-  )
+  const playlist = store.library.createPlaylist('日语歌', ['online-copy', 'online-only'], true)
   const folder = store.library.list()[0].folder.id
   const empty = { folders: [], playlists: [], favorites: false }
   const all = { folders: [folder], playlists: [playlist], favorites: true }
@@ -82,33 +93,61 @@ try {
   assert.equal(taste.references(empty).summary.count, 0)
   assert.equal(taste.references({ ...empty, folders: [folder, folder] }).summary.count, 2)
   assert.throws(() => taste.references({ ...all, folders: 'wrong' }), /参考范围/)
-  const { tracks } = taste.references({ ...empty, playlists: [playlist] })
-  assert.deepEqual(tracks.map((row) => row.title).sort(), ['在线别名', '另一首'].sort())
+  const only = { ...empty, playlists: [playlist] }
   const signal = new AbortController().signal
-  assert.equal(await taste.referenceProfile(tracks, signal), '')
+  const groups = (selection) => taste.references(selection).groups
+  const profile = (selection) => taste.referenceProfile(groups(selection), signal)
+  const keyword = (desc, selection, weight) =>
+    catalogKeyword(store, null, taste, 'publicLists', desc, selection, signal, weight)
+  assert.deepEqual(
+    taste
+      .references(only)
+      .tracks.map((row) => row.title)
+      .sort(),
+    ['在线别名', '另一首'].sort(),
+  )
+  assert.equal(await profile(only), '')
   assert.equal(calls.length, 0)
   taste.consent(true)
-  assert.equal(await taste.referenceProfile(tracks, signal), '测试摘要第1段')
-  assert.deepEqual(calls[0], { previous: '', changes: tracks })
+  const japanese = await profile(only)
+  assert.equal(JSON.parse(japanese)[0].name, '日语歌')
+  assert.equal(calls[0].collection.name, '日语歌')
   assert(!/PRIVATE|fixture|online-|local-|同标签|拒绝外传/.test(JSON.stringify(calls[0])))
-  assert.equal(await taste.referenceProfile([], signal), '')
-  assert.equal(calls.length, 1)
-  const next = taste.references({ ...empty, favorites: true }).tracks
-  await taste.referenceProfile(next, signal)
-  assert.equal(calls[1].previous, '')
-  assert.deepEqual(
-    calls[1].changes.map((r) => r.title),
-    ['同标签'],
+  assert.equal(await profile(empty), '')
+  assert.equal(await profile(only), japanese)
+  for (const scope of ['direct', 'related']) {
+    const result = await requestMusicModel(
+      store,
+      null,
+      'recommend',
+      { scope, preference: '我喜欢的音乐', profile: japanese },
+      signal,
+    )
+    assert.equal(calls.at(-1).requiredVocalLanguage, 'ja')
+    assert.deepEqual(
+      result.songs.map((row) => row.title),
+      ['English Title'],
+    )
+  }
+  await requestMusicModel(
+    store,
+    null,
+    'recommend',
+    { scope: 'direct', preference: '我这次想听英文歌', profile: japanese },
+    signal,
   )
-  const many = Array.from({ length: 51 }, (_, i) => ({ ...next[0], title: String(i) }))
-  await taste.referenceProfile(many, signal)
+  assert.equal(calls.at(-1).requiredVocalLanguage, 'en')
+  const begin = calls.length
+  const mixed = JSON.parse(await profile(all))
   assert.deepEqual(
-    calls.slice(2).map((r) => r.changes.length),
-    [50, 1],
+    mixed.map((group) => group.uniqueRecordings),
+    [2, 1, 0],
   )
-  assert.equal(calls[3].previous, '测试摘要第3段')
-  await assert.rejects(taste.referenceProfile(tracks, AbortSignal.abort()), /aborted/i)
-  assert.equal(calls.length, 4)
+  assert.equal(calls.slice(begin).flatMap((call) => call.changes).length, 3)
+  const beforeCache = calls.length
+  assert.equal(await profile(only), japanese)
+  assert.equal(calls.length, beforeCache)
+  await assert.rejects(taste.referenceProfile(groups(only), AbortSignal.abort()), /aborted/i)
   taste.setExcluded('folder', folder, true)
   assert.deepEqual(
     taste
@@ -117,33 +156,60 @@ try {
       .sort(),
     ['另一首', '同标签'].sort(),
   )
-  assert.equal(taste.references(all).summary.count, 3)
-  const favoritesOnly = { ...empty, favorites: true }
-  const keyword = (kind, selection) =>
-    catalogKeyword(store, null, taste, kind, '通勤', selection, signal)
-  const start = calls.length
-  const scopedProfile = await taste.referenceProfile(taste.references(favoritesOnly).tracks, signal)
-  assert.equal(await keyword('publicLists', favoritesOnly), '环境音乐')
-  assert.deepEqual(calls.slice(start + 1), [
-    { kind: 'publicLists', description: '通勤', profile: scopedProfile },
-  ])
-  await keyword('publicLists', empty)
-  await keyword('artists', undefined)
-  assert.deepEqual(calls.slice(-2), [
-    { kind: 'publicLists', description: '通勤' },
-    { kind: 'artists', description: '通勤' },
-  ])
+  assert.equal(await keyword('', only, 80), '日语歌')
+  assert.deepEqual(calls.at(-1), {
+    kind: 'publicLists',
+    description: '',
+    requestWeight: 0,
+    tasteWeight: 100,
+    profile: japanese,
+  })
+  await keyword('通勤', only, 65)
+  assert.deepEqual(calls.at(-1), {
+    kind: 'publicLists',
+    description: '通勤',
+    requestWeight: 65,
+    tasteWeight: 35,
+    profile: japanese,
+  })
+  await keyword('通勤', empty, 65)
+  assert.deepEqual(calls.at(-1), {
+    kind: 'publicLists',
+    description: '通勤',
+    requestWeight: 100,
+    tasteWeight: 0,
+  })
+  const beforeEmpty = calls.length
+  await assert.rejects(keyword('', empty, 0), /请输入/)
+  assert.equal(calls.length, beforeEmpty)
   key = randomUUID()
-  const rotated = await taste.referenceProfile(taste.references(favoritesOnly).tracks, signal)
-  assert.notEqual(rotated, scopedProfile)
+  const rotated = await profile(only)
+  assert.notEqual(rotated, japanese)
+  store.db.prepare("UPDATE playlists SET name='演歌' WHERE id=?").run(playlist)
+  assert.notEqual(await profile(only), rotated)
+  store.db
+    .prepare("DELETE FROM playlist_tracks WHERE playlist=? AND track='online-only'")
+    .run(playlist)
+  const changed = await profile(only)
+  assert.equal(JSON.parse(changed)[0].uniqueRecordings, 1)
   taste.consent(false)
-  await keyword('publicLists', favoritesOnly)
-  assert.deepEqual(calls.at(-1), { kind: 'publicLists', description: '通勤' })
+  await assert.rejects(keyword('', only, 80), /请输入/)
+  assert.equal(await profile(only), '')
   taste.consent(true)
-  assert.notEqual(
-    await taste.referenceProfile(taste.references(favoritesOnly).tracks, signal),
-    rotated,
+  assert.notEqual(await profile(only), changed)
+  const large = Array.from({ length: 105 }, (_, i) => ({
+    id: 'large' + i,
+    kind: 'playlist',
+    name: '测试集合'.repeat(18) + i,
+    tracks: new Map([['track' + i, { title: '夹具' + i, artist: '测试', album: '' }]]),
+  }))
+  const folded = await taste.referenceProfile(large, signal)
+  assert.ok(folded.length <= 12000)
+  assert.equal(
+    JSON.parse(folded).reduce((n, g) => n + g.uniqueRecordings, 0),
+    105,
   )
+  assert.ok(calls.some((call) => Array.isArray(call.collections)))
   console.log(
     'PASS 录音身份、在线副本、独立同标签录音、目录自动入库、旧交叉排除、授权、空集、取消、隐私、回环模型分批请求、公开歌单关键词与摘要缓存失效',
   )

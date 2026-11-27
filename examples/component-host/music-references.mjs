@@ -109,12 +109,20 @@ export function resolveReferences(store, input, exclusions) {
     favorites: input?.favorites ?? true,
     ...(legacy ? { legacyExclusions: true } : {}),
   }
+  const groups = []
   const matches = new Map()
   const add = (group, signal) => {
+    const name = String(group.name)
+      .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
+      .trim()
+    const safeName = !name || /[\\/]|[a-z]+:[^ ]/i.test(name) ? '未命名集合' : name.slice(0, 80)
+    const tracks = new Map()
     for (const [key, data] of group.tracks) {
       if (group !== favorites && suppressed.has(key)) continue
+      tracks.set(key, data)
       matches.set(key, { ...data, signal })
     }
+    groups.push({ id: group.kind + '/' + group.id, kind: group.kind, name: safeName, tracks })
   }
   for (const id of selection.folders) add(folders.get(id), '曲库新增')
   for (const id of selection.playlists) add(playlists.get(id), '主动加入自建歌单')
@@ -129,6 +137,7 @@ export function resolveReferences(store, input, exclusions) {
       count: matches.size,
       consented: store.get('taste-consent') === '1',
     },
+    groups,
     tracks: [...matches.values()],
   }
 }

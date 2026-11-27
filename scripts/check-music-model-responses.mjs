@@ -9,7 +9,12 @@ const root = await fs.mkdtemp(path.resolve('tmp/model-responses-'))
 const originalFetch = globalThis.fetch
 try {
   await fs.mkdir(path.join(root, 'music'))
-  for (const file of ['music-model.mjs', 'music-connection.mjs'])
+  for (const file of [
+    'music-model.mjs',
+    'music-connection.mjs',
+    'api-connections.mjs',
+    'connection-vault.mjs',
+  ])
     await fs.copyFile(path.join('examples/component-host', file), path.join(root, file))
   await fs.copyFile(
     'components/music/offline-source.mjs',

@@ -855,7 +855,7 @@ export function musicService(
       if (collectionSearch === job) collectionSearch = undefined
     }
   })
-  bind('aiCatalogQuery', async (kind, description, selection) => {
+  bind('aiCatalogQuery', async (kind, description, selection, weight) => {
     const controller = new AbortController()
     if (kind === 'publicLists' && selection !== undefined) catalogReferenceJobs.add(controller)
     try {
@@ -867,6 +867,7 @@ export function musicService(
         description,
         selection,
         controller.signal,
+        weight,
       )
     } finally {
       catalogReferenceJobs.delete(controller)
@@ -941,6 +942,10 @@ export function musicService(
       throw Error('无效推荐方式')
     if (!Number.isSafeInteger(targetCount) || targetCount < 1) throw Error('目标首数须为正整数')
     const scoped = selection !== undefined ? taste.references(selection) : null
+    if (scoped && (!scoped.summary.count || !scoped.summary.consented)) {
+      if (!preference.trim()) throw Error('请输入本次描述，或选择并授权至少一首参考歌曲')
+      weight = 100
+    }
     return generateTask(async (signal) => {
       const label = preference.trim() || (mode === 'artist' ? '按歌手推荐' : '按风格推荐')
       if (!weight) preference = ''
@@ -990,7 +995,7 @@ export function musicService(
           profilePolicy === null
             ? ''
             : scoped
-              ? await taste.referenceProfile(scoped.summary.consented ? scoped.tracks : [], signal)
+              ? await taste.referenceProfile(scoped.summary.consented ? scoped.groups : [], signal)
               : await taste.refresh(signal)
         const chart = wantsDouyinChart(preference) ? await readDouyinChart(signal) : undefined
         if (chart && !chart.songs.length)
@@ -1121,6 +1126,7 @@ export function musicService(
           ).slice(0, 30)
           const {
             songs: rows,
+            requiredVocalLanguage,
             requestedArtist,
             directExhausted,
           } = await requestMusicModel(
@@ -1173,7 +1179,7 @@ export function musicService(
           const fresh = []
           // A failed match may exhaust the model's five selections before the chart itself.
           const rankedRows = [...rows]
-          if (chartOptions.length) rankedRows.push(...chartOptions.slice(0, 5))
+          if (chartOptions.length && !requiredVocalLanguage) rankedRows.push(...chartOptions.slice(0, 5))
           for (let row of rankedRows) {
             if (chart) {
               const listed = chartCandidates.find((entry) => inLibrary(row, [entry]))

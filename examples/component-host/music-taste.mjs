@@ -13,7 +13,7 @@ export class MusicTaste {
     this.pending = null
     this.controller = null
     this.error = ''
-    this.referenceCache = null
+    this.referenceCache = new Map()
   }
   exclusions() {
     return JSON.parse(this.store.get('taste-exclusions') || '[]')
@@ -21,11 +21,10 @@ export class MusicTaste {
   references(selection) {
     return resolveReferences(this.store, selection, this.exclusions())
   }
-  async referenceProfile(tracks, signal) {
+  async referenceProfile(groups, signal) {
     signal.throwIfAborted()
-    if (!tracks.length || this.store.get('taste-consent') !== '1') return ''
-    // Keep one completed summary in memory. A different credential, model, endpoint,
-    // consent grant or set of projected signals must start from a fresh document.
+    const consented = () => this.store.get('taste-consent') === '1'
+    if (!groups.length || !consented()) return ''
     const connection = () =>
       createHash('sha256')
         .update(
@@ -37,20 +36,75 @@ export class MusicTaste {
         )
         .digest('hex')
     const account = connection()
-    const key = createHash('sha256').update(account).update(JSON.stringify(tracks)).digest('hex')
-    if (this.referenceCache?.key === key) return this.referenceCache.text
-    let previous = ''
-    for (let i = 0; i < tracks.length; i += 50) {
+    const check = () => {
       signal.throwIfAborted()
-      if (this.store.get('taste-consent') !== '1') return ''
-      if (i && account !== connection()) throw Error('模型连接已更改，请重新提交')
-      previous = await this.request({ previous, changes: tracks.slice(i, i + 50) }, signal)
+      if (!consented()) throw Error('已撤回审美资料授权')
+      if (account !== connection()) throw Error('模型连接已更改，请重新提交')
     }
-    signal.throwIfAborted()
-    if (this.store.get('taste-consent') !== '1') return ''
-    if (account !== connection()) throw Error('模型连接已更改，请重新提交')
-    this.referenceCache = { key, text: previous }
-    return previous
+    const seen = new Set()
+    const summaries = []
+    for (const group of groups) {
+      if (!group.tracks.size) continue
+      check()
+      const unique = []
+      for (const [id, metadata] of group.tracks) {
+        if (!seen.has(id)) unique.push(metadata)
+        seen.add(id)
+      }
+      const collection = { name: group.name, kind: group.kind }
+      const fingerprint = createHash('sha256')
+        .update(account)
+        .update(JSON.stringify([collection, unique]))
+        .digest('hex')
+      let profile = this.referenceCache.get(group.id)?.get(fingerprint)
+      if (profile === undefined) {
+        profile = ''
+        for (let i = 0; i < unique.length; i += 50) {
+          check()
+          profile = (
+            await this.request(
+              { collection, previous: profile, changes: unique.slice(i, i + 50) },
+              signal,
+            )
+          ).slice(0, 240)
+          check()
+        }
+        // Keep both a source's standalone summary and recent overlap variants.
+        const variants = this.referenceCache.get(group.id) ?? new Map()
+        if (variants.size >= 4) variants.delete(variants.keys().next().value)
+        variants.set(fingerprint, profile)
+        this.referenceCache.set(group.id, variants)
+        if (this.referenceCache.size > 256)
+          this.referenceCache.delete(this.referenceCache.keys().next().value)
+      }
+      summaries.push({
+        ...collection,
+        count: group.tracks.size,
+        uniqueRecordings: unique.length,
+        profile,
+      })
+    }
+    if (!summaries.length) return ''
+    // Keep ordinary selections verbatim. For very large selections, fold groups in bounded
+    // chunks so every selected collection contributes, including those beyond the first chunk.
+    let level = summaries
+    while (JSON.stringify(level).length > 12000) {
+      const next = []
+      for (let start = 0; start < level.length; start += 12) {
+        check()
+        const collections = level.slice(start, start + 12)
+        const profile = await this.request({ collections }, signal)
+        check()
+        next.push({
+          name: '所选集合摘要',
+          kind: 'combined',
+          profile: profile.slice(0, 240),
+          uniqueRecordings: collections.reduce((sum, group) => sum + group.uniqueRecordings, 0),
+        })
+      }
+      level = next
+    }
+    return JSON.stringify(level)
   }
   setExcluded(kind, id, excluded) {
     if (
@@ -181,7 +235,7 @@ export class MusicTaste {
     if (typeof value !== 'boolean') throw Error('授权状态无效')
     this.store.set('taste-consent', value ? '1' : '0')
     if (!value) {
-      this.referenceCache = null
+      this.referenceCache = new Map()
       this.controller?.abort()
     }
   }

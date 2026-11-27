@@ -3,9 +3,13 @@ import { Button, Input } from '@fluentui/react-components'
 import type { ModelInfo } from './ModelSettings'
 import { DiscoveryInput } from './DiscoveryInput'
 import { guardSearchEnter } from './searchSubmit'
-import { RecommendationReferences, type ReferenceControls } from './RecommendationReferences'
+import {
+  RecommendationReferences,
+  RecommendationWeight,
+  recommendationInputs,
+  type ReferenceControls,
+} from './RecommendationReferences'
 type Props = {
-  savedWeight: number
   models: ModelInfo
   onGenerating(busy: boolean): void
   activeTarget?: number | null
@@ -20,7 +24,6 @@ type Props = {
   openSettings(): void
 }
 export function RecommendationComposer({
-  savedWeight,
   models,
   activeTarget,
   running,
@@ -36,14 +39,13 @@ export function RecommendationComposer({
 }: Props) {
   const input = useRef<HTMLInputElement>(null)
   const [submitting, setBusy] = useState(false)
-  const [weight, setWeight] = useState(savedWeight)
-  const effectiveWeight = description.trim() ? weight : 0
+  const { weight: effectiveWeight, usable } = recommendationInputs(description, references)
   const target = Number(count)
   const validCount = /^\d+$/.test(count) && Number.isSafeInteger(target) && target > 0
   const busy = submitting || running
   const [error, setError] = useState('')
   async function generate() {
-    if (busy || !validCount || !references?.result.preview) return
+    if (busy || !validCount || !usable || !references?.result.preview) return
     onGenerating(true)
     setBusy(true)
     setError('')
@@ -87,7 +89,7 @@ export function RecommendationComposer({
         <DiscoveryInput ai value={description} edit={edit} inputRef={input} disabled={busy} />
         <Button
           type="submit"
-          disabled={busy || !validCount || !references?.result.preview}
+          disabled={busy || !validCount || !usable || !references?.result.preview}
           appearance="primary"
         >
           {busy ? '生成中…' : '生成推荐'}
@@ -121,27 +123,14 @@ export function RecommendationComposer({
         >
           {currentSong?.title ? `以《${currentSong.title}》为参考` : '以当前歌曲为参考'}
         </Button>
-        <label className="music-recommend-weight">
-          本次要求 {effectiveWeight}%
-          <input
-            type="range"
-            data-guide-anchor="weight"
-            aria-label="本次要求权重"
-            aria-valuetext={`本次要求 ${effectiveWeight}%，本地口味 ${100 - effectiveWeight}%`}
-            min={0}
-            max={100}
-            value={effectiveWeight}
-            disabled={busy || !description.trim()}
-            onChange={(event) => {
-              const next = event.currentTarget.valueAsNumber
-              setWeight(next)
-              void window.music
-                .setListeningPreference('requestWeight', String(next))
-                .catch(() => setError('未能保存推荐权重'))
-            }}
+        {references && (
+          <RecommendationWeight
+            description={description}
+            references={references}
+            busy={busy}
+            report={setError}
           />
-          本地口味 {100 - effectiveWeight}%
-        </label>
+        )}
       </div>
       {references && (
         <RecommendationReferences

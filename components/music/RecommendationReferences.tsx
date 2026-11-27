@@ -66,6 +66,8 @@ function includes(selection: ReferenceSelection, option: ReferenceOption) {
 }
 
 export type ReferenceControls = {
+  weight: number
+  setWeight(value: number): Promise<void>
   result: ReturnType<typeof useReferencePreview>
   selection?: ReferenceSelection
   change(value: ReferenceSelection): void
@@ -154,5 +156,57 @@ export function RecommendationReferences({
         </div>
       )}
     </fieldset>
+  )
+}
+
+export function recommendationInputs(description: string, references?: ReferenceControls) {
+  const preview = references?.result.preview
+  const hasReferences = Boolean(preview?.consented && preview.count)
+  const hasDescription = Boolean(description.trim())
+  return {
+    usable: hasReferences || hasDescription,
+    adjustable: hasReferences && hasDescription,
+    weight: hasDescription ? (hasReferences ? (references?.weight ?? 80) : 100) : 0,
+  }
+}
+export function RecommendationWeight({
+  description,
+  references,
+  busy,
+  report,
+}: {
+  description: string
+  references: ReferenceControls
+  busy: boolean
+  report(message: string): void
+}) {
+  const { usable, adjustable, weight } = recommendationInputs(description, references)
+  return (
+    <>
+      <label className="music-recommend-weight">
+        本次描述 {usable ? weight : 0}%
+        <input
+          type="range"
+          data-guide-anchor="weight"
+          aria-label="本次要求权重"
+          aria-valuetext={
+            usable ? `本次描述 ${weight}%，所选参考 ${100 - weight}%` : '尚无描述或参考'
+          }
+          min={0}
+          max={100}
+          value={weight}
+          disabled={busy || !adjustable}
+          onChange={(event) =>
+            void references
+              .setWeight(event.currentTarget.valueAsNumber)
+              .catch(() => report('未能保存推荐权重'))
+          }
+        />
+        所选参考 {usable ? 100 - weight : 0}%
+      </label>
+      {!usable && references.result.preview && (
+        <small>请输入本次描述，或选择并授权至少一首参考歌曲。</small>
+      )}
+    </>
   )
 }

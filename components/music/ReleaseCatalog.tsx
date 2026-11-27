@@ -38,6 +38,7 @@ export interface ReleaseAPI extends SongAPI {
     kind: 'artists' | 'publicLists',
     description: string,
     selection?: import('./RecommendationReferences').ReferenceSelection,
+    weight?: number,
   ): Promise<string>
   findArtists(term: string): Promise<Artist[]>
   similarArtists(id: string): Promise<Artist[]>

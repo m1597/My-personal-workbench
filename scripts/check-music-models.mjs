@@ -174,6 +174,11 @@ try {
   await openDiscovery(page, true)
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('雨天的爵士乐')
   const slider = page.getByRole('slider', { name: '本次要求权重' })
+  await expect(slider).toHaveValue('100')
+  await expect(slider).toBeDisabled()
+  await page.evaluate(() => window.music.setTasteConsent(true))
+  await page.reload()
+  await openDiscovery(page, true)
   await expect(slider).toHaveValue('80')
   await slider.press('End')
   await expect
@@ -187,6 +192,7 @@ try {
   await expect(slider).toHaveValue('0')
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('雨天的爵士乐')
   await expect(slider).toHaveValue('100')
+  await page.evaluate(() => window.music.setTasteConsent(false))
   await page.evaluate(() => window.music.setListeningPreference('requestWeight', '80'))
   await page.reload()
   await openDiscovery(page, true)
@@ -435,6 +441,9 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
       !last.includes('tone.mp3') &&
       !last.includes(root),
   )
+  // The fixture changed authorization through IPC outside the settings navigation.
+  await page.reload()
+  await openDiscovery(page, true)
   const before = (await calls()).length
   await page.getByLabel('想让 AI 推荐什么？（选填）').fill('')
   await page.getByLabel('想让 AI 推荐什么？（选填）').press('Enter')

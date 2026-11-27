@@ -3,7 +3,12 @@ import { useMusicFeedback } from './musicFeedback'
 import { OnlineSongRow, RowPlay } from './OnlineSongRow'
 import { SongCredits } from './SongCredits'
 import { DiscoveryInput } from './DiscoveryInput'
-import { RecommendationReferences, type ReferenceControls } from './RecommendationReferences'
+import {
+  RecommendationReferences,
+  RecommendationWeight,
+  recommendationInputs,
+  type ReferenceControls,
+} from './RecommendationReferences'
 import { BackButton } from './BackButton'
 import { Button, Checkbox, Tab, TabList } from '@fluentui/react-components'
 import { useEffect, useRef, useState } from 'react'
@@ -83,7 +88,8 @@ export function PublicPlaylists({
     },
     [],
   )
-  const canSubmit = !thinking && (!ai || Boolean(draft.trim() && references?.result.preview))
+  const { weight, usable } = recommendationInputs(draft, references)
+  const canSubmit = !thinking && (!ai || Boolean(usable && references?.result.preview))
   async function submit() {
     if (!canSubmit) return
     const version = ++queryVersion.current
@@ -95,6 +101,7 @@ export function PublicPlaylists({
             'publicLists',
             draft.trim(),
             references?.result.preview?.selection,
+            weight,
           )
         : draft.trim()
       if (version !== queryVersion.current) return
@@ -361,6 +368,14 @@ export function PublicPlaylists({
               {ai ? '推荐歌单' : '搜索'}
             </Button>
           </form>
+          {references && (
+            <RecommendationWeight
+              description={draft}
+              references={references}
+              busy={thinking}
+              report={setError}
+            />
+          )}
           {references && <RecommendationReferences {...references} busy={thinking} />}
           <TabList
             aria-label="公开歌单平台"
