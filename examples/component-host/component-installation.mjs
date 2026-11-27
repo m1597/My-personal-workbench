@@ -54,7 +54,7 @@ export function componentInstallation(installation, temp, request, execute = exe
     let file
     try {
       if (!retryInstall && (await version(id))) return
-      const asset = releaseInstaller(await latestRelease(request), id)
+      const asset = releaseInstaller(await latestRelease(request, id), id)
       if (!asset) throw Error('Invalid release asset')
       target = asset.version
       stage = 'downloading'

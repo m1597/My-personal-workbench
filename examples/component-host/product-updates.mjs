@@ -25,12 +25,36 @@ export function selectUpdate(release, product, installed) {
   return releaseInstaller(release, product)
 }
 
-export async function latestRelease(request) {
-  const response = await request(`https://api.github.com/repos/${repo}/releases/latest`, {
-    signal: AbortSignal.timeout(15000),
-  })
-  if (!response.ok) throw Error('Release unavailable')
-  return response.json()
+export async function latestRelease(request, product = 'workbench') {
+  const endpoint = `https://api.github.com/repos/${repo}/releases`
+  const signal = AbortSignal.timeout(15000)
+  async function read(url) {
+    const response = await request(url, { signal })
+    if (!response.ok) throw Error('Release unavailable')
+    return response
+  }
+  const matches = (release) => {
+    const version = release?.tag_name?.replace(/^v/, '')
+    return (
+      versionPattern.test(version) &&
+      !release.draft &&
+      !release.prerelease &&
+      release.assets?.some(
+        (asset) => asset.name === `FitBay-${products[product]}-Setup-${version}-x64.exe`,
+      )
+    )
+  }
+  const latest = await (await read(endpoint + '/latest')).json()
+  if (matches(latest)) return latest
+  // GitHub's latest release can belong to an independently versioned Music plugin.
+  for (let page = 1; ; page++) {
+    const response = await read(`${endpoint}?per_page=100&page=${page}`)
+    const releases = await response.json()
+    const found = releases.find(matches)
+    if (found) return found
+    if (!response.headers.get('link')?.includes('rel="next"'))
+      throw Error('Product release unavailable')
+  }
 }
 
 export function releaseInstaller(release, product) {
@@ -110,7 +134,7 @@ export function updateCatalog({
           operations.get(row.id) ??
           (row.id === 'workbench' && previousSelfUpdate ? { stage: 'failed' } : undefined),
         status: result?.status ?? (supportsUpdate(row.id) ? 'unchecked' : 'unsupported'),
-        available: result?.update?.version ?? null,
+        available: result?.latest ?? result?.update?.version ?? null,
       }
     })
     return { rows, lastChecked }
@@ -137,7 +161,8 @@ export function updateCatalog({
             versionPattern.test(version) &&
             versionPattern.test(row.version) &&
             !release?.draft &&
-            !release?.prerelease
+            !release?.prerelease &&
+            (row.id !== 'workbench' || Boolean(releaseInstaller(release, row.id)))
           const newer =
             valid &&
             version
@@ -151,6 +176,7 @@ export function updateCatalog({
             operations.delete(row.id)
           results.set(row.id, {
             installed: row.version,
+            latest: valid ? version : null,
             update,
             status: update ? 'available' : valid && !newer ? 'current' : 'failed',
           })
@@ -181,7 +207,11 @@ export function updateCatalog({
       }
       const refreshed = await inventory()
       if (refreshed.find((item) => item.id === row.id)?.version === result.update.version)
-        results.set(row.id, { installed: result.update.version, status: 'current' })
+        results.set(row.id, {
+          installed: result.update.version,
+          latest: result.update.version,
+          status: 'current',
+        })
       report('done')
       changed(state(refreshed))
     } catch {

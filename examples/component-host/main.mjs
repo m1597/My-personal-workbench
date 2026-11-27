@@ -547,8 +547,15 @@ else {
             const packaged = installation && id !== 'sample' && (await installation.find(id))
             const file =
               packaged || id === 'workbench' || id === 'toolkit' ? 'package.json' : 'component.json'
-            const { version } = JSON.parse(readFileSync(path.join(packaged || root, file), 'utf8'))
-            rows.push({ id, name, version, installable: Boolean(packaged) })
+            const manifest = JSON.parse(readFileSync(path.join(packaged || root, file), 'utf8'))
+            const development = id === 'workbench' && !app.isPackaged
+            rows.push({
+              id,
+              name,
+              version: manifest.version,
+              installable: Boolean(packaged),
+              ...(development && { development, revision: manifest.revision }),
+            })
           }
           return rows
         },

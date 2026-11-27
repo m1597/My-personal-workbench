@@ -95,10 +95,23 @@ try {
   await button('检查全部更新').click()
   await expect(shell.getByText(/检查失败/).first()).toBeVisible()
   await app.evaluate(() => {
-    globalThis.fixtureFetch = async () => Response.json({ tag_name: 'v0.1.0', assets: [] })
+    const name = 'FitBay-Workbench-Setup-0.1.0-x64.exe'
+    globalThis.fixtureFetch = async () =>
+      Response.json({
+        tag_name: 'v0.1.0',
+        assets: [
+          {
+            name,
+            size: 1,
+            digest: 'sha256:' + 'a'.repeat(64),
+            browser_download_url:
+              'https://github.com/m1597/My-personal-workbench/releases/download/v0.1.0/' + name,
+          },
+        ],
+      })
   })
   await shell.getByRole('button', { name: '重试' }).first().click()
-  await expect(shell.getByText(/已是最新/)).toHaveCount(1)
+  await expect(shell.getByText(/最新正式版 0.1.0/)).toHaveCount(1)
   await expect(shell.getByText(/检查失败/)).toHaveCount(
     live.rows.filter((r) => r.status !== 'unsupported').length - 1,
   )

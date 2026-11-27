@@ -1,5 +1,6 @@
 import { buildToolkitRecorder } from './build-toolkit-recorder.mjs'
 import { build } from 'vite'
+import { spawnSync } from 'node:child_process'
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { buildSongPath } from './build-song-path.mjs'
 const root = 'dist/component-prototype'
@@ -69,7 +70,17 @@ await writeFile(catalogPath, JSON.stringify(catalog))
 await writeFile(
   `${root}/host/package.json`,
   JSON.stringify(
-    { name: 'component-host-prototype', version: '0.1.0', type: 'module', main: 'main.mjs' },
+    {
+      name: 'component-host-prototype',
+      version: JSON.parse(await readFile('package.json', 'utf8')).version,
+      revision:
+        spawnSync('git', ['rev-parse', '--short', 'HEAD'], {
+          encoding: 'utf8',
+          windowsHide: true,
+        }).stdout?.trim() || undefined,
+      type: 'module',
+      main: 'main.mjs',
+    },
     null,
     2,
   ),

@@ -62,6 +62,11 @@ const release = {
     },
   ],
 }
+release.assets.push({
+  ...release.assets[0],
+  name: name.replace('Music', 'Workbench'),
+  browser_download_url: url.replace('Music', 'Workbench'),
+})
 await writeFile(
   probe,
   `const {net}=require('electron');global.downloads=[];net.fetch=async url=>{if(url.endsWith('/releases/latest'))return Response.json(${JSON.stringify(release)});global.downloads.push(url);return new Response(global.downloads.length===1?'damaged':${JSON.stringify(payload)})};global.fixtureInstall=async file=>{require('node:fs').writeFileSync(${JSON.stringify(path.join(root, 'launch.json'))},JSON.stringify({file,downloads:global.downloads,data:require('node:fs').readFileSync(file,'utf8')}));const fs=require('node:fs');const p=require('node:path').join(process.env.TEST_MUSIC_ROOT,'package.json');const pkg=JSON.parse(fs.readFileSync(p));pkg.version='0.2.0';fs.writeFileSync(p,JSON.stringify(pkg))}`,
@@ -128,6 +133,17 @@ try {
     .toEqual([url, url])
   const result = JSON.parse(await readFile(path.join(root, 'launch.json'), 'utf8'))
   expect(result.data).toBe(payload)
+  const host = page.locator('.update-row').first()
+  await expect(host).toContainText('已安装版本 0.2.0')
+  await expect(host).toContainText('最新正式版 0.2.0')
+  await app.evaluate(({ net }, stable) => {
+    const newer = JSON.parse(JSON.stringify(stable).replaceAll('0.2.0', '0.3.0'))
+    net.fetch = async () => Response.json(newer)
+  }, release)
+  await host.getByRole('button', { name: '检查更新' }).click()
+  await expect(host).toContainText('最新正式版 0.3.0')
+  await expect(b('更新 FitBay')).toBeVisible()
+  await expect(page.getByText('开发构建仅支持检查版本')).toHaveCount(0)
   console.log('PASS', root)
 } finally {
   await app.close().catch(() => {})

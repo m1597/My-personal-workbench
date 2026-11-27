@@ -94,3 +94,38 @@ test('a restarted host offers retry when a silent update left the original versi
   await service.check()
   assert.equal((await service.snapshot()).rows[0].operation.stage, 'failed')
 })
+
+test('development build checks the stable workbench release when GitHub latest belongs to a plugin', async () => {
+  const host = {
+    ...asset,
+    name: name.replace('Music', 'Workbench'),
+    browser_download_url: asset.browser_download_url.replace('Music', 'Workbench'),
+  }
+  const official = { ...release, assets: [host] }
+  const plugin = { tag_name: 'music-v1.0.0', assets: [] }
+  const requests = []
+  const service = updateCatalog({
+    inventory: async () => [
+      { id: 'workbench', version: '0.20.0', development: true, installable: false },
+    ],
+    request: async (url) => {
+      requests.push(url)
+      if (url.endsWith('/latest')) return Response.json(plugin)
+      if (url.endsWith('page=1'))
+        return Response.json(
+          [
+            { ...plugin, tag_name: 'v8.0.0' },
+            { ...official, draft: true },
+            { ...official, prerelease: true },
+          ],
+          { headers: { link: '<next>; rel="next"' } },
+        )
+      return Response.json([official])
+    },
+  })
+  const [row] = (await service.check()).rows
+  assert.equal(requests.length, 3)
+  assert.equal(row.available, '0.10.0')
+  assert.equal(row.status, 'current')
+  await assert.rejects(service.install('workbench'))
+})

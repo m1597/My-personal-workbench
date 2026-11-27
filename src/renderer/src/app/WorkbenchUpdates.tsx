@@ -13,6 +13,8 @@ export type UpdateState = {
     available: string | null
     status: Status
     operation?: { stage: string; progress?: number }
+    development?: boolean
+    revision?: string
     installable: boolean
   }[]
 }
@@ -105,6 +107,8 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
                 version: project.version,
                 available: null,
                 status: 'unsupported' as const,
+                development: true,
+                revision: undefined,
                 installable: false,
                 operation: undefined,
               },
@@ -115,8 +119,22 @@ export function WorkbenchUpdates({ state }: { state?: UpdateState }) {
           <div>
             <h3>{row.name}</h3>
             <p>
-              {t('已安装版本', 'Installed version')} {row.version} · {labels[row.status]}
-              {row.available && ' · ' + t('可用版本', 'Available version') + ' ' + row.available}
+              {row.development
+                ? t('产品开发构建', 'Product development build')
+                : t('已安装版本', 'Installed version')}{' '}
+              {row.version}
+              {row.revision && ` (${row.revision})`} ·{' '}
+              {row.development && (row.status === 'current' || row.status === 'available')
+                ? t('已检查', 'Checked')
+                : labels[row.status]}
+              {row.available &&
+                (row.id === 'workbench' || row.status === 'available') &&
+                ' · ' +
+                  (row.id === 'workbench'
+                    ? t('最新正式版', 'Latest stable release')
+                    : t('可用版本', 'Available version')) +
+                  ' ' +
+                  row.available}
             </p>
             {row.operation && (
               <p role="status">
