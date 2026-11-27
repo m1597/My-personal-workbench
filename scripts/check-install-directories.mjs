@@ -30,15 +30,23 @@ OutFile "${tmp}\\${product}.exe"
 !define APP_ID "io.github.m1597.fitbay.${product}"
 !define FITBAY_REG "${key}"
 !define FITBAY_HISTORY "${key}\\PreviousInstallations"
+!define APP_GUID "FitBayDirectoryTest-${randomUUID()}"
 !define APP_EXECUTABLE_FILENAME "${file}"
 ${product === 'music' ? 'Var fitbayPreviousDirectory' : ''}
 !define UNINSTALL_FILENAME "unused-test-uninstaller.exe"
+; This probe exercises destination and owned-file checks in its own registry key.
+; The separate private-hive test exercises the production registration helper.
+!macro FitBaySuite operation
+  !if "\${operation}" == "Detach"
+    WriteRegStr HKCU "${key}\\PreviousInstallations" "\${FITBAY_SLOT}" "$INSTDIR"
+    DeleteRegValue HKCU "${key}" "\${FITBAY_SLOT}"
+  !endif
+!macroend
 !include "${owned}"
 Section
 SetRegView 64
 ReadEnvStr $0 "FITBAY_PATH_TEST_REMOVE"
 StrCmp $0 "1" 0 install
-!insertmacro customUnInstall
 !insertmacro customRemoveFiles
 Goto done
 install:
@@ -86,7 +94,8 @@ try {
   run('workbench', root, { remove: true })
   await access(path.join(musicDir, 'FitBay Music.exe'))
   await writeFile(path.join(root, 'foreign.txt'), 'private')
-  run('workbench', root, { code: 2 })
+  run('workbench', root)
+  assert.equal(await readFile(path.join(root, 'foreign.txt'), 'utf8'), 'private')
   await unlink(path.join(root, 'foreign.txt'))
   run('workbench', root)
   run('music', musicDir, { remove: true })

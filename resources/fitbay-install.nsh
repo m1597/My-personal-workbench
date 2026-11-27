@@ -56,6 +56,7 @@
   ${EndIf}
 !macroend
 
+!ifmacrondef FitBaySuite
 !macro FitBaySuite operation
   InitPluginsDir
   File "/oname=$PLUGINSDIR\fitbay-suite.ps1" "${FITBAY_SUITE_SCRIPT}"
@@ -67,6 +68,8 @@
     Quit
   ${EndIf}
 !macroend
+
+!endif
 
 !macro customUnInit
   !insertmacro FitBayCurrentUserOnly
@@ -176,6 +179,9 @@
     !insertmacro FitBayCheckPeer "Prompts" $5
     !insertmacro FitBayCheckPeer "Toolkit" $6
     ReadRegStr $1 HKCU "${FITBAY_REG}" "${FITBAY_SLOT}"
+    ${If} $1 == ""
+      ReadRegStr $1 HKCU "Software\${APP_GUID}" "InstallLocation"
+    ${EndIf}
     ${If} $1 != ""
       System::Call 'kernel32::GetFullPathNameW(w "$1\.", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'
       StrCmp $1 $2 validPath
@@ -203,6 +209,7 @@
     ${Loop}
     FindClose $0
     validPath:
+      !insertmacro FitBaySuite Preflight
       Return
     invalidPath:
       MessageBox MB_OK|MB_ICONEXCLAMATION "首次安装请选择空目录。工作台下只允许已登记的 Music、Prompts、Toolkit 组件子目录，安装位置不能与用户数据重叠或经过目录链接。" /SD IDOK
@@ -212,6 +219,11 @@
 
   !macro customInit
     !insertmacro FitBayCurrentUserOnly
+    ${StdUtils.TestParameter} $0 "delete-app-data"
+    ${If} $0 == "true"
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
     !if "${FITBAY_SLOT}" != "Workbench"
       Var /GLOBAL fitbayPreviousDirectory
       SetRegView 64

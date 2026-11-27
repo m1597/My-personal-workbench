@@ -90,6 +90,37 @@ try {
     $other=$shell.CreateShortcut((Join-Path $mockDesktop 'FitBay Other.lnk'))
     $other.TargetPath=(Join-Path $lab.FullName 'unrelated.exe')
     $other.Save()
+    # Missing/foreign old installer and a mismatched marker must block before any registry writes.
+    function Expect-Refused([scriptblock]$check, [string]$pattern) {
+        try { & $check } catch { if ($_.Exception.Message -like $pattern) { return }; throw }
+        throw "Expected refusal: $pattern"
+    }
+    $hostKey="$arpPath\$($ids.Workbench)"
+    $hostCommand=Read-Reg $hostKey 'UninstallString'
+    Write-Reg $hostKey 'UninstallString' '"foreign.exe" /currentuser'
+    Expect-Refused { & $controller -Operation Preflight -Slot Workbench -Directory $locations.Workbench } '*Incomplete installation*'
+    Write-Reg $hostKey 'UninstallString' $hostCommand
+    Write-Reg $hostKey 'DisplayVersion' '9.9.9'
+    Expect-Refused { & $controller -Operation Preflight -Slot Workbench -Directory $locations.Workbench } '*identity differs*'
+    Write-Reg $hostKey 'DisplayVersion' '0.2.7'
+    Expect-Refused { & $controller -Operation Preflight -Slot Workbench -Directory $lab.FullName } '*registered Workbench directory*'
+    Expect (Read-Reg "$arpPath\FitBay" 'DisplayName') $null 'preflight leaves no suite entry'
+    # Overlapping individually valid legacy locations cannot be hidden or removed together.
+    $musicKey="$arpPath\$($ids.Music)"
+    $musicInstall="Software\$($ids.Music)"
+    $musicCommand=Read-Reg $musicKey 'UninstallString'
+    $nested=Join-Path $locations.Workbench 'wrong child'
+    Microsoft.PowerShell.Management\Copy-Item -LiteralPath $locations.Music -Destination $nested -Recurse
+    Write-Reg $musicInstall 'InstallLocation' $nested
+    Write-Reg $musicKey 'UninstallString' ('"'+(Join-Path $nested 'Uninstall FitBay Music.exe')+'" /currentuser')
+    foreach ($action in 'Preflight','Register','RemoveSuite') {
+        Expect-Refused { & $controller -Operation $action -Slot Workbench -Directory $locations.Workbench } '*Overlapping installations*'
+    }
+    Expect (Read-Reg $musicKey 'SystemComponent') $null 'overlap never hidden'
+    Expect (Read-Reg "$arpPath\FitBay" 'DisplayName') $null 'overlap leaves no suite entry'
+    Write-Reg $musicInstall 'InstallLocation' $locations.Music
+    Write-Reg $musicKey 'UninstallString' $musicCommand
+    & $controller -Operation Preflight -Slot Workbench -Directory $locations.Workbench
     & $controller -Operation Register -Slot Workbench -Directory $locations.Workbench
     Expect (Read-Reg "$arpPath\FitBay" 'DisplayName') 'FitBay' 'single suite title'
     $expectQuiet='"'+(Join-Path $locations.Workbench 'Uninstall FitBay.exe')+'" /currentuser --fitbay-suite /S'
@@ -109,7 +140,20 @@ try {
     Write-Reg "$arpPath\$($ids.Prompts)" 'UninstallString' '"foreign.exe" /currentuser'
     & $controller -Operation Register -Slot Workbench -Directory $locations.Workbench
     Expect (Read-Reg "$arpPath\$($ids.Prompts)" 'SystemComponent') $null 'broken peer left visible'
-    [ordered]@{result='PASS';controller=$controller;sha256=(Get-FileHash -LiteralPath $controller).Hash;fixtures=$lab.FullName;adopted=4;legacyFallback=3;unrelatedLinkPreserved=$true;untrustedPeerSkipped=$true;externalInstallersExecuted=0} | ConvertTo-Json
+    # A previously adopted peer subsequently breaks. The healthy controller must
+    # release its hiding flag and continue without running the invalid command.
+    Write-Reg "$arpPath\$($ids.Prompts)" 'UninstallString' ('"'+(Join-Path $locations.Prompts 'Uninstall FitBay Prompts.exe')+'" /currentuser')
+    & $controller -Operation Register -Slot Workbench -Directory $locations.Workbench
+    foreach($id in 'Music','Toolkit','Prompts') {
+        Write-Reg "$arpPath\$($ids[$id])" 'UninstallString' '"foreign.exe" /currentuser'
+    }
+    & $controller -Operation RemoveSuite -Slot Workbench -Directory $locations.Workbench
+    foreach($id in 'Music','Toolkit','Prompts') {
+        Expect (Read-Reg "$arpPath\$($ids[$id])" 'SystemComponent') $null "broken adopted $id visible"
+        Expect (Read-Reg "$arpPath\$($ids[$id])" 'FitBaySuiteManaged') $null "broken adopted $id released"
+        Expect (Test-Path -LiteralPath (Join-Path $locations[$id] "FitBay $id.exe")) $true "broken $id untouched"
+    }
+    [ordered]@{result='PASS';controller=$controller;sha256=(Get-FileHash -LiteralPath $controller).Hash;fixtures=$lab.FullName;adopted=4;legacyFallback=3;unrelatedLinkPreserved=$true;untrustedPeerSkipped=$true;upgradeIdentityPreflight=$true;overlapRejected=3;damagedAdoptionsReleased=3;externalInstallersExecuted=0} | ConvertTo-Json
 } finally {
     if($private){$private.Dispose()}
     [void][FitBayTestHives]::RegOverridePredefKey([IntPtr](-2147483647),[IntPtr]::Zero)

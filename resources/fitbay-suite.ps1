@@ -2,7 +2,7 @@
 # original electron-builder v5 app IDs and must also match older installers.
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)][ValidateSet('Register','RemoveSuite','Detach')][string]$Operation,
+    [Parameter(Mandatory)][ValidateSet('Preflight','Register','RemoveSuite','Detach')][string]$Operation,
     [Parameter(Mandatory)][ValidateSet('Workbench','Music','Prompts','Toolkit')][string]$Slot,
     [Parameter(Mandatory)][string]$Directory
 )
@@ -50,7 +50,10 @@ function Get-Product($id) {
     $registered = Get-Value $slots $id
     $key = "$arp\$guid"
     $command = Get-Value $key 'UninstallString'
-    if (!$root -and !$registered -and !$command) { return }
+    if (!$root -and !$registered -and !$command) {
+        if ((Get-Value $key 'FitBaySuiteManaged') -eq 1) { throw "Missing installation: $id" }
+        return
+    }
     if (!$root -or $root -notmatch '^(?:[a-z]:\\|\\\\[^\\]+\\[^\\]+\\)' -or
         [IO.Path]::GetFullPath($root) -ne $root -or !$root.TrimEnd('\') -or
         $root.TrimEnd('\') -eq [IO.Path]::GetPathRoot($root).TrimEnd('\') -or
@@ -83,6 +86,22 @@ function Remove-ProductLinks($product, $paths) {
         }
     }
 }
+function Assert-DisjointProducts($products) {
+    foreach ($peer in $products) {
+        foreach ($other in $products | Where-Object Slot -ne $peer.Slot) {
+            if ($peer.Root -eq $other.Root -or (($peer.Root+'\').StartsWith($other.Root+'\',[StringComparison]::OrdinalIgnoreCase) -and
+                !($other.Slot -eq 'Workbench' -and $peer.Root -eq (Join-Path $other.Root $peer.Slot)))) {
+                throw "Overlapping installations: $($peer.Slot), $($other.Slot)"
+            }
+        }
+    }
+}
+function Restore-Listing($key) {
+    if ((Get-Value $key 'FitBaySuiteManaged') -eq 1) {
+        Remove-Value $key 'SystemComponent'
+        Remove-Value $key 'FitBaySuiteManaged'
+    }
+}
 function Sync-Listing($products) {
     $controller = $products | Where-Object { (Get-Value $_.Key 'FitBaySuiteController') -eq 1 } | Select-Object -First 1
     $existing = $current.OpenSubKey($suiteKey)
@@ -105,29 +124,40 @@ function Sync-Listing($products) {
         Set-Value $suiteKey 'DisplayName' 'FitBay'
         foreach ($product in $products) {
             Set-Value $slots $product.Slot $product.Root
+            Set-Value $product.Key 'FitBaySuiteManaged' 1 'DWord'
             Set-Value $product.Key 'SystemComponent' 1 'DWord'
         }
     } else {
         # The last suite-aware standalone component can be removed while a
         # legacy product remains. Restore its original working Apps entry.
-        foreach ($product in $products) { Remove-Value $product.Key 'SystemComponent' }
+        foreach ($product in $products) { Restore-Listing $product.Key }
         $current.DeleteSubKeyTree($suiteKey,$false)
     }
 }
 try {
     $products = @()
+    $invalidKeys = @()
     foreach ($id in $guids.Keys) {
         if ($Operation -eq 'Detach' -and $id -eq $Slot) { continue }
         try {
             $product = Get-Product $id
             if ($product) { $products += $product }
         } catch {
-            if ($Operation -eq 'RemoveSuite' -or $id -eq $Slot) { throw }
+            if ($id -eq $Slot) { throw }
+            $invalidKeys += "$arp\$($guids[$id])"
             # A stale or unrelated record is not eligible for adoption.
             Write-Warning $_
         }
     }
     $own = $products | Where-Object Slot -eq $Slot
+    if ($Operation -eq 'Preflight') {
+        if ($own -and $own.Root -ne $Directory) { throw "Upgrade must use the registered $Slot directory" }
+        if (!$own) { $products += [pscustomobject]@{ Slot=$Slot; Root=$Directory } }
+        Assert-DisjointProducts $products
+        return
+    }
+    foreach ($key in $invalidKeys) { Restore-Listing $key }
+    Assert-DisjointProducts $products
     if ($Operation -ne 'Detach' -and (!$own -or $own.Root -ne $Directory)) { throw "Unexpected active $Slot directory" }
     if ($Operation -eq 'Register') {
         Set-Value $own.Key 'FitBaySuiteController' 1 'DWord'
@@ -146,14 +176,6 @@ try {
         # All paths and identities are checked before the first file operation.
         if ((Get-Value $suiteKey 'InstallLocation') -ne $own.Root -or
             (Get-Value $own.Key 'FitBaySuiteController') -ne 1) { throw 'Stale suite entry' }
-        foreach ($peer in $products) {
-            foreach ($other in $products | Where-Object Slot -ne $peer.Slot) {
-                if ($peer.Root -eq $other.Root -or (($peer.Root+'\').StartsWith($other.Root+'\',[StringComparison]::OrdinalIgnoreCase) -and
-                    !($other.Slot -eq 'Workbench' -and $peer.Root -eq (Join-Path $other.Root $peer.Slot)))) {
-                    throw "Overlapping installations: $($peer.Slot), $($other.Slot)"
-                }
-            }
-        }
         foreach ($peer in $products | Where-Object Slot -ne $Slot) {
             Set-Value $history $peer.Slot $peer.Root
             # NSIS _?= must be last and unquoted. A private copy permits the

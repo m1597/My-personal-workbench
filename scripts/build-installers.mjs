@@ -50,10 +50,30 @@ const installUtil = path.join(templates, 'include', 'installUtil.nsh')
 const uninstallScript = await readFile(installUtil, 'utf8')
 // biome-ignore lint/suspicious/noTemplateCurlyInString: literal NSIS control flow.
 const updateFlag = '  ${if} ${isDeleteAppData}'
-if (uninstallScript.split(updateFlag).length !== 2) throw Error('Unexpected old uninstaller flags')
+// biome-ignore lint/suspicious/noTemplateCurlyInString: literal NSIS control flow.
+const previousDirLookup = '  ${if} $installationDir == ""'
+const previousDirAt = uninstallScript.indexOf(previousDirLookup)
+if (uninstallScript.split(updateFlag).length !== 2 || previousDirAt < 0) {
+  throw Error('Unexpected old uninstaller lookup or flags')
+}
+// Guard the actual command snapshot used by the pinned builder, including after a registry change.
+const checkedUninstaller =
+  uninstallScript.slice(0, previousDirAt) +
+  [
+    '  StrCmp $installationDir $INSTDIR 0 fitbayInvalidOldUninstaller',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal NSIS filename definition.
+    '  StrCmp $uninstallerFileName "$INSTDIR\\${UNINSTALL_FILENAME}" 0 fitbayInvalidOldUninstaller',
+    '  Goto fitbayOldUninstallerVerified',
+    '  fitbayInvalidOldUninstaller:',
+    '  SetErrorLevel 2',
+    '  Quit',
+    '  fitbayOldUninstallerVerified:',
+    '',
+  ].join('\n') +
+  uninstallScript.slice(previousDirAt)
 await writeFile(
   installUtil,
-  uninstallScript.replace(
+  checkedUninstaller.replace(
     updateFlag,
     '  !ifdef DO_NOT_CREATE_DESKTOP_SHORTCUT\n    StrCpy $0 "$0 --keep-shortcuts"\n  !endif\n' +
       updateFlag,
