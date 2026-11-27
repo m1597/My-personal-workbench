@@ -36,7 +36,10 @@ const safeName = (name) =>
 export async function recyclableLyrics(db, audio) {
   const lyric = await ownedLyrics(db, audio)
   if (!lyric) return null
-  return (await hasOtherRecording(audio)) ? null : lyric
+  const other = db.prepare(
+    'SELECT 1 FROM lyric_files WHERE file=? COLLATE NOCASE AND audio<>? COLLATE NOCASE LIMIT 1',
+  ).get(lyric, audio)
+  return other || (await hasOtherRecording(audio)) ? null : lyric
 }
 async function hasOtherRecording(audio) {
   const current = path.parse(audio)
@@ -82,7 +85,8 @@ export function forgetLocal(store, ids) {
 }
 async function finishTrash(store, row, trash) {
   const db = store.db
-  if (row.lyric && row.lyric === (await recyclableLyrics(db, row.file))) {
+  if (row.lyric && !(await confirmedMissing(row.file)) && !stat(row.file)) return
+  if (row.lyric && !stat(row.file) && row.lyric === (await recyclableLyrics(db, row.file))) {
     try {
       await trash(row.lyric)
     } catch {
@@ -350,6 +354,40 @@ export async function sortFavorite(store, id, manualDirectory, onMove) {
   } catch {
     pending('文件冲突、正在使用或目录不可用，请另选文件夹或重试')
   }
+}
+// Historical audio rows may already have cascaded away. The sidecar ownership ledger
+// survives that deletion and records both the original file identity and content hash.
+export async function retireOrphanLyrics(store, trash, signal) {
+  const directory = store.get('music-recommend-dir')
+  const db = store.db
+  if (!directory || !await safeDir(directory).catch(() => false) ||
+      !db.prepare("SELECT 1 FROM sqlite_master WHERE name='lyric_files'").get()) return 0
+  let failures = 0
+  for (const { audio, file } of db.prepare('SELECT audio,file FROM lyric_files').all()) {
+    signal?.throwIfAborted()
+    if (pathKey(path.dirname(audio)) !== pathKey(directory)) continue
+    if (!await confirmedMissing(audio) || file !== await recyclableLyrics(db, audio)) continue
+    if (db.prepare('SELECT 1 FROM local_tracks WHERE path_key=?').get(pathKey(audio))) continue
+    try {
+      await trash(file)
+      db.prepare('DELETE FROM lyric_files WHERE audio=? AND file=?').run(audio, file)
+    } catch {
+      failures++
+    }
+  }
+  return failures
+}
+export async function retirePendingBatches(store, operations, signal) {
+  const runs = store.db.prepare('SELECT batch FROM retiring_daily_batches').all()
+  const orphanFailures = await retireOrphanLyrics(store, operations.trash, signal)
+  let failures = orphanFailures
+  for (const { batch } of runs) {
+    const result = await retireDownloads(store, batch, operations, signal)
+    failures += result.failures
+    if (!result.failures && !orphanFailures)
+      store.db.prepare('DELETE FROM retiring_daily_batches WHERE batch=?').run(batch)
+  }
+  return failures
 }
 export async function retireDownloads(store, previous, { trash, forget }, signal) {
   const rows = store.db

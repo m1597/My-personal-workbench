@@ -73,6 +73,7 @@ export class MusicStore {
     this.db.exec(`CREATE TABLE IF NOT EXISTS daily_downloads(
       local TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE,
       batch TEXT NOT NULL,file TEXT NOT NULL,digest TEXT NOT NULL,identity TEXT);
+      CREATE TABLE IF NOT EXISTS retiring_daily_batches(batch TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS favorite_moves(local TEXT PRIMARY KEY, original TEXT NOT NULL, destination TEXT NOT NULL, copies TEXT NOT NULL, sources TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS favorite_sort_pending(local TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE, reason TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS pending_trash(local TEXT PRIMARY KEY,file TEXT NOT NULL);`)
@@ -537,8 +538,10 @@ export class MusicStore {
         this.db
           .prepare("INSERT INTO recommendation_runs VALUES(?,?,'running','正在准备推荐')")
           .run(batch, targetCount)
-        if (!this.get('retiring-daily-run'))
-          this.set('retiring-daily-run', this.get('latest-daily-run'))
+        for (const key of ['retiring-daily-run', 'latest-daily-run']) {
+          const previous = this.get(key)
+          if (previous) this.db.prepare('INSERT OR IGNORE INTO retiring_daily_batches VALUES(?)').run(previous)
+        }
         this.set('latest-daily-run', batch)
       }
       for (const row of accepted) {

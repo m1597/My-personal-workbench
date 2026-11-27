@@ -165,6 +165,7 @@ try {
   )
   await page.getByRole('button', { name: '选择分类根目录' }).click()
   await expect(page.getByText(fresh, { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '返回', exact: true }).click()
   await openDiscovery(page, true)
   await page.getByRole('button', { name: '试听即时归类', exact: true }).click()
   await page.getByRole('button', { name: '收藏当前歌曲' }).click()
