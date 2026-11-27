@@ -233,7 +233,9 @@ export class WatchedLibrary {
         const stamp = changed.get(row.file)
         if (watchStamp(current) !== stamp) continue
         const key = pathKey(row.file)
-        const existing = db.prepare('SELECT id FROM local_tracks WHERE path_key=?').get(key)
+        const existing = db
+          .prepare('SELECT id,fileIdentity FROM local_tracks WHERE path_key=?')
+          .get(key)
         const cached =
           existing &&
           db
@@ -243,15 +245,17 @@ export class WatchedLibrary {
         if (!digest || this.closed) continue
         let candidates = row.identity
           ? db
-              .prepare('SELECT id,file FROM local_tracks WHERE fileIdentity=? AND path_key<>?')
+              .prepare(
+                'SELECT id,file,path_key FROM local_tracks WHERE fileIdentity=? AND path_key IS NOT ?',
+              )
               .all(row.identity, pathKey(row.file))
           : []
-        if (!existing && !candidates.length) {
+        if ((!existing || existing.fileIdentity !== row.identity) && !candidates.length) {
           candidates = db
             .prepare(
-              'SELECT t.id,t.file,t.fileIdentity FROM watched_recording_digests d JOIN local_tracks t ON t.id=d.local WHERE digest=?',
+              'SELECT t.id,t.file,t.fileIdentity,t.path_key FROM watched_recording_digests d JOIN local_tracks t ON t.id=d.local WHERE digest=? AND t.path_key IS NOT ?',
             )
-            .all(digest)
+            .all(digest, key)
           // A cross-volume move is initially visible as a copy. Give the file manager
           // time to remove the source; a lasting duplicate gets an independent ID.
           if (
@@ -269,7 +273,7 @@ export class WatchedLibrary {
         const missing =
           original &&
           (await this.library.acceptsVolume(original.file)) &&
-          (await confirmedMissing(original.file))
+          (original.path_key === null || (await confirmedMissing(original.file)))
         const final = await lstat(row.file, { bigint: true }).catch(() => null)
         if (!final || watchStamp(final) !== stamp || this.closed) continue
         if (
@@ -282,18 +286,29 @@ export class WatchedLibrary {
           continue
         if (
           missing &&
-          !db.prepare('SELECT 1 FROM local_tracks WHERE path_key=?').get(key) &&
           db
-            .prepare('SELECT 1 FROM local_tracks WHERE id=? AND file=?')
-            .get(original.id, original.file)
+            .prepare('SELECT 1 FROM local_tracks WHERE id=? AND file=? AND path_key IS ?')
+            .get(original.id, original.file, original.path_key)
         ) {
-          this.library.upsert(row, original.id)
-          this.library.restoreMovedMembership(original.id)
+          // Keep a displaced recording's ID and last known location, but release its claim
+          // on this file. Existing playlists referencing it must never play the new occupant.
+          db.exec('BEGIN IMMEDIATE')
+          try {
+            db.prepare(
+              'UPDATE local_tracks SET path_key=NULL,available=0,awaitingLocation=1 WHERE path_key=? AND id<>?',
+            ).run(key, original.id)
+            this.library.upsert(row, original.id)
+            this.library.restoreMovedMembership(original.id)
+            db.prepare('DELETE FROM daily_downloads WHERE local=? AND file=?').run(
+              original.id,
+              original.file,
+            )
+            db.exec('COMMIT')
+          } catch (error) {
+            db.exec('ROLLBACK')
+            throw error
+          }
           this.onMove(original.id, row.file)
-          db.prepare('DELETE FROM daily_downloads WHERE local=? AND file=?').run(
-            original.id,
-            original.file,
-          )
         } else this.library.upsert(row)
         db.prepare(
           'INSERT OR REPLACE INTO watched_recording_digests(local,stamp,digest) SELECT id,?,? FROM local_tracks WHERE path_key=?',

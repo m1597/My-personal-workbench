@@ -925,6 +925,18 @@ export class LocalLibrary {
     const stat = await audioFileStat(row.file)
     const size = stat ? Number(stat.size) : null
     const identity = fileIdentity(stat)
+    // A known recording may have moved onto this path before the watcher reconciles it.
+    if (
+      identity &&
+      row.fileIdentity &&
+      row.fileIdentity !== identity &&
+      this.watchedRoot(row.file)
+    ) {
+      this.db
+        .prepare('UPDATE local_tracks SET available=0 WHERE id=? AND file=? AND fileIdentity=?')
+        .run(row.id, row.file, row.fileIdentity)
+      return false
+    }
     const ok = !row.unplayable && size !== null
     if (
       size === null &&
@@ -956,7 +968,7 @@ export class LocalLibrary {
     )
       this.db
         .prepare(
-          'UPDATE local_tracks SET available=?,size=?,fileIdentity=COALESCE(?,fileIdentity) WHERE id=? AND file=?',
+          'UPDATE local_tracks SET available=?,size=?,fileIdentity=COALESCE(?,fileIdentity) WHERE id=? AND file=? AND awaitingLocation=0',
         )
         .run(Number(ok), size, identity, row.id, row.file)
     return ok

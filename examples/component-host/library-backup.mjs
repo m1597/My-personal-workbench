@@ -7,19 +7,23 @@ export const backupLimit = 32 * 1024 * 1024
 export function exportLibrary(store, taste) {
   const tracks = store.library
     .list()
-    .map(({ id, title, artist, album, duration, listed, observedAt, size, favorite, origin }) => ({
-      id,
-      file: store.library.row(id).file,
-      title,
-      artist,
-      album,
-      duration,
-      listed,
-      observedAt,
-      size,
-      favorite,
-      origin,
-    }))
+    .map(({ id, title, artist, album, duration, listed, observedAt, size, favorite, origin }) => {
+      const row = store.library.row(id)
+      return {
+        id,
+        file: row.file,
+        ...(row.path_key === null ? { displaced: true } : {}),
+        title,
+        artist,
+        album,
+        duration,
+        listed,
+        observedAt,
+        size,
+        favorite,
+        origin,
+      }
+    })
   const allLists = store.library.playlists()
   const localIds = new Set(tracks.map((t) => t.id))
   const playlists = allLists
@@ -129,7 +133,8 @@ export function validateBackup(value) {
         text(t.file, 32766) &&
         path.isAbsolute(t.file) &&
         Object.hasOwn(audioTypes, path.extname(t.file).toLowerCase()) &&
-        !paths.has(pathKey(t.file)) &&
+        (t.displaced === undefined || typeof t.displaced === 'boolean') &&
+        (t.displaced || !paths.has(pathKey(t.file))) &&
         text(t.title, 2048) &&
         text(t.artist, 2048) &&
         text(t.album, 2048) &&
@@ -142,7 +147,7 @@ export function validateBackup(value) {
         (t.size === null || (Number.isSafeInteger(t.size) && t.size >= 0)),
     )
     ids.add(t.id)
-    paths.add(pathKey(t.file))
+    if (!t.displaced) paths.add(pathKey(t.file))
   }
   const names = new Set(),
     lists = new Set(),
@@ -227,7 +232,7 @@ export function restoreLibrary(store, taste, value) {
     const byPath = db.prepare('SELECT id FROM local_tracks WHERE path_key=?'),
       byId = db.prepare('SELECT id FROM local_tracks WHERE id=?')
     for (const t of value.tracks) {
-      const already = byPath.get(pathKey(t.file))?.id,
+      const already = t.displaced ? undefined : byPath.get(pathKey(t.file))?.id,
         same = byId.get(t.id)?.id
       if (already && same && already !== same) throw Error('歌曲标识与现有路径冲突，曲库资料已保留')
       const id = already || same || t.id
@@ -239,7 +244,7 @@ export function restoreLibrary(store, taste, value) {
         db.prepare(`INSERT INTO local_tracks(id,path_key,file,title,artist,album,duration,listed,observedAt,size,favorite,importedOrigin,available,awaitingLocation)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0,1)`).run(
           id,
-          pathKey(t.file),
+          t.displaced ? null : pathKey(t.file),
           t.file,
           t.title,
           t.artist,

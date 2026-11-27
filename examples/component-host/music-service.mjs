@@ -37,7 +37,7 @@ import {
   setListeningPreference,
 } from './music-preferences.mjs'
 import { lstat, readFile, realpath } from 'node:fs/promises'
-import { openAudio, pathKey, regularFile } from './music/local-files.mjs'
+import { fileIdentity, openAudio, pathKey, regularFile } from './music/local-files.mjs'
 import { serviceErrorMessage } from './music-download-diagnosis.mjs'
 import { registerLx } from './lx-music.mjs'
 import path from 'node:path'
@@ -624,8 +624,12 @@ export function musicService(
       for (const { row, lyric } of targets) {
         try {
           if (epoch !== viewEpoch) throw Error('窗口已关闭，尚未处理的歌曲已保留')
+          const fresh = store.library.row(row.id)
           if (
-            store.library.row(row.id).file !== row.file ||
+            fresh.file !== row.file ||
+            fresh.awaitingLocation ||
+            (row.fileIdentity &&
+              row.fileIdentity !== fileIdentity(await lstat(row.file, { bigint: true }))) ||
             !(await store.library.acceptsVolume(row.file)) ||
             !(await regularFile(row.file))
           )

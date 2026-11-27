@@ -1,5 +1,6 @@
 import path from 'node:path'
 import os from 'node:os'
+import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
@@ -64,9 +65,10 @@ store.set('latest-daily-run', batch)
 store.db.close()
 const db = new DatabaseSync(path.join(profile, 'fitbay-music/music.sqlite'), { readOnly: true })
 const docked = process.argv.includes('--docked')
+const hostPath = path.resolve(process.env.FITBAY_MOVE_HOST ?? 'dist/component-prototype/host')
 const app = await electron.launch({
   args: [
-    path.resolve(process.env.FITBAY_MOVE_HOST ?? 'dist/component-prototype/host'),
+    hostPath,
     '--mode=' + (docked ? 'workbench' : 'music'),
     '--workbench=' + path.resolve('out/renderer/index.html'),
     '--user-data-dir=' + profile,
@@ -190,6 +192,79 @@ try {
     path.parse(root).root,
     '→',
     path.parse(disk).root,
+  )
+  const originalFile = path.join(a, '同名.wav')
+  const vacantFile = path.join(b, '同名.wav')
+  const sourceAudio = Buffer.from(recording('fitbay-tone-1')),
+    priorAudio = Buffer.from(recording('fitbay-tone-2'))
+  sourceAudio[sourceAudio.length - 1] ^= 1
+  priorAudio[priorAudio.length - 1] ^= 2
+  await writeFile(originalFile, sourceAudio)
+  await writeFile(vacantFile, priorAudio)
+  const owner = (file) =>
+    db.prepare('SELECT id FROM local_tracks WHERE path_key=?').get(file.toLowerCase())?.id
+  await expect
+    .poll(() => Boolean(owner(originalFile) && owner(vacantFile)), { timeout: 18000 })
+    .toBe(true)
+  const original = owner(originalFile),
+    displaced = owner(vacantFile)
+  assert.notEqual(original, displaced)
+  await page.evaluate(
+    async ([original, displaced]) => {
+      await window.music.createPlaylist('原文件 A', [original])
+      await window.music.createPlaylist('旧文件 B', [displaced])
+      await window.music.setFavorite(original, true)
+      await window.music.setQueue([original])
+    },
+    [original, displaced],
+  )
+  await unlink(vacantFile)
+  await expect
+    .poll(
+      () => db.prepare('SELECT available FROM local_tracks WHERE id=?').get(displaced).available,
+    )
+    .toBe(0)
+  await rename(originalFile, vacantFile)
+  await expect.poll(() => owner(vacantFile), { timeout: 6000 }).toBe(original)
+  await page.evaluate(() => window.music.refreshLocal())
+  const refs = await status()
+  assert.deepEqual(refs.playlists.find((p) => p.name === '原文件 A').tracks, [original])
+  assert.deepEqual(refs.playlists.find((p) => p.name === '旧文件 B').tracks, [displaced])
+  assert(refs.localTracks.find((t) => t.id === original).favorite)
+  assert.equal(refs.localTracks.find((t) => t.id === displaced).available, 0)
+  assert.deepEqual(refs.queue, [original])
+  await assert.rejects(page.evaluate((id) => window.music.localSource(id), displaced))
+  await assert.rejects(
+    page.evaluate((id) => window.music.trashLocal(id), displaced),
+    /重新定位/,
+  )
+  await page.getByRole('tab', { name: '歌单', exact: true }).click()
+  await button('原文件 A').click()
+  await page.locator('.library-row .library-name strong').filter({ hasText: '同名' }).dblclick()
+  await expect
+    .poll(() => page.locator('audio').evaluate((el) => !el.paused && el.currentTime > 0))
+    .toBe(true)
+  assert.equal((await status()).current, original)
+  assert.deepEqual(await readFile(rowFile(original)), sourceAudio)
+  const { exportLibrary, restoreLibrary } = await import(
+    pathToFileURL(path.join(hostPath, 'library-backup.mjs')).href
+  )
+  const sourceStore = new MusicStore(path.join(profile, 'fitbay-music'))
+  const restoredStore = new MusicStore(path.join(root, 'restored-library'))
+  try {
+    const taste = { document: () => ({ text: '', updatedAt: '', incorporated: [] }) }
+    const backup = exportLibrary(sourceStore, taste)
+    restoreLibrary(restoredStore, taste, backup)
+    const getList = (name) => restoredStore.library.playlists().find((list) => list.name === name)
+    assert.deepEqual(getList('原文件 A').tracks, [original])
+    assert.deepEqual(getList('旧文件 B').tracks, [displaced])
+    assert.equal(restoredStore.library.row(displaced).path_key, null)
+  } finally {
+    sourceStore.db.close()
+    restoredStore.db.close()
+  }
+  console.log(
+    'PASS moved A plays through its playlist at the vacated B path; B stays offline, both IDs and playlists retained',
   )
 } catch (e) {
   console.error((await app.windows().at(-1)?.locator('body').textContent())?.slice(0, 2500))
