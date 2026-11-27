@@ -623,6 +623,7 @@ lx.on('request',()=>[]); lx.send('inited',{sources:{wy:{actions:['search','music
     globalThis.holdTransfer = true
   })
   await openDiscovery(page, true)
+  await page.getByLabel('想让 AI 推荐什么？（选填）').fill('测试本批播放队列')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   await expect(page.getByText(/已入库 4\/5/)).toBeVisible({
     timeout: 30000,

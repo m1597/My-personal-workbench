@@ -436,6 +436,8 @@ async function verify() {
       'data:image/png;base64,' +
       (await fs.readFile('src/renderer/public/fitbay.png')).toString('base64')
     const recommendation = page.locator('.music-list li').filter({ hasText: '晨风' }).first()
+    // Artwork loads when the row enters the scroll viewport, as during normal browsing.
+    await recommendation.scrollIntoViewIfNeeded()
     await expect(recommendation.locator('.album-art img')).toHaveAttribute('src', expectedCover)
     const frame = recommendation.locator('.music-track-icon'),
       button = frame.getByRole('button')
