@@ -63,9 +63,12 @@ try {
     ['独立打开', 'window', ''],
     ['加入工作台', 'embedded', '1'],
   ]) {
-    await library(
-      `[...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || b.textContent.trim()) === ${JSON.stringify(button)}).click()`,
-    )
+    if (!(await library("Boolean(document.querySelector('.prompt-settings'))"))) {
+      await library("document.querySelector('button[aria-label=\"提示词库设置\"]').click()")
+    }
+    const control = `[...document.querySelectorAll('.prompt-settings button')].find(b => b.textContent.trim() === ${JSON.stringify(button)})`
+    await expect.poll(() => library(`Boolean(${control})`)).toBe(true)
+    await library(`${control}.click()`)
     await expect
       .poll(() => library("document.querySelector('[data-surface]').dataset.surface"))
       .toBe(surface)

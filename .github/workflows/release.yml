@@ -8,6 +8,7 @@ on:
         "codex/preview-0.2.3",
         "codex/release-0.2.4",
         "codex/preview-0.2.5",
+        "codex/resume-1127-candidate",
       ]
     tags: ["v*"]
 permissions:
