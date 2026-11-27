@@ -37,6 +37,7 @@ class SourceDownloadError extends Error {}
 class AddressError extends SourceDownloadError {
   kind = 'address'
 }
+class BrokenAddress extends AddressError {}
 class TransferError extends SourceDownloadError {}
 class TransferDeadline extends TransferError {}
 class InvalidAudio extends SourceDownloadError {
@@ -465,6 +466,7 @@ export async function saveRecording(
       .finally(() => clearTimeout(connectionTimer))
     if (res.statusCode !== 200) {
       res.destroy()
+      if (res.statusCode === 410) throw new BrokenAddress('音频地址已永久移除（HTTP 410）')
       throw new SourceDownloadError('音频服务器拒绝下载（HTTP ' + res.statusCode + '）')
     }
     res.setTimeout(dailyId ? 10000 : 120000, () =>
@@ -476,7 +478,7 @@ export async function saveRecording(
       transform(chunk, _encoding, cb) {
         hash?.update(chunk)
         size += chunk.length
-        if (size > 512 * 1024 * 1024) cb(new InvalidAudio('音频超过单曲大小限制'))
+        if (size > 512 * 1024 * 1024) cb(new RecordingError('unusable', '音频超过单曲大小限制'))
         else cb(null, chunk)
       },
     })
@@ -516,6 +518,19 @@ export async function saveRecording(
       Math.abs(info.durationSeconds - format.duration) > Math.max(3, info.durationSeconds * 0.025)
     )
       throw new InvalidAudio('音频时长与所选完整录音不符')
+    if (info.expectedQuality) {
+      const quality = info.expectedQuality
+      const bitrate = /^(128|192|320)k$/.exec(quality)
+      if (
+        (['flac', 'flac24bit', 'hires'].includes(quality) && format.lossless === false) ||
+        (quality === 'flac24bit' && format.bitsPerSample > 0 && format.bitsPerSample < 24) ||
+        (bitrate &&
+          format.codecProfile === 'CBR' &&
+          format.bitrate > 0 &&
+          format.bitrate < Number(bitrate[1]) * 980)
+      )
+        throw new InvalidAudio('音频实际编码低于所选音质')
+    }
     const name = (info.singer + ' - ' + info.name)
       .normalize()
       .replace(/[<>:"/\\|?*\p{Cc}]/gu, '_')
@@ -1504,7 +1519,9 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       )
     }
     if (typeof url !== 'string' || !url || url.length > 16384)
-      throw new AddressError('音乐源未返回可用地址')
+      throw new BrokenAddress('音乐源未返回可用地址')
+    if (!URL.canParse(url) || !['http:', 'https:'].includes(new URL(url).protocol))
+      throw new BrokenAddress('音乐源返回无效地址')
     return url
   }
   async function fetchRecording(
@@ -1519,6 +1536,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
     canRetry = true,
     lyricTasks,
     replacing,
+    expectedQuality,
   ) {
     for (let attempt = 0; ; attempt++) {
       const url =
@@ -1532,6 +1550,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           {
             name: dailyId ? text(recordingDisplayTitle(row)) : text(row.name),
             durationSeconds: row.durationSeconds,
+            expectedQuality,
             singer: text(row.singer),
             albumName: text(row.albumName),
           },
@@ -1543,6 +1562,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           replacing,
         )
         if (filename && !auditionId) {
+          catalog().recordWorking(src)
           const bytes = (await lstat(path.join(dir, filename)).catch(() => null))?.size
           if (bytes > 0) {
             const key = sourceKey(src)
@@ -1911,6 +1931,25 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         ['missing', 'unknown', 'denied', 'preview', 'quality', 'mixed', 'ignored'].includes(
           error.kind,
         )
+      let lockedRecording = saved
+      function sameVersion(row) {
+        if (!lockedRecording) return true
+        const first = lockedRecording.row
+        if (first === row) return true
+        const firstAlbum = text(first.albumName).normalize('NFKC').toLowerCase()
+        const nextAlbum = text(row.albumName).normalize('NFKC').toLowerCase()
+        const match = titleMatch(
+          { title: recordingDisplayTitle(first), artist: first.singer },
+          row,
+          { exactChart: true },
+        )
+        if (!match || (firstAlbum && nextAlbum && firstAlbum !== nextAlbum)) return false
+        return !(
+          first.durationSeconds > 0 &&
+          row.durationSeconds > 0 &&
+          Math.abs(first.durationSeconds - row.durationSeconds) > 3
+        )
+      }
       const selectRecording = async (src, probeSignal = signal) => {
         const catalog = catalogKey(src)
         const known = health?.catalogRecordings.get(JSON.stringify([item.title, item.artist]))
@@ -2002,6 +2041,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         const candidates = new Map()
         const reasons = new Set()
         for (const row of relevant) {
+          if (!sameVersion(row)) continue
           const grant = rights?.get(row.id)
           const right = permission(src, row)
           if (right !== 'granted' && !(right === 'unknown' && grant?.length)) {
@@ -2011,7 +2051,10 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           const qualities = recordingQualities(src, row).filter(
             (q) => right === 'granted' || grant.includes(q),
           )
-          const quality = [prefs.quality, '320k', ...qualities].find((q) => qualities.includes(q))
+          const order = lockedRecording
+            ? [lockedRecording.quality]
+            : [prefs.quality, '320k', ...qualities]
+          const quality = order.find((q) => qualities.includes(q))
           if (!quality) {
             reasons.add('quality')
             continue
@@ -2098,6 +2141,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
             preparedUrl,
             canRetry,
             health?.lyricTasks,
+            undefined,
+            !initialSources.has(keyFor(src)) || src !== lockedRecording?.src ? quality : undefined,
           )
         }
       }
@@ -2115,6 +2160,8 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
       const probe = async (src, probeSignal) => {
         probeSignal.throwIfAborted()
+        if (!bank.isAvailable(src))
+          throw new RecordingError('source', '此来源连续返回无效录音，暂缓使用')
         const suspended =
           health &&
           [keyFor(src), catalogKey(src)]
@@ -2124,7 +2171,18 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           throw new RecordingError('network', '同批暂时跳过此来源：' + suspended.message)
         if (health && src.permanentSave === false)
           throw new RecordingError('denied', explanations.denied)
-        const candidate = saved || (await selectRecording(src, probeSignal))
+        const candidate =
+          saved && keyFor(src) === keyFor(saved.src)
+            ? saved
+            : await selectRecording(src, probeSignal)
+        if (candidate) {
+          if (
+            !sameVersion(candidate.row) ||
+            (lockedRecording && lockedRecording.quality !== candidate.quality)
+          )
+            throw new RecordingError('missing', '此来源缺少已选录音版本或音质')
+          lockedRecording ??= candidate
+        }
         if (batchSignal && candidate && prefs.recommendDir) {
           const identity = versionInfo(src, candidate.row, candidate.quality)
           if (!ownedRecording(identity) && !hasLocalCopy(candidate.row))
@@ -2138,9 +2196,12 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
         }
         return candidate
       }
-      let sources = saved ? [saved.src] : installed
+      let sources = saved
+        ? [saved.src, ...installed.filter((src) => keyFor(src) !== keyFor(saved.src))]
+        : installed
       // Prefer an independent active script while repository-managed candidates are being verified.
-      const triedSources = new Set(sources.map(keyFor))
+      const initialSources = new Set(sources.map(keyFor))
+      const triedSources = new Set(initialSources)
       const deferredDeep = []
       let checkedInstalled = !independent
       let recoveredCatalog = false
@@ -2156,6 +2217,11 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
       }
       const timedOutUrls = new Set()
       let deferredTransfer
+      if (!sources.length && !saved) {
+        recoveredCatalog = true
+        await refreshSources()
+        sources = await newSources()
+      }
       while (sources.length) {
         const expand = []
         for await (const { src, candidate, error: searchError } of availableSources(
@@ -2176,6 +2242,14 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           } catch (error) {
             signal.throwIfAborted()
             if (isStorageError(error)) throw error
+            if (error instanceof BrokenAddress || error instanceof InvalidAudio) {
+              const recording = JSON.stringify(
+                [recordingDisplayTitle(lockedRecording.row), lockedRecording.row.singer].map((v) =>
+                  String(v).normalize('NFKC').trim().toLowerCase(),
+                ),
+              )
+              if (bank.recordBroken(src, recording)) await refreshSources()
+            }
             if (
               health &&
               ['network', 'source-request'].includes(failureKind(error)) &&
@@ -2206,7 +2280,7 @@ export function registerLx(bind, getStore, dialog, lyricsSaved) {
           phase = 'deep'
           continue
         }
-        if (!recoveredCatalog && !saved && !choicesForItem.size) {
+        if (!recoveredCatalog && !choicesForItem.size) {
           recoveredCatalog = true
           await refreshSources()
           sources = await newSources()

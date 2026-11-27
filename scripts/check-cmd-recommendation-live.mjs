@@ -73,10 +73,21 @@ try {
     store.db.close()
   }
   let page
-  if (process.env.FITBAY_TEST_MUSIC_EXE) {
+  const devHost = process.env.FITBAY_TEST_DEV_HOST
+  if (process.env.FITBAY_TEST_MUSIC_EXE || devHost) {
     app = await _electron.launch({
       executablePath: process.env.FITBAY_TEST_MUSIC_EXE,
-      args: [`--user-data-dir=${profile}`, '--mute-audio'],
+      args: [
+        ...(devHost
+          ? [
+              path.resolve(devHost),
+              '--mode=music',
+              '--workbench=' + path.resolve('out/renderer/index.html'),
+            ]
+          : []),
+        `--user-data-dir=${profile}`,
+        '--mute-audio',
+      ],
       env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
     })
     page = await app.firstWindow()

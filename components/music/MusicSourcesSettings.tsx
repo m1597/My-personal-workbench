@@ -6,6 +6,7 @@ type CatalogEntry = { id: string; name: string }
 type Installed = CatalogEntry & {
   origin: string | null
   disabled?: string
+  pausedPlatforms?: string[]
   origins: string[]
   platform: string
   searchPlatforms?: string[]
@@ -93,6 +94,7 @@ export function MusicSourcesSettings() {
               <Option key={item.id} value={item.id} text={item.name} disabled={!!item.disabled}>
                 {item.name}
                 {item.disabled ? '（已停用：' + item.disabled + '）' : ''}
+                {item.pausedPlatforms?.length ? '（部分推荐来源暂缓使用）' : ''}
               </Option>
             ))}
           </Dropdown>
@@ -114,6 +116,8 @@ export function MusicSourcesSettings() {
                 } as Record<string, string>
               )[p.platform] ?? p.platform}{' '}
               · {p.search === 'source' ? '源内搜索' : '平台目录搜索'} · {p.quality.join(' / ')}
+              {active.pausedPlatforms?.includes(p.platform) &&
+                ' · 连续返回无效录音，推荐暂缓使用；重新选择此源可重试'}
               <br />
             </span>
           ))}

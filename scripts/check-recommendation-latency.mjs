@@ -1,3 +1,4 @@
+import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 import { openDiscovery } from './discovery-fixture.mjs'
 import { offlineSourceRepository } from './music-source-fixture.mjs'
 import assert from 'node:assert/strict'
@@ -23,6 +24,7 @@ const sources = [
     `if(action==='musicUrl')return 'https://1.1.1.1/recording/'+encodeURIComponent(info.musicInfo.name);
     if(action==='lyric')return '';
     const [name,singer]=info.keyword.split(' ');
+    if(name==='锁定专辑')return [{id:name,name,singer,albumName:'其他唱片',allowPermanentSave:true}];
     if(name.startsWith('故障'))throw Error('检索暂不可用');
     if(name.startsWith('缺歌') || name.startsWith('目录恢复'))return [];
     if(name==='慢歌')return new Promise(()=>{});
@@ -34,6 +36,12 @@ const sources = [
     '无响应源',
     `if(action==='search' && info.keyword.startsWith('故障'))throw Error('检索暂不可用');
     if(action==='lyric')return '';
+    if(action==='search' && info.keyword.startsWith('锁定')){
+      const [name,singer]=info.keyword.split(' ')
+      return [{id:name,name,singer,albumName:'原唱片',allowPermanentSave:true}]
+    }
+    if(action==='musicUrl' && info.musicInfo.name.startsWith('锁定'))
+      return 'https://1.1.1.1/recording/'+encodeURIComponent(info.musicInfo.name)+'?alternative=1';
     if(action==='search' && info.keyword.startsWith('目录恢复'))return [];
     if(action==='search' && info.keyword.startsWith('单源恢复'))return [];
     if(action==='search' && info.keyword.startsWith('超时换源'))return [{id:'超时换源',name:'超时换源',singer:'甲',allowPermanentSave:true}];
@@ -97,6 +105,12 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
     '单源恢复',
     '目录恢复甲',
     '目录恢复乙',
+    '坏源甲',
+    '坏源乙',
+    '坏源丙',
+    '坏源丁',
+    '锁定专辑',
+    '锁定音质',
   ].entries()) {
     recordings[name] = path.join(root, name + '.wav')
     await writeFixtureRecording(recordings[name], 718 + index * 151)
@@ -192,11 +206,18 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k'],a
           }
           const respond = () =>
             receive(
-              Object.assign(fs.createReadStream(recordings[song] ?? audio), {
-                statusCode: 200,
-                headers: {},
-                setTimeout() {},
-              }),
+              Object.assign(
+                fs.createReadStream(
+                  song === '锁定音质' && !url.searchParams.has('alternative')
+                    ? audio
+                    : (recordings[song] ?? audio),
+                ),
+                {
+                  statusCode: 200,
+                  headers: {},
+                  setTimeout() {},
+                },
+              ),
             )
           req.end = () => {
             if (song === '慢传追加') globalThis.releaseSlowTransfer = respond
@@ -331,6 +352,83 @@ lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}
       assert.equal(result.diagnosis, 'storage')
       assert.match(result.error, /本地存储失败/)
       evidence.storage = { diagnosis: result.diagnosis, detail: result.error }
+      assert.equal(fixture.db.prepare('SELECT count(*) n FROM music_source_failures').get().n, 0)
+      fixture.set('music-recommend-dir', output)
+      const broken = path.join(root, 'broken.js')
+      await fs.writeFile(
+        broken,
+        `// @name 坏源检测
+lx.on('request',({action,info})=>{
+  if(action==='musicUrl')return 'bad-address'
+  if(action==='search'){
+    const [name,singer]=info.keyword.split(' ')
+    return [{id:name,name,singer,albumName:name.startsWith('锁定')?'原唱片':undefined,allowPermanentSave:true}]
+  }
+})
+lx.send('inited',{sources:{wy:{actions:['search','musicUrl'],qualitys:['320k']}}})`,
+      )
+      await app.evaluate(({ dialog }, file) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+      }, broken)
+      await page.evaluate(() => window.music.lxImport())
+      const outcomes = []
+      for (const title of ['坏源甲', '坏源乙', '坏源丙', '坏源丁']) {
+        const batch = fixture.saveSuggestions(
+          '保持同版和音质',
+          [{ title, artist: '甲', reason: '测试' }],
+          '待处理',
+        )
+        const { id } = fixture.db.prepare('SELECT id FROM items WHERE batch=?').get(batch)
+        await page.evaluate((id) => window.music.prepareRecommendation(id), id)
+        const copy = fixture.db
+          .prepare(
+            'SELECT c.source,c.quality FROM recommended_items r JOIN recording_copies c ON c.local=r.local WHERE r.item=?',
+          )
+          .get(id)
+        assert.equal(copy?.source, '健康源')
+        assert.equal(copy?.quality, '320k')
+        outcomes.push(fixture.db.prepare('SELECT count(*) n FROM music_source_failures').get().n)
+      }
+      assert.deepEqual(outcomes, [1, 2, 3, 3])
+      const invalidRequests = await app.evaluate(
+        () => globalThis.calls.filter((x) => x === '坏源检测/musicUrl').length,
+      )
+      assert.equal(invalidRequests, 3)
+      const paused = await page.evaluate(async () =>
+        (await window.music.lxSources()).installed.find((s) => s.name === '坏源检测'),
+      )
+      assert.deepEqual(paused.pausedPlatforms, ['wy'])
+      await openMusicSettings(page)
+      await selectMusicSettings(page, '音乐源')
+      const settings = page.locator('.music-source-settings')
+      await expect(settings.getByText(/连续返回无效录音/)).toBeVisible()
+      await settings.getByRole('combobox').click()
+      await page.getByRole('option', { name: /坏源检测/ }).click()
+      await expect(settings.getByText(/连续返回无效录音/)).toHaveCount(0)
+      assert.equal(fixture.db.prepare('SELECT count(*) n FROM music_source_failures').get().n, 0)
+      for (const title of ['锁定专辑', '锁定音质']) {
+        const batch = fixture.saveSuggestions(
+          '保持同版和音质',
+          [{ title, artist: '甲', reason: '测试' }],
+          '待处理',
+        )
+        const { id } = fixture.db.prepare('SELECT id FROM items WHERE batch=?').get(batch)
+        await page.evaluate((id) => window.music.prepareRecommendation(id), id)
+        const copy = fixture.db
+          .prepare(
+            'SELECT c.source,c.quality FROM recommended_items r JOIN recording_copies c ON c.local=r.local WHERE r.item=?',
+          )
+          .get(id)
+        assert.equal(copy?.source, '无响应源', title)
+        assert.equal(copy.quality, '320k')
+      }
+      evidence.lockedRecording = ['跨专辑拒绝', '降质编码拒绝']
+      evidence.quarantine = {
+        outcomes,
+        invalidRequests,
+        successfulCopies: 4,
+        manuallyRestored: true,
+      }
     } finally {
       fixture.db.close()
     }

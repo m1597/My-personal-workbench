@@ -215,6 +215,18 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
   db.exec(
     'CREATE TABLE IF NOT EXISTS music_source_rejections(origin TEXT PRIMARY KEY,blob TEXT NOT NULL)',
   )
+  db.exec(`CREATE TABLE IF NOT EXISTS music_source_failures(
+    digest TEXT NOT NULL, platform TEXT NOT NULL, recording TEXT NOT NULL, observed INTEGER NOT NULL,
+    PRIMARY KEY(digest,platform,recording))`)
+  // Three distinct recordings in the last day suspend only this script version and platform.
+  // A changed script, a verified transfer, or expiry restores eligibility.
+  const day = 24 * 60 * 60 * 1000
+  const suspended = (digest, platform) =>
+    db
+      .prepare(
+        'SELECT count(*) AS n FROM music_source_failures WHERE digest=? AND platform=? AND observed>?',
+      )
+      .get(digest, platform, Date.now() - day).n >= 3
   const columns = db
     .prepare('PRAGMA table_info(music_sources)')
     .all()
@@ -307,12 +319,15 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
       const active = current ? byDigest(fingerprint(JSON.parse(current).code)) : null
       const aliases = db.prepare('SELECT origin,source FROM music_source_origins').all()
       const installed = db
-        .prepare('SELECT id,origin,payload,disabled FROM music_sources ORDER BY rowid')
+        .prepare('SELECT id,origin,payload,disabled,digest FROM music_sources ORDER BY rowid')
         .all()
         .map((row) => ({
           id: row.id,
           origin: row.origin,
           disabled: row.disabled,
+          pausedPlatforms: ['wy', 'tx', 'kg', 'kw', 'mg'].filter((platform) =>
+            suspended(row.digest, platform),
+          ),
           origins: aliases.filter((entry) => entry.source === row.id).map((entry) => entry.origin),
           ...capabilities(JSON.parse(row.payload)),
         }))
@@ -351,6 +366,9 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
         db.prepare("SELECT payload FROM music_sources WHERE id=? AND disabled=''").get(id)
       if (!row) throw Error('未知的已导入音乐源')
       migrate()
+      db.prepare('DELETE FROM music_source_failures WHERE digest=?').run(
+        fingerprint(JSON.parse(row.payload).code),
+      )
       set('lx-source', row.payload)
       return capabilities(JSON.parse(row.payload))
     })
@@ -540,6 +558,27 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
     return complete && !budget.aborted && validReport
   }
   return {
+    isAvailable(src) {
+      return !suspended(fingerprint(src.code), src.platform)
+    },
+    recordBroken(src, recording) {
+      const digest = fingerprint(src.code)
+      db.prepare('DELETE FROM music_source_failures WHERE observed<=?').run(Date.now() - day)
+      if (suspended(digest, src.platform)) return false
+      db.prepare('INSERT OR REPLACE INTO music_source_failures VALUES(?,?,?,?)').run(
+        digest,
+        src.platform,
+        recording,
+        Date.now(),
+      )
+      return suspended(digest, src.platform)
+    },
+    recordWorking(src) {
+      db.prepare('DELETE FROM music_source_failures WHERE digest=? AND platform=?').run(
+        fingerprint(src.code),
+        src.platform,
+      )
+    },
     configuration(code = JSON.parse(get('lx-source') || 'null')?.code) {
       const active = code ? fingerprint(code) : ''
       const sources = new Set(
@@ -583,11 +622,13 @@ export function sourceCatalog(db, loadFile = fetchRepositoryFile) {
         .map(({ payload }) => JSON.parse(payload))
         .filter((src) => src.code !== current.code)
       return [current, ...others].flatMap((src) =>
-        Object.values(src.platforms ?? { [src.platform]: src }).map((platform) => ({
-          ...src,
-          ...platform,
-          permanentSave: platform.permanentSave,
-        })),
+        Object.values(src.platforms ?? { [src.platform]: src })
+          .filter((platform) => !suspended(fingerprint(src.code), platform.platform))
+          .map((platform) => ({
+            ...src,
+            ...platform,
+            permanentSave: platform.permanentSave,
+          })),
       )
     },
     alternatives(platform, quality, currentCode) {
