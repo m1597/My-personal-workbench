@@ -362,7 +362,7 @@ export async function promptRuntime({ profile, here, root, isEditor, options, se
   handle('copy', 'editor', (text) => {
     if (typeof text !== 'string' || Buffer.byteLength(text) > 4 * 1024 * 1024)
       throw Error('文本过大')
-    clipboard.writeText(text)
+    return clipboard.writeText(text)
   })
   for (const method of [
     'identity',

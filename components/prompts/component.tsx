@@ -1,11 +1,11 @@
 import { Button, Input } from '@fluentui/react-components'
-import { Search, ClipboardPaste } from 'lucide-react'
+import { Search, ClipboardPaste, Copy, FileText, BookOpen } from 'lucide-react'
 import { PromptVisual, usePromptVisual, type VisualData } from './PromptVisual'
 import { ChoiceDropdown } from '../../src/renderer/src/app/SharedDropdown'
 import { ShortcutRecorder } from '../../src/renderer/src/app/ShortcutRecorder'
 import { BackButton } from '../music/BackButton'
 import { SettingsGear, SettingsShell } from '../../src/renderer/src/app/ComponentSettings'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ComponentTheme, configureBackdrop } from '../../src/renderer/src/app/ComponentTheme'
 import './style.css'
@@ -173,6 +173,8 @@ function Palette() {
   )
 }
 function Library() {
+  const documentList = useRef<HTMLDivElement>(null)
+  const savedScroll = useRef<number | undefined>(undefined)
   const [state, setState] = useState<State>(),
     [entry, setEntry] = useState<Entry>(),
     [enlarged, enlarge] = useState(false),
@@ -368,6 +370,12 @@ function Library() {
       imageDialog.current.showModal()
   }, [enlarged])
   const selectionVersion = useRef(0)
+  useLayoutEffect(() => {
+    if (!entry && documentList.current && savedScroll.current !== undefined) {
+      documentList.current.scrollTop = savedScroll.current
+      savedScroll.current = undefined
+    }
+  }, [entry])
   const currentRoot = state?.root
   // biome-ignore lint/correctness/useExhaustiveDependencies: disk and focus events invalidate the catalogue.
   useEffect(() => {
@@ -393,11 +401,17 @@ function Library() {
       active = false
     }
   }, [currentRoot, tick, filter])
+  const visibleCards = cards.filter((c) => (!purpose || purpose === c.category) && c.match)
   const variablePattern = /\{\{([^{}\r\n]+)\}\}/g
   const variables = [...new Set(Array.from(draft.matchAll(variablePattern), (m) => m[1].trim()))]
   const result = draft.replace(variablePattern, (original, key: string) =>
     Object.hasOwn(values, key.trim()) && values[key.trim()] ? values[key.trim()] : original,
   )
+  const copyLabel = variables.some((key) => Object.hasOwn(values, key) && values[key])
+    ? '复制替换后的提示词'
+    : dirty
+      ? '复制当前草稿'
+      : '复制当前提示词'
   function discard() {
     return !dirty || window.confirm('放弃此文件未保存的修改？')
   }
@@ -618,6 +632,7 @@ function Library() {
         <div className="prompt-searchbar">
           <Input
             contentBefore={<Search size={16} aria-hidden="true" />}
+            type="search"
             aria-label="搜索提示词"
             placeholder="搜索提示词"
             value={filter}
@@ -667,39 +682,58 @@ function Library() {
         {!entry && <small className="drop-hint">可拖入 TXT 或 Markdown 文件</small>}
         <section className={entry ? 'split prompt-split reading' : 'split prompt-split'}>
           <nav aria-label="提示词">
-            <button type="button" onClick={() => setPurpose('')}>
-              全部用途
-            </button>
-            {[...new Set(cards.map((c) => c.category))].map((c) => (
-              <button
-                type="button"
-                key={c}
-                aria-pressed={purpose === c}
-                onClick={() => setPurpose(c)}
-              >
-                {c}
-              </button>
-            ))}
-            <div className="entries list">
-              {cards
-                .filter((c) => (!purpose || purpose === c.category) && c.match)
-                .map((c) => (
-                  <button
-                    type="button"
-                    key={c.name}
-                    aria-current={c.name === lastSelected || undefined}
-                    onClick={() => {
-                      if (state && discard())
-                        reset({ root: state.root, name: c.name, label: c.title, type: 'text' })
-                    }}
-                  >
+            <div className="purpose-filter">
+              <span>用途</span>
+              <ChoiceDropdown
+                aria-label="按用途筛选"
+                value={purpose}
+                choices={[
+                  { value: '', label: '全部用途' },
+                  ...[...new Set(cards.map((c) => c.category))].map((value) => ({
+                    value,
+                    label: value,
+                  })),
+                ]}
+                onChange={setPurpose}
+              />
+            </div>
+            <div className="entries list" ref={documentList}>
+              {visibleCards.map((c) => (
+                <button
+                  type="button"
+                  key={c.name}
+                  aria-current={c.name === lastSelected || undefined}
+                  onClick={() => {
+                    if (state && discard()) {
+                      savedScroll.current = documentList.current?.scrollTop
+                      reset({ root: state.root, name: c.name, label: c.title, type: 'text' })
+                    }
+                  }}
+                >
+                  {c.skill ? (
+                    <BookOpen size={16} aria-hidden="true" />
+                  ) : (
+                    <FileText size={16} aria-hidden="true" />
+                  )}
+                  <span>
                     {c.title}
                     {c.skill ? ' · Skill' : ''}
-                  </button>
-                ))}
+                  </span>
+                </button>
+              ))}
+              {!visibleCards.length && state?.root && (
+                <p className="empty-list">
+                  {filter
+                    ? '没有找到与「' + filter + '」匹配的文档'
+                    : purpose
+                      ? '此用途下暂无文档'
+                      : '当前目录暂无文档'}
+                </p>
+              )}
             </div>
           </nav>
           <article className={entry ? 'file-preview active' : 'file-preview'}>
+            {!entry && state?.root && <p className="empty-reader">选择列表中的文档即可阅读</p>}
             {enlarged && entry && (
               <dialog
                 ref={imageDialog}
@@ -764,6 +798,22 @@ function Library() {
                     }}
                   />
                   <h2>{entry.label}</h2>
+                  <Button
+                    className="copy-current"
+                    appearance="subtle"
+                    icon={<Copy size={17} />}
+                    title={copyLabel}
+                    aria-label={copyLabel}
+                    disabled={!doc}
+                    onClick={() =>
+                      void attempt(async () => {
+                        await api.copy(result)
+                        say('已复制')
+                      })
+                    }
+                  >
+                    <span>{copyLabel}</span>
+                  </Button>
                 </div>
                 <div className="tools reader-tabs">
                   <Button
@@ -889,17 +939,6 @@ function Library() {
                       }
                     >
                       保存
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void attempt(async () => {
-                          await api.copy(result)
-                          say('已复制')
-                        })
-                      }
-                    >
-                      复制本次结果
                     </button>
                   </div>
                   {conflict && (

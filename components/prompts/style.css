@@ -87,14 +87,14 @@ article,
   overflow: auto;
   min-width: 0;
 }
-.split nav button,
+.split:not(.prompt-split) nav button,
 .hits button {
   display: block;
   text-align: left;
   width: 100%;
   overflow-wrap: anywhere;
 }
-.split nav button {
+.split:not(.prompt-split) nav button {
   border: 0;
   margin: 2px 0;
 }
@@ -548,4 +548,80 @@ select option {
 }
 .markdown-table [data-align="right"] {
   text-align: right;
+}
+
+.prompt-split nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+.prompt-split .purpose-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+}
+.prompt-split .purpose-filter .fui-Dropdown {
+  flex: 1;
+  min-width: 0;
+}
+.prompt-split nav .entries {
+  display: block;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.prompt-split .entries button {
+  width: 100%;
+  text-align: start;
+  margin-block: 2px;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  border-inline-start: 3px solid transparent;
+  border-radius: 4px;
+}
+.prompt-split .entries svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+.prompt-split .entries button:hover {
+  background: var(--hover);
+}
+.prompt-split .entries button[aria-current="true"] {
+  background: var(--accent-soft);
+  border-inline-start-color: var(--accent);
+}
+.reader-heading h2 {
+  flex: 1;
+  min-width: 0;
+}
+.reader-heading .copy-current {
+  margin-inline-start: auto;
+}
+.empty-reader,
+.empty-list {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+.empty-reader {
+  margin: auto;
+  text-align: center;
+}
+@media (max-width: 700px) {
+  .prompt-split.reading nav {
+    display: none;
+  }
+  .reader-heading .copy-current span:not(.fui-Button__icon) {
+    display: none;
+  }
+  .reader-heading .copy-current {
+    min-width: 32px;
+    padding: 5px;
+  }
 }

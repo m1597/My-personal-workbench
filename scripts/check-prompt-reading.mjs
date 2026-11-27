@@ -13,7 +13,7 @@ await mkdir(root)
 await mkdir(path.join(profile, 'prompt-library'), { recursive: true })
 for (const file of ['修复分窗收起问题.md', '接入ai订阅.md'])
   await cp(path.join(source, file), path.join(root, file))
-for (let i = 0; i < 40; i++) await writeFile(path.join(root, 'test-' + i + '.txt'), 'SDK test')
+for (let i = 0; i < 40; i++) await writeFile(path.join(root, '阿文档-' + i + '.txt'), 'SDK test')
 await writeFile(
   path.join(profile, 'prompt-library/catalogue-preferences.json'),
   JSON.stringify({ defaultRoot: root, shortcut: 'F20', shortcutEnabled: false }),
@@ -154,6 +154,7 @@ try {
     )
   }
   const search = page.getByLabel('搜索提示词')
+  const expectedCopy = await readFile(path.join(source, '接入ai订阅.md'), 'utf8')
   let count = 0
   for (const [surface, width, height] of [
     ['standalone', 1160, 800],
@@ -190,11 +191,27 @@ try {
       await expect(page.getByLabel('粘贴原文')).toBeVisible()
       await paste.click()
     }
+    await search.fill('没有这个测试关键词')
+    await expect(page.getByText('没有找到与「没有这个测试关键词」匹配的文档')).toBeVisible()
+    if (surface === 'standalone') {
+      await expect(page.getByText('选择列表中的文档即可阅读')).toBeVisible()
+      await capture('no-match')
+    }
+    await search.fill('')
     await search.fill('SDK')
+    if (surface === 'standalone') {
+      const purpose = page.getByRole('combobox', { name: '按用途筛选' })
+      await purpose.click()
+      await expect(page.getByRole('option', { name: '未分类', exact: true })).toBeVisible()
+      await capture('purpose-options')
+      await page.keyboard.press('Escape')
+    }
     const nav = page.getByRole('navigation', { name: '提示词' })
     const card = nav.getByRole('button', { name: /pi-ai/ })
     await card.scrollIntoViewIfNeeded()
-    const position = await nav.evaluate((el) => el.scrollTop)
+    const list = nav.locator('.entries')
+    const position = await list.evaluate((el) => el.scrollTop)
+    assert(position > 0, 'list must be scrolled before opening the document')
     await card.click()
     const reader = page.locator('.reader-content')
     const generate = btn('生成可视化')
@@ -241,6 +258,43 @@ try {
     assert(anchorBox.y >= tabs.y + tabs.height - 1)
     await expect(btn('原文')).toHaveAttribute('aria-pressed', 'true')
     await expect(btn('可视化')).toHaveAttribute('aria-pressed', 'false')
+    const copy = btn('复制当前提示词')
+    await expect(copy).toBeInViewport()
+    const before = await reader.evaluate((el) => el.scrollTop)
+    assert(before > 0)
+    await app.evaluate(async ({ clipboard, ClipboardItem }) => {
+      // Electron read items are lazy and cannot be passed back to write().
+      // Materialize every representation before the UI changes the system clipboard.
+      globalThis.priorClipboard = await Promise.all(
+        (await clipboard.read()).map(async (item) => {
+          const formats = await Promise.all(
+            item.types.map(async (type) => [type, await item.getType(type)]),
+          )
+          return new ClipboardItem(Object.fromEntries(formats))
+        }),
+      )
+    })
+    try {
+      await copy.click()
+      await expect(page.getByRole('status').filter({ hasText: '已复制' })).toBeVisible()
+      assert(
+        await app.evaluate(
+          async ({ clipboard }, expected) => (await clipboard.readText()) === expected,
+          expectedCopy,
+        ),
+        'copy must contain complete unmodified document',
+      )
+      assert.equal(await reader.evaluate((el) => el.scrollTop), before)
+      await capture(surface + '-copy')
+    } finally {
+      await app.evaluate(async ({ clipboard }, expected) => {
+        if ((await clipboard.readText()) === expected) {
+          if (globalThis.priorClipboard.length) await clipboard.write(globalThis.priorClipboard)
+          else clipboard.clear()
+        }
+        delete globalThis.priorClipboard
+      }, expectedCopy)
+    }
     await capture(surface + '-oauth')
     await reader.evaluate((el) => {
       el.scrollTop = el.scrollHeight
@@ -253,13 +307,17 @@ try {
     await page.getByRole('button', { name: '返回', exact: true }).click()
     await expect(search).toHaveValue('SDK')
     await expect(card).toHaveAttribute('aria-current', 'true')
-    assert(Math.abs((await nav.evaluate((el) => el.scrollTop)) - position) <= 2)
+    const restoredPosition = await list.evaluate((el) => el.scrollTop)
+    assert(
+      Math.abs(restoredPosition - position) <= 2,
+      surface + ' list position ' + position + ' -> ' + restoredPosition,
+    )
     await capture(surface + '-list')
     count++
   }
   const data = await readFile(path.join(root, '接入ai订阅.md'))
   assert(data.equals(await readFile(path.join(source, '接入ai订阅.md'))))
-  console.log('PASS', count, 'viewports,', data.length, 'bytes', evidence)
+  console.log('PASS', count, 'viewports,', data.length, 'bytes; clipboard:', 'system', evidence)
 } finally {
   await app.close()
 }

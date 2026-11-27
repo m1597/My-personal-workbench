@@ -23,3 +23,11 @@
 ### Markdown 表格复验
 
 从同一份《接入ai订阅.md》复现原版渲染 0 张表。修复后在独立、半屏、窄窗及停靠入口均读到 6 张表、79 行数据，首表首行为 OpenAI 和 OPENAI_API_KEY。实际 59 个目录链接均对应文内目标；点击 OAuth Providers 后标题可见并获得焦点。约 309 CSS 像素宽时，只在宽表内横向滚动，正文和页面无横向溢出。[窄窗表头与数据](../../../tmp/prompt-reading-xqJ3jx/narrow-table.png) · [OAuth 定位](../../../tmp/prompt-reading-xqJ3jx/narrow-oauth.png) · [窗口实测](../../../tmp/prompt-reading-xqJ3jx/geometry.json)
+
+### 搜索、阅读、复制与返回
+
+在 `f780641` 上调整标题栏与列表。使用 Music 共用的用途下拉选择器，选中文档以图标和侧边线标识。无匹配时显示关键词；使用原搜索框清空后恢复列表。标题旁只保留一个复制动作，随当前内容显示「复制当前提示词」「复制替换后的提示词」或「复制当前草稿」，窄窗保留图标、悬停说明和可访问名称。
+
+实测独立、停靠、半屏及窄窗，在长文 OAuth Providers 章节点击标题旁的复制按钮。每次从 Windows 系统剪贴板读回，均与 110459 字节源文件的 UTF-8 正文完全一致，点击前后的正文滚动值相等。返回后核对搜索词 SDK、当前文档以及打开前非零的列表滚动位置。草稿不落盘，未填变量保留占位符，只读 Skill 仍可复制。首次测试因 Electron 不接受直接写回只读 ClipboardItem，未能还原测试前的剪贴板，后续复验先完整读取各格式数据并重新构造可写项。
+
+[用途菜单](../../../tmp/prompt-reading-CUs66q/purpose-options.png) · [窄窗复制](../../../tmp/prompt-reading-CUs66q/narrow-copy.png) · [返回列表](../../../tmp/prompt-reading-CUs66q/narrow-list.png) · [无匹配](../../../tmp/prompt-reading-CUs66q/no-match.png)。构建 prompts/component.js SHA-256 为 `C24D637E3A98DAAFABD9280F46E5EE827BF6C6276DB84B0993B617D2294B0D23`。
