@@ -32,6 +32,19 @@ jobs:
           npm run dist:win
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node --test tests/product-updates.test.mjs
+      - name: Verify the development version through the Windows launcher
+        shell: pwsh
+        run: |
+          & ./scripts/open-workbench.cmd --verify-desktop
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $deadline = (Get-Date).AddSeconds(60)
+          do {
+            $port = Get-ChildItem -Path 'tmp/desktop-check-*/DevToolsActivePort' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (!$port) { Start-Sleep -Milliseconds 300 }
+          } until ($port -or (Get-Date) -ge $deadline)
+          if (!$port) { throw 'Development launcher did not start' }
+          node scripts/check-desktop-product-version.mjs $port.DirectoryName
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Verify upgrade from the previous stable Windows release
         shell: pwsh
         env:
