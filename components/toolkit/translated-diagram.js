@@ -128,6 +128,33 @@ function label(group, text, x, y, w, h, ink, measure) {
     group.append(node)
   })
 }
+// Use at most half of the clear band on each side so neighboring labels can
+// expand into the same gap without meeting. Stop at any differing pixel.
+function verticalSpace(ctx, x, y, width, height, fill) {
+  const left = Math.max(0, Math.floor(x) - 1),
+    right = Math.min(ctx.canvas.width, Math.ceil(x + width) + 1)
+  const start = Math.max(0, Math.floor(y) - 1),
+    end = Math.min(ctx.canvas.height, Math.ceil(y + height) + 1)
+  const reach = Math.ceil(height * 2),
+    top = Math.max(0, start - reach),
+    bottom = Math.min(ctx.canvas.height, end + reach)
+  const pixels = ctx.getImageData(left, top, right - left, bottom - top).data
+  const rgb = [1, 3, 5].map((i) => parseInt(fill.slice(i, i + 2), 16))
+  function available(row, step) {
+    let count = 0
+    while (row >= top && row < bottom) {
+      let i = 4 * (row - top) * (right - left)
+      for (let col = left; col < right; col++, i += 4) {
+        if (rgb.some((channel, c) => Math.abs(pixels[i + c] - channel) > 12))
+          return Math.floor(count / 2)
+      }
+      count++
+      row += step
+    }
+    return Math.floor(count / 2)
+  }
+  return [available(start - 1, -1), available(end, 1)]
+}
 export async function layoutTranslation(source, blocks) {
   const img = new Image()
   img.src = source
@@ -162,7 +189,28 @@ export async function layoutTranslation(source, blocks) {
   }
   const layers = {}
   const buttons = {}
+  let manualZoom = false
   function mode(name) {
+    if (!manualZoom && port.clientWidth) {
+      let magnification = 1
+      if (name === '双语' && compactBlocks.length) {
+        const sizes = compactBlocks.map((b) => b.size).sort((a, b) => a - b)
+        const typicalSmall = sizes[Math.floor(sizes.length * 0.15)]
+        magnification = Math.min(
+          8,
+          Math.max(1, Math.ceil((4 * 10.5 * w) / (typicalSmall * port.clientWidth)) / 4),
+        )
+      }
+      zoom.value = String(magnification)
+      drawing.style.width = magnification * 100 + '%'
+      adjustLabels()
+      if (name === '双语' && magnification > 1) {
+        // Keep the first columns in view and center the diagram vertically;
+        // a magnified top-left corner can otherwise contain only background.
+        port.scrollTop = (port.scrollHeight - port.clientHeight) / 2
+        toolbar.scrollIntoView({ block: 'start', inline: 'nearest' })
+      }
+    }
     for (const [key, g] of Object.entries(layers)) g.style.display = key === name ? '' : 'none'
     for (const [key, b] of Object.entries(buttons))
       b.setAttribute('aria-pressed', String(key === name))
@@ -182,6 +230,7 @@ export async function layoutTranslation(source, blocks) {
   zoom.value = '1'
   zoom.setAttribute('aria-label', '图像缩放')
   zoom.oninput = () => {
+    manualZoom = true
     drawing.style.width = Number(zoom.value) * 100 + '%'
   }
   toolbar.append(zoom)
@@ -243,8 +292,11 @@ export async function layoutTranslation(source, blocks) {
         light = 0.299 * (rgb >> 16) + 0.587 * ((rgb >> 8) & 255) + 0.114 * (rgb & 255)
       const ink = light > 128 ? '#17212a' : '#ffffff'
       if (name === '双语') {
-        label(content, block.text, x, y, width, height * 0.46, ink, ctx)
-        label(content, block.zh, x, y + height * 0.46, width, height * 0.54, ink, ctx)
+        const [above, below] = verticalSpace(ctx, x, y, width, height, fill)
+        const top = y - above,
+          lineHeight = (height + above + below) / 2
+        label(content, block.text, x, top, width, lineHeight, ink, ctx)
+        label(content, block.zh, x, top + lineHeight, width, lineHeight, ink, ctx)
         const marker = svg('rect', {
           x,
           y,

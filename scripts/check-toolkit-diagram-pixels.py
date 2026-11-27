@@ -15,6 +15,11 @@ draw = ImageDraw.Draw(mask)
 for x, y, right, bottom in json.loads((folder / "boxes.json").read_text()):
     draw.rectangle((math.floor(x)-2, math.floor(y)-2, math.ceil(right)+2, math.ceil(bottom)+2), fill=1)
 for name in ("chinese", "bilingual"):
+    allowed=mask.copy()
+    if name=="bilingual":
+        expanded=ImageDraw.Draw(allowed)
+        for x,y,r,b in json.loads((folder/"bilingual-boxes.json").read_text()):
+            expanded.rectangle((math.floor(x)-1,math.floor(y)-1,math.ceil(r)+1,math.ceil(b)+1),fill=1)
     output = Image.open(folder / (name + ".png")).convert("RGB")
     assert output.size == original.size
     before, after, labels = original.load(), output.load(), mask.load()
@@ -25,7 +30,8 @@ for name in ("chinese", "bilingual"):
             different = before[x, y] != after[x, y]
             is_blue = b > 140 and r < 100 and g < 140
             changed += different
-            outside += different and not labels[x, y]
+            outside += different and not allowed.getpixel((x,y))
+            if not labels[x,y] and min(r,g,b)<180: assert not different, (name,x,y,before[x,y],after[x,y])
             blue += is_blue
             damaged += is_blue and different
     print(f"{name}: changed={changed} outside={outside} blue_connectors={blue} damaged={damaged}")

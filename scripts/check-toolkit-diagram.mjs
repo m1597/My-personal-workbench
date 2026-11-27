@@ -56,7 +56,10 @@ const server = createServer(async (req, res) => {
         ? []
         : items.map(({ id, text }) => ({
             id,
-            zh: translations.find(([re]) => re.test(text))?.[1] || text,
+            zh:
+              process.argv.includes('--long-label') && /^Module$/i.test(text)
+                ? '模块需要在准备完成之后通过认证并为每个受保护的设备建立独立连接以保证后续请求能够安全完成'
+                : translations.find(([re]) => re.test(text))?.[1] || text,
           })),
     )
   }
@@ -72,7 +75,7 @@ db.close()
 const env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
 let app, host, prompts
 const b = (p, n) => p.getByRole('button', { name: n, exact: true })
-try {
+async function checkDiagram() {
   const profileArg = '--workbench-profile=' + profile
   let panel
   if (candidateRoot || process.argv.includes('--packaged')) {
@@ -240,9 +243,61 @@ im.save(sys.stdout.buffer,'PNG')`,
     await writeFile(path.join(folder, name + '.png'), Buffer.from(await raster(), 'base64'))
   }
   assert.equal(requests.length, requestsBeforeModes)
+  const bilingual = diagram.locator('[data-mode="双语"] [role=button]')
+  const actual = await bilingual.evaluateAll((nodes) =>
+    nodes.map((n) => {
+      const texts = [...n.querySelectorAll('text')].filter(
+        (t) => t.getBoundingClientRect().width > 0,
+      )
+      return {
+        pair: n.getAttribute('aria-label'),
+        visible: texts.map((t) => t.textContent).join(''),
+        font: Math.min(
+          ...texts.map((t) => Number(t.getAttribute('font-size')) * t.getScreenCTM().a),
+        ),
+      }
+    }),
+  )
+  for (const [pair, target] of [
+    ['GnuTLS', '库'],
+    ['User', '用户'],
+  ]) {
+    const row = actual.find((r) => r.pair.startsWith(pair + '：'))
+    assert(
+      row?.visible.includes(pair) && row.visible.includes(target) && row.font >= 10,
+      JSON.stringify(actual),
+    )
+  }
+  if (process.argv.includes('--long-label'))
+    assert.equal(actual.find((r) => r.pair.startsWith('Module：')).visible, '')
+  assert(actual.filter((r) => r.visible).length >= actual.length * 0.8)
+  await result.screenshot({ path: path.join(folder, 'bilingual-window.png') })
+  if (process.argv.includes('--long-label')) {
+    await bilingual
+      .filter({ has: result.locator('[data-compact-label]:visible') })
+      .filter({ hasText: 'Module →' })
+      .click()
+    await expect(result.locator('.block-detail')).toContainText('建立独立连接')
+    await result.screenshot({ path: path.join(folder, 'long-label-detail.png') })
+  }
+  await writeFile(path.join(folder, 'readability.json'), JSON.stringify(actual, null, 2))
+  const bilingualBoxes = await bilingual.evaluateAll((nodes) =>
+    nodes.map((n) => {
+      const r = n.getBBox()
+      return [r.x, r.y, r.x + r.width, r.y + r.height]
+    }),
+  )
+  await writeFile(path.join(folder, 'bilingual-boxes.json'), JSON.stringify(bilingualBoxes))
+  if (process.argv.includes('--bilingual')) {
+    execFileSync('python', ['scripts/check-toolkit-diagram-pixels.py', folder], {
+      stdio: 'inherit',
+    })
+    console.log('PASS unclicked bilingual window:', folder)
+    return
+  }
   const compact = diagram.locator('[data-compact-label]:visible').first()
-  await expect(compact).toBeVisible()
-  await compact.click()
+  if (await compact.count()) await compact.click()
+  else await bilingual.first().click()
   await expect(result.locator('.block-detail')).not.toBeEmpty()
   await result.getByRole('slider', { name: '图像缩放' }).press('End')
   assert(await result.locator('.diagram-scroll').evaluate((n) => n.scrollWidth > n.clientWidth))
@@ -398,6 +453,9 @@ im.save(sys.stdout.buffer,'PNG')`,
     'text-only translation, retry, 3 layers, zoom, actual image and two follow-ups',
     folder,
   )
+}
+try {
+  await checkDiagram()
 } finally {
   await app?.close()
   await host?.close()
