@@ -55,7 +55,14 @@ const sessions = new WeakMap()
 export async function translateImage(image, service, signal) {
   const fingerprint = createHash('sha256')
     .update(
-      JSON.stringify([service.id, service.endpoint, service.model, service.protocol, service.key]),
+      JSON.stringify([
+        service.id,
+        service.authType,
+        service.endpoint,
+        service.model,
+        service.protocol,
+        service.key,
+      ]),
     )
     .digest('hex')
   let session = sessions.get(image)

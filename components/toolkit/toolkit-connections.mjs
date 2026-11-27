@@ -85,7 +85,8 @@ export function toolkitConnections({
           model: value.model,
           protocol: value.protocol,
           hasKey: value.configured,
-          private: owners.length <= 1,
+          subscription: value.authType === 'subscription',
+          private: owners.length <= 1 && value.authType !== 'subscription',
           name:
             owners.map((b) => b.label.component + ' · ' + b.label.purpose).join(' / ') +
             ' — ' +
@@ -134,6 +135,8 @@ export function toolkitConnections({
         db = await open(),
         binding = db.read(id)
       if (!binding) throw Error('TOOLKIT_CONFIG_' + route)
+      if (binding.authType === 'subscription')
+        return { ...binding, requestPlan: (input) => db.requestPlan(id, input) }
       if (
         !binding.configured &&
         !['localhost', '127.0.0.1', '[::1]'].includes(new URL(binding.endpoint).hostname)

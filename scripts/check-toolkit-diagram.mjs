@@ -34,6 +34,7 @@ const translations = [
   [/user/i, '用户'],
   [/KCS/i, '公钥密码标准接口'],
 ]
+const assistantKeys = process.argv.includes('--assistant-keys')
 const checkTheme = process.argv.includes('--result-theme')
 const copyResults = checkTheme || process.argv.includes('--copy-results')
 let bad = !copyResults
@@ -49,7 +50,11 @@ const server = createServer(async (req, res) => {
   requests.push(input)
   if (!copyResults && requests.length === 1) await responseGate
   let answer = '已根据选区回答'
-  if (input.model === 'text-test' && input.messages.length === 1) {
+  if (
+    input.model === 'text-test' &&
+    input.messages.length === 1 &&
+    input.messages[0].content.startsWith('把下面每项')
+  ) {
     const prompt = input.messages[0].content
     assert.equal(typeof prompt, 'string')
     const items = JSON.parse(prompt.slice(prompt.indexOf('\n') + 1))
@@ -81,7 +86,15 @@ async function checkDiagram() {
   if (process.argv.includes('--pin-in-place')) env.WORKBENCH_TEST_HIDDEN_SURFACES = '1'
   const profileArg = '--workbench-profile=' + profile
   let panel
-  if (checkTheme) {
+  if (assistantKeys) {
+    await mkdir(path.join(profile, 'toolkit'), { recursive: true })
+    await writeFile(
+      path.join(profile, 'toolkit/settings.json'),
+      JSON.stringify({ selection: { key: 'Alt+S', enabled: true } }),
+    )
+    app = await _electron.launch({ args: ['components/toolkit', profileArg], env })
+    panel = await app.firstWindow()
+  } else if (checkTheme) {
     await writeFile(
       path.join(profile, 'workbench-material.json'),
       JSON.stringify({ brightness: 15, transparency: 25, frost: 65 }),
@@ -202,6 +215,100 @@ im.save(sys.stdout.buffer,'PNG')`,
     await overlay.mouse.up()
     await b(overlay, '翻译').waitFor()
     return overlay
+  }
+  if (assistantKeys) {
+    bad = false
+    unblock()
+    const old = await panel.evaluate(async () => (await window.toolkit.state()).settings)
+    assert.equal(old.selection.activeKey, 'Alt+S')
+    assert.match(old.notice, /截图翻译快捷键.*占用/)
+    await app.evaluate(({ globalShortcut, desktopCapturer, screen }) => {
+      globalThis.callbacks = new Map()
+      const register = globalShortcut.register.bind(globalShortcut)
+      globalShortcut.register = (key, fn) => {
+        const ok = register(key, fn)
+        if (ok) globalThis.callbacks.set(key, fn)
+        return ok
+      }
+      const fixture = desktopCapturer.getSources
+      desktopCapturer.getSources = async (opts) => {
+        const [source] = await fixture(opts)
+        return screen.getAllDisplays().map((d) => ({ ...source, display_id: String(d.id) }))
+      }
+      // Only the OS selection boundary is substituted. Never copy from the user's foreground app.
+      const child = process.getBuiltinModule('node:child_process'),
+        exec = child.execFile
+      child.execFile = (file, args, options, callback) => {
+        if (!args.some((arg) => typeof arg === 'string' && arg.endsWith('selection.ps1')))
+          return exec(file, args, options, callback)
+        queueMicrotask(() => callback(null, globalThis.fixtureText))
+        return { stdin: { on() {}, end() {} } }
+      }
+      process.getBuiltinModule('node:module').syncBuiltinESMExports()
+    })
+    const record = (id, key) =>
+      panel.evaluate(
+        ([id, key]) => window.toolkit.enable({ id, key, enabled: true, field: 'key' }),
+        [id, key],
+      )
+    let selectionKey = 'Alt+D'
+    try {
+      await record('selection', selectionKey)
+    } catch (error) {
+      if (!String(error).includes('占用')) throw error
+      assert.equal(
+        (await panel.evaluate(async () => (await window.toolkit.state()).settings)).selection
+          .activeKey,
+        'Alt+S',
+      )
+      selectionKey = 'Control+Alt+Shift+F18'
+      await record('selection', selectionKey)
+      console.log(
+        'Alt+D unavailable to Windows registration, previous Alt+S survived. Using',
+        selectionKey,
+      )
+    }
+    await record('translate', 'Alt+S')
+    async function invoke(key, selected) {
+      const next = app.waitForEvent('window')
+      await app.evaluate(
+        (_, [key, selected]) => {
+          globalThis.fixtureText = selected
+          globalThis.callbacks.get(key)()
+        },
+        [key, selected],
+      )
+      return next
+    }
+    const selected = 'Exact middle sentence.'
+    let result = await invoke(selectionKey, selected)
+    await expect(result.getByText('已根据选区回答', { exact: true })).toBeVisible()
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].messages[0].content.split('\n\n').at(-1), selected)
+    await result.close()
+    const empty = await invoke(selectionKey, '')
+    await expect(b(empty, '框选翻译')).toBeVisible()
+    assert.equal(requests.length, 1)
+    const next = app.waitForEvent('window')
+    await b(empty, '框选翻译').click()
+    const fallback = await next
+    await fallback.locator('.screen img').waitFor()
+    await fallback.close()
+    const overlay = await invoke('Alt+S', '')
+    await overlay.locator('.screen img').waitFor()
+    const translated = app.waitForEvent('window')
+    await overlay.mouse.move(mapX(82), mapY(82))
+    await overlay.mouse.down()
+    await overlay.mouse.move(mapX(678), mapY(440))
+    await overlay.mouse.up()
+    result = await translated
+    await expect(b(result, '仅中文')).toBeVisible({ timeout: 30000 })
+    assert.equal(requests.length, 2)
+    console.log(
+      'PASS existing Alt+S preserved, registered selection and Alt+S callbacks, hit only, empty fallback and direct OCR translation',
+      folder,
+    )
+    return
   }
   if (process.argv.includes('--direct-translation')) {
     bad = false
@@ -428,6 +535,22 @@ assert diff is None,diff`,
           .trim()
       assert.equal(center(sampleImage), '(57, 120, 173)')
       assert.equal(center(await sample.screenshot()), '(57, 120, 173)')
+      await b(result, '复制 RGB').click()
+      assert.equal(await read(), 'rgb(57, 120, 173)')
+      next = app.waitForEvent('window')
+      await b(result, '重新取色').click()
+      const again = await next
+      await again.locator('img').evaluate((i) => i.decode())
+      next = app.waitForEvent('window')
+      await again.mouse.click(mapX(65), mapY(35))
+      result = await next
+      await expect(result.getByText('#C45B39', { exact: true })).toBeVisible()
+      await b(result, '关闭取色结果')
+        .click()
+        .catch((error) => {
+          if (!result.isClosed()) throw error
+        })
+      await expect.poll(() => result.isClosed()).toBe(true)
       console.log(
         'PASS shared live material, unchanged rendered original and sampled pixel; text, image, color windows',
         folder,

@@ -76,6 +76,7 @@ export function connectionEditor(parent, { api, button, notice, error }, initial
         : own
           ? bound
           : ref
+    fields.hidden = Boolean(current?.subscription && !own)
     protocol.set({ value: current?.protocol || 'chat', disabled: !own })
     address.value = current?.endpoint || ''
     model.value = current?.model || ''
@@ -96,6 +97,9 @@ export function connectionEditor(parent, { api, button, notice, error }, initial
           : own
             ? '单独配置仅用于当前用途。'
             : '使用所选连接的服务和凭据。'
+    if (current?.subscription && !own)
+      status.textContent =
+        (id === 'inherit' ? '继承工作台默认订阅' : '复用订阅连接') + ' · ' + current.model
     if (!bound && own && purpose.value === 'vision' && fallback && !fallback.vision)
       status.textContent = '工作台默认连接未启用图像。可单独配置视觉模型。'
     if (snapshot.migrationPending.includes(purpose.value))
@@ -108,7 +112,7 @@ export function connectionEditor(parent, { api, button, notice, error }, initial
       { label: '单独配置', value: 'private' },
     ]
     const bound = snapshot.routes[purpose.value]
-    if (bound && bound.source !== 'default' && !bound.private)
+    if (bound && bound.source !== 'default' && !bound.private && !bound.subscription)
       choices.push({ label: '编辑当前共享连接', value: 'edit' })
     for (const c of snapshot.connections) {
       if (purpose.value === 'vision' && !c.vision && c.id !== bound?.id) continue

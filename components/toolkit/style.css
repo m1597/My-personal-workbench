@@ -142,6 +142,9 @@ pre {
   border-radius: 5px;
   padding: 6px 10px;
 }
+.connection-fields[hidden] {
+  display: none;
+}
 .connection-fields {
   display: grid;
   gap: 10px;

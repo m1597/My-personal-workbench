@@ -80,6 +80,23 @@ function answerText(data, protocol) {
     .join('')
 }
 export async function complete(config, key, messages, signal) {
+  if (config.authType === 'subscription') {
+    const content = messages[0]?.content
+    const input =
+      messages.length === 1 && typeof content === 'string'
+        ? content
+        : messages.map(({ role, content }) => ({
+            role,
+            content: formatParts(content, 'responses'),
+          }))
+    const timeout = AbortSignal.timeout(60000)
+    const answer = await config.requestPlan({
+      input,
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    })
+    if (typeof answer !== 'string' || !answer.trim()) throw Error('模型响应没有可显示的文字')
+    return answer
+  }
   const { model, protocol = 'chat' } = config
   if (!model.trim()) throw Error('请先在工具集设置中填写模型名')
   const url = modelEndpoint(config.endpoint, protocol, model)

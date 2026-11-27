@@ -31,7 +31,8 @@ export function mountToolkit(root, bridge) {
           const describe = (v) =>
             v && {
               ...v,
-              private: v.owners.length <= 1,
+              subscription: v.authType === 'subscription',
+              private: v.owners.length <= 1 && v.authType !== 'subscription',
               name: v.owners.join(' / ') + ' — ' + v.model,
               hasKey: v.configured,
             }
