@@ -53,7 +53,11 @@ export function RecommendationComposer({
       const connection =
         window.fitbayConnections && (await window.fitbayConnections.snapshot()).rows[0]?.value
       if (
-        !(connection?.configured ?? models.providers.find((p) => p.id === models.active)?.hasKey)
+        !(
+          connection?.configured ??
+          models.subscription?.configured ??
+          models.providers.find((p) => p.id === models.active)?.hasKey
+        )
       ) {
         openSettings()
         return

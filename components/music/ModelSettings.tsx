@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Button, Input, Checkbox } from '@fluentui/react-components'
 export type ModelInfo = {
   source?: 'dedicated' | 'default'
+  subscription?: { configured: boolean }
   active: string
   providers: { id: string; label: string; model: string; hasKey: boolean }[]
 }

@@ -419,13 +419,17 @@ export function MusicSettings({
             })}
             {!(editing || guideTarget === 'model') && <ConnectionSettings />}
             <div className="settings-buttons">
-              <span>{models.providers.find((p) => p.id === models.active)?.label}</span>
+              <span>
+                {models.subscription
+                  ? 'ChatGPT 订阅'
+                  : models.providers.find((p) => p.id === models.active)?.label}
+              </span>
               <Button
                 size="small"
                 aria-expanded={editing || guideTarget === 'model'}
                 onClick={() => editModel(!(editing || guideTarget === 'model'))}
               >
-                模型设置
+                {models.subscription ? '单独配置 API Key' : '模型设置'}
               </Button>
             </div>
             {(editing || guideTarget === 'model') && (

@@ -9,11 +9,19 @@ export function modelInfo(store) {
   return {
     active,
     source: shared?.source,
+    subscription:
+      shared?.authType === 'subscription' ? { configured: shared.configured } : undefined,
     providers: Object.entries(providers).map(([id, p]) => ({
       id,
       label: p.label,
-      model: shared && id === active ? shared.model : accounts[id]?.model || p.model,
-      hasKey: shared && id === active ? shared.configured : !!accounts[id]?.secret,
+      model:
+        shared && shared.authType !== 'subscription' && id === active
+          ? shared.model
+          : accounts[id]?.model || p.model,
+      hasKey:
+        shared && id === active
+          ? shared.authType !== 'subscription' && shared.configured
+          : !!accounts[id]?.secret,
     })),
   }
 }
@@ -36,7 +44,10 @@ export function configureModel(store, vault, id, model, key, forget = false) {
   if (store.connections) {
     const shared = store.connections.read('music.model')
     const switchingLegacyAccount = id !== state.active && Boolean(secret)
-    const sameAccount = shared?.protocol === route.protocol && !switchingLegacyAccount
+    const sameAccount =
+      shared?.authType !== 'subscription' &&
+      shared?.protocol === route.protocol &&
+      !switchingLegacyAccount
     store.connections.write('music.model', {
       expectedId: shared?.id ?? null,
       separate: !sameAccount,
@@ -172,8 +183,17 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
             : recommendationInstructions +
               languageInstructions +
               ' 生成和补推时按 requestWeight 与 tasteWeight 的百分比权衡本次输入和已授权口味，权重为零的因素不参与。每首歌曲另附 requestFit 和 tasteFit 两个 0 到 100 的整数，分别独立衡量对本次输入、已提供口味的吻合度；缺乏对应信息填 50。理由说明具体依据。若给出 douyinChart，只有其中的同名同署名录音可作为已核验的热门作品；按权重兼顾口味及榜单名次，100%要求时仅从榜单选择。榜单缺失时不得声称已上榜。按 recording 的版本、翻唱、伴奏偏好处理。scope=direct 时只给直接相关的候选；可信直接候选已经用尽时返回 directExhausted:true，songs 可以为空。scope=related 才允许靠近主题的相邻风格，并在 reason 解释联系。'
+  const connection = store.connections?.read('music.model')
+  if (connection?.authType === 'subscription') {
+    const text = await store.connections.requestPlan('music.model', {
+      instructions,
+      input: JSON.stringify(payload),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]),
+    })
+    return parseModelReply(text, purpose, requiredLanguage)
+  }
   const resolved = store.connections?.resolve('music.model')
-  const shared = resolved ?? store.connections?.read('music.model')
+  const shared = resolved ?? connection
   const legacy = shared ? null : config(store)
   const account = shared ?? legacy.accounts[legacy.active]
   const route = shared ?? legacyRoute(legacy.active, account)
@@ -298,6 +318,14 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
         .map((v) => v.text || '')
         .join('')
     else content = data.choices[0].message.content
+  } catch {
+    throw invalidModelReply(purpose)
+  }
+  return parseModelReply(content, purpose, requiredLanguage)
+}
+
+function parseModelReply(content, purpose, requiredLanguage) {
+  try {
     const parsed = JSON.parse(
       content.trim().replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/gi, ''),
     )
@@ -363,10 +391,14 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
           : '',
     }
   } catch {
-    if (purpose === 'catalog-query') throw Error('模型未返回有效的目录关键词，请重试')
-    if (purpose === 'search') throw Error('模型未返回有效的曲库搜索结果，请重试')
-    if (purpose === 'profile') throw Error('模型未返回有效的偏好资料，请重试')
-    throw Error('模型未返回一至五首有效歌曲，请重试或更换模型')
+    throw invalidModelReply(purpose)
   }
+}
+
+function invalidModelReply(purpose) {
+  if (purpose === 'catalog-query') return Error('模型未返回有效的目录关键词，请重试')
+  if (purpose === 'search') return Error('模型未返回有效的曲库搜索结果，请重试')
+  if (purpose === 'profile') return Error('模型未返回有效的偏好资料，请重试')
+  return Error('模型未返回一至五首有效歌曲，请重试或更换模型')
 }
 class ServiceError extends Error {}
