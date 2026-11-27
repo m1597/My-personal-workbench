@@ -24,6 +24,7 @@ const { sharedConnectionVault } = await import(
 const models = []
 const store = openConnections(scratch, undefined, {
   request: async (url, init) => {
+    assert.equal(String(url), 'https://api.openai.com/v1/responses')
     const body = JSON.parse(init.body)
     models.push(body.model)
     assert.equal(body.input[0].content, '文档数据')
