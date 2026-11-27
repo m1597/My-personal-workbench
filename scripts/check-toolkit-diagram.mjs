@@ -34,7 +34,8 @@ const translations = [
   [/user/i, '用户'],
   [/KCS/i, '公钥密码标准接口'],
 ]
-let bad = true
+const copyResults = process.argv.includes('--copy-results')
+let bad = !copyResults
 let unblock
 const responseGate = new Promise((resolve) => {
   unblock = resolve
@@ -45,7 +46,7 @@ const server = createServer(async (req, res) => {
   for await (const chunk of req) chunks.push(chunk)
   const input = JSON.parse(Buffer.concat(chunks))
   requests.push(input)
-  if (requests.length === 1) await responseGate
+  if (!copyResults && requests.length === 1) await responseGate
   let answer = '已根据选区回答'
   if (input.model === 'text-test' && input.messages.length === 1) {
     const prompt = input.messages[0].content
@@ -102,6 +103,22 @@ async function checkDiagram() {
     await b(shell, '组件').click()
     await shell.locator('#window-menu').getByText('工具集', { exact: true }).click()
     panel = shell.locator('.toolkit-panel')
+  }
+  if (copyResults) {
+    await (await host.firstWindow()).setViewportSize({ width: 360, height: 600 })
+    await b(panel, '设置快捷键').click()
+    const row = panel.getByRole('region', { name: '划词助手' })
+    await row.getByRole('textbox').click()
+    await row.getByRole('textbox').press('Control+Alt+Shift+F11')
+    await b(row, '保存划词助手快捷键').click()
+    await b(panel, '返回').click()
+    const hint = panel.locator('.tool-row[data-tool=selection] small')
+    await expect(hint).toContainText('Ctrl+Alt+Shift+F11')
+    await panel.screenshot({ path: path.join(folder, 'selection-key.png') })
+    await b(panel, '设置快捷键').click()
+    await b(row, '停用').click()
+    await b(panel, '返回').click()
+    await expect(hint).toHaveText('划词助手已停用')
   }
   const template = '逐步推导并说明每个分支的作用'
   if (candidateRoot) {
@@ -178,6 +195,49 @@ im.save(sys.stdout.buffer,'PNG')`,
   let next = app.waitForEvent('window')
   await b(overlay, '翻译').click()
   let result = await next
+  if (copyResults) {
+    await result.setViewportSize({ width: 320, height: 650 })
+    await expect(b(result, '仅中文')).toBeVisible({ timeout: 30000 })
+    const read = () =>
+      app.evaluate(async ({ clipboard }) => (await clipboard.readText()).replace(/\r\n/g, '\n'))
+    const copy = b(result, '复制结果')
+    await copy.click()
+    await expect(result.getByText('已复制译文', { exact: true })).toBeVisible()
+    const translated = await result
+      .locator('[data-mode="仅中文"] [role="button"]')
+      .evaluateAll((nodes) =>
+        nodes.map((n) => n.getAttribute('aria-label').split('：').slice(1).join('：')).join('\n'),
+      )
+    assert.equal(await read(), translated)
+    await result.getByLabel('问题').fill('用一句话总结')
+    await b(result, '追问').click()
+    await expect(result.getByText('已根据选区回答', { exact: true })).toBeVisible()
+    await app.evaluate(({ clipboard }) => {
+      globalThis.restoreCopy = clipboard.writeText.bind(clipboard)
+      clipboard.writeText = () => {
+        throw Error('clipboard unavailable')
+      }
+    })
+    await copy.click()
+    await expect(result.getByText('复制失败，请再试一次', { exact: true })).toBeVisible()
+    assert.equal(await read(), translated)
+    await app.evaluate(({ clipboard }) => {
+      clipboard.writeText = globalThis.restoreCopy
+    })
+    await copy.click()
+    await expect(result.getByText('已复制最新回答', { exact: true })).toBeVisible()
+    assert.equal(await read(), '已根据选区回答')
+    await b(result, '窗口置顶').click()
+    await expect(b(result, '窗口已置顶')).toHaveAttribute('aria-pressed', 'true')
+    await result.screenshot({ path: path.join(folder, 'copy-result.png') })
+    await b(result, '窗口已置顶').click()
+    await expect(b(result, '窗口置顶')).toHaveAttribute('aria-pressed', 'false')
+    console.log(
+      'PASS narrow home shortcut, disabled state, translation and latest answer clipboard, failure retry and pin',
+      folder,
+    )
+    return
+  }
   await expect.poll(() => requests.length, { timeout: 30000 }).toBe(1)
   await expect(result.locator('[aria-busy=true]')).toBeVisible()
   for (const name of ['翻译', '问 AI']) {

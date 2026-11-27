@@ -229,8 +229,11 @@ try {
     }),
     '测试接口回答 4',
   )
-  await result.getByText('固定', { exact: true }).click()
-  await expect(result.getByText('取消固定')).toBeVisible()
+  await result.getByText('窗口置顶', { exact: true }).click()
+  await expect(result.getByRole('button', { name: '窗口已置顶' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
   await result.screenshot({ path: path.join(folder, 'answer.png') })
   console.log('PASS custom action, PNG, 503 retry, follow-up and pin')
   if (process.argv.includes('--pdf')) {

@@ -375,3 +375,14 @@ fitbay-toolkit-choice .fui-Option {
   gap: 12px;
   min-width: 0;
 }
+
+.assistant-result section > .notice {
+  font-size: var(--font-size-caption, 12px);
+  overflow-wrap: anywhere;
+}
+.result-actions button[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+.tool-row[data-tool="selection"] small {
+  overflow-wrap: anywhere;
+}

@@ -362,6 +362,14 @@ async function startToolkit() {
     })
   }
   const kinds = ['color-result', 'home', 'screen', 'result', 'pin', 'message']
+  function shortcutSettings() {
+    return {
+      color: cfg.color,
+      capture: cfg.capture,
+      selection: { ...cfg.selection, activeKey: bound.get('selection') || '' },
+      notice,
+    }
+  }
   handle('state', kinds, (s) => ({
     kind: s.kind,
     intent: s.intent,
@@ -372,10 +380,7 @@ async function startToolkit() {
       s.kind === 'home'
         ? {
             material: material(),
-            color: { ...cfg.color },
-            capture: { ...cfg.capture },
-            selection: { ...cfg.selection },
-            notice,
+            ...shortcutSettings(),
             catalog,
           }
         : undefined,
@@ -603,7 +608,8 @@ async function startToolkit() {
   })
   handle('copyAnswer', ['result'], (s) => {
     const last = s.history.at(-1)
-    if (last?.role === 'assistant') return clipboard.writeText(last.content)
+    if (last?.role !== 'assistant') throw Error('没有可复制的结果')
+    return clipboard.writeText(last.content)
   })
   handle('actions', ['screen', 'result'], async (s) => {
     const result = await reader?.listActions()
@@ -742,7 +748,7 @@ async function startToolkit() {
         const v = JSON.parse(readFileSync(file, 'utf8'))
         if (v) setShortcut(v)
         result = {
-          settings: { color: cfg.color, capture: cfg.capture, selection: cfg.selection, notice },
+          settings: shortcutSettings(),
         }
       } catch (e) {
         result = { error: e.code ? '快捷键请求不可用' : e.message }

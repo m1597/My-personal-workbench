@@ -159,7 +159,7 @@ async function result(s) {
   const row = el('div', '', 'row'),
     output = el('section'),
     history = el('div'),
-    controls = el('div', '', 'row')
+    controls = el('div', '', 'row result-actions')
   output.hidden = true
   body.append(prompt, row, notice, output)
   output.append(history, controls)
@@ -189,6 +189,26 @@ async function result(s) {
   })
   configure.hidden = true
   row.append(configure)
+  let copyKind = '最新回答'
+  const copyUI = feedback()
+  copyUI.notice.hidden = true
+  const copy = copyUI.button('复制结果', async () => {
+    try {
+      await api.copyAnswer()
+      copyUI.notice.textContent = '已复制' + copyKind
+    } catch {
+      copyUI.notice.textContent = '复制失败，请再试一次'
+    }
+    copyUI.notice.hidden = false
+  })
+  const pin = button('窗口置顶', async (button) => {
+    const pinned = await api.top()
+    button.textContent = pinned ? '窗口已置顶' : '窗口置顶'
+    button.title = pinned ? '取消窗口置顶' : '让结果窗口保持在最前面'
+    button.setAttribute('aria-pressed', String(pinned))
+  })
+  pin.title = '让结果窗口保持在最前面'
+  pin.setAttribute('aria-pressed', 'false')
   let hasAnswer = false,
     busy = false
   let failed
@@ -205,7 +225,10 @@ async function result(s) {
     failed = undefined
     retry.hidden = true
     prompt.readOnly = true
-    const requests = [...row.querySelectorAll('button'), controls.lastElementChild].filter(Boolean)
+    copyUI.notice.hidden = true
+    const requests = [copy, ...row.querySelectorAll('button'), controls.lastElementChild].filter(
+      Boolean,
+    )
     for (const action of requests) action.disabled = true
     row.setAttribute('aria-busy', 'true')
     configure.hidden = true
@@ -224,6 +247,7 @@ async function result(s) {
         )
       }
       output.hidden = false
+      copyKind = mode === 'translate' ? '译文' : '最新回答'
       hasAnswer = true
       if (prompt.value === question) prompt.value = ''
       notice.textContent = ''
@@ -256,15 +280,14 @@ async function result(s) {
     error(e)
   }
   controls.append(
-    button('复制结果', () => api.copyAnswer()),
-    button('固定', async (b) => {
-      b.textContent = (await api.top()) ? '取消固定' : '固定'
-    }),
+    copy,
+    pin,
     button('追问', () => {
       if (hasAnswer && prompt.value.trim()) return run('follow')
       prompt.focus()
     }),
   )
+  output.append(copyUI.notice)
   const initial = await api.initial()
   if (initial) await run(initial.mode, initial.id)
 }

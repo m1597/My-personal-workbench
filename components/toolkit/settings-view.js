@@ -168,6 +168,7 @@ export function settingsContents(s, target, ctx) {
   const refreshers = []
   const sync = (values) => {
     for (const apply of refreshers) apply(values)
+    ctx.onShortcutsChanged?.()
   }
   const refresh = async () =>
     sync(api.shortcutSettings ? await api.shortcutSettings() : (await api.state()).settings)

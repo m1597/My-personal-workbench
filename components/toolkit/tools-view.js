@@ -1,5 +1,5 @@
 import { createBackButton, createSettingsGear, createSettingsShell } from './settings-shell.js'
-import { el, field, choice } from './ui-dom.js'
+import { el, field, choice, feedback } from './ui-dom.js'
 export { toolkitHome, glyph, makeCanvas }
 /* Local toolkit pages use opaque file IDs returned by the native picker. */
 const glyphs = {
@@ -166,16 +166,29 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     const settings = api.shortcutSettings
       ? await api.shortcutSettings()
       : (await api.state()).settings
+    const hint = surface.querySelector('.tool-row[data-tool="selection"] small')
+    if (hint) {
+      const selection = settings.selection
+      const key = selection.activeKey ?? selection.key
+      hint.textContent = !selection.enabled
+        ? '划词助手已停用'
+        : key
+          ? '选中文字后按 ' + key.replace(/^Control\+/i, 'Ctrl+')
+          : selection.key
+            ? '快捷键未生效，请重新设置'
+            : '尚未设置快捷键'
+    }
     for (const action of surface.querySelectorAll('button[data-tool]')) {
       action.disabled = settings[action.dataset.tool]?.enabled === false
       action.title = action.disabled ? '已停用，可在设置中启用' : action.textContent
     }
   }
-  let refreshShortcuts
-  async function settingsPage() {
+  let refreshShortcuts, selectCategory
+  async function settingsPage(category) {
     surface.hidden = true
     settingsBox.hidden = false
     head.hidden = true
+    notice.hidden = true
     if (refreshShortcuts) await refreshShortcuts()
     if (!settingsBox.childElementCount) {
       let activeCategory = 'keys'
@@ -188,12 +201,18 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
         active: 'keys',
         onSelect: showCategory,
         onBack: () => {
+          notice.textContent = ''
+          notice.hidden = false
           settingsBox.hidden = true
           head.hidden = false
           surface.hidden = false
           void reflectAvailability().catch(error)
         },
       })
+      selectCategory = (id) => {
+        shell.select(id)
+        showCategory(id)
+      }
       const panels = el('div')
       function showCategory(id) {
         activeCategory = id
@@ -201,11 +220,18 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
           box.hidden = (id === 'api') !== box.classList.contains('connections')
       }
       settingsBox.append(shell.element)
-      shell.content.append(panels)
+      const settingsFeedback = feedback()
+      shell.content.append(settingsFeedback.notice, panels)
       try {
         const values = api.shortcutSettings ? await api.shortcutSettings() : s
         if (!panels.isConnected) return
-        refreshShortcuts = settingsContents(values, panels, { api, button, notice, error })
+        refreshShortcuts = settingsContents(values, panels, {
+          api,
+          ...settingsFeedback,
+          onShortcutsChanged: () => {
+            if (!surface.hidden) void reflectAvailability().catch(error)
+          },
+        })
         api.onSettingsTarget?.((route) => {
           if (route) {
             shell.select('api')
@@ -217,12 +243,14 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
         showCategory(route ? 'api' : activeCategory)
       } catch (e) {
         settingsBox.replaceChildren()
+        notice.hidden = false
         settingsBox.hidden = true
         head.hidden = false
         surface.hidden = false
         throw e
       }
     }
+    if (category === 'keys') selectCategory?.('keys')
   }
   api.onSettingsTarget?.(() => settingsPage())
   void api.settingsTarget?.().then((route) => {
@@ -238,6 +266,7 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     const item = el('div', '', 'tool-row'),
       badge = el('span', '', 'badge ' + icon),
       text = el('div', '', 'tool-text')
+    item.dataset.tool = icon
     badge.title = title
     badge.setAttribute('role', 'img')
     badge.setAttribute('aria-label', title)
@@ -264,7 +293,7 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
         tile('屏幕截图', '框选后可复制、贴图或提取文字', 'capture', '框选屏幕', () =>
           api.capture(),
         ),
-        tile('划词助手', '选中文字后按快捷键翻译或提问', 'selection', '设置快捷键', settingsPage),
+        tile('划词助手', '读取快捷键…', 'selection', '设置快捷键', () => settingsPage('keys')),
         tile('屏幕取色', '点选屏幕像素，复制十六进制色值', 'color', '开始取色', () =>
           api.capture('color'),
         ),
