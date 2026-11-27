@@ -12,11 +12,15 @@ export function PromptVisual({
   revision,
   text,
   configure,
+  original,
+  onAvailable,
 }: {
   text: string
   root: string
   name: string
   revision: string
+  original: boolean
+  onAvailable: (available: boolean) => void
   configure: () => void
 }) {
   const [zoom, setZoom] = useState(100),
@@ -40,14 +44,17 @@ export function PromptVisual({
       live = false
     }
   }, [root, name, revision])
+  useEffect(() => {
+    onAvailable(Boolean(view?.html))
+  }, [view?.html, onAvailable])
   const canvas = useRef<HTMLFieldSetElement>(null)
   useEffect(() => {
-    if (!view?.svg || !canvas.current) return
+    if (original || !view?.svg || !canvas.current) return
     // Only the local Archify compiler produces SVG; the model supplies validated text and indices.
     const svg = new DOMParser().parseFromString(view.svg, 'image/svg+xml').documentElement
     if (svg.localName !== 'svg') return
     canvas.current.replaceChildren(document.importNode(svg, true))
-  }, [view?.svg])
+  }, [view?.svg, original])
   async function generate() {
     setBusy(true)
     setError('')
@@ -78,8 +85,19 @@ export function PromptVisual({
         </button>
       )}
       {view?.stale && view.html && <small>上次生成的图</small>}
-      {!view?.html && (/\.md$/i.test(name) ? <MarkdownPreview text={text} /> : <pre>{text}</pre>)}
-      {view?.html ? (
+      {(original || !view?.html) &&
+        (/\.md$/i.test(name) ? (
+          <>
+            <MarkdownPreview text={text} />
+            <details>
+              <summary>Markdown 源码</summary>
+              <pre>{text}</pre>
+            </details>
+          </>
+        ) : (
+          <pre>{text}</pre>
+        ))}
+      {view?.html && !original ? (
         <>
           <label>
             缩放{' '}

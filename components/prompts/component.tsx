@@ -187,6 +187,7 @@ function Library() {
     [importName, setImportName] = useState('提示词.md'),
     [importBody, setImportBody] = useState(''),
     [raw, setRaw] = useState(false),
+    [hasVisual, setHasVisual] = useState(false),
     [values, setValues] = useState<Record<string, string>>({}),
     [doc, setDoc] = useState<Doc>(),
     [draft, edit] = useState(''),
@@ -402,6 +403,7 @@ function Library() {
   function reset(item?: Entry) {
     selectionVersion.current++
     setOrganized('')
+    setHasVisual(false)
     setValues({})
     setRaw(false)
     const next = item?.name || ''
@@ -788,7 +790,7 @@ function Library() {
                   <Button
                     appearance="subtle"
                     type="button"
-                    aria-pressed={!raw}
+                    aria-pressed={!raw && hasVisual}
                     disabled={dirty}
                     onClick={() => void showVisual()}
                   >
@@ -797,27 +799,29 @@ function Library() {
                   <Button
                     appearance="subtle"
                     type="button"
-                    aria-pressed={raw}
+                    aria-pressed={raw || !hasVisual}
                     onClick={() => setRaw(true)}
                   >
                     原文
                   </Button>
                 </div>
                 <div className="reader-content" key={JSON.stringify([fileRoot, name])}>
-                  {!raw && !editMode && doc && (
+                  {!editMode && doc && (
                     <PromptVisual
                       key={JSON.stringify([fileRoot, name, doc.revision, visualVersion])}
                       root={fileRoot}
                       name={name}
                       revision={doc.revision}
                       text={doc.text}
+                      original={raw}
+                      onAvailable={setHasVisual}
                       configure={() => {
                         setCategory('api')
                         setSettings(true)
                       }}
                     />
                   )}
-                  {raw && (
+                  {(raw || !hasVisual) && (
                     <details>
                       <summary>整理原文</summary>
                       <button
@@ -939,8 +943,6 @@ function Library() {
                       value={draft}
                       onChange={(e) => changeDraft(e.target.value)}
                     />
-                  ) : raw ? (
-                    <pre>{draft}</pre>
                   ) : null}
                   <details
                     key={name}

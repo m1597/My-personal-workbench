@@ -30,14 +30,124 @@ const app = await _electron.launch({
 try {
   const page = await app.firstWindow()
   const btn = (name) => page.getByRole('button', { name, exact: true })
-  const cdp = await page.context().newCDPSession(page)
-  const viewport = (width, height) =>
-    cdp.send('Emulation.setDeviceMetricsOverride', {
-      width,
-      height,
-      deviceScaleFactor: 1,
-      mobile: false,
+  const results = []
+  const inputSession = await page.context().newCDPSession(page)
+  async function viewport(width, height, zoom) {
+    return app.evaluate(
+      ({ BaseWindow, webContents }, size) => {
+        const wc = webContents
+          .getAllWebContents()
+          .find((w) => w.getURL().includes('/prompts/index.html'))
+        const owner = BaseWindow.getAllWindows().find((w) =>
+          w.contentView.children.some((c) => c.webContents === wc),
+        )
+        if (!owner) throw Error('找不到提示词宿主窗口')
+        owner.setContentSize(size.width, size.height)
+        wc.setZoomFactor(size.zoom)
+      },
+      { width, height, zoom },
+    )
+  }
+  async function capture(label) {
+    const measure = await page.evaluate(() => {
+      const v = visualViewport
+      const selectors = [
+        '.library:not([hidden])',
+        '.prompt-searchbar',
+        '[aria-label="搜索提示词"]',
+        '.prompt-searchbar button',
+        '.prompt-split',
+        '.reader-heading',
+        '.reader-tabs',
+        '.reader-content',
+        '.markdown',
+      ]
+      const boxes = selectors.flatMap((sel) =>
+        [...document.querySelectorAll(sel)]
+          .filter((el) => el.getClientRects().length)
+          .map((el) => {
+            const box = el.getBoundingClientRect()
+            return {
+              sel,
+              left: box.left,
+              right: box.right,
+              overflow: el.scrollWidth - el.clientWidth,
+            }
+          }),
+      )
+      const md = document.querySelector('.markdown')
+      const range = document.createRange()
+      const overflowLines = md
+        ? [...md.querySelectorAll('p,li,pre')].some((el) => {
+            range.selectNodeContents(el)
+            return [...range.getClientRects()].some(
+              (r) => r.right > v.offsetLeft + v.width + 1 || r.left < v.offsetLeft - 1,
+            )
+          })
+        : false
+      const outside = []
+      if (md)
+        for (const el of md.querySelectorAll('p,li,pre')) {
+          range.selectNodeContents(el)
+          const bad = [...range.getClientRects()].find((r) => r.right > v.width + 1 || r.left < -1)
+          if (bad && outside.length < 4)
+            outside.push({
+              tag: el.tagName,
+              right: bad.right,
+              left: bad.left,
+              display: getComputedStyle(el).whiteSpace,
+              text: el.textContent.slice(0, 55),
+            })
+        }
+      return {
+        outside,
+        width: v.width,
+        height: v.height,
+        dpr: devicePixelRatio,
+        boxes,
+        overflowLines,
+        rootOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      }
     })
+    const raw = await app.evaluate(async ({ webContents }) => {
+      const wc = webContents
+        .getAllWebContents()
+        .find((w) => w.getURL().includes('/prompts/index.html'))
+      const image = await wc.capturePage()
+      return { url: image.toDataURL(), size: image.getSize() }
+    })
+    const composite = await page.evaluate(async (url) => {
+      const img = new Image()
+      img.src = url
+      await img.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#202227'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(img, 0, 0)
+      return canvas.toDataURL('image/png').split(',')[1]
+    }, raw.url)
+    await writeFile(
+      path.join(evidence, label + '-layer.png'),
+      Buffer.from(raw.url.split(',')[1], 'base64'),
+    )
+    await writeFile(path.join(evidence, label + '.png'), Buffer.from(composite, 'base64'))
+    results.push({ label, ...measure, captureSize: raw.size })
+    await writeFile(path.join(evidence, 'geometry.json'), JSON.stringify(results, null, 2))
+    assert(
+      Math.abs(raw.size.width - measure.width * measure.dpr) <= 2 &&
+        Math.abs(raw.size.height - measure.height * measure.dpr) <= 2,
+      label + ' capture clipped',
+    )
+    assert(
+      !measure.overflowLines &&
+        measure.rootOverflow <= 1 &&
+        measure.boxes.every((b) => b.left >= -1 && b.right <= measure.width + 1 && b.overflow <= 1),
+      label + ' viewport overflow: ' + JSON.stringify(measure),
+    )
+  }
   const search = page.getByLabel('搜索提示词')
   let count = 0
   for (const [surface, width, height] of [
@@ -52,15 +162,29 @@ try {
       await expect(btn('独立打开')).toBeVisible()
       await btn('返回').click()
     }
-    await viewport(width, height)
-    await app.evaluate(
-      ({ webContents }, zoom) =>
-        webContents
-          .getAllWebContents()
-          .find((w) => w.getURL().includes('/prompts/index.html'))
-          .setZoomFactor(zoom),
-      surface === 'narrow' ? 1.25 : 1,
-    )
+    await viewport(width, height, surface === 'narrow' ? 1.25 : 1)
+    await expect.poll(() => page.evaluate(() => Math.round(innerWidth))).toBeGreaterThan(0)
+    if (surface === 'narrow') {
+      await search.fill('')
+      await search.click()
+      await inputSession.send('Input.imeSetComposition', {
+        text: '目录',
+        selectionStart: 2,
+        selectionEnd: 2,
+      })
+      await inputSession.send('Input.insertText', { text: '目录' })
+      await expect(search).toHaveValue('目录')
+      const paste = btn('粘贴导入')
+      assert(
+        await paste.evaluate((el) => {
+          const r = el.getBoundingClientRect()
+          return el.contains(document.elementFromPoint(r.right - 3, r.y + r.height / 2))
+        }),
+      )
+      await paste.click()
+      await expect(page.getByLabel('粘贴原文')).toBeVisible()
+      await paste.click()
+    }
     await search.fill('SDK')
     const nav = page.getByRole('navigation', { name: '提示词' })
     const card = nav.getByRole('button', { name: /pi-ai/ })
@@ -78,7 +202,9 @@ try {
     const anchorBox = await heading.boundingBox(),
       tabs = await page.locator('.reader-tabs').boundingBox()
     assert(anchorBox.y >= tabs.y + tabs.height - 1)
-    await page.screenshot({ path: path.join(evidence, surface + '-oauth.png') })
+    await expect(btn('原文')).toHaveAttribute('aria-pressed', 'true')
+    await expect(btn('可视化')).toHaveAttribute('aria-pressed', 'false')
+    await capture(surface + '-oauth')
     await reader.evaluate((el) => {
       el.scrollTop = el.scrollHeight
     })
@@ -91,7 +217,7 @@ try {
     await expect(search).toHaveValue('SDK')
     await expect(card).toHaveAttribute('aria-current', 'true')
     assert(Math.abs((await nav.evaluate((el) => el.scrollTop)) - position) <= 2)
-    await page.screenshot({ path: path.join(evidence, surface + '-list.png') })
+    await capture(surface + '-list')
     count++
   }
   const data = await readFile(path.join(root, '接入ai订阅.md'))

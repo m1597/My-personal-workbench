@@ -513,3 +513,10 @@ select option {
 .library > small:empty {
   display: none;
 }
+
+.reader-content .markdown pre,
+.reader-content .markdown pre code {
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
