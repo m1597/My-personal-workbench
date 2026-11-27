@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('fitbayConnections', {
   snapshot: () => ipcRenderer.invoke('connections:snapshot'),
+  plan: (action, use, id, model) => ipcRenderer.invoke('connections:plan', action, use, id, model),
   write: (use, input) => ipcRenderer.invoke('connections:write', use, input),
 })
 contextBridge.exposeInMainWorld('fitbayComponentSetup', {

@@ -17,6 +17,7 @@ const commonHostFiles = [
   'self-update.vbs',
   'component-installation.mjs',
   'api-connections.mjs',
+  'chatgpt-plan.mjs',
   'music-connection.mjs',
   'connection-vault.mjs',
   'installed-products.mjs',
@@ -113,6 +114,7 @@ export async function prepareProduct(product) {
     await cp('src/renderer/public/fitbay.png', path.join(app, 'fitbay.png'))
     for (const f of [
       'api-connections.mjs',
+      'chatgpt-plan.mjs',
       'connection-vault.mjs',
       'prompt-actions.mjs',
       'installed-products.mjs',

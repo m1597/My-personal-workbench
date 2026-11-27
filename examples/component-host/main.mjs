@@ -477,6 +477,15 @@ else {
           choices: connections.choices(),
         }
       })
+      ipcMain.handle('connections:plan', async (event, action, use, id, model) => {
+        if (!isShell(event) || !(await installedUses()).includes(use)) throw Error('DENIED')
+        if (action === 'authorize')
+          return connections.authorizePlan(use, id, (url) => systemShell.openExternal(url))
+        if (action === 'refresh') return connections.refreshPlanModels(use, id)
+        if (action === 'model') return connections.selectPlanModel(use, id, model)
+        if (action === 'revoke') return connections.revokePlan(use, id)
+        throw Error('DENIED')
+      })
       ipcMain.handle('connections:write', async (event, use, input) => {
         if (!isShell(event) || !(await installedUses()).includes(use)) throw Error('DENIED')
         return connections.write(use, input)

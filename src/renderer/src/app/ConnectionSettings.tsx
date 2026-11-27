@@ -11,6 +11,9 @@ type PublicConnection = {
   vision?: boolean
   configured: boolean
   protocol: string
+  authType?: 'subscription'
+  signedIn?: boolean
+  models?: { id: string; label: string; vision: boolean }[]
 }
 type Row = {
   use: string
@@ -35,6 +38,12 @@ type Edit = { expectedId: string | null } & (
 declare global {
   interface Window {
     fitbayConnections?: {
+      plan(
+        action: 'authorize' | 'model' | 'revoke' | 'refresh',
+        use: string,
+        id: string | null,
+        model?: string,
+      ): Promise<unknown>
       snapshot(): Promise<Snapshot>
       write(use: string, input: Edit): Promise<unknown>
     }
@@ -60,10 +69,25 @@ function Editor({
     [protocol, setProtocol] = useState(row.value?.protocol ?? 'chat'),
     [busy, setBusy] = useState(false),
     [message, status] = useState('')
+  const subscription = row.value?.authType === 'subscription'
+  const planMode = mode === 'plan' || (mode === 'edit' && subscription)
+  async function plan(action: 'authorize' | 'revoke' | 'model' | 'refresh', slug?: string) {
+    setBusy(true)
+    try {
+      await window.fitbayConnections?.plan(action, row.use, row.value?.id ?? null, slug)
+      saved()
+      status('已更新订阅连接')
+    } catch (error) {
+      status(error instanceof Error ? error.message : '订阅操作失败')
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <form
       onSubmit={async (e) => {
         e.preventDefault()
+        if (planMode) return
         setBusy(true)
         try {
           const api = window.fitbayConnections
@@ -109,6 +133,7 @@ function Editor({
           onChange={select}
           choices={[
             { value: 'edit', label: row.value ? '编辑当前连接' : '新建连接' },
+            { value: 'plan', label: 'ChatGPT 订阅授权' },
             ...(row.value ? [{ value: 'private', label: '单独配置' }] : []),
             ...choices
               .filter((c) => c.id !== row.value?.id && (row.use !== 'toolkit.vision' || c.vision))
@@ -119,7 +144,41 @@ function Editor({
           ]}
         />
       </label>
-      {!mode.startsWith('ref:') && (
+      {planMode && (
+        <div>
+          <p>
+            {subscription && row.value?.signedIn
+              ? row.value.configured
+                ? '已登录 · 套餐模型可用'
+                : '已登录 · 套餐模型不可用'
+              : '通过浏览器登录并授权 FitBay 使用你的 ChatGPT 套餐'}
+          </p>
+          <Button type="button" disabled={busy} onClick={() => void plan('authorize')}>
+            {subscription && row.value?.signedIn ? '重新授权' : 'Continue with ChatGPT'}
+          </Button>
+          {subscription && row.value?.signedIn && (
+            <>
+              <Button type="button" disabled={busy} onClick={() => void plan('refresh')}>
+                刷新套餐模型
+              </Button>
+              <Button type="button" disabled={busy} onClick={() => void plan('revoke')}>
+                撤销授权
+              </Button>
+              {!!row.value.models?.length && (
+                <ChoiceDropdown
+                  aria-label="订阅模型"
+                  value={row.value.model}
+                  choices={row.value.models
+                    .filter((m) => row.use !== 'toolkit.vision' || m.vision)
+                    .map((m) => ({ value: m.id, label: m.label }))}
+                  onChange={(slug) => void plan('model', slug)}
+                />
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {!planMode && !mode.startsWith('ref:') && (
         <>
           <label htmlFor={prefix + '-endpoint'}>
             服务地址
@@ -167,7 +226,7 @@ function Editor({
           </label>
         </>
       )}
-      {row.use === 'default' && (
+      {row.use === 'default' && !planMode && (
         <Checkbox
           label="此连接支持视觉输入"
           checked={vision}
@@ -219,9 +278,11 @@ function Editor({
           </Button>
         </>
       )}
-      <Button type="submit" disabled={busy}>
-        保存配置
-      </Button>
+      {!planMode && (
+        <Button type="submit" disabled={busy}>
+          保存配置
+        </Button>
+      )}
       <p role="status">{message}</p>
     </form>
   )
@@ -249,7 +310,7 @@ export function ConnectionSettings() {
   const row = data?.rows.find((r) => r.use === selection) ?? data?.rows[0]
   return (
     <section className="api-connections">
-      <div id="setting-4-0">
+      <div id="setting-3-0">
         <table>
           <thead>
             <tr>
@@ -271,7 +332,9 @@ export function ConnectionSettings() {
                   </Button>
                 </td>
                 <td>
-                  {r.value?.endpoint ?? '—'}
+                  {r.value?.authType === 'subscription'
+                    ? 'ChatGPT 订阅 · ' + (r.value.model || '无适用模型')
+                    : (r.value?.endpoint ?? '—')}
                   {r.value && r.use !== 'default' && (
                     <small> · {r.value.source === 'default' ? '继承默认' : '专用连接'}</small>
                   )}
