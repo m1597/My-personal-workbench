@@ -78,6 +78,7 @@ const env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
 let app, host, prompts
 const b = (p, n) => p.getByRole('button', { name: n, exact: true })
 async function checkDiagram() {
+  if (process.argv.includes('--pin-in-place')) env.WORKBENCH_TEST_HIDDEN_SURFACES = '1'
   const profileArg = '--workbench-profile=' + profile
   let panel
   if (checkTheme) {
@@ -203,6 +204,80 @@ im.save(sys.stdout.buffer,'PNG')`,
     return overlay
   }
   let overlay = await region()
+  if (process.argv.includes('--pin-in-place')) {
+    const original = await overlay.evaluate(() => window.toolkit.selectionImage())
+    const rect = await overlay.locator('.rect').boundingBox()
+    const context = overlay.context()
+    await context.addInitScript(() => {
+      const decode = HTMLImageElement.prototype.decode
+      HTMLImageElement.prototype.decode = function () {
+        if (this.closest('.pinned') && localStorage.getItem('reject-pin') === '1')
+          return Promise.reject(Error('test decode failure'))
+        return decode.call(this)
+      }
+    })
+    await overlay.evaluate(() => localStorage.setItem('reject-pin', '1'))
+    await b(overlay, '贴图置顶').click()
+    await expect(overlay.getByText('贴图未能显示，请重试', { exact: true })).toBeVisible({
+      timeout: 16000,
+    })
+    assert.equal(await overlay.evaluate(() => window.toolkit.selectionImage()), original)
+    await overlay.evaluate(() => localStorage.removeItem('reject-pin'))
+    const next = app.waitForEvent('window')
+    await b(overlay, '贴图置顶').click()
+    const pin = await next
+    await expect.poll(() => overlay.isClosed()).toBe(true)
+    const native = await app.browserWindow(pin)
+    const bounds = await native.evaluate((w) => w.getContentBounds())
+    assert(
+      Math.abs(bounds.x - display.fixture.bounds.x - rect.x) <= 1 &&
+        Math.abs(bounds.y - display.fixture.bounds.y - rect.y) <= 1 &&
+        Math.abs(bounds.width - rect.width) <= 1 &&
+        Math.abs(bounds.height - rect.height) <= 1,
+      JSON.stringify({ rect, bounds }),
+    )
+    assert.equal(await native.evaluate((w) => w.isAlwaysOnTop()), true)
+    const img = pin.locator('.pinned img')
+    assert.equal(await img.getAttribute('src'), original)
+    await pin.screenshot({ path: path.join(folder, 'pinned-native.png') })
+    await writeFile(
+      path.join(folder, 'selected.png'),
+      Buffer.from(original.split(',')[1], 'base64'),
+    )
+    execFileSync(
+      'python',
+      [
+        '-c',
+        `import sys
+from pathlib import Path
+from PIL import Image,ImageChops,ImageStat
+p=Path(sys.argv[1])
+ref=Image.open(p/'selected.png').convert('RGB')
+frame=Image.open(p/'pinned-native.png').convert('RGB')
+delta=ImageStat.Stat(ImageChops.difference(ref.resize((128,80),Image.Resampling.BOX),frame.resize((128,80),Image.Resampling.BOX))).mean
+assert max(delta)<7,delta
+print('Rendered pin mean channel differences:',delta)`,
+        folder,
+      ],
+      { stdio: 'inherit' },
+    )
+    await pin.mouse.move(20, 20)
+    await pin.mouse.down()
+    await pin.mouse.move(45, 40)
+    await pin.mouse.up()
+    await expect.poll(() => native.evaluate((w) => w.getBounds().x)).toBeGreaterThan(bounds.x + 15)
+    await pin.mouse.wheel(0, -120)
+    await expect
+      .poll(() => native.evaluate((w) => w.getContentBounds().width))
+      .toBeGreaterThan(bounds.width)
+    await pin.screenshot({ path: path.join(folder, 'pinned.png') })
+    await pin.keyboard.press('Escape').catch((e) => {
+      if (!pin.isClosed()) throw e
+    })
+    await expect.poll(() => pin.isClosed()).toBe(true)
+    console.log('PASS pin', folder)
+    return
+  }
   let next = app.waitForEvent('window')
   await b(overlay, '翻译').click()
   let result = await next

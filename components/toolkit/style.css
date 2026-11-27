@@ -221,3 +221,26 @@ body.result-window {
   gap: var(--space-6);
   align-items: center;
 }
+
+.pinned {
+  display: block;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+  cursor: move;
+}
+.screen .bar {
+  align-items: center;
+  background: var(--menu-surface);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-8, 8px);
+  box-shadow: var(--shadow-menu);
+}
+.screen .bar button {
+  color: var(--text);
+  background: transparent;
+  border: 0;
+}
+.screen .bar button:hover {
+  background: var(--hover);
+}

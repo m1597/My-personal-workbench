@@ -362,7 +362,42 @@ api
     }
     if (s.kind === 'pin') {
       root.className = 'pinned'
-      root.append(picture(s.image))
+      const img = picture(s.image)
+      root.append(img)
+      try {
+        await img.decode()
+      } catch {
+        await api.pinFailed()
+        return
+      }
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      await api.pinReady()
+      let drag
+      root.onpointerdown = (e) => {
+        if (e.button !== 0) return
+        root.setPointerCapture(e.pointerId)
+        drag = [e.screenX, e.screenY]
+      }
+      root.onpointermove = (e) => {
+        if (!drag) return
+        const dx = Math.round(e.screenX - drag[0]),
+          dy = Math.round(e.screenY - drag[1])
+        if (dx || dy) {
+          drag = [e.screenX, e.screenY]
+          void api.pinMove([dx, dy]).catch(error)
+        }
+      }
+      root.onpointerup = root.onlostpointercapture = () => {
+        drag = undefined
+      }
+      root.addEventListener(
+        'wheel',
+        (e) => {
+          e.preventDefault()
+          if (e.deltaY) void api.pinZoom(-Math.sign(e.deltaY)).catch(error)
+        },
+        { passive: false },
+      )
     } else
       root.append(
         el('p', s.text),

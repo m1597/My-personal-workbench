@@ -116,6 +116,7 @@ async function startToolkit() {
   app.once('will-quit', () => materialWatcher.close())
   let hosted = process.argv.includes('--fitbay-hosted')
   const backgroundTest = process.env.WORKBENCH_TEST_BACKGROUND === '1'
+  const hiddenSurfaces = backgroundTest && process.env.WORKBENCH_TEST_HIDDEN_SURFACES === '1'
   function show(data, options = {}, fromHost = hosted) {
     const win = new BrowserWindow({
       icon: path.join(here, 'toolkit.ico'),
@@ -163,6 +164,7 @@ async function startToolkit() {
     })
     win.on('page-title-updated', (e) => e.preventDefault())
     const reveal = () => {
+      if (hiddenSurfaces && ['pin', 'screen'].includes(data.kind)) return
       if (backgroundTest) {
         win.setPosition(-30000, -30000)
         win.showInactive()
@@ -186,7 +188,8 @@ async function startToolkit() {
       win.webContents.once('render-process-gone', () => {
         if (!win.isDestroyed()) win.destroy()
       })
-    } else win.once('ready-to-show', reveal)
+    } else if (data.kind === 'pin') states.get(id).reveal = reveal
+    else win.once('ready-to-show', reveal)
     void win.loadFile(path.join(here, 'index.html')).catch(() => {
       if (!win.isDestroyed()) win.destroy()
     })
@@ -282,7 +285,9 @@ async function startToolkit() {
       currentOverlay.once('close', () => {
         if (overlay === currentOverlay) overlay = undefined
       })
-      overlay.setBounds(backgroundTest ? { ...d.bounds, x: -30000, y: -30000 } : d.bounds)
+      overlay.setBounds(
+        backgroundTest && !hiddenSurfaces ? { ...d.bounds, x: -30000, y: -30000 } : d.bounds,
+      )
     } finally {
       capturing = false
     }
@@ -502,6 +507,7 @@ async function startToolkit() {
     const { width, height } = s.full.getSize(),
       x = Math.floor(v[0] * width),
       y = Math.floor(v[1] * height)
+    s.region = v
     s.image = s.full.crop({
       x,
       y,
@@ -585,27 +591,96 @@ async function startToolkit() {
       s.win.close()
     }
   })
-  handle('pin', ['screen'], (s) => {
-    const image = selected(s)
-    const { width, height } = image.getSize()
-    const display = displayFor(s)
-    const area = display.workArea
-    const scale = Math.min(1 / display.scaleFactor, area.width / width, area.height / height)
-    show(
-      { kind: 'pin', image },
-      {
-        title: 'FitBay 贴图',
-        x: area.x + Math.max(0, Math.round((area.width - width * scale) / 2)),
-        y: area.y + Math.max(0, Math.round((area.height - height * scale) / 2)),
-        alwaysOnTop: true,
-        width: Math.max(1, Math.round(width * scale)),
-        height: Math.max(1, Math.round(height * scale)),
-        minWidth: 1,
-        useContentSize: true,
-      },
-      s.hosted,
+  handle('pinFailed', ['pin'], (s) => s.win.destroy())
+  handle('pinReady', ['pin'], (s) => s.finishPaint?.())
+  handle('pinMove', ['pin'], (s, delta) => {
+    if (
+      !Array.isArray(delta) ||
+      delta.length !== 2 ||
+      !delta.every((n) => Number.isInteger(n) && Math.abs(n) < 32768)
     )
-    s.win.close()
+      throw Error('无效移动')
+    const [x, y] = s.win.getPosition()
+    s.win.setPosition(x + delta[0], y + delta[1])
+  })
+  handle('pinZoom', ['pin'], (s, step) => {
+    if (step !== 1 && step !== -1) return
+    const bounds = s.win.getBounds()
+    const ratio = Math.min(8, Math.max(0.1, (s.zoom || 1) * Math.pow(1.2, step)))
+    const width = Math.max(1, Math.round(s.originalSize.width * ratio)),
+      height = Math.max(1, Math.round(s.originalSize.height * ratio))
+    s.win.setBounds({
+      x: bounds.x + Math.round((bounds.width - width) / 2),
+      y: bounds.y + Math.round((bounds.height - height) / 2),
+      width,
+      height,
+    })
+    s.zoom = ratio
+  })
+  handle('pin', ['screen'], async (s) => {
+    if (s.pinning) return
+    const image = selected(s),
+      display = displayFor(s)
+    const [left, top, right, bottom] = s.region
+    const { x, y, width, height } = display.bounds
+    const size = {
+      width: Math.max(1, Math.round(right * width) - Math.round(left * width)),
+      height: Math.max(1, Math.round(bottom * height) - Math.round(top * height)),
+    }
+    s.pinning = true
+    try {
+      const pin = show(
+        { kind: 'pin', image, originalSize: size },
+        {
+          title: 'FitBay 贴图',
+          x: x + Math.round(left * width),
+          y: y + Math.round(top * height),
+          ...size,
+          frame: false,
+          thickFrame: false,
+          hasShadow: false,
+          roundedCorners: false,
+          resizable: false,
+          useContentSize: true,
+          minWidth: 1,
+          minHeight: 1,
+          alwaysOnTop: true,
+          skipTaskbar: true,
+        },
+        s.hosted,
+      )
+      pin.setBounds({ x: x + Math.round(left * width), y: y + Math.round(top * height), ...size })
+      const contents = pin.webContents,
+        state = states.get(contents.id)
+      await new Promise((resolve, reject) => {
+        const cancel = () => {
+          if (!pin.isDestroyed()) pin.destroy()
+        }
+        const deadline = setTimeout(cancel, 12000)
+        const failed = () => {
+          cleanup()
+          reject(Error('贴图未能显示，请重试'))
+        }
+        const cleanup = () => {
+          clearTimeout(deadline)
+          s.abort.signal.removeEventListener('abort', cancel)
+          pin.removeListener('closed', failed)
+          contents.removeListener('render-process-gone', cancel)
+          state.finishPaint = undefined
+        }
+        pin.once('closed', failed)
+        contents.once('render-process-gone', cancel)
+        s.abort.signal.addEventListener('abort', cancel, { once: true })
+        state.finishPaint = () => {
+          cleanup()
+          state.reveal()
+          resolve()
+        }
+      })
+      if (!s.win.isDestroyed()) s.win.close()
+    } finally {
+      s.pinning = false
+    }
   })
   handle('top', ['result'], (s) => {
     s.win.setAlwaysOnTop(!s.win.isAlwaysOnTop(), 'screen-saver')
