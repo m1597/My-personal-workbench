@@ -163,7 +163,9 @@ export function WindowMenu({ collapsed }: { collapsed: ReturnType<typeof useEdge
     return () => window.removeEventListener('fitbay-layout-name', sync)
   }, [inspect])
   function restoreForOpen(id: string) {
-    const entry = collapsed.find((item) => item.panels.includes(id)) ?? collapsed.at(-1)
+    const panel = workspace.api?.getPanel(id)
+    if (panel?.group.api.isVisible) return
+    const entry = panel ? collapsed.find((item) => item.panels.includes(id)) : collapsed.at(-1)
     entry?.restore()
   }
   async function openComponent(host: Window['componentHost'], id: string) {

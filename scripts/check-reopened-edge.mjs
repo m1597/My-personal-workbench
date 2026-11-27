@@ -113,11 +113,16 @@ for (const axis of ['width', 'height']) {
                 ? '工具集'
                 : '示例组件'
         await open(name)
+        if (reopen === 'neighbor') {
+          await expect(groups).toHaveCount(1)
+          expect(await sizes()).toEqual({ span: first.span, panes: first.panes, gaps: first.gaps })
+          await open(hiddenName)
+        }
         const selected = {
           提示词库: 'component-prompts',
           工具集: 'component-toolkit',
           示例组件: 'component-example',
-        }[name]
+        }[reopen === 'neighbor' ? hiddenName : name]
         await expect(
           groups.locator(`[data-tab-panel-id="${selected}"][aria-selected=true]`),
         ).toBeVisible()
@@ -145,7 +150,13 @@ for (const axis of ['width', 'height']) {
         expect(app.windows().filter((p) => p.url().includes('/component/index.html'))).toEqual([
           sample,
         ])
-        results.push({ key, first, second, contentRetained: true })
+        results.push({
+          key,
+          first,
+          second,
+          ...(reopen === 'neighbor' && { visibleClickKeptCollapsed: true }),
+          contentRetained: true,
+        })
       } catch (e) {
         results.push({ key, error: e.message.split('Call log:')[0] })
       } finally {
