@@ -19,10 +19,15 @@ await writeFile(
   JSON.stringify({ defaultRoot: root, shortcut: 'F20', shortcutEnabled: false }),
 )
 const app = await _electron.launch({
+  executablePath: process.env.FITBAY_TEST_PROMPTS_EXECUTABLE,
   args: [
-    path.resolve('dist/component-prototype/host'),
-    '--mode=prompts',
-    '--workbench=' + path.resolve('out/renderer/index.html'),
+    ...(process.env.FITBAY_TEST_PROMPTS_EXECUTABLE
+      ? []
+      : [
+          path.resolve('dist/component-prototype/host'),
+          '--mode=prompts',
+          '--workbench=' + path.resolve('out/renderer/index.html'),
+        ]),
     '--user-data-dir=' + profile,
   ],
   env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },

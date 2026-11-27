@@ -59,10 +59,15 @@ const server = createServer(async (req, res) => {
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
 const launch = () =>
   _electron.launch({
+    executablePath: process.env.FITBAY_TEST_PROMPTS_EXECUTABLE,
     args: [
-      path.join(dist, 'host'),
-      '--mode=prompts',
-      '--workbench=' + path.resolve('out/renderer/index.html'),
+      ...(process.env.FITBAY_TEST_PROMPTS_EXECUTABLE
+        ? []
+        : [
+            path.join(dist, 'host'),
+            '--mode=prompts',
+            '--workbench=' + path.resolve('out/renderer/index.html'),
+          ]),
       '--user-data-dir=' + profile,
     ],
     env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
