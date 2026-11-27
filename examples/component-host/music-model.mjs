@@ -183,8 +183,9 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
             : recommendationInstructions +
               languageInstructions +
               ' 生成和补推时按 requestWeight 与 tasteWeight 的百分比权衡本次输入和已授权口味，权重为零的因素不参与。每首歌曲另附 requestFit 和 tasteFit 两个 0 到 100 的整数，分别独立衡量对本次输入、已提供口味的吻合度；缺乏对应信息填 50。理由说明具体依据。若给出 douyinChart，只有其中的同名同署名录音可作为已核验的热门作品；按权重兼顾口味及榜单名次，100%要求时仅从榜单选择。榜单缺失时不得声称已上榜。按 recording 的版本、翻唱、伴奏偏好处理。scope=direct 时只给直接相关的候选；可信直接候选已经用尽时返回 directExhausted:true，songs 可以为空。scope=related 才允许靠近主题的相邻风格，并在 reason 解释联系。'
-  const connection = store.connections?.read('music.model')
-  if (connection?.authType === 'subscription') {
+  const resolved = store.connections?.resolve('music.model')
+  const shared = resolved ?? store.connections?.read?.('music.model')
+  if (shared?.authType === 'subscription') {
     const text = await store.connections.requestPlan('music.model', {
       instructions,
       input: JSON.stringify(payload),
@@ -192,8 +193,6 @@ export async function requestMusicModel(store, vault, purpose, payload, signal) 
     })
     return parseModelReply(text, purpose, requiredLanguage)
   }
-  const resolved = store.connections?.resolve('music.model')
-  const shared = resolved ?? connection
   const legacy = shared ? null : config(store)
   const account = shared ?? legacy.accounts[legacy.active]
   const route = shared ?? legacyRoute(legacy.active, account)

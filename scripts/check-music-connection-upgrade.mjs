@@ -45,6 +45,7 @@ try {
   await expect(page.locator('.api-connections')).toHaveCount(0)
   await page.getByRole('tab', { name: '找歌', exact: true }).click()
   await page.getByRole('tab', { name: 'AI 推荐', exact: true }).click()
+  await page.locator('#music-generate-recommendations input').fill('器乐')
   await page.getByRole('button', { name: '生成推荐', exact: true }).click()
   const form = page.locator('.api-connections form')
   await expect(form).toBeVisible()
