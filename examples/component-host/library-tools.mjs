@@ -20,7 +20,8 @@ export async function relocationPreview(library, dir) {
   const candidates = new Map(),
     matches = new Map()
   const byFilename = new Map(),
-    byTitle = new Map()
+    byTitle = new Map(),
+    byIdentity = new Map()
   const add = (index, key, id) => {
     if (!index.has(key)) index.set(key, new Set())
     index.get(key).add(id)
@@ -33,17 +34,22 @@ export async function relocationPreview(library, dir) {
     const id = randomUUID()
     const stat = await lstat(row.file, { bigint: true }).catch(() => null)
     if (!stat?.isFile() || Number(stat.size) !== row.size) continue
+    if (row.identity) add(byIdentity, row.identity, id)
     candidates.set(id, { ...row, linked: linked?.id, signature: signature(stat) })
     add(byFilename, normalized(path.basename(row.file)), id)
     add(byTitle, normalized(row.title), id)
   }
   const view = missing.map((track) => {
-    const options = [
-      ...new Set([
-        ...(byFilename.get(normalized(path.basename(track.file))) || []),
-        ...(byTitle.get(normalized(track.title)) || []),
-      ]),
-    ].filter((id) => !candidates.get(id).linked || candidates.get(id).linked === track.id)
+    const options = (
+      byIdentity.get(track.fileIdentity)
+        ? [...byIdentity.get(track.fileIdentity)]
+        : [
+            ...new Set([
+              ...(byFilename.get(normalized(path.basename(track.file))) || []),
+              ...(byTitle.get(normalized(track.title)) || []),
+            ]),
+          ]
+    ).filter((id) => !candidates.get(id).linked || candidates.get(id).linked === track.id)
     matches.set(track.id, { track, options })
     return {
       id: track.id,
@@ -98,7 +104,7 @@ export async function applyRelocation(library, preview, selections) {
   try {
     for (const [old, c] of updates) {
       const result = db
-        .prepare(`UPDATE local_tracks SET file=?,path_key=?,title=?,artist=?,album=?,size=?,duration=?,available=1,unplayable=0,awaitingLocation=0
+        .prepare(`UPDATE local_tracks SET file=?,path_key=?,title=?,artist=?,album=?,size=?,duration=?,fileIdentity=?,available=1,unplayable=0,awaitingLocation=0
         WHERE id=? AND file=? AND available=0`)
         .run(
           c.file,
@@ -108,10 +114,12 @@ export async function applyRelocation(library, preview, selections) {
           c.album,
           c.size,
           c.duration,
+          c.identity ?? null,
           old.id,
           old.file,
         )
       if (!result.changes) throw Error('曲库已变化，请重新扫描')
+      library.restoreMovedMembership(old.id)
     }
     db.prepare('INSERT OR IGNORE INTO music_roots(dir) VALUES(?)').run(preview.dir)
     db.exec('COMMIT')

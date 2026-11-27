@@ -189,6 +189,7 @@ export class LocalLibrary {
       this.db.exec(`
         CREATE INDEX IF NOT EXISTS recommended_local_track ON recommended_items(local);
         CREATE TABLE IF NOT EXISTS removed_recommendation_members(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS missing_recommendation_members(track TEXT PRIMARY KEY REFERENCES local_tracks(id) ON DELETE CASCADE);
         DROP VIEW IF EXISTS recommendation_playlist_members;
         CREATE VIEW recommendation_playlist_members AS
           SELECT track, source, position,joinedAt FROM (
@@ -790,13 +791,18 @@ export class LocalLibrary {
             expires: Date.now() + 10_000,
           }
       }
-      if (system)
+      if (system) {
+        this.db
+          .prepare(
+            'DELETE FROM missing_recommendation_members WHERE track IN (SELECT value FROM json_each(?))',
+          )
+          .run(data)
         this.db
           .prepare(
             'INSERT OR IGNORE INTO removed_recommendation_members SELECT track FROM recommendation_playlist_members WHERE track IN (SELECT value FROM json_each(?))',
           )
           .run(data)
-      else if (added)
+      } else if (added)
         addedCount = this.db
           .prepare(
             'INSERT OR IGNORE INTO playlist_tracks(playlist,track,position,addedAt) SELECT ?, value, ? + key, ? FROM json_each(?) ORDER BY key',
@@ -900,6 +906,14 @@ export class LocalLibrary {
     for (const row of rows) if (await this.verify(row)) return row
     return null
   }
+  restoreMovedMembership(id) {
+    this.db
+      .prepare(
+        'DELETE FROM removed_recommendation_members WHERE track=? AND track IN (SELECT track FROM missing_recommendation_members)',
+      )
+      .run(id)
+    this.db.prepare('DELETE FROM missing_recommendation_members WHERE track=?').run(id)
+  }
   async verify(row) {
     if (row.awaitingLocation) return false
     if (!(await this.acceptsVolume(row.file))) {
@@ -917,12 +931,17 @@ export class LocalLibrary {
       (row.recommendationMember || (row.lastHeardAt != null && !row.hiddenFromRecent)) &&
       (await confirmedMissing(row.file))
     ) {
-      if (row.recommendationMember)
-        this.db
+      if (row.recommendationMember) {
+        const hidden = this.db
           .prepare(
             'INSERT OR IGNORE INTO removed_recommendation_members SELECT id FROM local_tracks WHERE id=? AND file=? AND awaitingLocation=0',
           )
           .run(row.id, row.file)
+        if (hidden.changes)
+          this.db
+            .prepare('INSERT OR IGNORE INTO missing_recommendation_members VALUES(?)')
+            .run(row.id)
+      }
       if (row.lastHeardAt != null)
         this.db
           .prepare(

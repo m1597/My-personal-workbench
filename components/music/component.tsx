@@ -4,7 +4,7 @@ import { useLibrarySearch } from './useLibrarySearch'
 import { useOutputDevice } from './PlayerOptionsPane'
 import { playlistRows, type PlaylistSorting } from './PlaylistSortMenu'
 import { filterLocalSongs } from './localSearch'
-import { RevealTrackContext, TrackMenu } from './TrackMenu'
+import { MoveTrackContext, RevealTrackContext, TrackMenu } from './TrackMenu'
 import { Cover, type Album } from './AlbumBrowser'
 import { NowPlaying, type LyricLine } from './NowPlaying'
 import { guideSteps, MusicGuide } from './MusicGuide'
@@ -286,6 +286,9 @@ declare global {
         removeFolder(id: string): Promise<string[]>
         renamePlaylist(id: string, name: string): Promise<void>
         deletePlaylist(id: string): Promise<void>
+        moveLocalTracks(
+          ids: string[],
+        ): Promise<{ moved: number; skipped: number; failed: number; reason: string } | null>
         relocateLocal(id: string): Promise<void>
         mediaFailed(id: string, url: string): Promise<undefined | PlaybackFailure>
         localSource(id: string, scope?: string): Promise<string>
@@ -456,6 +459,7 @@ function Music() {
     PlaybackFailure & { id: string; ids: string[]; occurrence: number }
   >()
   const playBatch = useRef({ scope: '', ids: [] as string[], occurrence: 0 })
+  const [moveSelection, setMoveSelection] = useState<string[] | null>(null)
   const [presentation, setPresentation] = useState<Presentation>('full')
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>('library')
   function openSettings(category: SettingsCategory) {
@@ -654,6 +658,9 @@ function Music() {
   const rows = batchRows
     .filter((row) => (row.daily ? savedDaily(row) : row.status !== '已在曲库'))
     .slice(0, batch?.targetCount ?? 5)
+  const moveIds = rows.flatMap((row) =>
+    row.localId && moveSelection?.includes(row.localId) ? [row.localId] : [],
+  )
   const downloaded = [...new Set(rows.flatMap((r) => (r.daily && r.localId ? [r.localId] : [])))]
   async function forBatches(items: Item[], action: (batch: string) => Promise<unknown>) {
     for (const id of new Set(items.map((item) => item.batch))) await action(id)
@@ -2018,12 +2025,22 @@ function Music() {
                         </Button>
                       )}
                     </div>
+                    {rows.some((row) => row.localId) && (
+                      <Button
+                        appearance="subtle"
+                        size="small"
+                        onClick={() => setMoveSelection(moveSelection ? null : [])}
+                      >
+                        {moveSelection ? '结束多选' : '多选'}
+                      </Button>
+                    )}
                     <ol>
                       {rows.map((r) => {
                         const version = r.candidates.find((t) => t.id === r.track)
                         return (
                           <TrackMenu
                             key={r.id}
+                            moveIds={moveIds}
                             localId={r.localId}
                             queueable={playable(r)}
                             onQueue={(next) => onQueue(r.localId ?? r.id, next)}
@@ -2037,6 +2054,21 @@ function Music() {
                                 else if (r.online) void act(() => audition(r))
                               })}
                             >
+                              {moveSelection && r.localId && (
+                                <Checkbox
+                                  aria-label={'选择' + r.title}
+                                  checked={moveSelection.includes(r.localId)}
+                                  onChange={(_, data) => {
+                                    const id = r.localId
+                                    if (!id) return
+                                    setMoveSelection((prev) =>
+                                      data.checked
+                                        ? [...(prev ?? []), id]
+                                        : (prev ?? []).filter((track) => track !== id),
+                                    )
+                                  }}
+                                />
+                              )}
                               <div
                                 className="music-track-icon"
                                 data-cover={!!r.daily}
@@ -2534,15 +2566,31 @@ function Music() {
     </ComponentTheme>
   )
   return (
-    <RevealTrackContext.Provider value={(id) => void act(() => host.revealTrack(id))}>
-      <RowPlayback.Provider value={{ id: now, paused, toggle: togglePlayback }}>
-        <RecordingLists.Provider value={state?.playlists.filter((list) => !list.system) ?? []}>
-          <MusicLanguage.Provider value={language}>
-            <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
-          </MusicLanguage.Provider>
-        </RecordingLists.Provider>
-      </RowPlayback.Provider>
-    </RevealTrackContext.Provider>
+    <MoveTrackContext.Provider
+      value={(ids) =>
+        void act(async () => {
+          const result = await host.moveLocalTracks(ids)
+          if (result) {
+            setError(
+              language === 'en'
+                ? `Moved ${result.moved}, skipped ${result.skipped}, failed ${result.failed}`
+                : `已移动 ${result.moved} 首，跳过 ${result.skipped} 首，失败 ${result.failed} 首` +
+                    (result.reason ? ' · ' + result.reason : ''),
+            )
+          }
+        })
+      }
+    >
+      <RevealTrackContext.Provider value={(id) => void act(() => host.revealTrack(id))}>
+        <RowPlayback.Provider value={{ id: now, paused, toggle: togglePlayback }}>
+          <RecordingLists.Provider value={state?.playlists.filter((list) => !list.system) ?? []}>
+            <MusicLanguage.Provider value={language}>
+              <SongCatalog.Provider value={catalog.openCatalog}>{content}</SongCatalog.Provider>
+            </MusicLanguage.Provider>
+          </RecordingLists.Provider>
+        </RowPlayback.Provider>
+      </RevealTrackContext.Provider>
+    </MoveTrackContext.Provider>
   )
 }
 const root = document.getElementById('root')

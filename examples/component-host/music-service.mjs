@@ -14,6 +14,7 @@ import {
   forgetLocal,
   recoverTrash,
   recoverFavoriteMoves,
+  moveLibraryTrack,
   sortFavorite,
   recyclableLyrics,
   retirePendingBatches,
@@ -100,12 +101,19 @@ export function musicService(
         if (ids.length) recoveringTrash = recoveringTrash.then(() => archiveFavorites(ids))
       }
     }
-    watchedLibrary ??= new WatchedLibrary(store.library, ({ music, lyrics }) => {
-      if (musicView && !musicView.isDestroyed()) {
-        if (music) musicView.send('music:library-changed', [])
-        if (lyrics) musicView.send('music:lyrics-saved')
-      }
-    })
+    watchedLibrary ??= new WatchedLibrary(
+      store.library,
+      ({ music, lyrics }) => {
+        if (musicView && !musicView.isDestroyed()) {
+          if (music) musicView.send('music:library-changed', [])
+          if (lyrics) musicView.send('music:lyrics-saved')
+        }
+      },
+      undefined,
+      (track, file) => {
+        if ((grant?.libraryId ?? grant?.id) === track) grant.file = file
+      },
+    )
   }
   const overlay = desktopLyrics(
     () => store,
@@ -377,6 +385,58 @@ export function musicService(
   bind('undoMembership', (token) => store.library.undoMembership(text(token)))
   bind('cancelImport', () => store.library.cancel())
   bind('relocateLocal', (id) => selectLocal('files', text(id)))
+  bind('moveLocalTracks', async (ids) => {
+    if (!Array.isArray(ids) || !ids.length || ids.some((id) => typeof id !== 'string'))
+      throw Error('请选择本地歌曲')
+    if (localDialog) throw Error('请先关闭当前文件选择窗口')
+    localDialog = true
+    const epoch = viewEpoch
+    try {
+      const choice = await dialog.showOpenDialog({
+        title: '移动到文件夹',
+        properties: ['openDirectory', 'createDirectory'],
+      })
+      if (choice.canceled || !choice.filePaths.length || epoch !== viewEpoch) return null
+      const target = choice.filePaths[0]
+      const run = async () => {
+        let moved = 0,
+          skipped = 0,
+          failed = 0,
+          reason = ''
+        const seen = new Set()
+        for (const id of new Set(ids)) {
+          try {
+            const row =
+              store.db.prepare('SELECT * FROM local_tracks WHERE id=?').get(id) ??
+              (await store.library.onlineCopy(id))
+            if (!row || seen.has(row.id)) {
+              skipped++
+              continue
+            }
+            seen.add(row.id)
+            if (
+              await moveLibraryTrack(store, row, target, (track, file) => {
+                if ((grant?.libraryId ?? grant?.id) === track) grant.file = file
+              })
+            )
+              moved++
+            else skipped++
+          } catch (err) {
+            failed++
+            reason = err.code ? '目标冲突、文件占用或目录不可用' : err.message
+          }
+        }
+        if (moved && musicView && !musicView.isDestroyed())
+          musicView.send('music:library-changed', [])
+        return { moved, skipped, failed, reason }
+      }
+      const task = sorting.then(run)
+      sorting = task.catch(() => {})
+      return await task
+    } finally {
+      localDialog = false
+    }
+  })
   bind('refreshLocal', async () => {
     await store.library.refresh()
     await reconcileRecycled(store, forgetTracks)

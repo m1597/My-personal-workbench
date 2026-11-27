@@ -869,6 +869,7 @@ export function LibraryPane({
                       <TrackMenu
                         key={t.id}
                         localId={t.origin === 'online' && !t.localCopy ? null : t.id}
+                        moveIds={selectedIds}
                         play={t.available ? () => playRow(t.id) : undefined}
                         lists={userPlaylists}
                         addTo={(id) => void membership(id, t.id, true)}

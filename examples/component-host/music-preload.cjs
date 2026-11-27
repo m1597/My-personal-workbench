@@ -107,6 +107,7 @@ const names = [
   'renamePlaylist',
   'deletePlaylist',
   'relocateLocal',
+  'moveLocalTracks',
   'localSource',
   'analysisRecording',
   'mediaFailed',

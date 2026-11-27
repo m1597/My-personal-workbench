@@ -3,6 +3,8 @@ import { Menu, MenuItem, MenuList, MenuPopover, MenuTrigger } from '@fluentui/re
 
 export const RevealTrackContext = createContext<(id: string) => void>(() => {})
 
+export const MoveTrackContext = createContext<(ids: string[]) => void>(() => {})
+
 export function TrackMenu({
   children,
   play,
@@ -13,10 +15,12 @@ export function TrackMenu({
   onQueue,
   queueShortcut,
   localId,
+  moveIds,
   dismissed,
   onDismiss,
 }: {
   children: ReactElement
+  moveIds?: string[]
   localId?: string | null
   play?(): void
   download?(): void
@@ -28,6 +32,7 @@ export function TrackMenu({
   dismissed?: boolean
   onDismiss?(): void
 }) {
+  const move = useContext(MoveTrackContext)
   const reveal = useContext(RevealTrackContext)
   if (!onQueue && !localId && !onDismiss && !play && !download && !addTo) return children
   return (
@@ -60,6 +65,11 @@ export function TrackMenu({
                 </MenuList>
               </MenuPopover>
             </Menu>
+          )}
+          {localId && (
+            <MenuItem onClick={() => move(moveIds?.includes(localId) ? moveIds : [localId])}>
+              移动到文件夹
+            </MenuItem>
           )}
           {localId && <MenuItem onClick={() => reveal(localId)}>查看文件所在位置</MenuItem>}
           {onQueue && (

@@ -114,6 +114,8 @@ export async function recoverTrash(store, forget, trash) {
 }
 export async function trashAudio(store, row, lyric, trash, forget) {
   const db = store.db
+  if (db.prepare('SELECT 1 FROM favorite_moves WHERE local=?').get(row.id))
+    throw Error('歌曲正在移动')
   db.prepare('INSERT INTO pending_trash(local,file,lyric) VALUES(?,?,?)').run(
     row.id,
     row.file,
@@ -143,13 +145,54 @@ async function verifyDownload(row) {
     await handle.close()
   }
 }
-async function moveFavorite(store, row, target, sourceRevision, lyric, onMove, manual) {
+// The native picker authorizes this move including an accompanying user-written LRC.
+export async function moveLibraryTrack(store, row, target, onMove) {
+  if (!(await safeDir(target)) || !(await store.library.acceptsVolume(target)))
+    throw Error('目标目录不可用')
+  if (pathKey(target) === pathKey(path.dirname(row.file))) return false
+  const source = stat(row.file)
+  if (
+    !source?.isFile() ||
+    row.awaitingLocation ||
+    !(await store.library.acceptsVolume(row.file)) ||
+    (row.fileIdentity && identity(source) !== row.fileIdentity)
+  )
+    throw Error('原曲不可用或已被替换')
+  const sidecar = lyricPath(row.file)
+  const lyrics = stat(sidecar)
+  if (lyrics && (!lyrics.isFile() || (await hasOtherRecording(row.file))))
+    throw Error('歌词由其他录音共用或无法移动')
+  await moveRecording(
+    store,
+    row,
+    target,
+    revision(source),
+    lyrics ? sidecar : null,
+    onMove,
+    true,
+    true,
+  )
+  return true
+}
+async function moveRecording(
+  store,
+  row,
+  target,
+  sourceRevision,
+  lyric,
+  onMove,
+  manual,
+  explicit = false,
+) {
   const db = store.db
   const file = path.join(target, path.basename(row.file))
   if (pathKey(file) === pathKey(row.file)) return
   // Copy exclusively before switching the index. A power loss always leaves a playable copy.
+  const managedLyric = lyric && (await ownedLyrics(db, row.file))
   const copies = []
   const sources = []
+  if (db.prepare('SELECT 1 FROM pending_trash WHERE local=?').get(row.id))
+    throw Error('歌曲正在回收')
   db.prepare('INSERT INTO favorite_moves VALUES(?,?,?,?,?)').run(row.id, row.file, file, '[]', '[]')
   const copy = async (src, dst) => {
     const old = stat(src)
@@ -175,7 +218,13 @@ async function moveFavorite(store, row, target, sourceRevision, lyric, onMove, m
       fsyncSync(fd)
       created = fstatSync(fd, { bigint: true })
     } finally {
-      if (fd !== undefined) closeSync(fd)
+      if (fd !== undefined) {
+        // A live, empty destination can be rolled back even if the first journal write failed.
+        const last = fstatSync(fd, { bigint: true })
+        if (last.size === 0n && copies.at(-1)?.[0] === dst)
+          copies[copies.length - 1] = [dst, revision(last)]
+        closeSync(fd)
+      }
       await input.close()
     }
     if (identity(stat(dst)) !== identity(created)) throw Error('目标文件已替换')
@@ -192,8 +241,8 @@ async function moveFavorite(store, row, target, sourceRevision, lyric, onMove, m
       pathKey(realpathSync(target)) !== pathKey(target) ||
       pathKey(realpathSync(row.file)) !== pathKey(row.file) ||
       !db
-        .prepare('SELECT 1 FROM local_tracks WHERE id=? AND file=? AND favorite=1')
-        .get(row.id, row.file) ||
+        .prepare('SELECT 1 FROM local_tracks WHERE id=? AND file=? AND (? OR favorite=1)')
+        .get(row.id, row.file, Number(explicit)) ||
       revision(stat(row.file)) !== sourceRevision
     )
       throw Error('目录或原曲已变化')
@@ -205,13 +254,19 @@ async function moveFavorite(store, row, target, sourceRevision, lyric, onMove, m
     const audio = await copy(row.file, file)
     const dst = lyricPath(file)
     const s = lyric ? await copy(lyric, dst) : null
-    if (lyric && lyric !== (await recyclableLyrics(db, row.file))) throw Error('歌词已变化')
+    if (
+      lyric &&
+      (explicit
+        ? await hasOtherRecording(row.file)
+        : lyric !== (await recyclableLyrics(db, row.file)))
+    )
+      throw Error('歌词已变化')
     if (lyric && (await hasOtherRecording(file))) throw Error('目标目录有同名录音')
     checkPaths()
     if (copies.some(([dst, version]) => revision(stat(dst)) !== version))
       throw Error('目标文件已变化')
     db.exec('BEGIN IMMEDIATE')
-    if (s) {
+    if (s && managedLyric) {
       db.prepare('UPDATE lyric_files SET audio=?,file=?,identity=? WHERE audio=? AND file=?').run(
         file,
         dst,
@@ -350,7 +405,7 @@ export async function sortFavorite(store, id, manualDirectory, onMove) {
       pending('现有歌词未经确认或与其他录音共用，已保留原位')
       return
     }
-    await moveFavorite(store, row, target, verified, lyric, onMove, Boolean(manualDirectory))
+    await moveRecording(store, row, target, verified, lyric, onMove, Boolean(manualDirectory))
   } catch {
     pending('文件冲突、正在使用或目录不可用，请另选文件夹或重试')
   }
