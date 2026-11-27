@@ -108,6 +108,16 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-installed-toolkit-renderer.mjs $root
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $catalog = Get-Content -Raw (Join-Path $root 'Music/resources/app/host/plugin-catalog.json') | ConvertFrom-Json
+          foreach ($id in 'wave','tags','rules') {
+            $entry = @($catalog | Where-Object id -eq $id)
+            $url = "https://github.com/m1597/My-personal-workbench/releases/download/music-v1.0.0/$id.fitbayplugin"
+            if ($entry.Count -ne 1 -or $entry[0].url -cne $url) { throw "Incorrect installed plugin URL: $id" }
+            $file = Join-Path $env:RUNNER_TEMP "$id.fitbayplugin"
+            Invoke-WebRequest -Uri $url -OutFile $file
+            if ((Get-Item $file).Length -ne $entry[0].bytes -or (Get-FileHash $file).Hash -ne $entry[0].digest) { throw "Incorrect plugin bytes: $id" }
+            Write-Host "PASS installed catalog fetched and verified $id from the main repository"
+          }
           Copy-Item "docs/releases/v$version.md" dist/installers/RELEASE-NOTES.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
