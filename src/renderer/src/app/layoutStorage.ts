@@ -145,6 +145,7 @@ function retirePlaceholders(layout: SerializedDockview) {
 export function captureLayout(api: DockviewApi) {
   const layout = api.toJSON()
   Reflect.deleteProperty(layout.grid, 'maximizedNode')
+  if (!fixtureWorkspace && !api.groups.length) return { ...layout, quickStartClosed: true }
   return layout
 }
 
@@ -168,6 +169,8 @@ function restoreSnapshot(api: DockviewApi, snapshot: SerializedDockview, gap: nu
     if (layout.panels[id]) layout.panels[id].title = title
   }
   applyLayout(api, layout, gap)
+  if (!fixtureWorkspace && !api.groups.length && Reflect.get(snapshot, 'quickStartClosed') !== true)
+    api.addGroup()
   const slot = api.getPanel('component-example')
   if (slot && !window.componentHost?.sampleEnabled) api.removePanel(slot)
   const toolkit = api.getPanel('component-toolkit')
@@ -215,6 +218,7 @@ export function restoreLayout(api: DockviewApi, gap: number) {
   try {
     const startup = readStartup()
     if (startup === 'blank') {
+      if (!fixtureWorkspace) api.addGroup()
       selectLayoutName('')
       return
     }
