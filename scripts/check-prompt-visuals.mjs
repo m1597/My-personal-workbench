@@ -1,9 +1,9 @@
 import { openConnections } from '../examples/component-host/api-connections.mjs'
 import assert from 'node:assert/strict'
 import path from 'node:path'
-import { mkdir, mkdtemp, writeFile, readFile, unlink } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile, readFile, unlink, rmdir } from 'node:fs/promises'
 import { createServer } from 'node:http'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import { _electron, expect } from '@playwright/test'
 await mkdir('tmp', { recursive: true })
 const evidence = await mkdtemp(path.resolve('tmp/prompt-visuals-')),
@@ -93,12 +93,32 @@ try {
   await ui.screenshot({ path: path.join(evidence, 'connection-dropdown.png') })
   await ui.keyboard.press('Escape')
   await btn('返回').click()
+  // A directory in place of the cached JSON file makes readFile reject.
+  const cacheDir = path.join(profile, 'prompt-library', 'visuals-v1')
+  const blocked = path.join(
+    cacheDir,
+    createHash('sha256')
+      .update(JSON.stringify([root, '开发.md']))
+      .digest('hex') + '.json',
+  )
+  await mkdir(blocked, { recursive: true })
   await btn('粘贴导入').click()
   await ui.getByLabel('文件名').fill('开发.md')
   await ui.getByLabel('粘贴原文').fill(flow)
   await btn('导入').click()
   await expect(ui.getByRole('heading', { name: '开发.md', exact: true })).toBeVisible()
+  await expect(frame().getByRole('status')).toContainText('无法读取可视化缓存')
+  await rmdir(blocked)
+  await frame().getByRole('button', { name: '重试读取缓存' }).click()
+  await expect(frame().getByRole('button', { name: '生成可视化' })).toBeEnabled()
+  assert.equal(requests, 0)
+  hold = Promise.withResolvers()
   await btn('可视化').click()
+  await expect(ui.locator('.reader-tabs').getByRole('button', { name: '正在生成…' })).toBeDisabled()
+  await expect(frame().getByRole('button', { name: '正在生成…' })).toBeDisabled()
+  await expect.poll(() => requests).toBe(1)
+  hold.resolve()
+  hold = undefined
   await expect(frame().locator('[data-node-id]')).toHaveCount(3)
   assert.equal(
     await frame()
@@ -274,6 +294,39 @@ try {
     .toBe(true)
   await expect(frame().getByRole('slider')).toHaveValue('150')
   await expect(frame().locator('mark')).toHaveText('材质是釉面')
+  // Start from the body button and leave while the model is still responding.
+  await writeFile(path.join(root, 'manual.md'), flow + '\n手动等待')
+  await btn('返回').click()
+  await btn('manual').click()
+  hold = Promise.withResolvers()
+  await frame().getByRole('button', { name: '生成可视化' }).click()
+  await expect(ui.locator('.reader-tabs').getByRole('button', { name: '正在生成…' })).toBeDisabled()
+  await expect(frame().getByRole('button', { name: '正在生成…' })).toBeDisabled()
+  await expect.poll(() => requests).toBe(7)
+  await btn('返回').click()
+  await btn('场景').click()
+  await frame().getByRole('button', { name: '材质是釉面' }).click()
+  await frame().getByRole('slider').fill('150')
+  hold.resolve()
+  await expect
+    .poll(async () =>
+      Boolean(
+        (await ui.evaluate((root) => window.promptLibrary.visual(root, 'manual.md', false), root))
+          .html,
+      ),
+    )
+    .toBe(true)
+  await expect(frame().getByRole('slider')).toHaveValue('150')
+  await expect(frame().locator('mark')).toHaveText('材质是釉面')
+  await writeFile(path.join(root, 'invalid.txt'), 'unmatched evidence')
+  await btn('返回').click()
+  await btn('invalid').click()
+  await btn('可视化').click()
+  await expect(frame().getByRole('status')).toContainText('核对引用')
+  await expect(ui.locator('.reader-tabs').getByRole('button', { name: '重试可视化' })).toBeEnabled()
+  await frame().getByRole('button', { name: '重试生成' }).click()
+  await expect(frame().getByRole('status')).toContainText('核对引用')
+  assert.equal(requests, 9)
   console.log('PASS', evidence)
 } finally {
   hold?.resolve()

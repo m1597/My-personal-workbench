@@ -1,6 +1,6 @@
 import { Button, Input } from '@fluentui/react-components'
 import { Search, ClipboardPaste } from 'lucide-react'
-import { PromptVisual, type VisualData } from './PromptVisual'
+import { PromptVisual, usePromptVisual, type VisualData } from './PromptVisual'
 import { ChoiceDropdown } from '../../src/renderer/src/app/SharedDropdown'
 import { ShortcutRecorder } from '../../src/renderer/src/app/ShortcutRecorder'
 import { BackButton } from '../music/BackButton'
@@ -187,7 +187,6 @@ function Library() {
     [importName, setImportName] = useState('提示词.md'),
     [importBody, setImportBody] = useState(''),
     [raw, setRaw] = useState(false),
-    [hasVisual, setHasVisual] = useState(false),
     [values, setValues] = useState<Record<string, string>>({}),
     [doc, setDoc] = useState<Doc>(),
     [draft, edit] = useState(''),
@@ -217,6 +216,8 @@ function Library() {
       say('草稿暂存空间已满，请先保存或复制正文')
     }
   }
+  const visual = usePromptVisual(fileRoot, name, doc?.revision, visualVersion)
+  const hasVisual = Boolean(visual.view?.html)
   const dirty = !!doc && draft !== doc.text
   const live = useRef({ name, doc, draft, root: fileRoot })
   live.current = { name, doc, draft, root: fileRoot }
@@ -403,7 +404,6 @@ function Library() {
   function reset(item?: Entry) {
     selectionVersion.current++
     setOrganized('')
-    setHasVisual(false)
     setValues({})
     setRaw(false)
     const next = item?.name || ''
@@ -425,32 +425,11 @@ function Library() {
         ?.replace(/\.(md|txt)$/i, '') || '',
     )
   }
-  async function showVisual() {
+  function showVisual() {
+    if (!doc || dirty || visual.busy) return
     setRaw(false)
-    if (!fileRoot || dirty) return
-    const selection = selectionVersion.current
-    try {
-      await api.visual(fileRoot, name, true)
-      if (
-        selection === selectionVersion.current &&
-        live.current.root === fileRoot &&
-        live.current.name === name
-      )
-        setVisualVersion((v) => v + 1)
-    } catch (e) {
-      if (
-        selection !== selectionVersion.current ||
-        live.current.root !== fileRoot ||
-        live.current.name !== name
-      )
-        return
-      const error = message(e)
-      say(error)
-      if (error.includes('配置 API')) {
-        setCategory('api')
-        setSettings(true)
-      }
-    }
+    if (visual.phase === 'cache-error') void visual.request(false)
+    else if (!hasVisual || visual.view?.stale) void visual.request(true)
   }
   async function importOne(filename: string, body: string) {
     const root = state?.root
@@ -791,10 +770,17 @@ function Library() {
                     appearance="subtle"
                     type="button"
                     aria-pressed={!raw && hasVisual}
-                    disabled={dirty}
-                    onClick={() => void showVisual()}
+                    disabled={dirty || !doc || editMode || visual.busy}
+                    title={visual.error}
+                    onClick={showVisual}
                   >
-                    可视化
+                    {visual.phase === 'generating'
+                      ? '正在生成…'
+                      : visual.phase === 'cache-error'
+                        ? '重试读取缓存'
+                        : visual.phase === 'error'
+                          ? '重试可视化'
+                          : '可视化'}
                   </Button>
                   <Button
                     appearance="subtle"
@@ -811,10 +797,10 @@ function Library() {
                       key={JSON.stringify([fileRoot, name, doc.revision, visualVersion])}
                       root={fileRoot}
                       name={name}
-                      revision={doc.revision}
                       text={doc.text}
                       original={raw}
-                      onAvailable={setHasVisual}
+                      visual={visual}
+                      onGenerate={showVisual}
                       configure={() => {
                         setCategory('api')
                         setSettings(true)
