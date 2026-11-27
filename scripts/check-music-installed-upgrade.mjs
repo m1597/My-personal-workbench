@@ -3,6 +3,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 import { openMusicSettings, selectMusicSettings } from './music-settings-fixture.mjs'
 import { _electron, expect } from '@playwright/test'
@@ -15,11 +16,28 @@ assert(
   'Usage: node scripts/check-music-installed-upgrade.mjs seed|verify|recover ABSOLUTE_NEW_FIXTURE ABSOLUTE_MUSIC_EXE',
 )
 const marker = path.join(directory, 'music-upgrade-fixture.json')
-const profile = path.join(directory, 'profile')
+const useDefaultProfile = process.argv.includes('--suite-default-profile')
+const checkSuiteData = useDefaultProfile || process.argv.includes('--suite-data')
+const profile = useDefaultProfile
+  ? path.join(process.env.APPDATA, 'FitBay', 'desktop-profile')
+  : path.join(directory, 'profile')
+if (useDefaultProfile) {
+  assert.equal(
+    process.env.FITBAY_DISPOSABLE_PROFILE,
+    profile,
+    'Unexpected suite acceptance account',
+  )
+  assert.notEqual(phase, 'recover')
+}
 const hash = (text) => createHash('sha256').update(text).digest('hex')
 const key = phase === 'seed' ? randomUUID() : ''
 // Non-recursive mkdir refuses to seed any existing directory, including a user's profile.
 if (phase === 'seed') await mkdir(directory)
+if (useDefaultProfile && phase === 'seed') {
+  await mkdir(path.dirname(profile), { recursive: true })
+  // Never seed into a pre-existing default profile, even on a test machine.
+  await mkdir(profile)
+}
 const fixture =
   phase === 'seed'
     ? {
@@ -71,11 +89,44 @@ try {
       db.close()
     }
   }
+  if (checkSuiteData) {
+    const libraryRoot = path.join(profile, 'fitbay-music')
+    const module = path.join(path.dirname(executable), 'resources/app/host/music/store.mjs')
+    const { MusicStore } = await import(pathToFileURL(module).href)
+    const store = new MusicStore(libraryRoot)
+    const file = path.join(directory, 'library-track.mp3')
+    const tone = 'tests/fixtures/local-music/tone.mp3'
+    try {
+      if (phase === 'seed') {
+        await copyFile(tone, file)
+        store.library.upsert({
+          file,
+          title: 'Retained track',
+          artist: 'Fixture',
+          album: 'Fixture',
+          duration: 4,
+        })
+        const track = store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file)
+        store.db.prepare('UPDATE local_tracks SET favorite=1 WHERE id=?').run(track.id)
+        store.library.createPlaylist('Suite retention', [track.id])
+      }
+      const saved = store.db.prepare('SELECT id FROM local_tracks WHERE file=?').get(file)
+      const retained = store.library.list().find((row) => row.id === saved?.id)
+      assert(retained?.favorite)
+      assert.deepEqual(
+        store.library.playlists().find((row) => row.name === 'Suite retention')?.tracks,
+        [retained.id],
+      )
+      assert.deepEqual(await readFile(file), await readFile(tone))
+    } finally {
+      store.db.close()
+    }
+  }
   const runtimeProfile =
     phase === 'recover' ? await mkdtemp(path.join(directory, 'restore-')) : profile
   app = await _electron.launch({
     executablePath: executable,
-    args: ['--user-data-dir=' + runtimeProfile],
+    args: useDefaultProfile ? [] : ['--user-data-dir=' + runtimeProfile],
     env: { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' },
   })
   const opened = await app.evaluate(({ app }) => app.getPath('userData'))
@@ -150,7 +201,7 @@ try {
   const result = await page.evaluate(() => window.music.aiCatalogQuery('artists', 'upgrade probe'))
   assert.equal(result, 'upgrade-probe')
   assert.equal(received, 1)
-  if (phase === 'verify') {
+  if (phase === 'verify' && !checkSuiteData) {
     const skip = page.getByRole('button', { name: '跳过', exact: true })
     if (await skip.isVisible()) await skip.click()
     await page.getByRole('tab', { name: '找歌', exact: true }).click()
@@ -164,6 +215,8 @@ try {
     }
     console.log('PASS installed Music discovery sidebar and both AI reference selectors')
   }
+  if (checkSuiteData)
+    console.log('PASS retained recording, favorite, playlist membership and original audio')
   if (phase === 'seed') await writeFile(marker, JSON.stringify(fixture), { flag: 'wx' })
   console.log(
     'PASS',
