@@ -24,18 +24,37 @@ export function openInDefaultGrid(api: DockviewApi, options: PanelOptions) {
   if (groups.length === 1 && groups[0].panels.length) {
     return api.addPanel({ ...options, position: { referenceGroup: groups[0], direction: 'right' } })
   }
-  if (groups.length === 2 && groups.every((group) => group.panels.length)) {
-    const left = groups[0],
-      right = groups[1]
-    const lowerLeft = api.addGroup({ referenceGroup: left, direction: 'below' })
-    api.addGroup({ referenceGroup: right, direction: 'below' })
-    return api.addPanel({
+  const empty = groups.find((group) => !group.panels.length)
+  if (empty)
+    return api.addPanel({ ...options, position: { referenceGroup: empty, direction: 'within' } })
+  if (groups.length === 2 || groups.length === 3) {
+    // Split the right column first. The existing left pane keeps its live view and width.
+    const target =
+      groups.length === 2
+        ? groups[1]
+        : groups.reduce((largest, group) =>
+            group.api.height > largest.api.height ? group : largest,
+          )
+    const peer = groups.find(
+      (g) => g.element.getBoundingClientRect().left !== target.element.getBoundingClientRect().left,
+    )
+    const before = peer?.element.getBoundingClientRect()
+    const targetBox = target.element.getBoundingClientRect()
+    const gap = before
+      ? Math.max(0, Math.max(before.left, targetBox.left) - Math.min(before.right, targetBox.right))
+      : 0
+    const panel = api.addPanel({
       ...options,
-      position: { referenceGroup: lowerLeft, direction: 'within' },
+      position: { referenceGroup: target, direction: 'below' },
     })
+    if (peer && before) {
+      const correction = before.width - peer.element.getBoundingClientRect().width
+      if (Math.abs(correction) >= 1) peer.api.setSize({ width: before.width + gap / 2 })
+    }
+    return panel
   }
   const grid = groups.slice(0, 4)
   const count = grid.reduce((n, g) => n + g.panels.length, 0)
-  const group = grid.find((g) => !g.panels.length) ?? grid[count % grid.length]
+  const group = grid[count % grid.length]
   return api.addPanel({ ...options, position: { referenceGroup: group, direction: 'within' } })
 }

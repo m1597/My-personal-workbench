@@ -142,7 +142,7 @@ test('关闭部分及全部模块保持状态，重置后持久恢复默认', as
     await page.getByRole('menuitem', { name: `模块 ${id}`, exact: true }).click()
     if (id === 3) {
       await restart(3)
-      await expect(page.locator('.dv-groupview')).toHaveCount(4)
+      await expect(page.locator('.dv-groupview')).toHaveCount(3)
     }
   }
   await expect.poll(async () => (await saved()).panels).toEqual(baseline.panels)

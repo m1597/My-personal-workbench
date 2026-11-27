@@ -30,4 +30,5 @@ export function showDockedModule(api: DockviewApi, id: string) {
 export function createDefaultLayout(api: DockviewApi) {
   api.clear()
   if (fixtureWorkspace) addFixturePanels(api)
+  else api.addGroup()
 }

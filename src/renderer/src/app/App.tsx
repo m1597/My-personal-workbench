@@ -1,3 +1,4 @@
+import { fixtureWorkspace } from './moduleRegistry'
 import { useEdgeCollapse } from './useEdgeCollapse'
 import { applyMaterial } from './material'
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
@@ -69,7 +70,12 @@ export default function App() {
     }
     const subscriptions = [
       api.onDidAddPanel(update),
-      api.onDidRemovePanel(update),
+      api.onDidRemovePanel(() => {
+        update()
+        queueMicrotask(() => {
+          if (!fixtureWorkspace && !api.groups.length) api.addGroup()
+        })
+      }),
       api.onDidActivePanelChange(update),
     ]
     update()

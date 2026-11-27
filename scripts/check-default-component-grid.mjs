@@ -76,8 +76,10 @@ try {
       'component-music',
       'component-example',
     ]
+    const positions = [0, 1, 3, 2, 4, 5, 6, 7]
+    const expected = i === 2 ? ids.slice(0, 3) : positions.map((n) => ids[n])
     for (const [slot, group] of groups.entries())
-      expect(group.tabs).toEqual(ids.slice(0, i + 1).filter((_, n) => n % 4 === slot))
+      expect(group.tabs).toEqual(expected.slice(0, i + 1).filter((_, n) => n % 4 === slot))
     await expect(page.locator('.dv-tab[data-tab-panel-id="' + ids[i] + '"]')).toHaveAttribute(
       'aria-selected',
       'true',
@@ -88,8 +90,12 @@ try {
         expect(Math.abs(group.contentTop - peer.contentTop)).toBeLessThan(0.05)
     }
     evidence.push(groups)
-    expect(groups.length).toBe(Math.min(i < 2 ? i + 1 : 4, 4))
-    if (i >= 2) {
+    expect(groups.length).toBe(Math.min(i + 1, 4))
+    if (i === 2) {
+      expect(groups[0].h).toBeGreaterThan(groups[1].h * 1.9)
+      expect(groups[1].x).toBe(groups[2].x)
+    }
+    if (i >= 3) {
       expect(
         Math.max(...groups.map((g) => g.w)) - Math.min(...groups.map((g) => g.w)),
       ).toBeLessThan(4)
