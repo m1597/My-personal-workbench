@@ -32,6 +32,21 @@
   !endif
 !macroend
 
+; These builder callbacks run immediately after uninstallOldVersion. Both a
+; failed ExecWait and a launched uninstaller's nonzero exit must stop extraction.
+!macro customUnInstallCheck
+  ${If} ${Errors}
+  ${OrIf} $R0 != 0
+    DetailPrint "FitBay could not complete the previous uninstall."
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+!macroend
+
+!macro customUnInstallCheckCurrentUser
+  !insertmacro customUnInstallCheck
+!macroend
+
 !macro customInstallMode
   StrCpy $isForceCurrentInstall 1
 !macroend
