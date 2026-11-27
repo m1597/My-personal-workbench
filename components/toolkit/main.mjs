@@ -1,3 +1,4 @@
+import { resultBounds } from './result-placement.mjs'
 import {
   app,
   BrowserWindow,
@@ -65,7 +66,8 @@ async function startToolkit() {
   }
   const states = new Map(),
     bound = new Map()
-  let home,
+  let tray,
+    home,
     overlay,
     capturing = false
   const readerUrl = app.isPackaged
@@ -88,6 +90,7 @@ async function startToolkit() {
     writeFileSync(`${file}.tmp`, JSON.stringify(next))
     renameSync(`${file}.tmp`, file)
     cfg = next
+    if (tray) updateTrayMenu()
   }
   function material() {
     try {
@@ -199,7 +202,9 @@ async function startToolkit() {
       persist(next)
     },
     onChange: () => {
-      if (home && !home.isDestroyed()) home.webContents.send('toolkit:connections-changed')
+      for (const state of states.values())
+        if (['home', 'result'].includes(state.kind) && !state.win.isDestroyed())
+          state.win.webContents.send('toolkit:connections-changed')
     },
   })
   if (process.argv.includes('--toolkit-migrate-connections')) {
@@ -230,7 +235,7 @@ async function startToolkit() {
   function fail(e, fromHost = hosted) {
     show({ kind: 'message', text: e.message }, { height: 230 }, fromHost)
   }
-  async function capture(intent, fromHost = hosted) {
+  async function capture(intent, fromHost = hosted, displayId) {
     if (overlay && !overlay.isDestroyed()) {
       overlay.focus()
       return
@@ -238,7 +243,9 @@ async function startToolkit() {
     if (capturing) return
     capturing = true
     try {
-      const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+      const d =
+        screen.getAllDisplays().find((display) => display.id === displayId) ??
+        screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
       const size = {
         width: Math.round(d.size.width * d.scaleFactor),
         height: Math.round(d.size.height * d.scaleFactor),
@@ -249,7 +256,7 @@ async function startToolkit() {
         (sources.length === 1 ? sources[0] : null)
       if (!source || source.thumbnail.isEmpty()) throw Error('无法读取当前显示器')
       overlay = show(
-        { kind: 'screen', full: source.thumbnail, intent },
+        { kind: 'screen', full: source.thumbnail, intent, displayId: d.id },
         {
           ...d.bounds,
           minWidth: 1,
@@ -276,11 +283,43 @@ async function startToolkit() {
       capturing = false
     }
   }
-  const foreground = koffi.load('user32.dll').func('intptr_t __stdcall GetForegroundWindow()')
+  function displayFor(s) {
+    return (
+      screen.getAllDisplays().find((display) => display.id === s.displayId) ??
+      screen.getDisplayMatching(s.win.getBounds())
+    )
+  }
+  function showResult(data, display, fromHost) {
+    const target =
+      screen.getAllDisplays().find((d) => d.id === display.id) ??
+      screen.getDisplayMatching(display.bounds)
+    return show(
+      { kind: 'result', ...data, displayId: target.id },
+      resultBounds(target.workArea),
+      fromHost,
+    )
+  }
+  const user32 = koffi.load('user32.dll')
+  const windowRect = user32.func('int __stdcall GetWindowRect(intptr_t hwnd, void *rect)')
+  const foreground = user32.func('intptr_t __stdcall GetForegroundWindow()')
   async function select(fromHost = hosted) {
     const hwnd = foreground()
+    const rect = Buffer.alloc(16)
+    const hasRect = hwnd && windowRect(hwnd, rect)
+    const [left, top, right, bottom] = [0, 4, 8, 12].map((i) => rect.readInt32LE(i))
+    const display =
+      hasRect && right > left && bottom > top
+        ? screen.getDisplayMatching(
+            screen.screenToDipRect(null, {
+              x: left,
+              y: top,
+              width: right - left,
+              height: bottom - top,
+            }),
+          )
+        : screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     const text = await readSelectionOrOcr(undefined, String(hwnd))
-    show({ kind: 'result', text }, {}, fromHost)
+    showResult({ text }, display, fromHost)
   }
   function bind(id, key) {
     if (
@@ -346,9 +385,8 @@ async function startToolkit() {
     s.reveal = null
   })
   handle('dismiss', kinds, (s) => s.win.close())
-  handle('settings', ['result'], (s, route) => settings(route, s.hosted))
   handle('settingsTarget', ['home'], () => targetRoute)
-  handle('connections', ['home'], () => connections.snapshot())
+  handle('connections', ['home', 'result'], () => connections.snapshot())
   installLocalFiles(handle)
   handle('batchInputs', ['home'], async (s, request) => {
     if (!request || request.id !== targetTool?.id || request.tool !== targetTool.tool)
@@ -441,7 +479,7 @@ async function startToolkit() {
     }
   }
   handle('enable', ['home'], (_, v) => setShortcut(v))
-  handle('configure', ['home'], (_s, value) => connections.save(value))
+  handle('configure', ['home', 'result'], (_s, value) => connections.save(value))
   handle('crop', ['screen'], (s, v) => {
     if (
       !Array.isArray(v) ||
@@ -483,16 +521,17 @@ async function startToolkit() {
   handle('extractText', ['screen'], async (s) => {
     const text = await readSelectionOrOcr(selected(s).toPNG(), undefined, s.abort.signal)
     if (!s.win.isDestroyed() && !s.abort.signal.aborted) {
-      show({ kind: 'result', text }, {}, s.hosted)
+      showResult({ text }, displayFor(s), s.hosted)
       s.win.close()
     }
   })
   handle('copyMeasuredColor', ['screen'], (s, hex) => {
     if (!/^#[0-9A-F]{6}$/.test(hex)) throw Error('请先取色')
     clipboard.writeText(hex)
+    const display = displayFor(s)
     show(
-      { kind: 'color-result', hex },
-      { title: 'FitBay 取色结果', width: 365, height: 245 },
+      { kind: 'color-result', hex, displayId: display.id },
+      { title: 'FitBay 取色结果', ...resultBounds(display.workArea, 365, 245) },
       s.hosted,
     )
     s.win.close()
@@ -507,7 +546,7 @@ async function startToolkit() {
   handle('repick', ['color-result'], async (s) => {
     s.win.hide()
     try {
-      await capture('color', s.hosted)
+      await capture('color', s.hosted, s.displayId)
       s.win.close()
     } catch (error) {
       if (!s.win.isDestroyed()) s.win.show()
@@ -539,7 +578,7 @@ async function startToolkit() {
   handle('pin', ['screen'], (s) => {
     const image = selected(s)
     const { width, height } = image.getSize()
-    const display = screen.getDisplayMatching(s.win.getBounds())
+    const display = displayFor(s)
     const area = display.workArea
     const scale = Math.min(1 / display.scaleFactor, area.width / width, area.height / height)
     show(
@@ -643,7 +682,7 @@ async function startToolkit() {
   }
   handle('ask', ['screen', 'result'], async (s, v) => {
     if (s.kind === 'screen') {
-      show({ kind: 'result', image: selected(s), initial: v }, {}, s.hosted)
+      showResult({ image: selected(s), initial: v }, displayFor(s), s.hosted)
       s.win.close()
       return
     }
@@ -746,7 +785,6 @@ async function startToolkit() {
     }
   }
   app.on('will-quit', () => globalShortcut.unregisterAll())
-  let tray
   function syncTray() {
     if (hosted) {
       tray?.destroy()
@@ -756,13 +794,27 @@ async function startToolkit() {
     if (tray) return
     tray = new Tray(path.join(here, 'toolkit.ico'))
     tray.setToolTip('工具集')
+    updateTrayMenu()
+    tray.on('click', () => settings())
+  }
+  function updateTrayMenu() {
     tray.setContextMenu(
       Menu.buildFromTemplate([
+        {
+          label: '屏幕截图',
+          enabled: cfg.capture.enabled,
+          click: () => void capture().catch(fail),
+        },
+        {
+          label: '屏幕取色',
+          enabled: cfg.color.enabled,
+          click: () => void capture('color').catch(fail),
+        },
+        { type: 'separator' },
         { label: '工具集设置', click: () => settings() },
         { label: '退出工具集', click: () => app.quit() },
       ]),
     )
-    tray.on('click', () => settings())
   }
   app.on('before-quit', () => {
     connections.close()

@@ -23,7 +23,6 @@ const commands = [
   'planRename',
   'applyRename',
   'convertDoc',
-  'settings',
   'configure',
   'connections',
   'settingsTarget',

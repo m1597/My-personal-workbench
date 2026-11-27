@@ -1,3 +1,4 @@
+import { installScreenFixture } from './toolkit-screen-fixture.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:http'
@@ -6,6 +7,12 @@ import path from 'node:path'
 import { _electron, expect } from '@playwright/test'
 import { openConnections } from '../examples/component-host/api-connections.mjs'
 
+const candidateRoot = process.argv.includes('--candidate')
+  ? process.env.FITBAY_CANDIDATE_ROOT
+  : undefined
+if (process.argv.includes('--candidate') && (!candidateRoot || !path.isAbsolute(candidateRoot))) {
+  throw Error('请设置 FITBAY_CANDIDATE_ROOT 为含候选组件的绝对目录')
+}
 const source =
   process.argv.slice(2).find((arg) => !arg.startsWith('--')) ||
   'C:/Program Files/Git/mingw64/share/doc/gnutls/pkcs11-vision.png'
@@ -28,12 +35,17 @@ const translations = [
   [/KCS/i, '公钥密码标准接口'],
 ]
 let bad = true
+let unblock
+const responseGate = new Promise((resolve) => {
+  unblock = resolve
+})
 const requests = []
 const server = createServer(async (req, res) => {
   const chunks = []
   for await (const chunk of req) chunks.push(chunk)
   const input = JSON.parse(Buffer.concat(chunks))
   requests.push(input)
+  if (requests.length === 1) await responseGate
   let answer = '已根据选区回答'
   if (input.model === 'text-test' && input.messages.length === 1) {
     const prompt = input.messages[0].content
@@ -58,14 +70,16 @@ db.write('default', { endpoint, model: 'text-test', vision: false })
 db.write('toolkit.vision', { endpoint, model: 'vision-test' })
 db.close()
 const env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
-let app, host
+let app, host, prompts
 const b = (p, n) => p.getByRole('button', { name: n, exact: true })
 try {
   const profileArg = '--workbench-profile=' + profile
   let panel
-  if (process.argv.includes('--packaged')) {
+  if (candidateRoot || process.argv.includes('--packaged')) {
     app = await _electron.launch({
-      executablePath: path.resolve('.cache/fitbay-build/toolkit/win-unpacked/FitBay Toolkit.exe'),
+      executablePath: candidateRoot
+        ? path.join(candidateRoot, 'Toolkit', 'FitBay Toolkit.exe')
+        : path.resolve('.cache/fitbay-build/toolkit/win-unpacked/FitBay Toolkit.exe'),
       args: [profileArg],
       env,
     })
@@ -86,45 +100,72 @@ try {
     await shell.locator('#window-menu').getByText('工具集', { exact: true }).click()
     panel = shell.locator('.toolkit-panel')
   }
-  await app.evaluate(async ({ BrowserWindow, screen }, data) => {
-    const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-    const win = new BrowserWindow({
-      x: d.bounds.x + 80,
-      y: d.bounds.y + 80,
-      width: 600,
-      height: 362,
-      show: false,
-      frame: false,
-      skipTaskbar: true,
-      focusable: false,
-      alwaysOnTop: true,
-      backgroundColor: '#ffffff',
+  const template = '逐步推导并说明每个分支的作用'
+  if (candidateRoot) {
+    const library = path.join(folder, 'library')
+    await mkdir(library)
+    await writeFile(path.join(library, '解释推导.md'), template)
+    prompts = await _electron.launch({
+      executablePath: path.join(candidateRoot, 'Prompts', 'FitBay Prompts.exe'),
+      args: ['--user-data-dir=' + profile],
+      env,
     })
-    globalThis.graphWindow = win
-    await win.loadURL(
-      'data:text/html,' +
-        encodeURIComponent(
-          '<body style="margin:0;background:white"><img style="margin:14px;width:572px;height:334px" src="data:image/png;base64,' +
-            data +
-            '"></body>',
-        ),
-    )
-    await win.webContents.executeJavaScript('document.images[0].decode()')
-  }, png.toString('base64'))
+    const ui = await prompts.firstWindow()
+    await prompts.evaluate(({ dialog }, dir) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
+    }, library)
+    await b(ui, '选择提示词目录').click()
+    await b(ui, '解释推导').click()
+    await ui.getByText('固定为工具集动作', { exact: true }).click()
+    await ui.getByLabel('显示名').fill('解释推导')
+    await ui.getByRole('combobox', { name: '输入类型' }).click()
+    await ui.getByRole('option', { name: '图片', exact: true }).click()
+    await b(ui, '固定动作').click()
+    await expect(ui.getByRole('status')).toContainText('已固定')
+    await ui.screenshot({ path: path.join(folder, 'registered-action.png') })
+  }
+  if (candidateRoot && process.argv.includes('--dock')) {
+    await prompts.close()
+    prompts = undefined
+    host = await _electron.launch({
+      executablePath: path.join(candidateRoot, 'FitBay.exe'),
+      args: ['--user-data-dir=' + profile],
+      env,
+    })
+    const shell = await host.firstWindow()
+    await b(shell, '组件').click()
+    await shell.getByRole('menuitemcheckbox', { name: '工具集', exact: true }).click()
+    panel = shell.locator('.toolkit-panel')
+    await expect(b(panel, '开始取色')).toBeVisible()
+  }
+  const frame = execFileSync(
+    'python',
+    [
+      '-c',
+      `
+import io,sys
+from PIL import Image,ImageDraw
+im=Image.new('RGB',(900,640),'white')
+im.paste(Image.open(io.BytesIO(sys.stdin.buffer.read())).convert('RGB'),(94,94))
+d=ImageDraw.Draw(im)
+d.rectangle((20,20,49,49),fill='#3978AD')
+d.rectangle((50,20,79,49),fill='#C45B39')
+im.save(sys.stdout.buffer,'PNG')`,
+    ],
+    { input: png },
+  )
+  const display = await installScreenFixture(app, frame)
+  await writeFile(path.join(folder, 'display.json'), JSON.stringify(display, null, 2))
+  const mapX = (x) => Math.round((x * display.fixture.bounds.width) / 900)
+  const mapY = (y) => Math.round((y * display.fixture.bounds.height) / 640)
   async function region() {
-    await app.evaluate(() => {
-      globalThis.graphWindow.setAlwaysOnTop(true, 'screen-saver')
-      globalThis.graphWindow.showInactive()
-    })
-    await new Promise((r) => setTimeout(r, 350))
     const next = app.waitForEvent('window')
     await b(panel, '框选屏幕').click()
     const overlay = await next
     await overlay.locator('.screen img').waitFor()
-    await app.evaluate(() => globalThis.graphWindow.hide())
-    await overlay.mouse.move(82, 82)
+    await overlay.mouse.move(mapX(82), mapY(82))
     await overlay.mouse.down()
-    await overlay.mouse.move(678, 440)
+    await overlay.mouse.move(mapX(678), mapY(440))
     await overlay.mouse.up()
     await b(overlay, '翻译').waitFor()
     return overlay
@@ -133,22 +174,32 @@ try {
   let next = app.waitForEvent('window')
   await b(overlay, '翻译').click()
   let result = await next
+  await expect.poll(() => requests.length, { timeout: 30000 }).toBe(1)
+  await expect(result.locator('[aria-busy=true]')).toBeVisible()
+  for (const name of ['翻译', '问 AI']) {
+    const action = b(result, name)
+    await expect(action).toBeDisabled()
+    await action.evaluate((n) => n.click())
+  }
+  unblock()
   await expect(result.getByRole('status')).toContainText('缺少对应文字块', { timeout: 30000 })
   bad = false
-  await b(result, '翻译').click()
+  await b(result, '重试').click()
   await expect(b(result, '仅中文')).toBeVisible({ timeout: 30000 })
+  assert.equal(requests.length, 2)
+  assert.deepEqual(requests[1], requests[0])
   const diagram = result.locator('.diagram-scroll svg')
   const original = await diagram.locator('image').getAttribute('href')
   await writeFile(path.join(folder, 'capture.png'), Buffer.from(original.split(',')[1], 'base64'))
   const blocks = await diagram
-    .locator('[data-mode="仅中文"] g')
+    .locator('[data-mode="仅中文"] [role=button]')
     .evaluateAll((ns) => ns.map((n) => n.getAttribute('aria-label')))
   assert(blocks.length >= 9, JSON.stringify(blocks))
   assert(
     blocks.some((t) => /GnuTLS|PKCS|Smart card|Keyring/i.test(t)),
     JSON.stringify(blocks),
   )
-  const boxes = await diagram.locator('[data-mode="仅中文"] g').evaluateAll((nodes) =>
+  const boxes = await diagram.locator('[data-mode="仅中文"] [role=button]').evaluateAll((nodes) =>
     nodes.map((n) => {
       const rs = [...n.querySelectorAll('rect,[data-edge-ink]')].map((r) => r.getBBox())
       return [
@@ -178,6 +229,7 @@ try {
       canvas.getContext('2d').drawImage(image, 0, 0)
       return canvas.toDataURL().split(',')[1]
     })
+  const requestsBeforeModes = requests.length
   for (const [mode, name] of [
     ['原图', 'original'],
     ['仅中文', 'chinese'],
@@ -186,9 +238,14 @@ try {
     await b(result, mode).click()
     await writeFile(path.join(folder, name + '.png'), Buffer.from(await raster(), 'base64'))
   }
+  assert.equal(requests.length, requestsBeforeModes)
+  const compact = diagram.locator('[data-compact-label]:visible').first()
+  await expect(compact).toBeVisible()
+  await compact.click()
+  await expect(result.locator('.block-detail')).not.toBeEmpty()
   await result.getByRole('slider', { name: '图像缩放' }).press('End')
   assert(await result.locator('.diagram-scroll').evaluate((n) => n.scrollWidth > n.clientWidth))
-  const block = diagram.locator('[data-mode="双语"] g').first()
+  const block = diagram.locator('[data-mode="双语"] [role=button]').first()
   await block.focus()
   await expect(result.locator('.block-detail')).not.toBeEmpty()
   await result.screenshot({ path: path.join(folder, 'zoom.png') })
@@ -199,12 +256,8 @@ try {
   await expect(result.getByRole('heading', { name: '第一个标签为什么这样翻译？' })).toBeVisible()
   assert.equal(requests.at(-1).model, 'text-test')
   assert(requests.at(-1).messages.every((m) => typeof m.content === 'string'))
-  await result.close()
-  overlay = await region()
-  const expected = await overlay.evaluate(() => window.toolkit.selectionImage())
-  next = app.waitForEvent('window')
-  await b(overlay, '问 AI').click()
-  result = await next
+  await b(result, '问 AI').click()
+  const expected = original
   await expect(result.getByText('已根据选区回答', { exact: true })).toBeVisible()
   assert.equal(requests.at(-1).model, 'vision-test')
   assert.equal(requests.at(-1).messages[0].content[1].image_url.url, expected)
@@ -216,8 +269,130 @@ try {
   }
   assert.equal(requests.at(-1).messages.length, 5)
   assert.equal(requests.at(-1).messages[0].content[1].image_url.url, expected)
+  if (candidateRoot) {
+    await result.close()
+    overlay = await region()
+    const crop = await overlay.evaluate(() => window.toolkit.selectionImage())
+    next = app.waitForEvent('window')
+    await b(overlay, '解释推导').click()
+    result = await next
+    await expect(result.getByText('已根据选区回答', { exact: true })).toBeVisible()
+    const content = requests.at(-1).messages[0].content
+    assert.equal(content[0].text, template)
+    assert.equal(content[1].image_url.url, crop)
+    await result.screenshot({ path: path.join(folder, 'action-result.png') })
+    await result.close()
+    next = app.waitForEvent('window')
+    await b(panel, '开始取色').click()
+    const picker = await next
+    await picker.locator('.swatch').waitFor()
+    const hex = await picker.locator('.screen img').evaluate(async (img) => {
+      await img.decode()
+      const r = img.getBoundingClientRect(),
+        c = document.createElement('canvas')
+      c.width = c.height = 1
+      const ctx = c.getContext('2d')
+      ctx.drawImage(
+        img,
+        Math.floor(((200 - r.left) * img.naturalWidth) / r.width),
+        Math.floor(((150 - r.top) * img.naturalHeight) / r.height),
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+      )
+      return (
+        '#' +
+        Array.from(ctx.getImageData(0, 0, 1, 1).data)
+          .slice(0, 3)
+          .map((v) => v.toString(16).padStart(2, '0'))
+          .join('')
+          .toUpperCase()
+      )
+    })
+    next = app.waitForEvent('window')
+    await picker.mouse.click(200, 150)
+    result = await next
+    await expect(result.getByText(hex, { exact: true })).toBeVisible()
+    const rgb =
+      'rgb(' +
+      hex
+        .slice(1)
+        .match(/../g)
+        .map((v) => parseInt(v, 16))
+        .join(', ') +
+      ')'
+    await expect(result.getByText(rgb, { exact: true })).toBeVisible()
+    await b(result, '复制 RGB').click()
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), rgb)
+    await result.screenshot({ path: path.join(folder, 'color-result.png') })
+    const versions = {}
+    for (const product of ['Toolkit', 'Prompts']) {
+      const manifest = JSON.parse(
+        await readFile(path.join(candidateRoot, product, 'resources/app/package.json'), 'utf8'),
+      )
+      versions[product] = manifest.version
+    }
+    await writeFile(
+      path.join(folder, 'candidate-result.json'),
+      JSON.stringify(
+        {
+          versions,
+          entry: host ? 'docked' : 'standalone',
+          blocks: blocks.length,
+          colors: { hex, rgb },
+          registeredAction: '解释推导',
+          modes: ['原图', '仅中文', '双语'],
+          templateMatched: true,
+          selectionPngMatched: true,
+          service: 'loopback',
+        },
+        null,
+        2,
+      ),
+    )
+    console.log(
+      'PASS candidate prompt registration, template and image byte equality; native swatch and RGB copy',
+    )
+  }
+  await result.close()
+  overlay = await region()
+  await overlay.keyboard.press('Escape').catch((e) => {
+    if (!overlay.isClosed()) throw e
+  })
+  await expect.poll(() => overlay.isClosed()).toBe(true)
+  for (const [x, hex, rgb] of [
+    [35, '#3978AD', 'rgb(57, 120, 173)'],
+    [65, '#C45B39', 'rgb(196, 91, 57)'],
+  ]) {
+    next = app.waitForEvent('window')
+    await b(panel, '开始取色').click()
+    const picker = await next
+    await picker.locator('.swatch').waitFor()
+    next = app.waitForEvent('window')
+    await picker.mouse.click(mapX(x), mapY(35))
+    result = await next
+    await expect(result.getByText(hex, { exact: true })).toBeVisible()
+    await b(result, '复制 HEX').click()
+    await expect(result.getByRole('status')).toHaveText('已复制 HEX')
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), hex)
+    await b(result, '复制 RGB').click()
+    await expect(result.getByRole('status')).toHaveText('已复制 RGB')
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), rgb)
+    await result.screenshot({ path: path.join(folder, 'sample-' + x + '.png') })
+    next = app.waitForEvent('window')
+    await b(result, '重新取色').click()
+    const again = await next
+    await again.locator('.swatch').waitFor()
+    await again.keyboard.press('Escape').catch((e) => {
+      if (!again.isClosed()) throw e
+    })
+    await expect.poll(() => again.isClosed()).toBe(true)
+  }
   console.log(
-    'PASS desktop GnuTLS graph, OCR blocks:',
+    'PASS isolated GnuTLS graph, OCR blocks:',
     blocks.length,
     'text-only translation, retry, 3 layers, zoom, actual image and two follow-ups',
     folder,
@@ -225,5 +400,6 @@ try {
 } finally {
   await app?.close()
   await host?.close()
+  await prompts?.close()
   server.close()
 }

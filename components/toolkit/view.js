@@ -1,5 +1,6 @@
 import { layoutTranslation } from './translated-diagram.js'
-import { settingsContents } from './settings-view.js'
+import { settingsContents, connectionEditor } from './settings-view.js'
+import { createSettingsShell } from './settings-shell.js'
 import { el, field, feedback } from './ui-dom.js'
 import { toolkitHome, glyph } from './tools-view.js'
 import { pickScreenColor, annotateRegion } from './screen-tools.js'
@@ -144,10 +145,14 @@ async function screenView(s) {
   }
 }
 async function result(s) {
-  root.append(el('h1', s.image ? '截图助手' : '划词助手'))
+  const body = el('div', '', 'assistant-result')
+  const settingsBox = el('div', '', 'result-settings')
+  settingsBox.hidden = true
+  root.append(body, settingsBox)
+  body.append(el('h1', s.image ? '截图助手' : '划词助手'))
   const preview = s.image && picture(s.image, 'preview')
-  if (preview) root.append(preview)
-  else root.append(el('pre', s.text))
+  if (preview) body.append(preview)
+  else body.append(el('pre', s.text))
   const prompt = el('textarea')
   prompt.placeholder = '输入问题'
   prompt.setAttribute('aria-label', '问题')
@@ -156,21 +161,53 @@ async function result(s) {
     history = el('div'),
     controls = el('div', '', 'row')
   output.hidden = true
-  root.append(prompt, row, notice, output)
+  body.append(prompt, row, notice, output)
   output.append(history, controls)
-  const configure = button('打开 API 设置', () => api.settings(configure.dataset.route))
+  let focusRoute
+  const configure = button('打开 API 设置', async () => {
+    body.hidden = true
+    settingsBox.hidden = false
+    if (focusRoute) {
+      await focusRoute(configure.dataset.route)
+      return
+    }
+    const shell = createSettingsShell({
+      title: '工具集设置',
+      categories: [{ id: 'api', name: 'API 与模型' }],
+      active: 'api',
+      onSelect: () => {},
+      onBack: () => {
+        settingsBox.hidden = true
+        body.hidden = false
+        configure.focus()
+      },
+    })
+    const settingsUI = feedback()
+    settingsBox.append(shell.element)
+    shell.content.append(settingsUI.notice)
+    focusRoute = connectionEditor(shell.content, { ...settingsUI, api }, configure.dataset.route)
+  })
   configure.hidden = true
   row.append(configure)
   let hasAnswer = false,
     busy = false
-  async function run(mode, id) {
+  let failed
+  const retry = button('重试', () => run(failed.mode, failed.id, failed.question))
+  retry.hidden = true
+  row.append(retry)
+  async function run(mode, id, question = prompt.value) {
     if (busy) return
-    if (mode === 'question' && !prompt.value.trim()) {
+    if (mode === 'question' && !question.trim()) {
       prompt.focus()
       return
     }
-    const question = prompt.value
     busy = true
+    failed = undefined
+    retry.hidden = true
+    prompt.readOnly = true
+    const requests = [...row.querySelectorAll('button'), controls.lastElementChild].filter(Boolean)
+    for (const action of requests) action.disabled = true
+    row.setAttribute('aria-busy', 'true')
     configure.hidden = true
     notice.textContent = '正在处理…'
     try {
@@ -188,9 +225,11 @@ async function result(s) {
       }
       output.hidden = false
       hasAnswer = true
-      prompt.value = ''
+      if (prompt.value === question) prompt.value = ''
       notice.textContent = ''
     } catch (e) {
+      failed = { mode, id, question }
+      retry.hidden = false
       const missing = String(e.message || e).match(/TOOLKIT_CONFIG_(translation|vision)/)
       if (missing) {
         configure.dataset.route = missing[1]
@@ -201,6 +240,9 @@ async function result(s) {
       } else error(e)
     } finally {
       busy = false
+      prompt.readOnly = false
+      for (const action of requests) action.disabled = false
+      row.removeAttribute('aria-busy')
     }
   }
   row.append(
@@ -227,7 +269,10 @@ async function result(s) {
   if (initial) await run(initial.mode, initial.id)
 }
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') void api.dismiss()
+  if (e.key !== 'Escape') return
+  const back = root.querySelector('.result-settings:not([hidden]) button[aria-label="返回"]')
+  if (back) back.click()
+  else void api.dismiss()
 })
 api
   .state()
@@ -272,8 +317,14 @@ api
       sample.append(swatch, values)
       const actions = el('div', '', 'row')
       actions.append(
-        button('复制 HEX', () => api.copyColorResult('hex')),
-        button('复制 RGB', () => api.copyColorResult('rgb')),
+        button('复制 HEX', async () => {
+          await api.copyColorResult('hex')
+          notice.textContent = '已复制 HEX'
+        }),
+        button('复制 RGB', async () => {
+          await api.copyColorResult('rgb')
+          notice.textContent = '已复制 RGB'
+        }),
         button('重新取色', () => api.repick()),
       )
       root.append(el('h1', '取色结果'), sample, actions, notice)

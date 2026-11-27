@@ -31,6 +31,8 @@ def run():
     try:
         assistant_test = any(flag in sys.argv[1:] for flag in ("--pdf", "--absent"))
         entry = "scripts/check-toolkit.mjs" if assistant_test else "scripts/check-toolkit-capture-colors.mjs"
+        if "--candidate" in sys.argv[1:] or "--diagram" in sys.argv[1:]:
+            entry = "scripts/check-toolkit-diagram.mjs"
         proc = subprocess.Popen(
             ["node", entry, *sys.argv[1:]],
             cwd=Path(__file__).resolve().parents[1],

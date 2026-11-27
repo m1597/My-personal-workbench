@@ -1,6 +1,6 @@
 import { el, field, choice } from './ui-dom.js'
 // Only public connection summaries enter this window. A typed key is write-only.
-function connectionEditor(parent, { api, button, notice, error }) {
+export function connectionEditor(parent, { api, button, notice, error }, initialRoute) {
   const section = el('section', '', 'connections')
   section.append(el('h2', 'API 与模型'))
   const purposeLabel = el('label', '用途')
@@ -155,9 +155,10 @@ function connectionEditor(parent, { api, button, notice, error }) {
   api.onConnectionChange?.(() => void refresh().catch(error))
   api.onSettingsTarget?.((route) => void focusRoute(route).catch(error))
   void refresh()
-    .then(() => api.settingsTarget?.())
+    .then(() => initialRoute || api.settingsTarget?.())
     .then(focusRoute)
     .catch(error)
+  return focusRoute
 }
 
 export function settingsContents(s, target, ctx) {

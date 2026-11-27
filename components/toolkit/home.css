@@ -44,7 +44,7 @@ body:has(.tools-surface) {
   min-height: 74px;
 }
 .tool-row + .tool-row {
-  border-top: 1px solid #535c6d;
+  border-top: 1px solid var(--stroke);
 }
 .tool-text {
   flex: 1;
@@ -57,30 +57,35 @@ body:has(.tools-surface) {
 }
 .tool-text small,
 .tool-item small {
-  color: #c4cad6;
+  color: var(--text-secondary);
 }
 .tool-row > button {
   padding: 7px 12px;
   white-space: nowrap;
+  min-inline-size: 7em;
+  color: var(--text);
+  background: var(--control);
+  border: 1px solid var(--stroke);
+  cursor: pointer;
 }
-.tool-row:first-child > button {
-  background: #72bcfa;
-  color: #10273c;
-  border-color: #88caff;
+.tool-row > button:hover:enabled {
+  background: var(--hover);
 }
-.badge {
-  width: 42px;
-  height: 42px;
+.tool-row > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.tool-row > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.tool-row .badge {
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: #34536b;
-  color: #8ad4ff;
-  flex-shrink: 0;
-}
-.badge.selection {
-  background: #434e72;
-  color: #b3baff;
+  flex: none;
+  color: #fff;
 }
 .tool-glyph {
   width: 20px;
@@ -337,4 +342,36 @@ fitbay-toolkit-choice .fui-Option {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   padding-inline: 8px;
+}
+
+@container (max-width: 380px) {
+  .tool-row {
+    gap: 8px;
+  }
+  .tool-row .badge {
+    width: 28px;
+  }
+  .tool-text {
+    overflow-wrap: anywhere;
+  }
+  .tool-row > button {
+    min-inline-size: 6em;
+    padding-inline: 6px;
+  }
+}
+@container (max-width: 228px) {
+  .tool-row {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+  }
+  .tool-row > button {
+    grid-column: 2;
+    justify-self: end;
+  }
+}
+
+.assistant-result:not([hidden]) {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
 }

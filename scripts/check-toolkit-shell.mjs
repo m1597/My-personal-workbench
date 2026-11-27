@@ -79,6 +79,42 @@ try {
       ),
     )
     .toBe('1')
+  async function checkRows(page, surface, name) {
+    const rows = surface.locator('.tool-row')
+    await expect(rows).toHaveCount(3)
+    const metrics = await rows.evaluateAll((items) =>
+      items.map((item) => {
+        const badge = item.querySelector('.badge'),
+          svg = badge.querySelector('svg'),
+          action = item.querySelector('button')
+        return {
+          label: badge.getAttribute('aria-label'),
+          background: getComputedStyle(badge).backgroundColor,
+          stroke: getComputedStyle(svg).stroke,
+          width: svg.getBoundingClientRect().width,
+          right: action.getBoundingClientRect().right,
+          gap:
+            action.getBoundingClientRect().left -
+            item.querySelector('.tool-text').getBoundingClientRect().right,
+        }
+      }),
+    )
+    for (const m of metrics) {
+      assert(m.label && m.gap >= 0)
+      assert.equal(m.background, 'rgba(0, 0, 0, 0)')
+      assert.equal(m.stroke, 'rgb(255, 255, 255)')
+      assert.equal(m.width, 27)
+      assert(Math.abs(m.right - metrics[0].right) < 1)
+    }
+    await b(surface, '设置').hover()
+    await expect(surface.getByRole('tooltip')).toBeVisible()
+    await expect(b(surface, '框选屏幕')).toBeDisabled()
+    await page.screenshot({ path: path.join(profile, name + '.png') })
+  }
+  for (const width of [850, 600, 320]) {
+    await p.setViewportSize({ width, height: 620 })
+    await checkRows(p, p, 'standalone-' + width)
+  }
   await p.setViewportSize({ width: 320, height: 620 })
   await b(p, '设置').click()
   await b(p, '设置分类').click()
@@ -94,7 +130,7 @@ try {
   const dock = w.locator('.toolkit-panel')
   await expect(b(dock, '框选屏幕')).toBeVisible()
   await expect.poll(() => count(kit)).toBe(0)
-  await dock.screenshot({ path: path.join(profile, 'dock-home.png') })
+  await checkRows(w, dock, 'dock-home')
   assert.equal(
     await dock.evaluate((el) => getComputedStyle(el).backgroundColor),
     'rgba(0, 0, 0, 0)',
@@ -123,12 +159,42 @@ try {
       await dock.locator(selector).evaluate((el) => getComputedStyle(el).outlineStyle),
       'none',
     )
+  const choice = dock.getByRole('combobox', { name: '用途' })
+  await choice.click()
+  await expect(dock.getByRole('option', { name: '视觉问答' })).toBeVisible()
+  await dock.screenshot({ path: path.join(profile, 'dock-api-open.png') })
+  await choice.press('Escape')
   await dock.screenshot({ path: path.join(profile, 'dock-api.png') })
   await dock.getByLabel('服务地址').fill('https://example.invalid/')
   await b(dock, '返回').click()
   await expect(b(dock, '框选屏幕')).toBeVisible()
   assert.equal(await count(host), 1)
   assert.equal(await count(kit), 0)
+  await b(w, '组件').click()
+  await w.getByRole('menuitemcheckbox', { name: 'Music', exact: true }).click()
+  await expect
+    .poll(() => host.windows().some((p) => p.url().includes('/music/index.html')))
+    .toBe(true)
+  const music = host.windows().find((p) => p.url().includes('/music/index.html'))
+  await b(music, '跳过').click()
+  const musicGear = b(music, '音乐设置')
+  await musicGear.hover()
+  await music.screenshot({ path: path.join(profile, 'music-home.png') })
+  async function geometry(control) {
+    return control.evaluate((n) => {
+      const r = n.getBoundingClientRect()
+      return { width: r.width, height: r.height, path: n.querySelector('path')?.getAttribute('d') }
+    })
+  }
+  const reference = await geometry(musicGear),
+    toolkit = await geometry(b(dock, '设置'))
+  assert.deepEqual(toolkit, reference)
+  await writeFile(
+    path.join(profile, 'gear.json'),
+    JSON.stringify({ music: reference, toolkit }, null, 2),
+  )
+  await musicGear.click()
+  await music.screenshot({ path: path.join(profile, 'music-settings.png') })
   independent()
   await expect.poll(() => count(kit)).toBe(1)
   const second = await mkdtemp(path.resolve('tmp/toolkit-owner-'))

@@ -162,6 +162,15 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
   settingsBox.hidden = true
   root.append(head, notice, surface, settingsBox)
   notice.textContent = s.notice
+  async function reflectAvailability() {
+    const settings = api.shortcutSettings
+      ? await api.shortcutSettings()
+      : (await api.state()).settings
+    for (const action of surface.querySelectorAll('button[data-tool]')) {
+      action.disabled = settings[action.dataset.tool]?.enabled === false
+      action.title = action.disabled ? '已停用，可在设置中启用' : action.textContent
+    }
+  }
   let refreshShortcuts
   async function settingsPage() {
     surface.hidden = true
@@ -182,6 +191,7 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
           settingsBox.hidden = true
           head.hidden = false
           surface.hidden = false
+          void reflectAvailability().catch(error)
         },
       })
       const panels = el('div')
@@ -228,9 +238,13 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
     const item = el('div', '', 'tool-row'),
       badge = el('span', '', 'badge ' + icon),
       text = el('div', '', 'tool-text')
+    badge.title = title
+    badge.setAttribute('role', 'img')
+    badge.setAttribute('aria-label', title)
     badge.append(glyph(icon))
     text.append(el('strong', title), el('small', sub))
     const action = button(label, fn)
+    if (icon !== 'selection') action.dataset.tool = icon
     item.append(badge, text, action)
     return item
   }
@@ -256,6 +270,7 @@ function toolkitHome(s, { api, root, notice, error, button, settingsContents }) 
         ),
       )
       surface.append(primary)
+      void reflectAvailability().catch(error)
       return
     }
     const panel = el('section', '', 'tool-page'),

@@ -1,3 +1,5 @@
+import { installScreenFixture } from './toolkit-screen-fixture.mjs'
+import { readFile } from 'node:fs/promises'
 import { _electron, expect } from '@playwright/test'
 import path from 'node:path'
 import assert from 'node:assert/strict'
@@ -26,6 +28,44 @@ async function settings() {
 try {
   let p = await settings()
   const row = (page, name) => page.getByRole('region', { name, exact: true })
+  await installScreenFixture(
+    app,
+    await readFile('C:/Program Files/Git/mingw64/share/doc/gnutls/pkcs11-vision.png'),
+  )
+  await app.evaluate(({ Menu, globalShortcut }) => {
+    const build = Menu.buildFromTemplate.bind(Menu),
+      register = globalShortcut.register.bind(globalShortcut)
+    globalThis.testKitActions = new Map()
+    Menu.buildFromTemplate = (template) => {
+      const menu = build(template)
+      globalThis.testKitMenu = menu
+      return menu
+    }
+    globalShortcut.register = (key, action) => {
+      const ok = register(key, action)
+      if (ok) globalThis.testKitActions.set(key, action)
+      return ok
+    }
+  })
+  const color = row(p, '屏幕取色')
+  const colorKey = color.getByRole('textbox')
+  await colorKey.click()
+  await colorKey.press('Control+Alt+Shift+F11')
+  await color.getByRole('button', { name: '保存屏幕取色快捷键' }).click()
+  for (const entry of ['menu', 'shortcut', 'menu', 'shortcut']) {
+    const next = app.waitForEvent('window')
+    await app.evaluate((_, entry) => {
+      if (entry === 'menu')
+        globalThis.testKitMenu.items.find((item) => item.label === '屏幕取色').click()
+      else Array.from(globalThis.testKitActions.values()).at(-1)()
+    }, entry)
+    const overlay = await next
+    await expect(overlay.locator('.swatch')).toBeVisible()
+    await overlay.keyboard.press('Escape').catch((e) => {
+      if (!overlay.isClosed()) throw e
+    })
+    await expect.poll(() => overlay.isClosed()).toBe(true)
+  }
   const form = row(p, '屏幕截图')
   const key = form.getByRole('textbox')
   await key.click()

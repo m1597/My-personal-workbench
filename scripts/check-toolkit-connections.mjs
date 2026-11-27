@@ -1,3 +1,4 @@
+import { installScreenFixture } from './toolkit-screen-fixture.mjs'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
@@ -7,6 +8,7 @@ import { toolkitConnections } from '../components/toolkit/toolkit-connections.mj
 import { openConnections } from '../examples/component-host/api-connections.mjs'
 
 const profile = await mkdtemp(path.resolve('tmp/toolkit-connections-'))
+const frame = await readFile('C:/Program Files/Git/mingw64/share/doc/gnutls/pkcs11-vision.png')
 const settings = path.join(profile, 'toolkit/settings.json')
 const standalone = process.argv.includes('--packaged')
   ? {
@@ -14,6 +16,7 @@ const standalone = process.argv.includes('--packaged')
       args: [],
     }
   : { args: [path.resolve('components/toolkit')] }
+standalone.env = { ...process.env, WORKBENCH_TEST_BACKGROUND: '1' }
 standalone.args.push('--workbench-profile=' + profile)
 const marker = randomUUID()
 const endpoint = 'http://127.0.0.1:18080/' + 'long-service-name/'.repeat(5) + 'v1'
@@ -24,6 +27,7 @@ const keys = {
 let app, host
 try {
   app = await _electron.launch(standalone)
+  await installScreenFixture(app, frame)
   let home = await app.firstWindow()
   await expect(home.getByText('框选屏幕')).toBeVisible()
   async function region() {
@@ -68,8 +72,11 @@ try {
   await overlay.getByText('翻译', { exact: true }).click()
   const result = await resultReady
   await result.getByText('打开 API 设置').click()
-  await expect(home.getByRole('combobox', { name: '用途' })).toHaveText('翻译与文字问答')
-  await expect(home.getByLabel('服务地址')).toBeFocused()
+  await expect(result.getByRole('combobox', { name: '用途' })).toHaveText('翻译与文字问答')
+  await expect(result.getByLabel('服务地址')).toBeFocused()
+  await result.getByRole('button', { name: '返回', exact: true }).click()
+  await expect(result.getByRole('button', { name: '重试', exact: true })).toBeVisible()
+  await expect(home.getByRole('button', { name: '框选屏幕', exact: true })).toBeVisible()
   const encrypted = await app.evaluate(
     ({ safeStorage }, key) => safeStorage.encryptString(key).toString('base64'),
     marker,

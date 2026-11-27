@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readSelectionOrOcr } from './native.mjs'
 import { complete } from './model.mjs'
 
@@ -49,10 +50,23 @@ async function locateText(image, signal) {
   if (!blocks.length) throw Error('选区没有识别到文字，请重新框选')
   return blocks
 }
+// NativeImage identity scopes partial results to the selected pixels; closing the result releases them.
+const sessions = new WeakMap()
 export async function translateImage(image, service, signal) {
-  const blocks = await locateText(image, signal)
+  const fingerprint = createHash('sha256')
+    .update(
+      JSON.stringify([service.id, service.endpoint, service.model, service.protocol, service.key]),
+    )
+    .digest('hex')
+  let session = sessions.get(image)
+  if (session?.fingerprint !== fingerprint) {
+    session = { fingerprint, blocks: await locateText(image, signal) }
+    sessions.set(image, session)
+  }
+  const blocks = session.blocks
   for (let i = 0; i < blocks.length; i += 20) {
     const batch = blocks.slice(i, i + 20)
+    if (batch.every((block) => block.zh)) continue
     const request = batch.map(({ id, text }) => ({ id, text }))
     const prompt =
       '把下面每项 text 翻译成简体中文。保持流程图标签简洁，保留术语和编号。只返回 JSON 数组，每项包含原 id 和译文 zh。\n' +
@@ -67,11 +81,14 @@ export async function translateImage(image, service, signal) {
       )
       if (!Array.isArray(rows) || rows.length !== batch.length) throw Error()
       const translated = new Map(rows.map((r) => [r.id, r.zh]))
-      for (const block of batch) {
+      const values = batch.map((block) => {
         const value = translated.get(block.id)
         if (typeof value !== 'string' || !value.trim()) throw Error()
-        block.zh = value.trim()
-      }
+        return value.trim()
+      })
+      batch.forEach((block, index) => {
+        block.zh = values[index]
+      })
     } catch {
       throw Error('翻译响应缺少对应文字块，请重试翻译')
     }

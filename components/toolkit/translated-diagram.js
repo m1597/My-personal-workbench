@@ -150,6 +150,16 @@ export async function layoutTranslation(source, blocks) {
   const drawing = svg('svg', { viewBox: '0 0 ' + w + ' ' + h, 'aria-label': '选区翻译图' })
   const base = svg('image', { href: source, width: w, height: h })
   drawing.append(base)
+  const compactBlocks = []
+  function adjustLabels() {
+    const scale = drawing.getBoundingClientRect().width / w
+    if (!scale) return
+    for (const { content, marker, size } of compactBlocks) {
+      const compact = size * scale < 8
+      content.style.display = compact ? 'none' : ''
+      marker.style.display = compact ? '' : 'none'
+    }
+  }
   const layers = {}
   const buttons = {}
   function mode(name) {
@@ -206,10 +216,12 @@ export async function layoutTranslation(source, blocks) {
         y = Math.min(...block.words.map((r) => r.y))
       const width = Math.max(...block.words.map((r) => r.x + r.w)) - x,
         height = Math.max(...block.words.map((r) => r.y + r.h)) - y
+      const content = svg('g', {})
+      box.append(content)
       let fill
       for (const word of block.words) {
         fill = background(ctx, word, w, h)
-        box.append(
+        content.append(
           svg('rect', {
             x: word.x - 0.5,
             y: word.y - 0.5,
@@ -225,20 +237,45 @@ export async function layoutTranslation(source, blocks) {
       ]) {
         const color = background(ctx, word, w, h)
         const d = edgeInk(ctx, word, color, side)
-        if (d) box.append(svg('path', { d, fill: color, 'data-edge-ink': '' }))
+        if (d) content.append(svg('path', { d, fill: color, 'data-edge-ink': '' }))
       }
       const rgb = parseInt(fill.slice(1), 16),
         light = 0.299 * (rgb >> 16) + 0.587 * ((rgb >> 8) & 255) + 0.114 * (rgb & 255)
       const ink = light > 128 ? '#17212a' : '#ffffff'
       if (name === '双语') {
-        label(box, block.text, x, y, width, height * 0.46, ink, ctx)
-        label(box, block.zh, x, y + height * 0.46, width, height * 0.54, ink, ctx)
-      } else label(box, block.zh, x, y, width, height, ink, ctx)
+        label(content, block.text, x, y, width, height * 0.46, ink, ctx)
+        label(content, block.zh, x, y + height * 0.46, width, height * 0.54, ink, ctx)
+        const marker = svg('rect', {
+          x,
+          y,
+          width,
+          height,
+          rx: 1,
+          fill: 'transparent',
+          'data-compact-label': '',
+          stroke: ink,
+          'stroke-width': 1,
+          'stroke-dasharray': '2 2',
+        })
+        box.append(marker)
+        compactBlocks.push({
+          content,
+          marker,
+          size: Math.min(
+            ...Array.from(content.querySelectorAll('text'), (n) =>
+              Number(n.getAttribute('font-size')),
+            ),
+          ),
+        })
+      } else label(content, block.zh, x, y, width, height, ink, ctx)
       layer.append(box)
     }
   }
   mode('仅中文')
   port.append(drawing)
   container.append(toolbar, port, details)
+  // Re-evaluate at the actual pane width and whenever the user zooms.
+  const observer = new ResizeObserver(adjustLabels)
+  observer.observe(drawing)
   return container
 }
