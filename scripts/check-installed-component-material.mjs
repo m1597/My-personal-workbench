@@ -64,7 +64,7 @@ try {
     ['加入工作台', 'embedded', '1'],
   ]) {
     if (!(await library("Boolean(document.querySelector('.prompt-settings'))"))) {
-      await library("document.querySelector('button[aria-label=\"提示词库设置\"]').click()")
+      await library('document.querySelector(\'button[aria-label="提示词库设置"]\').click()')
     }
     const control = `[...document.querySelectorAll('.prompt-settings button')].find(b => b.textContent.trim() === ${JSON.stringify(button)})`
     await expect.poll(() => library(`Boolean(${control})`)).toBe(true)
